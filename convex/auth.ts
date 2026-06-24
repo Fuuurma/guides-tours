@@ -6,7 +6,10 @@ import { query } from "./_generated/server";
 import type { DataModel } from "./_generated/dataModel";
 import authConfig from "./auth.config";
 
-const siteUrl = process.env.SITE_URL!;
+const siteUrl = process.env.SITE_URL;
+if (!siteUrl) {
+	throw new Error("SITE_URL must be set in the Convex dashboard");
+}
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
