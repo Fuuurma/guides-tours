@@ -1,217 +1,84 @@
-Welcome to your new TanStack Start app! 
+# guides-tours
 
-# Getting Started
+Tour operator SaaS — destination repo for the canonical codebase after migration.
 
-To run this application:
+## Status
+- **Stage:** building
+- **Phase:** 2 (Foundation) — TanStack Start + Convex + Better Auth scaffolded
+- **Migration plan:** [`newProjectsPlanner/migrations/2026-06-deployment-and-convergence.md`](../../newProjectsPlanner/migrations/2026-06-deployment-and-convergence.md) §guides-tours
+- **Port checklist:** [PORT-CHECKLIST.md](./PORT-CHECKLIST.md) (from reservations-automation)
 
-```bash
-npm install
-npm run dev
+## Source codebases
+- **Canonical source:** [Fuuurma/reservations-automation](https://github.com/Fuuurma/reservations-automation) (Django 5 + Next.js 16)
+- **Dropped:** [Fuuurma/Tour-Management-SaaS](https://github.com/Fuuurma/Tour-Management-SaaS)
+
+## Stack (standard, per CONVENTIONS.md)
+- TanStack Start (React 19, file-based routing)
+- Convex (DB, auth, realtime, cron, storage)
+- Better Auth via `@convex-dev/better-auth` (org plugin planned for Phase 4)
+- Tailwind v4 + shadcn/ui (radix, new-york style)
+- Stripe (raw SDK in Convex action) — Phase 8
+- Amazon SES via `@aws-sdk/client-sesv2` — Phase 7
+- Cloudflare Workers deploy via Nitro preset (Vite `@cloudflare/vite-plugin`)
+- Vitest + Testing Library
+
+## First-time setup
+
+1. Copy env template: `cp .env.example .env.local`
+2. Run `npx convex dev` to provision the Convex deployment and write `CONVEX_DEPLOYMENT` + `VITE_CONVEX_URL` + `VITE_CONVEX_SITE_URL` into `.env.local`
+3. Run `npx convex env set BETTER_AUTH_SECRET=$(openssl rand -base64 32)` to set the auth secret on the Convex dashboard
+4. Run `npx convex env set SITE_URL=http://localhost:3000`
+5. Start the app: `npm run dev`
+
+## Scripts
+
+- `npm run dev` — Vite dev server (port 3000)
+- `npm run build` — Production build (Cloudflare Workers target)
+- `npm run deploy` — Build + `wrangler deploy`
+- `npm run test` — Vitest run
+- `npm run lint` — Biome lint
+- `npm run check` — Biome lint + format check
+- `npx convex dev` — Convex backend dev (separate terminal)
+- `npx convex deploy --prod` — Convex production deploy
+- `npx tsr generate` — Regenerate route tree (run after adding routes)
+
+## Repository layout
+
+```
+convex/                    # Convex backend
+├── auth.config.ts         # Better Auth provider config
+├── auth.ts                # Better Auth factory + getCurrentUser
+├── convex.config.ts       # Component registration
+├── http.ts                # Better Auth HTTP route registration
+└── schema.ts              # Convex schema (filled in Phase 3)
+
+src/
+├── components/ui/         # shadcn components (copied via shadcn CLI)
+├── lib/
+│   ├── auth-client.ts     # Better Auth React client
+│   ├── auth-server.ts     # Server-side auth helpers (getToken, etc.)
+│   └── utils.ts           # cn() class merge helper
+├── routes/
+│   ├── __root.tsx         # Root layout + ConvexBetterAuthProvider
+│   ├── index.tsx          # Home placeholder
+│   └── api/auth/$.ts      # Better Auth proxy route
+└── router.tsx             # Router setup with ConvexQueryClient
 ```
 
-# Building For Production
+## Phase status
 
-To build this application for production:
-
-```bash
-npm run build
-```
-
-## Testing
-
-This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:
-
-```bash
-npm run test
-```
-
-## Styling
-
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Uninstall the packages: `npm install @tailwindcss/vite tailwindcss -D`
-
-## Linting & Formatting
-
-This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
-
-
-```bash
-npm run lint
-npm run format
-npm run check
-```
-
-
-## Deploy to Cloudflare Workers
-
-This project uses the Cloudflare Vite plugin (configured in `vite.config.ts`) and `wrangler.jsonc`:
-
-1. Install Wrangler: `npm install -g wrangler`
-2. Authenticate: `wrangler login`
-3. Deploy: `npx wrangler deploy`
-
-For production env vars, run `wrangler secret put MY_VAR` for each secret listed in `.env.example`. Public (non-secret) vars go in `wrangler.jsonc` under `vars`.
-
-KV, D1, R2, and Durable Object bindings are configured in `wrangler.jsonc` — see https://developers.cloudflare.com/workers/wrangler/configuration/.
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+- [x] Phase 1 — Clone + analyze (PORT-CHECKLIST.md)
+- [/] Phase 2 — Foundation (in progress)
+  - [x] TanStack Start scaffolded
+  - [x] Convex + Better Auth installed and wired
+  - [x] shadcn UI primitives added
+  - [ ] End-to-end auth roundtrip (register / login / logout) — needs first `convex dev`
+- [ ] Phase 3 — Schema port (40 Django models → Convex)
+- [ ] Phase 4 — Auth + multi-tenancy (Better Auth org plugin)
+- [ ] Phase 5 — Celery → Convex cron
+- [ ] Phase 6 — 7 OTA integrations
+- [ ] Phase 7 — Resend → SES, Twilio → SNS, Cloudinary → Convex storage
+- [ ] Phase 8 — Stripe payments
+- [ ] Phase 9 — 30 Next.js routes → TanStack Start
+- [ ] Phase 10 — Vitest + Playwright
+- [ ] Phase 11 — Deploy (Convex prod + Cloudflare Workers)
