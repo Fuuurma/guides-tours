@@ -24,7 +24,7 @@ export const upsertOtaBooking = internalMutation({
 		event: v.object({
 			kind: v.literal("booking.created"),
 			reservationId: v.string(),
-			productId: v.string(),
+			productId: v.optional(v.string()),
 			customerName: v.string(),
 			customerEmail: v.string(),
 			customerPhone: v.optional(v.string()),

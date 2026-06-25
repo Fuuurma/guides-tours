@@ -13,13 +13,12 @@
 
 import type { HttpRouter } from "convex/server";
 import { viatorWebhook } from "./viator_webhook";
-// Phase 6.4+: import + register the remaining 6.
-// import { getYourGuideWebhook } from "./getYourGuide_webhook";
-// import { airbnbWebhook } from "./airbnb_webhook";
-// import { tripAdvisorWebhook } from "./tripAdvisor_webhook";
-// import { klookWebhook } from "./klook_webhook";
-// import { bookingWebhook } from "./booking_webhook";
-// import { expediaWebhook } from "./expedia_webhook";
+import { getYourGuideWebhook } from "./getyourguide_webhook";
+import { airbnbWebhook } from "./airbnb_webhook";
+import { tripAdvisorWebhook } from "./tripadvisor_webhook";
+import { klookWebhook } from "./klook_webhook";
+import { bookingWebhook } from "./booking_webhook";
+import { expediaWebhook } from "./expedia_webhook";
 
 export function registerOtaRoutes(http: HttpRouter): void {
 	http.route({
@@ -27,11 +26,34 @@ export function registerOtaRoutes(http: HttpRouter): void {
 		method: "POST",
 		handler: viatorWebhook,
 	});
-
-	// http.route({
-	//   path: "/api/ota/webhooks/getYourGuide",
-	//   method: "POST",
-	//   handler: getYourGuideWebhook,
-	// });
-	// ... etc for the remaining 6 providers in Phase 6.4+
+	http.route({
+		path: "/api/ota/webhooks/getYourGuide",
+		method: "POST",
+		handler: getYourGuideWebhook,
+	});
+	http.route({
+		path: "/api/ota/webhooks/airbnb",
+		method: "POST",
+		handler: airbnbWebhook,
+	});
+	http.route({
+		path: "/api/ota/webhooks/tripAdvisor",
+		method: "POST",
+		handler: tripAdvisorWebhook,
+	});
+	http.route({
+		path: "/api/ota/webhooks/klook",
+		method: "POST",
+		handler: klookWebhook,
+	});
+	http.route({
+		path: "/api/ota/webhooks/booking",
+		method: "POST",
+		handler: bookingWebhook,
+	});
+	http.route({
+		path: "/api/ota/webhooks/expedia",
+		method: "POST",
+		handler: expediaWebhook,
+	});
 }

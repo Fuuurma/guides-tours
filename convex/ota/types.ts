@@ -14,7 +14,11 @@ export type NormalizedProviderEvent =
 	| {
 			kind: "booking.created";
 			reservationId: string;
-			productId: string;
+			// Optional because some webhook payloads don't carry a product
+			// identifier (e.g. GetYourGuide source only sends bookingId +
+			// traveler info). The upsert falls back to "unmatched" when
+			// this is absent.
+			productId?: string;
 			customerName: string;
 			customerEmail: string;
 			customerPhone?: string;
