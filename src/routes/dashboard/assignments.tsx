@@ -8,15 +8,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/assignments")({
@@ -29,10 +22,54 @@ const statusColors: Record<string, string> = {
 	cancelled: "bg-gray-100 text-gray-800",
 };
 
+interface Assignment {
+	_id: string;
+	date: string;
+	startTime: string;
+	endTime: string;
+	guideId: string;
+	tourId: string;
+	status: "scheduled" | "completed" | "cancelled";
+}
+
+const columns: DataTableColumn<Assignment>[] = [
+	{ key: "date", header: "Date", render: (a) => a.date },
+	{
+		key: "time",
+		header: "Time",
+		render: (a) => (
+			<span className="font-mono text-xs">
+				{a.startTime}–{a.endTime}
+			</span>
+		),
+	},
+	{
+		key: "guide",
+		header: "Guide",
+		render: (a) => <span className="font-mono text-xs">{a.guideId}</span>,
+	},
+	{
+		key: "tour",
+		header: "Tour",
+		render: (a) => <span className="font-mono text-xs">{a.tourId}</span>,
+	},
+	{
+		key: "status",
+		header: "Status",
+		render: (a) => (
+			<Badge className={statusColors[a.status] ?? ""} variant="secondary">
+				{a.status}
+			</Badge>
+		),
+	},
+];
+
 function AssignmentsPage() {
-	const { data: assignments, isPending } = useQuery(
+	const { data: assignments, isPending, error } = useQuery(
 		convexQuery(api.assignments.list, {}),
 	);
+
+	const itemCount = assignments?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -40,52 +77,18 @@ function AssignmentsPage() {
 				<CardHeader>
 					<CardTitle>Assignments</CardTitle>
 					<CardDescription>
-						{assignments?.length ?? 0} assignment
-						{(assignments?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} assignment{itemCount === 1 ? "" : "s"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !assignments?.length ? (
-						<p className="text-muted-foreground text-sm">No assignments yet.</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Date</TableHead>
-									<TableHead>Time</TableHead>
-									<TableHead>Guide</TableHead>
-									<TableHead>Tour</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{assignments.map((a) => (
-									<TableRow key={a._id}>
-										<TableCell>{a.date}</TableCell>
-										<TableCell className="font-mono text-xs">
-											{a.startTime}–{a.endTime}
-										</TableCell>
-										<TableCell className="font-mono text-xs">
-											{a.guideId}
-										</TableCell>
-										<TableCell className="font-mono text-xs">
-											{a.tourId}
-										</TableCell>
-										<TableCell>
-											<Badge
-												className={statusColors[a.status] ?? ""}
-												variant="secondary"
-											>
-												{a.status}
-											</Badge>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={assignments as Assignment[] | undefined}
+						columns={columns}
+						rowKey={(a) => a._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No assignments yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>

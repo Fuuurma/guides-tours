@@ -8,15 +8,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/vacations")({
@@ -29,10 +22,55 @@ const statusColors: Record<string, string> = {
 	rejected: "bg-red-100 text-red-800",
 };
 
+interface Vacation {
+	_id: string;
+	userId: string;
+	startDate: string;
+	endDate: string;
+	reason: string;
+	status: "pending" | "approved" | "rejected";
+}
+
+const columns: DataTableColumn<Vacation>[] = [
+	{
+		key: "userId",
+		header: "Guide",
+		render: (v) => <span className="font-mono text-xs">{v.userId}</span>,
+	},
+	{ key: "start", header: "Start", render: (v) => v.startDate },
+	{ key: "end", header: "End", render: (v) => v.endDate },
+	{
+		key: "days",
+		header: "Days",
+		render: (v) =>
+			Math.floor(
+				(Date.parse(v.endDate) - Date.parse(v.startDate)) / 86_400_000 + 1,
+			),
+	},
+	{
+		key: "reason",
+		header: "Reason",
+		render: (v) => (
+			<span className="max-w-[200px] truncate inline-block">{v.reason}</span>
+		),
+	},
+	{
+		key: "status",
+		header: "Status",
+		render: (v) => (
+			<Badge className={statusColors[v.status] ?? ""} variant="secondary">
+				{v.status}
+			</Badge>
+		),
+	},
+];
+
 function VacationsPage() {
-	const { data: vacations, isPending } = useQuery(
+	const { data: vacations, isPending, error } = useQuery(
 		convexQuery(api.vacationRequests.list, {}),
 	);
+
+	const itemCount = vacations?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -40,59 +78,18 @@ function VacationsPage() {
 				<CardHeader>
 					<CardTitle>Vacation requests</CardTitle>
 					<CardDescription>
-						{vacations?.length ?? 0} request
-						{(vacations?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} request{itemCount === 1 ? "" : "s"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !vacations?.length ? (
-						<p className="text-muted-foreground text-sm">No vacation requests yet.</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Guide</TableHead>
-									<TableHead>Start</TableHead>
-									<TableHead>End</TableHead>
-									<TableHead>Days</TableHead>
-									<TableHead>Reason</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{vacations.map((v) => {
-									const days = Math.floor(
-										(Date.parse(v.endDate) - Date.parse(v.startDate)) /
-											86_400_000 +
-											1,
-									);
-									return (
-										<TableRow key={v._id}>
-											<TableCell className="font-mono text-xs">
-												{v.userId}
-											</TableCell>
-											<TableCell>{v.startDate}</TableCell>
-											<TableCell>{v.endDate}</TableCell>
-											<TableCell>{days}</TableCell>
-											<TableCell className="max-w-[200px] truncate">
-												{v.reason}
-											</TableCell>
-											<TableCell>
-												<Badge
-													className={statusColors[v.status] ?? ""}
-													variant="secondary"
-												>
-													{v.status}
-												</Badge>
-											</TableCell>
-										</TableRow>
-									);
-								})}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={vacations as Vacation[] | undefined}
+						columns={columns}
+						rowKey={(v) => v._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No vacation requests yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>

@@ -8,15 +8,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/schedules")({
@@ -29,10 +22,46 @@ const statusColors: Record<string, string> = {
 	cancelled: "bg-gray-100 text-gray-800",
 };
 
+interface Schedule {
+	_id: string;
+	date: string;
+	startTime: string;
+	endTime: string;
+	capacityBooked: number;
+	capacityTotal: number;
+	status: "available" | "full" | "cancelled";
+}
+
+const columns: DataTableColumn<Schedule>[] = [
+	{ key: "date", header: "Date", render: (s) => s.date },
+	{
+		key: "time",
+		header: "Time",
+		render: (s) => (
+			<span className="font-mono text-xs">
+				{s.startTime}–{s.endTime}
+			</span>
+		),
+	},
+	{ key: "booked", header: "Booked", render: (s) => s.capacityBooked },
+	{ key: "capacity", header: "Capacity", render: (s) => s.capacityTotal },
+	{
+		key: "status",
+		header: "Status",
+		render: (s) => (
+			<Badge className={statusColors[s.status] ?? ""} variant="secondary">
+				{s.status}
+			</Badge>
+		),
+	},
+];
+
 function SchedulesPage() {
-	const { data: schedules, isPending } = useQuery(
+	const { data: schedules, isPending, error } = useQuery(
 		convexQuery(api.tourSchedules.list, {}),
 	);
+
+	const itemCount = schedules?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -40,50 +69,19 @@ function SchedulesPage() {
 				<CardHeader>
 					<CardTitle>Tour schedules</CardTitle>
 					<CardDescription>
-						{schedules?.length ?? 0} schedule
-						{(schedules?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} schedule{itemCount === 1 ? "" : "s"} — concrete
+						tour instances that customers can book against.
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !schedules?.length ? (
-						<p className="text-muted-foreground text-sm">
-							No schedules yet. Schedules are concrete tour instances (date + time) that customers can book.
-						</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Date</TableHead>
-									<TableHead>Time</TableHead>
-									<TableHead>Booked</TableHead>
-									<TableHead>Capacity</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{schedules.map((s) => (
-									<TableRow key={s._id}>
-										<TableCell>{s.date}</TableCell>
-										<TableCell className="font-mono text-xs">
-											{s.startTime}–{s.endTime}
-										</TableCell>
-										<TableCell>{s.capacityBooked}</TableCell>
-										<TableCell>{s.capacityTotal}</TableCell>
-										<TableCell>
-											<Badge
-												className={statusColors[s.status] ?? ""}
-												variant="secondary"
-											>
-												{s.status}
-											</Badge>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={schedules as Schedule[] | undefined}
+						columns={columns}
+						rowKey={(s) => s._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No schedules yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>

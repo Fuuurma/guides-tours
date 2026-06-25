@@ -8,25 +8,46 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/templates")({
 	component: TemplatesPage,
 });
 
+interface Template {
+	_id: string;
+	name: string;
+	tourType: string;
+	durationHours: number;
+	capacity: number;
+	isActive: boolean;
+}
+
+const columns: DataTableColumn<Template>[] = [
+	{ key: "name", header: "Name", render: (t) => t.name, className: "font-medium" },
+	{ key: "type", header: "Type", render: (t) => t.tourType },
+	{ key: "duration", header: "Duration", render: (t) => `${t.durationHours}h` },
+	{ key: "capacity", header: "Capacity", render: (t) => t.capacity },
+	{
+		key: "active",
+		header: "Status",
+		render: (t) =>
+			t.isActive ? (
+				<Badge>Active</Badge>
+			) : (
+				<Badge variant="secondary">Inactive</Badge>
+			),
+	},
+];
+
 function TemplatesPage() {
-	const { data: templates, isPending } = useQuery(
+	const { data: templates, isPending, error } = useQuery(
 		convexQuery(api.tourTemplates.list, {}),
 	);
+
+	const itemCount = templates?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -34,47 +55,19 @@ function TemplatesPage() {
 				<CardHeader>
 					<CardTitle>Tour templates</CardTitle>
 					<CardDescription>
-						{templates?.length ?? 0} template
-						{(templates?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} template{itemCount === 1 ? "" : "s"} — use
+						templates to spin up multiple tours with shared defaults.
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !templates?.length ? (
-						<p className="text-muted-foreground text-sm">
-							No templates yet. Use templates to spin up multiple tours with shared defaults.
-						</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Name</TableHead>
-									<TableHead>Type</TableHead>
-									<TableHead>Duration</TableHead>
-									<TableHead>Capacity</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{templates.map((t) => (
-									<TableRow key={t._id}>
-										<TableCell className="font-medium">{t.name}</TableCell>
-										<TableCell>{t.tourType}</TableCell>
-										<TableCell>{t.durationHours}h</TableCell>
-										<TableCell>{t.capacity}</TableCell>
-										<TableCell>
-											{t.isActive ? (
-												<Badge>Active</Badge>
-											) : (
-												<Badge variant="secondary">Inactive</Badge>
-											)}
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={templates as Template[] | undefined}
+						columns={columns}
+						rowKey={(t) => t._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No templates yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>

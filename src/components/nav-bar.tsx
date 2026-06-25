@@ -26,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ to: "/dashboard/vacations", label: "Vacations" },
 	{ to: "/dashboard/vehicles", label: "Vehicles" },
 	{ to: "/dashboard/drivers", label: "Drivers" },
+	{ to: "/dashboard/notifications", label: "Notifications" },
 ];
 
 export function NavBar({ orgName, userName, role }: NavBarProps) {
