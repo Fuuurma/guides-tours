@@ -8,34 +8,46 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/customers")({
 	component: CustomersPage,
 });
 
+interface Customer {
+	_id: string;
+	name: string;
+	email: string;
+	phone: string;
+	totalVisits: number;
+	vipStatus: boolean;
+}
+
+const columns: DataTableColumn<Customer>[] = [
+	{ key: "name", header: "Name", render: (c) => c.name, className: "font-medium" },
+	{ key: "email", header: "Email", render: (c) => c.email },
+	{ key: "phone", header: "Phone", render: (c) => c.phone },
+	{ key: "visits", header: "Visits", render: (c) => c.totalVisits },
+	{
+		key: "status",
+		header: "Status",
+		render: (c) =>
+			c.vipStatus ? (
+				<Badge>VIP</Badge>
+			) : (
+				<Badge variant="secondary">Regular</Badge>
+			),
+	},
+];
+
 function CustomersPage() {
-	const { data: org } = useQuery(
-		convexQuery(api.organizations.activeOrganization, {}),
-	);
-	const { data: customers, isPending } = useQuery(
+	const { data: customers, isPending, error } = useQuery(
 		convexQuery(api.customers.list, {}),
 	);
 
-	if (!org) {
-		return (
-			<p className="text-muted-foreground">No organization selected.</p>
-		);
-	}
+	const itemCount = customers?.items?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -43,45 +55,18 @@ function CustomersPage() {
 				<CardHeader>
 					<CardTitle>Customers</CardTitle>
 					<CardDescription>
-						{customers?.items?.length ?? 0} customer
-						{(customers?.items?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} customer{itemCount === 1 ? "" : "s"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !customers?.items?.length ? (
-						<p className="text-muted-foreground text-sm">No customers yet.</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Name</TableHead>
-									<TableHead>Email</TableHead>
-									<TableHead>Phone</TableHead>
-									<TableHead>Visits</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{customers.items.map((c) => (
-									<TableRow key={c._id}>
-										<TableCell className="font-medium">{c.name}</TableCell>
-										<TableCell>{c.email}</TableCell>
-										<TableCell>{c.phone}</TableCell>
-										<TableCell>{c.totalVisits}</TableCell>
-										<TableCell>
-											{c.vipStatus ? (
-												<Badge>VIP</Badge>
-											) : (
-												<Badge variant="secondary">Regular</Badge>
-											)}
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={customers?.items as Customer[] | undefined}
+						columns={columns}
+						rowKey={(c) => c._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No customers yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>
