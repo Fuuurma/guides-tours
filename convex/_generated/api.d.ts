@@ -15,6 +15,7 @@ import type * as authz from "../authz.js";
 import type * as bookings from "../bookings.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
+import type * as drivers from "../drivers.js";
 import type * as http from "../http.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_crypto from "../lib/crypto.js";
@@ -47,6 +48,7 @@ import type * as payments_stripe_actions from "../payments_stripe_actions.js";
 import type * as public_booking from "../public_booking.js";
 import type * as tours from "../tours.js";
 import type * as vacationRequests from "../vacationRequests.js";
+import type * as vehicles from "../vehicles.js";
 
 import type {
   ApiFromModules,
@@ -62,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   bookings: typeof bookings;
   crons: typeof crons;
   customers: typeof customers;
+  drivers: typeof drivers;
   http: typeof http;
   "lib/authz": typeof lib_authz;
   "lib/crypto": typeof lib_crypto;
@@ -94,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   public_booking: typeof public_booking;
   tours: typeof tours;
   vacationRequests: typeof vacationRequests;
+  vehicles: typeof vehicles;
 }>;
 
 /**
