@@ -17,6 +17,7 @@ import type * as bookings from "../bookings.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as drivers from "../drivers.js";
+import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_awsSigV4 from "../lib/awsSigV4.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   customers: typeof customers;
   drivers: typeof drivers;
+  files: typeof files;
   http: typeof http;
   "lib/authz": typeof lib_authz;
   "lib/awsSigV4": typeof lib_awsSigV4;
