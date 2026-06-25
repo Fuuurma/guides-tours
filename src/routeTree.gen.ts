@@ -25,6 +25,7 @@ import { Route as DashboardDriversRouteImport } from './routes/dashboard/drivers
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard/customers'
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
+import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const SignUpRoute = SignUpRouteImport.update({
@@ -107,6 +108,11 @@ const DashboardAssignmentsRoute = DashboardAssignmentsRouteImport.update({
   path: '/assignments',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -119,6 +125,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
@@ -137,6 +144,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
+    | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
     | '/dashboard/customers'
@@ -196,6 +206,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
+    | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
     | '/dashboard/customers'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
+    | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
     | '/dashboard/customers'
@@ -353,6 +365,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAssignmentsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/analytics': {
+      id: '/dashboard/analytics'
+      path: '/analytics'
+      fullPath: '/dashboard/analytics'
+      preLoaderRoute: typeof DashboardAnalyticsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -364,6 +383,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface DashboardRouteChildren {
+  DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
   DashboardAssignmentsRoute: typeof DashboardAssignmentsRoute
   DashboardBookingsRoute: typeof DashboardBookingsRoute
   DashboardCustomersRoute: typeof DashboardCustomersRoute
@@ -377,6 +397,7 @@ interface DashboardRouteChildren {
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardAnalyticsRoute: DashboardAnalyticsRoute,
   DashboardAssignmentsRoute: DashboardAssignmentsRoute,
   DashboardBookingsRoute: DashboardBookingsRoute,
   DashboardCustomersRoute: DashboardCustomersRoute,

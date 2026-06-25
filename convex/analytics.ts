@@ -7,6 +7,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
+import { requireMembership } from "./lib/authz";
 
 // ---- helpers ----
 
@@ -35,15 +36,16 @@ export const getOverview = query({
 		endDate: v.string(),
 	},
 	handler: async (ctx, args) => {
+		const orgId = args.organizationId;
 		const tours = await ctx.db
 			.query("tours")
-			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
 			.collect();
 		const activeTours = tours.filter((t) => !t.deletedAt);
 
 		const allAssignments = await ctx.db
 			.query("assignments")
-			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
 			.collect();
 		const inRange = allAssignments.filter(
 			(a) =>
@@ -77,7 +79,7 @@ export const getOverview = query({
 			.query("vacationRequests")
 			.withIndex("by_org_status", (q) =>
 				q
-					.eq("organizationId", args.organizationId)
+					.eq("organizationId", orgId)
 					.eq("status", "pending"),
 			)
 			.collect();
@@ -89,7 +91,7 @@ export const getOverview = query({
 			const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
 			const memberList = await auth.api.listMembers({
 				headers,
-				query: { organizationId: args.organizationId },
+				query: { organizationId: orgId },
 			});
 			totalGuides = memberList.members.filter(
 				(m: { role: string }) => m.role === "guide",
