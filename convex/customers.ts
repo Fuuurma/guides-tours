@@ -360,7 +360,10 @@ export const update = mutation({
 export const remove = mutation({
 	args: { customerId: v.id("customers") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
+		// Source: @require_staff → any STAFF-role user. Our nearest
+		// equivalents are owner/admin/member (the people who do CRM
+		// work). Deliberately tighter than source on guides/drivers.
+		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		const customer = await ctx.db.get(args.customerId);
 		if (!customer) throw new ConvexError("Customer not found");
 		if (customer.organizationId !== member.organizationId) {
@@ -402,30 +405,10 @@ export const remove = mutation({
 	},
 });
 
-/** Bump loyalty points / total visits after a completed booking. */
-export const recordCompletion = mutation({
-	args: {
-		customerId: v.id("customers"),
-		totalRevenueCents: v.int64(),
-		loyaltyDelta: v.number(),
-		vipThreshold: v.number(),
-	},
-	handler: async (ctx, args) => {
-		const customer = await ctx.db.get(args.customerId);
-		if (!customer) throw new ConvexError("Customer not found");
-		const newVisits = customer.totalVisits + 1;
-		const newRevenue = customer.totalRevenueCents + args.totalRevenueCents;
-		const newLoyalty = customer.loyaltyPoints + args.loyaltyDelta;
-		const shouldBeVip =
-			customer.vipStatus ||
-			(args.vipThreshold > 0 && newVisits >= args.vipThreshold);
-		await ctx.db.patch(args.customerId, {
-			totalVisits: newVisits,
-			totalRevenueCents: newRevenue,
-			loyaltyPoints: newLoyalty,
-			vipStatus: shouldBeVip,
-			updatedAt: Date.now(),
-		});
-		return args.customerId;
-	},
-});
+/**
+ * NOTE: An earlier `recordCompletion` mutation here was deleted after
+ * audit (Phase 7.1 review). bookings.ts::complete inlines the
+ * customer-stats bump — duplicating it in a separate mutation risked
+ * drift. If a future caller needs a manual customer-stats correction
+ * (admin tool), land it in convex/admin.ts with proper RBAC.
+ */

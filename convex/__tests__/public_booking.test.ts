@@ -189,4 +189,35 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		);
 		expect(created).toBeDefined();
 	});
+
+	it("new public customers default to emailConsent: false (matches source model)", async () => {
+		// Regression for Phase 7.2 review finding #8:
+		// Source's Customer model defaults email_consent=False; we
+		// previously set emailConsent=true on new public customers,
+		// which is a behavioral change. The public form should
+		// collect explicit consent before flipping it on.
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_consent";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: orgId,
+			tourId: tourId as string,
+			customerName: "Greta",
+			customerEmail: "greta@example.com",
+			date: "2026-09-10",
+			startTime: "11:00",
+			guests: 1,
+		});
+		const customers = await t.run(async (ctx) =>
+			ctx.db.query("customers").collect(),
+		);
+		const greta = customers.find(
+			(c: { email: string }) => c.email === "greta@example.com",
+		);
+		expect(greta).toBeDefined();
+		expect(greta?.emailConsent).toBe(false);
+		expect(greta?.smsConsent).toBe(false);
+	});
 });

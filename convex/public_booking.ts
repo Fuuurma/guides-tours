@@ -131,9 +131,11 @@ export const internalCreate = internalMutation({
 				email: args.customerEmail,
 				phone: args.customerPhone ?? "",
 				notes: args.notes ?? "",
+				// Source default: False for both consent fields
+				// (models.py:891-892). The public booking form should
+				// collect explicit consent before flipping these on.
 				smsConsent: false,
-				emailConsent: true,
-				emailConsentDate: now,
+				emailConsent: false,
 				preferredLanguage: "en",
 				tags: [],
 				source: "public_booking",

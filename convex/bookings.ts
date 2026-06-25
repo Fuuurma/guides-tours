@@ -241,7 +241,7 @@ export const create = mutation({
 			guestNames: args.guestNames ?? "",
 			languageRequired: args.languageRequired ?? "",
 			notes: args.notes ?? "",
-			status: args.status ?? "pending",
+			status: args.status ?? "confirmed",
 			depositAmountCents: deposit,
 			totalAmountCents: total,
 			balanceDueCents: balance,
@@ -249,7 +249,11 @@ export const create = mutation({
 			checkedInAt: undefined,
 			checkedInBy: "",
 			completedAt: undefined,
-			netRevenueCents: balance,
+			// Net revenue = gross minus commission. We don't track
+			// commission on regular (non-OTA) bookings, so this
+			// collapses to total. Source: backend/tours/models.py:972
+			// (net_revenue_cents field) — populated only for OTA rows.
+			netRevenueCents: total,
 			source: args.source ?? "direct",
 			reviewRating: undefined,
 			reviewComment: "",
@@ -257,19 +261,16 @@ export const create = mutation({
 			updatedAt: now,
 		});
 
-		// If the booking is in the future, update customer.nextBookingDate
-		// if it would otherwise be earlier than this date. (Source pattern.)
+		// Source pattern: unconditionally set customer.nextBookingDate
+		// when the booking is in the future. Source doesn't max() —
+		// it overwrites. We follow source.
+		// See backend/tours/services/booking_service.py:148-151.
 		const today = new Date().toISOString().slice(0, 10);
 		if (args.date >= today) {
-			if (
-				!customer.nextBookingDate ||
-				customer.nextBookingDate < args.date
-			) {
-				await ctx.db.patch(args.customerId, {
-					nextBookingDate: args.date,
-					updatedAt: now,
-				});
-			}
+			await ctx.db.patch(args.customerId, {
+				nextBookingDate: args.date,
+				updatedAt: now,
+			});
 		}
 
 		await ctx.db.insert("auditLogs", {
@@ -328,8 +329,13 @@ export const update = mutation({
 		if (booking.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
-		if (booking.status === "cancelled") {
-			throw new ConvexError("Cannot modify a cancelled booking");
+		// Source: backend/tours/services/booking_service.py:206-207.
+// Modify refuses: completed | cancelled | no_show. We carry
+// `completed` + `cancelled` (no `no_show` in our schema union).
+if (booking.status === "cancelled" || booking.status === "completed") {
+			throw new ConvexError(
+				`Cannot modify a ${booking.status} booking`,
+			);
 		}
 
 		const now = Date.now();
@@ -353,11 +359,12 @@ export const update = mutation({
 				(patch.depositAmountCents as bigint | undefined) ??
 				booking.depositAmountCents;
 			patch.balanceDueCents = newTotal - dep;
-			patch.netRevenueCents = patch.balanceDueCents;
+			// Net revenue = total (no commission on regular bookings).
+			patch.netRevenueCents = newTotal;
 		} else if (patch.depositAmountCents !== undefined) {
 			const dep = patch.depositAmountCents as bigint;
 			patch.balanceDueCents = booking.totalAmountCents - dep;
-			patch.netRevenueCents = patch.balanceDueCents;
+			patch.netRevenueCents = booking.totalAmountCents;
 		}
 
 		patch.updatedAt = now;
@@ -391,12 +398,18 @@ export const cancel = mutation({
 		if (booking.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
+		// Source: backend/tours/services/booking_service.py:206-207.
+		// Terminal states cannot be cancelled.
 		if (booking.status === "cancelled") {
 			throw new ConvexError("Already cancelled");
 		}
-		if (booking.status === "confirmed") {
-			// Source allows cancel of any non-completed booking. We
-			// accept cancellation of confirmed too — matches source.
+		if (booking.status === "completed") {
+			throw new ConvexError("Cannot cancel a completed booking");
+		}
+		if (booking.status === "checked_in") {
+			throw new ConvexError(
+				"Cannot cancel a checked-in booking; complete it first",
+			);
 		}
 
 		const now = Date.now();
@@ -433,7 +446,6 @@ export const checkIn = mutation({
 			"owner",
 			"admin",
 			"member",
-			"guide",
 		]);
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
@@ -453,6 +465,20 @@ export const checkIn = mutation({
 			checkedInBy: member.userId,
 			updatedAt: now,
 		});
+		await ctx.db.insert("auditLogs", {
+			organizationId: booking.organizationId,
+			userId: member.userId,
+			action: "booking.checked_in",
+			resourceType: "booking",
+			resourceId: args.bookingId,
+			oldValues: { status: "confirmed" },
+			newValues: {
+				status: "checked_in",
+				checkedInAt: now,
+				checkedInBy: member.userId,
+			},
+			timestamp: now,
+		});
 		return args.bookingId;
 	},
 });
@@ -465,7 +491,6 @@ export const complete = mutation({
 			"owner",
 			"admin",
 			"member",
-			"guide",
 		]);
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
@@ -512,8 +537,8 @@ export const complete = mutation({
 			action: "booking.completed",
 			resourceType: "booking",
 			resourceId: args.bookingId,
-			oldValues: {},
-			newValues: { completedAt: now },
+			oldValues: { status: "checked_in" },
+			newValues: { status: "completed", completedAt: now },
 			timestamp: now,
 		});
 
