@@ -413,10 +413,12 @@ export default defineSchema({
 		guestNames: v.string(), // comma-separated, source: TextField
 		languageRequired: v.string(),
 		notes: v.string(),
-		// PENDING | CONFIRMED | CANCELLED
+		// PENDING | CONFIRMED | CHECKED_IN | COMPLETED | CANCELLED
 		status: v.union(
 			v.literal("pending"),
 			v.literal("confirmed"),
+			v.literal("checked_in"),
+			v.literal("completed"),
 			v.literal("cancelled"),
 		),
 		// Cents-only (per Phase 3 decision — drop DecimalField dollars)

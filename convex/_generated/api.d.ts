@@ -10,7 +10,9 @@
 
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
+import type * as bookings from "../bookings.js";
 import type * as crons from "../crons.js";
+import type * as customers from "../customers.js";
 import type * as http from "../http.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_crypto from "../lib/crypto.js";
@@ -48,7 +50,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authz: typeof authz;
+  bookings: typeof bookings;
   crons: typeof crons;
+  customers: typeof customers;
   http: typeof http;
   "lib/authz": typeof lib_authz;
   "lib/crypto": typeof lib_crypto;
