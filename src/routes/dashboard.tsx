@@ -1,7 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -15,10 +14,10 @@ import { authClient } from "@/lib/auth-client";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard")({
-	component: DashboardPage,
+	component: DashboardLayout,
 });
 
-function DashboardPage() {
+function DashboardLayout() {
 	const navigate = useNavigate();
 	const { data: user, isPending: userPending } = useQuery(
 		convexQuery(api.auth.getCurrentUser, {}),
@@ -37,9 +36,9 @@ function DashboardPage() {
 		});
 	};
 
-	if (userPending) {
+	if (userPending || orgPending) {
 		return (
-			<main className="mx-auto max-w-2xl px-4 py-12">
+			<main className="mx-auto max-w-6xl px-4 py-12">
 				<p className="text-muted-foreground">Loading...</p>
 			</main>
 		);
@@ -47,7 +46,7 @@ function DashboardPage() {
 
 	if (!user) {
 		return (
-			<main className="mx-auto max-w-2xl px-4 py-12">
+			<main className="mx-auto max-w-6xl px-4 py-12">
 				<Toaster />
 				<Card>
 					<CardHeader>
@@ -66,19 +65,9 @@ function DashboardPage() {
 		);
 	}
 
-	if (orgPending) {
-		return (
-			<main className="mx-auto max-w-2xl px-4 py-12">
-				<Toaster />
-				<p className="text-muted-foreground">Loading workspace...</p>
-			</main>
-		);
-	}
-
-	// No active organization — send to onboarding.
 	if (!org) {
 		return (
-			<main className="mx-auto max-w-2xl px-4 py-12">
+			<main className="mx-auto max-w-6xl px-4 py-12">
 				<Toaster />
 				<Card>
 					<CardHeader>
@@ -98,51 +87,50 @@ function DashboardPage() {
 	}
 
 	return (
-		<main className="mx-auto max-w-2xl space-y-6 px-4 py-12">
+		<div className="min-h-screen">
 			<Toaster />
-			<Card>
-				<CardHeader>
-					<CardTitle>{org.name}</CardTitle>
-					<CardDescription>
-						{user.name} ({user.email}) · role:{" "}
-						<span className="font-mono">{org.role}</span> · {org.memberCount}{" "}
-						member
-						{org.memberCount === 1 ? "" : "s"}
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					<div className="bg-muted rounded-md p-3 font-mono text-xs">
-						slug: /{org.slug}
-					</div>
-					<p className="text-muted-foreground text-sm">
-						Phase 4 wired. Phase 5+ will add tour scheduling, guides, OTA
-						integrations, and Stripe.
-					</p>
-					<div className="flex gap-2">
-						<Button
-							variant="outline"
-							onClick={async () => {
-								const invite = await authClient.organization.inviteMember({
-									email: window.prompt("Invite email:") ?? "",
-									role: "member",
-								});
-								if (invite.error) {
-									toast.error(invite.error.message);
-									return;
-								}
-								toast.success(
-									`Invite created (id ${invite.data?.id}). Stub: ${invite.data?.id ? "no email sent yet (Phase 7 wires SES)" : ""}`,
-								);
-							}}
+			<nav className="border-b bg-white">
+				<div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
+					<Link to="/dashboard" className="text-lg font-semibold">
+						{org.name}
+					</Link>
+					<div className="flex gap-1">
+						<Link
+							to="/dashboard"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeOptions={{ exact: true }}
+							activeProps={{ className: "bg-gray-100 font-medium" }}
 						>
-							Invite member
-						</Button>
-						<Button variant="outline" onClick={handleSignOut}>
+							Home
+						</Link>
+						<Link
+							to="/dashboard/customers"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Customers
+						</Link>
+						<Link
+							to="/dashboard/bookings"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Bookings
+						</Link>
+					</div>
+					<div className="ml-auto flex items-center gap-2">
+						<span className="text-muted-foreground text-sm">
+							{user.name} · {org.role}
+						</span>
+						<Button variant="outline" size="sm" onClick={handleSignOut}>
 							Sign out
 						</Button>
 					</div>
-				</CardContent>
-			</Card>
-		</main>
+				</div>
+			</nav>
+			<main className="mx-auto max-w-6xl px-4 py-8">
+				<Outlet />
+			</main>
+		</div>
 	);
 }
