@@ -126,3 +126,36 @@ export async function verifyStripeSignature(
 	}
 	return timingSafeEqual(expectedBytes, signatureBytes);
 }
+
+/**
+ * Produce a Stripe-compatible Signature header for a payload. Used by
+ * tests to round-trip signature verification. Production webhooks use
+ * the real Stripe signing — this helper is for self-test only.
+ *
+ * @param payload The raw webhook body string
+ * @param secret  The endpoint signing secret (whsec_...)
+ * @param timestamp Optional unix seconds (defaults to now)
+ */
+export async function signStripePayload(
+	payload: string,
+	secret: string,
+	timestamp?: number,
+): Promise<string> {
+	const ts = timestamp ?? Math.floor(Date.now() / 1000);
+	const signed = `${ts}.${payload}`;
+	const keyBytes = new TextEncoder().encode(secret);
+	const key = await getCrypto().subtle.importKey(
+		"raw",
+		keyBytes as BufferSource,
+		{ name: "HMAC", hash: "SHA-256" },
+		false,
+		["sign"],
+	);
+	const sigBuf = await getCrypto().subtle.sign(
+		"HMAC",
+		key,
+		new TextEncoder().encode(signed),
+	);
+	const sig = toHex(new Uint8Array(sigBuf));
+	return `t=${ts},v1=${sig}`;
+}
