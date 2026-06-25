@@ -45,6 +45,7 @@ import type * as payments_stripe from "../payments_stripe.js";
 import type * as payments_stripe_actions from "../payments_stripe_actions.js";
 import type * as public_booking from "../public_booking.js";
 import type * as tours from "../tours.js";
+import type * as vacationRequests from "../vacationRequests.js";
 
 import type {
   ApiFromModules,
@@ -90,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   payments_stripe_actions: typeof payments_stripe_actions;
   public_booking: typeof public_booking;
   tours: typeof tours;
+  vacationRequests: typeof vacationRequests;
 }>;
 
 /**

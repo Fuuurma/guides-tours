@@ -77,11 +77,14 @@ export default defineSchema({
 			v.literal("approved"),
 			v.literal("rejected"),
 		),
+		reviewedBy: v.optional(v.string()),
+		reviewedAt: v.optional(v.number()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
 		.index("by_org_status", ["organizationId", "status"])
 		.index("by_user", ["userId"])
+		.index("by_user_status", ["userId", "status"])
 		.index("by_org", ["organizationId"]),
 
 	// ----- Tours -----
