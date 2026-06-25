@@ -49,6 +49,7 @@ import type * as payments from "../payments.js";
 import type * as payments_stripe from "../payments_stripe.js";
 import type * as payments_stripe_actions from "../payments_stripe_actions.js";
 import type * as public_booking from "../public_booking.js";
+import type * as scheduledNotifications from "../scheduledNotifications.js";
 import type * as tourCategories from "../tourCategories.js";
 import type * as tourTemplates from "../tourTemplates.js";
 import type * as tours from "../tours.js";
@@ -103,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   payments_stripe: typeof payments_stripe;
   payments_stripe_actions: typeof payments_stripe_actions;
   public_booking: typeof public_booking;
+  scheduledNotifications: typeof scheduledNotifications;
   tourCategories: typeof tourCategories;
   tourTemplates: typeof tourTemplates;
   tours: typeof tours;

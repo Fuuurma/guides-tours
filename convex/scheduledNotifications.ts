@@ -1,0 +1,116 @@
+// Scheduled notifications: queue reminders + post-tour reviews.
+// The cron in convex/notifications.ts picks rows where sent=false
+// and scheduledFor <= now, dispatches via notification_dispatch.ts.
+//
+// Source: backend/notifications/service.py::schedule_booking_reminders
+// (the source defines it but doesn't wire it into booking creation —
+// we DO wire it in convex/bookings.ts::internalCreate).
+
+import { v, ConvexError } from "convex/values";
+import { internalMutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+
+// Hours-before-tour that each reminder fires at.
+const REMINDER_OFFSETS = {
+	reminder_24h: 24,
+	reminder_2h: 2,
+} as const;
+
+/**
+ * Schedule reminders (24h + 2h) and the post-tour review for a booking.
+ * Skips past reminders silently (matches source).
+ *
+ * @returns IDs of the ScheduledNotification rows created (empty if all in past)
+ */
+export const scheduleForBooking = internalMutation({
+	args: {
+		organizationId: v.string(),
+		bookingId: v.id("bookings"),
+		date: v.string(),
+		startTime: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const now = Date.now();
+
+		// Combine booking date + startTime into a UTC timestamp.
+		const tourTs = parseBookingTime(args.date, args.startTime);
+		if (!tourTs) {
+			throw new ConvexError(
+				`Cannot schedule: invalid date/time "${args.date} ${args.startTime}"`,
+			);
+		}
+
+		const created: Id<"scheduledNotifications">[] = [];
+
+		for (const [templateType, offsetHours] of Object.entries(
+			REMINDER_OFFSETS,
+		) as Array<[keyof typeof REMINDER_OFFSETS, number]>) {
+			const template = await findTemplate(
+				ctx,
+				args.organizationId,
+				templateType,
+			);
+			if (!template) continue; // source: skip if template missing
+			const sendAt = tourTs - offsetHours * 3_600_000;
+			if (sendAt <= now) continue; // source: skip if in past
+			const id = await ctx.db.insert("scheduledNotifications", {
+				organizationId: args.organizationId,
+				bookingId: args.bookingId,
+				templateId: template,
+				scheduledFor: sendAt,
+				sent: false,
+				retryCount: 0,
+				maxRetries: template !== undefined
+					? (await getTemplateMaxRetries(ctx, template))
+					: 3,
+				createdAt: now,
+			});
+			created.push(id);
+		}
+
+		return created;
+	},
+});
+
+async function findTemplate(
+	ctx: { db: { query: Function } },
+	organizationId: string,
+	templateType: string,
+): Promise<Id<"notificationTemplates"> | null> {
+	const row = await ctx.db
+		.query("notificationTemplates")
+		.withIndex("by_org_type", (q: any) =>
+			q.eq("organizationId", organizationId).eq("templateType", templateType),
+		)
+		.filter((q: any) => q.eq(q.field("isActive"), true))
+		.first();
+	return row?._id ?? null;
+}
+
+async function getTemplateMaxRetries(
+	ctx: { db: { get: Function } },
+	id: Id<"notificationTemplates">,
+): Promise<number> {
+	const t = await ctx.db.get(id);
+	return t?.retryCount ?? 3;
+}
+
+// Lightweight Function type alias so we don't pull the full DataModel.
+type Function = (...args: any[]) => any;
+
+function parseBookingTime(
+	date: string,
+	startTime: string,
+): number | null {
+	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+	const t = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(startTime);
+	if (!m || !t) return null;
+	const year = Number(m[1]);
+	const month = Number(m[2]);
+	const day = Number(m[3]);
+	const hh = Number(t[1]);
+	const mm = Number(t[2]);
+	const ss = t[3] ? Number(t[3]) : 0;
+	const ts = Date.UTC(year, month - 1, day, hh, mm, ss);
+	return Number.isFinite(ts) ? ts : null;
+}

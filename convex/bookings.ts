@@ -24,6 +24,7 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { internal } from "./_generated/api";
 
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
 // minus currency/conversion noise (we are cents-only).
@@ -290,6 +291,21 @@ export const create = mutation({
 			},
 			timestamp: now,
 		});
+
+		// Schedule reminder notifications (24h + 2h before tour).
+		// Source had this defined but never called — we wire it here.
+		// See backend/notifications/service.py::schedule_booking_reminders.
+		if (args.status !== "cancelled") {
+			await ctx.runMutation(
+				internal.scheduledNotifications.scheduleForBooking,
+				{
+					organizationId: member.organizationId,
+					bookingId,
+					date: args.date,
+					startTime: args.startTime,
+				},
+			);
+		}
 
 		return bookingId;
 	},

@@ -192,6 +192,17 @@ export const internalCreate = internalMutation({
 			timestamp: now,
 		});
 
+		// Schedule reminder notifications (24h + 2h before tour).
+		await ctx.runMutation(
+			internal.scheduledNotifications.scheduleForBooking,
+			{
+				organizationId: args.organizationId,
+				bookingId: bookingId as never,
+				date: args.date,
+				startTime: args.startTime,
+			},
+		);
+
 		return bookingId;
 	},
 });
