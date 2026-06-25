@@ -10,9 +10,12 @@
 
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_crypto from "../lib/crypto.js";
+import type * as notification_dispatch from "../notification_dispatch.js";
+import type * as notifications from "../notifications.js";
 import type * as organizations from "../organizations.js";
 import type * as tours from "../tours.js";
 
@@ -25,9 +28,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authz: typeof authz;
+  crons: typeof crons;
   http: typeof http;
   "lib/authz": typeof lib_authz;
   "lib/crypto": typeof lib_crypto;
+  notification_dispatch: typeof notification_dispatch;
+  notifications: typeof notifications;
   organizations: typeof organizations;
   tours: typeof tours;
 }>;

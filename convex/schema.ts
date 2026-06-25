@@ -359,10 +359,12 @@ export default defineSchema({
 		),
 		createdAt: v.number(),
 		updatedAt: v.number(),
+		...softDelete,
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_org_date", ["organizationId", "date"])
 		.index("by_org_status_date", ["organizationId", "status", "date"])
+		.index("by_status_date", ["status", "date"])
 		.index("by_tour_date", ["tourId", "date"])
 		.index("by_guide_date", ["guideId", "date"])
 		.index("by_vehicle_date", ["vehicleId", "date"])
@@ -721,7 +723,8 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_org_status", ["organizationId", "status"])
 		.index("by_booking", ["bookingId"])
-		.index("by_org_channel", ["organizationId", "channel"]),
+		.index("by_org_channel", ["organizationId", "channel"])
+		.index("by_created_at", ["createdAt"]),
 
 	// Cron-driven: processPendingNotifications picks sent=false AND
 	// scheduledFor<=now. Compound index on (sent, scheduledFor) makes
