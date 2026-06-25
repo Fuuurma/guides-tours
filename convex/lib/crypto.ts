@@ -21,6 +21,8 @@
 // has Node's crypto (Convex actions, vitest in Node, etc.). It does
 // NOT work in the browser — the client never holds the key.
 
+"use node";
+
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 
 const ALGO = "aes-256-gcm";

@@ -54,7 +54,10 @@ function SignUpPage() {
 			setError(signUpError.message ?? "Sign up failed");
 			return;
 		}
-		await navigate({ to: "/dashboard" });
+		// First user → land on onboarding to create the company org.
+		// After that, sign-up via invite lands on dashboard directly
+		// (handled by the /invite/$invitationId route, Phase 4.4).
+		await navigate({ to: "/onboarding" });
 	});
 
 	return (

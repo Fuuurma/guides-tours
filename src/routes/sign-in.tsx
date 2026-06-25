@@ -52,7 +52,12 @@ function SignInPage() {
 			setError(signInError.message ?? "Sign in failed");
 			return;
 		}
-		await navigate({ to: "/dashboard" });
+		// After sign-in, peek at whether the user has any org. If not,
+		// route them through onboarding. Otherwise straight to dashboard.
+		const { data: orgs } = await authClient.organization.list();
+		await navigate({
+			to: orgs && orgs.length > 0 ? "/dashboard" : "/onboarding",
+		});
 	});
 
 	return (

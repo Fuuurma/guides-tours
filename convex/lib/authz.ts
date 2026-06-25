@@ -9,6 +9,11 @@
 // Use requireMembership() in every public query/mutation that touches
 // tenant data. Throws ConvexError on failure so the client gets a clean
 // 401/403 instead of an opaque internal error.
+//
+// Active-org resolution: Better Auth org plugin stores
+// `session.activeOrganizationId`. We read it via auth.api.getSession.
+// If null (user never called setActiveOrganization), we fall back to
+// the user's first membership.
 
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
@@ -44,15 +49,37 @@ export async function requireUser(ctx: Ctx) {
 /**
  * Resolve the caller's active membership.
  *
- * For now, returns the first organization the user belongs to. Phase 4
- * will switch to Better Auth's active-organization tracking on the
- * session, which lets users switch between organizations.
- *
- * Throws if the user has no organization.
+ * Reads `session.activeOrganizationId` (Better Auth org plugin).
+ * Falls back to the user's first org if no active org is set.
+ * Throws if the user has no organization at all.
  */
 export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 	const user = await requireUser(ctx);
 	const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+	const session = await auth.api.getSession({ headers });
+	const activeOrgId =
+		(session?.session as { activeOrganizationId?: string } | null)
+			?.activeOrganizationId ?? null;
+
+	if (activeOrgId) {
+		// Resolve the user's role in the active org.
+		const memberList = await auth.api.listMembers({
+			headers,
+			query: { organizationId: activeOrgId },
+		});
+		const me = memberList.members.find(
+			(m: { userId: string }) => m.userId === user._id,
+		);
+		if (me) {
+			return {
+				userId: user._id,
+				organizationId: activeOrgId,
+				role: me.role,
+			};
+		}
+	}
+
+	// Fall back to the user's first org (no active set yet).
 	const list = await auth.api.listOrganizations({ headers });
 	const first = list[0];
 	if (!first) {
@@ -60,8 +87,6 @@ export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 			"No organization: user must belong to at least one organization",
 		);
 	}
-	// listOrganizations returns the org; we need a separate call to get
-	// the user's role in it.
 	const memberList = await auth.api.listMembers({
 		headers,
 		query: { organizationId: first.id },

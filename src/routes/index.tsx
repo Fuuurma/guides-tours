@@ -22,7 +22,8 @@ function Home() {
 					</Button>
 				</div>
 				<p className="text-muted-foreground text-xs">
-					Phase 2 scaffolding complete — auth roundtrip ready.
+					Multi-tenant tour operator SaaS. Phase 4 complete — org + invite flow
+					ready.
 				</p>
 			</div>
 		</main>
