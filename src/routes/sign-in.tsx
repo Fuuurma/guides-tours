@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -104,9 +104,9 @@ function SignInPage() {
 						</Button>
 						<p className="text-muted-foreground text-sm">
 							No account yet?{" "}
-							<a href="/sign-up" className="text-foreground underline">
+							<Link to="/sign-up" className="text-foreground underline">
 								Create one
-							</a>
+							</Link>
 						</p>
 					</CardFooter>
 				</form>

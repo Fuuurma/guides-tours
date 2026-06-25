@@ -50,7 +50,8 @@ convex/                    # Convex backend
 ├── auth.ts                # Better Auth factory + getCurrentUser
 ├── convex.config.ts       # Component registration
 ├── http.ts                # Better Auth HTTP route registration
-└── schema.ts              # Convex schema (filled in Phase 3)
+├── schema.ts              # Convex schema (filled in Phase 3)
+└── tsconfig.json          # Convex-specific typecheck config
 
 src/
 ├── components/ui/         # shadcn components (copied via shadcn CLI)
@@ -59,20 +60,32 @@ src/
 │   ├── auth-server.ts     # Server-side auth helpers (getToken, etc.)
 │   └── utils.ts           # cn() class merge helper
 ├── routes/
-│   ├── __root.tsx         # Root layout + ConvexBetterAuthProvider
-│   ├── index.tsx          # Home placeholder
-│   └── api/auth/$.ts      # Better Auth proxy route
-└── router.tsx             # Router setup with ConvexQueryClient
+│   ├── __root.tsx         # Root layout + ConvexBetterAuthProvider + Toaster
+│   ├── index.tsx          # Landing page
+│   ├── sign-up.tsx        # Email/password registration
+│   ├── sign-in.tsx        # Email/password login
+│   ├── dashboard.tsx      # Authenticated home (shows current user + sign-out)
+│   └── api/auth/$.ts      # Better Auth proxy route → Convex
+├── router.tsx             # Router setup with ConvexQueryClient
+└── styles.css             # Tailwind v4 + shadcn CSS variables
+
+wrangler.jsonc             # Cloudflare Workers config
+vite.config.ts             # SSR + Convex dev plugin config
+biome.json                 # Lint + format config
+components.json            # shadcn/ui config
+.env.example               # Template for required env vars
 ```
 
 ## Phase status
 
 - [x] Phase 1 — Clone + analyze (PORT-CHECKLIST.md)
-- [/] Phase 2 — Foundation (in progress)
+- [x] Phase 2 — Foundation
   - [x] TanStack Start scaffolded
   - [x] Convex + Better Auth installed and wired
   - [x] shadcn UI primitives added
-  - [ ] End-to-end auth roundtrip (register / login / logout) — needs first `convex dev`
+  - [x] Sign-up / sign-in / dashboard / proxy routes
+  - [x] Auth roundtrip verified end-to-end (HTTP 200 on all routes, Convex auth endpoint responds, env vars set)
+  - **Browser-side roundtrip pending** — needs you to click through in browser
 - [ ] Phase 3 — Schema port (40 Django models → Convex)
 - [ ] Phase 4 — Auth + multi-tenancy (Better Auth org plugin)
 - [ ] Phase 5 — Celery → Convex cron

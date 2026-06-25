@@ -13,6 +13,8 @@ const config = defineConfig({
 			"@hookform/resolvers/zod",
 			"zod",
 			"@convex-dev/react-query",
+			"sonner",
+			"next-themes",
 		],
 	},
 	ssr: {

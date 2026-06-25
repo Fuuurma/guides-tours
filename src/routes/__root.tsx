@@ -12,6 +12,7 @@ import {
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
 import type * as React from "react";
+import { Toaster } from "@/components/ui/sonner";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
 import appCss from "../styles.css?url";
@@ -69,6 +70,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			<HeadContent />
 			<body>
 				{children}
+				<Toaster />
 				<TanStackDevtools
 					config={{
 						position: "bottom-right",
