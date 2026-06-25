@@ -21,6 +21,7 @@ import type * as http from "../http.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_awsSigV4 from "../lib/awsSigV4.js";
 import type * as lib_crypto from "../lib/crypto.js";
+import type * as notificationSettings from "../notificationSettings.js";
 import type * as notificationTemplates from "../notificationTemplates.js";
 import type * as notification_dispatch from "../notification_dispatch.js";
 import type * as notifications from "../notifications.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authz": typeof lib_authz;
   "lib/awsSigV4": typeof lib_awsSigV4;
   "lib/crypto": typeof lib_crypto;
+  notificationSettings: typeof notificationSettings;
   notificationTemplates: typeof notificationTemplates;
   notification_dispatch: typeof notification_dispatch;
   notifications: typeof notifications;
