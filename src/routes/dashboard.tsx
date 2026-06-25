@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -10,7 +10,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Toaster } from "@/components/ui/sonner";
-import { authClient } from "@/lib/auth-client";
+import { NavBar } from "@/components/nav-bar";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard")({
@@ -25,16 +25,6 @@ function DashboardLayout() {
 	const { data: org, isPending: orgPending } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
-
-	const handleSignOut = async () => {
-		await authClient.signOut({
-			fetchOptions: {
-				onSuccess: () => {
-					location.assign("/");
-				},
-			},
-		});
-	};
 
 	if (userPending || orgPending) {
 		return (
@@ -89,101 +79,7 @@ function DashboardLayout() {
 	return (
 		<div className="min-h-screen">
 			<Toaster />
-			<nav className="border-b bg-white">
-				<div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
-					<Link to="/dashboard" className="text-lg font-semibold">
-						{org.name}
-					</Link>
-					<div className="flex gap-1">
-						<Link
-							to="/dashboard"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeOptions={{ exact: true }}
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Home
-						</Link>
-						<Link
-							to="/dashboard/tours"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Tours
-						</Link>
-						<Link
-							to="/dashboard/templates"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Templates
-						</Link>
-						<Link
-							to="/dashboard/schedules"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Schedules
-						</Link>
-						<Link
-							to="/dashboard/bookings"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Bookings
-						</Link>
-						<Link
-							to="/dashboard/customers"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Customers
-						</Link>
-						<Link
-							to="/dashboard/analytics"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Analytics
-						</Link>
-						<Link
-							to="/dashboard/assignments"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Assignments
-						</Link>
-						<Link
-							to="/dashboard/vacations"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Vacations
-						</Link>
-						<Link
-							to="/dashboard/vehicles"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Vehicles
-						</Link>
-						<Link
-							to="/dashboard/drivers"
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
-							activeProps={{ className: "bg-gray-100 font-medium" }}
-						>
-							Drivers
-						</Link>
-					</div>
-					<div className="ml-auto flex items-center gap-2">
-						<span className="text-muted-foreground text-sm">
-							{user.name} · {org.role}
-						</span>
-						<Button variant="outline" size="sm" onClick={handleSignOut}>
-							Sign out
-						</Button>
-					</div>
-				</div>
-			</nav>
+			<NavBar orgName={org.name} userName={user.name} role={org.role} />
 			<main className="mx-auto max-w-6xl px-4 py-8">
 				<Outlet />
 			</main>
