@@ -87,7 +87,7 @@ async function seedBooking(
 	overrides: Partial<{
 		totalAmountCents: bigint;
 		depositAmountCents: bigint;
-		status: "pending" | "confirmed" | "cancelled";
+		status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
 		date: string;
 		checkedInAt: number;
 		completedAt: number;

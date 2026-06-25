@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { registerOtaRoutes } from "./ota/router";
+import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 
 const http = httpRouter();
@@ -14,6 +15,16 @@ authComponent.registerRoutes(http, createAuth);
 // at /api/ota/webhooks/{provider}. Add new providers in
 // convex/ota/router.ts.
 registerOtaRoutes(http);
+
+// Stripe webhook — POST /api/payments/stripe/webhook. Verifies the
+// signature against the org's stored webhook secret, then dispatches
+// payment_intent.succeeded / payment_intent.payment_failed /
+// charge.refunded to the payments table.
+http.route({
+	path: "/api/payments/stripe/webhook",
+	method: "POST",
+	handler: stripeWebhook,
+});
 
 // Public booking endpoint — POST /api/public/book/:slug. No auth
 // required (visitors from the marketing site). The slug identifies

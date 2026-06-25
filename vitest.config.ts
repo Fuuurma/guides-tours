@@ -13,5 +13,11 @@ export default defineConfig({
 			"convex/**/__tests__/**/*.test.ts",
 			"src/**/*.test.{ts,tsx}",
 		],
+		// convex/auth.ts throws at module-load if SITE_URL is missing.
+		// Set a dummy value so importing the auth chain (transitively
+		// pulled in by convex/payments.ts → convex/lib/authz) works.
+		env: {
+			SITE_URL: "http://localhost:3000",
+		},
 	},
 });
