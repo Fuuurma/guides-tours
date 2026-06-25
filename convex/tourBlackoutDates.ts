@@ -1,0 +1,200 @@
+// Tour blackout dates: block bookings for specific date ranges per tour.
+//
+// Source: backend/tours/models.py::TourBlackoutDate
+
+import { v, ConvexError } from "convex/values";
+import {
+	query,
+	mutation,
+	internalMutation,
+} from "./_generated/server";
+import type { FunctionReference } from "convex/server";
+import { requireMembership, requireRole } from "./lib/authz";
+
+// ---- queries ----
+
+export const list = query({
+	args: {
+		tourId: v.optional(v.id("tours")),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const orgId = member.organizationId;
+		let q = ctx.db
+			.query("tourBlackoutDates")
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
+		if (args.tourId) {
+			q = ctx.db
+				.query("tourBlackoutDates")
+				.withIndex("by_tour_start", (q) =>
+					q.eq("tourId", args.tourId!),
+				);
+		}
+		const all = await q.collect();
+		return all.sort((a, b) => a.startDate.localeCompare(b.startDate));
+	},
+});
+
+// Returns true if any blackout covers the given (tourId, date).
+// Exported as `isBlackout` query for production use; the logic is
+// available as `isBlackoutHelper` for tests (no auth context).
+export const isBlackout = query({
+	args: {
+		tourId: v.id("tours"),
+		date: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await requireMembership(ctx);
+		return await isBlackoutHelper(ctx, args.tourId, args.date);
+	},
+});
+
+export async function isBlackoutHelper(
+	ctx: { db: { query: Function } },
+	tourId: string,
+	date: string,
+): Promise<boolean> {
+	const all = await ctx.db
+		.query("tourBlackoutDates")
+		.withIndex("by_tour_start", (q: any) => q.eq("tourId", tourId))
+		.collect();
+	return all.some(
+		(b: { startDate: string; endDate: string }) =>
+			b.startDate <= date && b.endDate >= date,
+	);
+}
+
+type Function = (...args: any[]) => any;
+
+// ---- mutations ----
+
+export const create = mutation({
+	args: {
+		tourId: v.id("tours"),
+		startDate: v.string(),
+		endDate: v.string(),
+		reason: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		return await ctx.runMutation(
+			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			{ organizationId: member.organizationId, userId: member.userId, ...args },
+		);
+	},
+});
+
+export const internalCreate = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		tourId: v.id("tours"),
+		startDate: v.string(),
+		endDate: v.string(),
+		reason: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		if (args.endDate < args.startDate) {
+			throw new ConvexError("endDate must be on or after startDate");
+		}
+		const now = Date.now();
+		const id = await ctx.db.insert("tourBlackoutDates", {
+			organizationId: args.organizationId,
+			tourId: args.tourId,
+			startDate: args.startDate,
+			endDate: args.endDate,
+			reason: args.reason ?? "",
+			createdAt: now,
+			updatedAt: now,
+		});
+		await ctx.db.insert("auditLogs", {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tour_blackout.created",
+			resourceType: "tourBlackout",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				tourId: args.tourId,
+				startDate: args.startDate,
+				endDate: args.endDate,
+			},
+			timestamp: now,
+		});
+		return id;
+	},
+});
+
+export const update = mutation({
+	args: {
+		blackoutId: v.id("tourBlackoutDates"),
+		startDate: v.optional(v.string()),
+		endDate: v.optional(v.string()),
+		reason: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const { blackoutId, ...rest } = args;
+		return await ctx.runMutation(
+			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			{ organizationId: member.organizationId, userId: member.userId, blackoutId, ...rest },
+		);
+	},
+});
+
+export const internalUpdate = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		blackoutId: v.id("tourBlackoutDates"),
+		startDate: v.optional(v.string()),
+		endDate: v.optional(v.string()),
+		reason: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db.get(args.blackoutId);
+		if (!existing) throw new ConvexError("Blackout not found");
+		if (existing.organizationId !== args.organizationId) {
+			throw new ConvexError("Forbidden: wrong organization");
+		}
+		const nextStart = args.startDate ?? existing.startDate;
+		const nextEnd = args.endDate ?? existing.endDate;
+		if (nextEnd < nextStart) {
+			throw new ConvexError("endDate must be on or after startDate");
+		}
+		const patch: Record<string, unknown> = { updatedAt: Date.now() };
+		if (args.startDate !== undefined) patch.startDate = args.startDate;
+		if (args.endDate !== undefined) patch.endDate = args.endDate;
+		if (args.reason !== undefined) patch.reason = args.reason;
+		await ctx.db.patch(args.blackoutId, patch);
+		return args.blackoutId;
+	},
+});
+
+export const remove = mutation({
+	args: { blackoutId: v.id("tourBlackoutDates") },
+	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin"]);
+		return await ctx.runMutation(
+			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			{ organizationId: member.organizationId, userId: member.userId, blackoutId: args.blackoutId },
+		);
+	},
+});
+
+export const internalRemove = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		blackoutId: v.id("tourBlackoutDates"),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db.get(args.blackoutId);
+		if (!existing) throw new ConvexError("Blackout not found");
+		if (existing.organizationId !== args.organizationId) {
+			throw new ConvexError("Forbidden: wrong organization");
+		}
+		await ctx.db.delete(args.blackoutId);
+		return args.blackoutId;
+	},
+});
