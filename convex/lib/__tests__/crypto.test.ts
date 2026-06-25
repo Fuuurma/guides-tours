@@ -11,96 +11,95 @@ describe("convex/lib/crypto", () => {
 	});
 
 	describe("encrypt + decrypt", () => {
-		it("round-trips a simple string with a hex key", () => {
-			const ct = encrypt("viator-api-key-12345");
+		it("round-trips a simple string with a hex key", async () => {
+			const ct = await encrypt("viator-api-key-12345");
 			expect(ct).not.toBe("viator-api-key-12345");
 			expect(ct.split(":")).toHaveLength(3);
-			expect(decrypt(ct)).toBe("viator-api-key-12345");
+			expect(await decrypt(ct)).toBe("viator-api-key-12345");
 		});
 
-		it("round-trips with a 32-byte ascii key", () => {
+		it("round-trips with a 32-byte ascii key", async () => {
 			_resetKeyForTest();
 			process.env.ENCRYPTION_KEY = ASCII_KEY;
-			const ct = encrypt("secret-stripe-key");
-			expect(decrypt(ct)).toBe("secret-stripe-key");
+			const ct = await encrypt("secret-stripe-key");
+			expect(await decrypt(ct)).toBe("secret-stripe-key");
 		});
 
-		it("round-trips an empty string", () => {
-			const ct = encrypt("");
-			expect(decrypt(ct)).toBe("");
+		it("round-trips an empty string", async () => {
+			const ct = await encrypt("");
+			expect(await decrypt(ct)).toBe("");
 		});
 
-		it("round-trips unicode", () => {
+		it("round-trips unicode", async () => {
 			const original = "Guía de tours — 中文 🌴";
-			expect(decrypt(encrypt(original))).toBe(original);
+			expect(await decrypt(await encrypt(original))).toBe(original);
 		});
 
-		it("round-trips a long string", () => {
+		it("round-trips a long string", async () => {
 			const original = "x".repeat(10_000);
-			expect(decrypt(encrypt(original))).toBe(original);
+			expect(await decrypt(await encrypt(original))).toBe(original);
 		});
 
-		it("produces different ciphertext each call (random IV)", () => {
-			const ct1 = encrypt("same plaintext");
-			const ct2 = encrypt("same plaintext");
+		it("produces different ciphertext each call (random IV)", async () => {
+			const ct1 = await encrypt("same plaintext");
+			const ct2 = await encrypt("same plaintext");
 			expect(ct1).not.toBe(ct2);
-			expect(decrypt(ct1)).toBe("same plaintext");
-			expect(decrypt(ct2)).toBe("same plaintext");
+			expect(await decrypt(ct1)).toBe("same plaintext");
+			expect(await decrypt(ct2)).toBe("same plaintext");
 		});
 	});
 
 	describe("authentication (GCM tag)", () => {
-		it("rejects tampered ciphertext", () => {
-			const ct = encrypt("pay-me");
+		it("rejects tampered ciphertext", async () => {
+			const ct = await encrypt("pay-me");
 			const [iv, body, tag] = ct.split(":") as [string, string, string];
-			// Flip one hex char in the ciphertext body.
 			const tampered =
 				body.slice(0, -1) + (body.slice(-1) === "a" ? "b" : "a");
-			expect(() => decrypt(`${iv}:${tampered}:${tag}`)).toThrow();
+			await expect(decrypt(`${iv}:${tampered}:${tag}`)).rejects.toThrow();
 		});
 
-		it("rejects tampered auth tag", () => {
-			const ct = encrypt("pay-me");
+		it("rejects tampered auth tag", async () => {
+			const ct = await encrypt("pay-me");
 			const [iv, body, tag] = ct.split(":") as [string, string, string];
 			const tamperedTag =
 				tag.slice(0, -1) + (tag.slice(-1) === "a" ? "b" : "a");
-			expect(() => decrypt(`${iv}:${body}:${tamperedTag}`)).toThrow();
+			await expect(decrypt(`${iv}:${body}:${tamperedTag}`)).rejects.toThrow();
 		});
 	});
 
 	describe("input validation", () => {
-		it("throws when ENCRYPTION_KEY is missing", () => {
+		it("throws when ENCRYPTION_KEY is missing", async () => {
 			_resetKeyForTest();
 			delete process.env.ENCRYPTION_KEY;
-			expect(() => encrypt("x")).toThrow(/ENCRYPTION_KEY/);
+			await expect(encrypt("x")).rejects.toThrow(/ENCRYPTION_KEY/);
 		});
 
-		it("throws on wrong-length key", () => {
+		it("throws on wrong-length key", async () => {
 			_resetKeyForTest();
 			process.env.ENCRYPTION_KEY = "tooshort";
-			expect(() => encrypt("x")).toThrow(/32 bytes/);
+			await expect(encrypt("x")).rejects.toThrow(/32 bytes/);
 		});
 
-		it("throws on malformed ciphertext", () => {
-			expect(() => decrypt("not-a-valid-format")).toThrow(/format/);
+		it("throws on malformed ciphertext", async () => {
+			await expect(decrypt("not-a-valid-format")).rejects.toThrow(/format/);
 		});
 	});
 
 	describe("key rotation", () => {
-		it("data encrypted under key A cannot be decrypted under key B", () => {
-			const ct = encrypt("secret");
+		it("data encrypted under key A cannot be decrypted under key B", async () => {
+			const ct = await encrypt("secret");
 			_resetKeyForTest();
 			process.env.ENCRYPTION_KEY = "b".repeat(64);
-			expect(() => decrypt(ct)).toThrow();
+			await expect(decrypt(ct)).rejects.toThrow();
 		});
 
-		it("after rotation, new data uses new key", () => {
-			const oldCt = encrypt("old-secret");
+		it("after rotation, new data uses new key", async () => {
+			const oldCt = await encrypt("old-secret");
 			_resetKeyForTest();
 			process.env.ENCRYPTION_KEY = "b".repeat(64);
-			const newCt = encrypt("new-secret");
-			expect(decrypt(newCt)).toBe("new-secret");
-			expect(() => decrypt(oldCt)).toThrow();
+			const newCt = await encrypt("new-secret");
+			expect(await decrypt(newCt)).toBe("new-secret");
+			await expect(decrypt(oldCt)).rejects.toThrow();
 		});
 	});
 });
