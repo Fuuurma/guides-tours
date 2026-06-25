@@ -46,6 +46,7 @@ import type * as ota_upsert from "../ota/upsert.js";
 import type * as ota_viator from "../ota/viator.js";
 import type * as ota_viator_webhook from "../ota/viator_webhook.js";
 import type * as ota_webhook_verify from "../ota/webhook_verify.js";
+import type * as otaProducts from "../otaProducts.js";
 import type * as payments from "../payments.js";
 import type * as payments_stripe from "../payments_stripe.js";
 import type * as payments_stripe_actions from "../payments_stripe_actions.js";
@@ -108,6 +109,7 @@ declare const fullApi: ApiFromModules<{
   "ota/viator": typeof ota_viator;
   "ota/viator_webhook": typeof ota_viator_webhook;
   "ota/webhook_verify": typeof ota_webhook_verify;
+  otaProducts: typeof otaProducts;
   payments: typeof payments;
   payments_stripe: typeof payments_stripe;
   payments_stripe_actions: typeof payments_stripe_actions;
