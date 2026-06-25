@@ -12,6 +12,7 @@ import type * as analytics from "../analytics.js";
 import type * as assignments from "../assignments.js";
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
+import type * as availabilities from "../availabilities.js";
 import type * as bookings from "../bookings.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
@@ -64,6 +65,7 @@ declare const fullApi: ApiFromModules<{
   assignments: typeof assignments;
   auth: typeof auth;
   authz: typeof authz;
+  availabilities: typeof availabilities;
   bookings: typeof bookings;
   crons: typeof crons;
   customers: typeof customers;
