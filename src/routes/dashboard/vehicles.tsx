@@ -8,15 +8,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/vehicles")({
@@ -30,10 +23,37 @@ const statusColors: Record<string, string> = {
 	retired: "bg-gray-100 text-gray-800",
 };
 
+interface Vehicle {
+	_id: string;
+	name: string;
+	vehicleType: string;
+	licensePlate: string;
+	capacity: number;
+	status: string;
+}
+
+const columns: DataTableColumn<Vehicle>[] = [
+	{ key: "name", header: "Name", render: (v) => v.name, className: "font-medium" },
+	{ key: "type", header: "Type", render: (v) => v.vehicleType },
+	{ key: "plate", header: "Plate", render: (v) => v.licensePlate },
+	{ key: "capacity", header: "Capacity", render: (v) => v.capacity },
+	{
+		key: "status",
+		header: "Status",
+		render: (v) => (
+			<Badge className={statusColors[v.status] ?? ""} variant="secondary">
+				{v.status}
+			</Badge>
+		),
+	},
+];
+
 function VehiclesPage() {
-	const { data: vehicles, isPending } = useQuery(
+	const { data: vehicles, isPending, error } = useQuery(
 		convexQuery(api.vehicles.list, {}),
 	);
+
+	const itemCount = vehicles?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -41,46 +61,18 @@ function VehiclesPage() {
 				<CardHeader>
 					<CardTitle>Vehicles</CardTitle>
 					<CardDescription>
-						{vehicles?.length ?? 0} vehicle
-						{(vehicles?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} vehicle{itemCount === 1 ? "" : "s"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !vehicles?.length ? (
-						<p className="text-muted-foreground text-sm">No vehicles yet.</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Name</TableHead>
-									<TableHead>Type</TableHead>
-									<TableHead>Plate</TableHead>
-									<TableHead>Capacity</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{vehicles.map((v) => (
-									<TableRow key={v._id}>
-										<TableCell className="font-medium">{v.name}</TableCell>
-										<TableCell>{v.vehicleType}</TableCell>
-										<TableCell>{v.licensePlate}</TableCell>
-										<TableCell>{v.capacity}</TableCell>
-										<TableCell>
-											<Badge
-												className={statusColors[v.status] ?? ""}
-												variant="secondary"
-											>
-												{v.status}
-											</Badge>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={vehicles as Vehicle[] | undefined}
+						columns={columns}
+						rowKey={(v) => v._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No vehicles yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>

@@ -8,25 +8,46 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/drivers")({
 	component: DriversPage,
 });
 
+interface Driver {
+	_id: string;
+	userId: string;
+	licenseInfo: string;
+	isActive: boolean;
+}
+
+const columns: DataTableColumn<Driver>[] = [
+	{
+		key: "userId",
+		header: "User ID",
+		render: (d) => <span className="font-mono text-xs">{d.userId}</span>,
+	},
+	{ key: "license", header: "License", render: (d) => d.licenseInfo },
+	{
+		key: "status",
+		header: "Status",
+		render: (d) =>
+			d.isActive ? (
+				<Badge>Active</Badge>
+			) : (
+				<Badge variant="secondary">Inactive</Badge>
+			),
+	},
+];
+
 function DriversPage() {
-	const { data: drivers, isPending } = useQuery(
+	const { data: drivers, isPending, error } = useQuery(
 		convexQuery(api.drivers.list, {}),
 	);
+
+	const itemCount = drivers?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -34,43 +55,18 @@ function DriversPage() {
 				<CardHeader>
 					<CardTitle>Drivers</CardTitle>
 					<CardDescription>
-						{drivers?.length ?? 0} driver
-						{(drivers?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} driver{itemCount === 1 ? "" : "s"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !drivers?.length ? (
-						<p className="text-muted-foreground text-sm">No drivers yet.</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>User ID</TableHead>
-									<TableHead>License</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{drivers.map((d) => (
-									<TableRow key={d._id}>
-										<TableCell className="font-mono text-xs">
-											{d.userId}
-										</TableCell>
-										<TableCell>{d.licenseInfo}</TableCell>
-										<TableCell>
-											{d.isActive ? (
-												<Badge>Active</Badge>
-											) : (
-												<Badge variant="secondary">Inactive</Badge>
-											)}
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={drivers as Driver[] | undefined}
+						columns={columns}
+						rowKey={(d) => d._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No drivers yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>

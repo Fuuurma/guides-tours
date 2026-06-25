@@ -8,15 +8,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/bookings")({
@@ -31,19 +24,55 @@ const statusColors: Record<string, string> = {
 	cancelled: "bg-red-100 text-red-800",
 };
 
+interface Booking {
+	_id: string;
+	date: string;
+	tourId: string;
+	guests: number;
+	totalAmountCents: number;
+	source: string;
+	status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
+}
+
+const columns: DataTableColumn<Booking>[] = [
+	{ key: "date", header: "Date", render: (b) => b.date },
+	{
+		key: "tour",
+		header: "Tour",
+		render: (b) => (
+			<span className="font-mono text-xs">{b.tourId}</span>
+		),
+	},
+	{ key: "guests", header: "Guests", render: (b) => b.guests },
+	{
+		key: "amount",
+		header: "Amount",
+		render: (b) => `$${(Number(b.totalAmountCents) / 100).toFixed(2)}`,
+	},
+	{
+		key: "source",
+		header: "Source",
+		render: (b) => (
+			<Badge variant="outline">{b.source}</Badge>
+		),
+	},
+	{
+		key: "status",
+		header: "Status",
+		render: (b) => (
+			<Badge className={statusColors[b.status] ?? ""} variant="secondary">
+				{b.status}
+			</Badge>
+		),
+	},
+];
+
 function BookingsPage() {
-	const { data: org } = useQuery(
-		convexQuery(api.organizations.activeOrganization, {}),
-	);
-	const { data: bookings, isPending } = useQuery(
+	const { data: bookings, isPending, error } = useQuery(
 		convexQuery(api.bookings.list, {}),
 	);
 
-	if (!org) {
-		return (
-			<p className="text-muted-foreground">No organization selected.</p>
-		);
-	}
+	const itemCount = bookings?.items?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -51,54 +80,18 @@ function BookingsPage() {
 				<CardHeader>
 					<CardTitle>Bookings</CardTitle>
 					<CardDescription>
-						{bookings?.items?.length ?? 0} booking
-						{(bookings?.items?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} booking{itemCount === 1 ? "" : "s"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !bookings?.items?.length ? (
-						<p className="text-muted-foreground text-sm">No bookings yet.</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Date</TableHead>
-									<TableHead>Tour</TableHead>
-									<TableHead>Guests</TableHead>
-									<TableHead>Amount</TableHead>
-									<TableHead>Source</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{bookings.items.map((b) => (
-									<TableRow key={b._id}>
-										<TableCell>{b.date}</TableCell>
-										<TableCell className="font-mono text-xs">
-											{b.tourId}
-										</TableCell>
-										<TableCell>{b.guests}</TableCell>
-										<TableCell>
-											${(Number(b.totalAmountCents) / 100).toFixed(2)}
-										</TableCell>
-										<TableCell>
-											<Badge variant="outline">{b.source}</Badge>
-										</TableCell>
-										<TableCell>
-											<Badge
-												className={statusColors[b.status] ?? ""}
-												variant="secondary"
-											>
-												{b.status}
-											</Badge>
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={bookings?.items as Booking[] | undefined}
+						columns={columns}
+						rowKey={(b) => b._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No bookings yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>
