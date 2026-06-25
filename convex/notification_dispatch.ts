@@ -1,16 +1,18 @@
 // Notification dispatch — sends email/SMS for a ScheduledNotification.
 //
 // Phase 5: stub implementation. Reads the template + booking + customer,
-// renders a basic text body, logs what would have been sent, then
-// records the outcome via an internalMutation.
+// renders a basic text + HTML body, logs what would have been sent, then
+// records the outcome (including the rendered payload) via
+// internal.notifications.recordDispatchResult so a notificationLog
+// row exists for audit regardless of phase.
 //
-// Phase 7 will swap the log call for an Amazon SES email + (optional)
+// Phase 7 will swap the console.log for an Amazon SES email + (optional)
 // SNS SMS via @aws-sdk/client-sesv2 / @aws-sdk/client-sns.
 //
 // Source: backend/notifications/service.py::NotificationService.
 // We preserve the same template_type dispatch shape:
 //   - reminder_24h, reminder_2h, post_tour_review
-//   - any other type is logged as unknown and skipped (matching source)
+//   - any other type falls back to a generic message (matches source)
 
 "use node";
 
@@ -24,6 +26,14 @@ export type DispatchResult = {
 	channel: DispatchChannel;
 	status: "sent" | "failed" | "skipped";
 	error?: string;
+	// Rendered payload — captured for the log row. Phase 7 hands these
+	// to SES/SNS instead of the console.log.
+	rendered: {
+		to: string;
+		subject: string;
+		bodyText: string;
+		bodyHtml: string;
+	};
 };
 
 export const dispatchScheduled = internalAction({
@@ -40,13 +50,12 @@ export const dispatchScheduled = internalAction({
 				channel: "none",
 				status: "skipped",
 				error: "scheduled notification not found",
+				rendered: { to: "", subject: "", bodyText: "", bodyHtml: "" },
 			};
 		}
 
 		const { template, booking, customer } = scheduled;
 
-		// Render a basic body — Phase 7 will swap for Jinja-style
-		// templating. For now, just enough to prove the pipeline.
 		const bodyText = renderPlainText(template.templateType, {
 			customerName: customer.name,
 			tourName: booking.tourName,
@@ -54,32 +63,55 @@ export const dispatchScheduled = internalAction({
 			startTime: booking.startTime,
 		});
 		const subject = humanSubject(template.templateType);
-		// Phase 7 will render bodyHtml from the template via SES; kept
-		// the helper so the wiring point is obvious.
-		const _bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
-		void _bodyHtml;
+		const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
+
+		// Pick the destination — email if available, phone if not.
+		const channel: DispatchChannel = customer.email
+			? "email"
+			: customer.phone
+				? "sms"
+				: "none";
+		const to = customer.email || customer.phone || "";
 
 		// Phase 5 stub: log the payload that Phase 7 will hand to SES.
-		console.log(
-			`[dispatch-stub] ${template.templateType} → ${customer.email} (${template.channel}) subject="${subject}"`,
-		);
+		if (channel !== "none") {
+			console.log(
+				`[dispatch-stub] ${template.templateType} → ${to} (${channel}) subject="${subject}"`,
+			);
+		} else {
+			console.warn(
+				`[dispatch-stub] ${template.templateType} has no email or phone for customer ${customer.name}`,
+			);
+		}
 
-		// Stub always succeeds. Phase 7 returns "failed" on transport
-		// errors and propagates the SES error message.
+		// Stub always succeeds (no transport in Phase 5). Phase 7
+		// returns "failed" on SES/SNS errors and propagates the error
+		// message; "skipped" if neither email nor phone is present.
+		const status: DispatchResult["status"] =
+			channel === "none" ? "skipped" : "sent";
 		const result: DispatchResult = {
-			channel: "email",
-			status: "sent",
+			channel,
+			status,
+			rendered: { to, subject, bodyText, bodyHtml },
 		};
 
-		// Record the outcome so the scheduled row gets marked sent
-		// (or retried) and a notificationLog row exists for audit.
+		// Record the outcome. Mark `sent=true` for both `sent` and
+		// `skipped` — the cron shouldn't re-pick either. Only `failed`
+		// (real transport error) leaves sent=false so the retry path
+		// kicks in via bumpRetryOrAbandon.
+		const markSent = result.status === "sent" || result.status === "skipped";
 		await ctx.runMutation(
 			internal.notifications.recordDispatchResult,
 			{
 				scheduledId: args.scheduledId,
-				success: result.status === "sent",
+				success: markSent,
 				errorMessage: result.error,
-				channel: result.channel === "none" ? undefined : result.channel,
+				// Pass through the literal channel — including "none"
+				// — so the log row reflects the actual reason for a skip.
+				channel: result.channel,
+				recipient: to,
+				subject,
+				templateName: template.name,
 			},
 		);
 

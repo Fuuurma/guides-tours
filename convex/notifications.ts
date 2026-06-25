@@ -66,6 +66,7 @@ export const getScheduledForDispatch = internalQuery({
 		return {
 			scheduled: { _id: scheduled._id, organizationId: scheduled.organizationId },
 			template: {
+				name: template.name,
 				templateType: template.templateType,
 				channel: template.channel,
 			},
@@ -150,6 +151,9 @@ export const recordDispatchResult = internalMutation({
 		success: v.boolean(),
 		errorMessage: v.optional(v.string()),
 		channel: v.optional(v.string()),
+		recipient: v.optional(v.string()),
+		subject: v.optional(v.string()),
+		templateName: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const scheduled = await ctx.db.get(args.scheduledId);
@@ -162,13 +166,15 @@ export const recordDispatchResult = internalMutation({
 			organizationId: scheduled.organizationId,
 			bookingId: scheduled.bookingId,
 			templateId: scheduled.templateId,
-			templateName: "",
+			templateName: args.templateName ?? "",
 			channel: args.channel ?? "email",
-			recipient: args.errorMessage ?? "",
+			// recipient is always the customer's email or phone — never
+			// the error message. Error info lives in errorMessage.
+			recipient: args.recipient ?? "",
 			status,
 			errorMessage: args.errorMessage,
 			sentAt: args.success ? now : undefined,
-			metadata: {},
+			metadata: args.subject ? { subject: args.subject } : {},
 			createdAt: now,
 		});
 
