@@ -1,24 +1,17 @@
 // Notification dispatch — sends email/SMS for a ScheduledNotification.
 //
-// Phase 5: stub implementation. Reads the template + booking + customer,
-// renders a basic text + HTML body, logs what would have been sent, then
-// records the outcome (including the rendered payload) via
-// internal.notifications.recordDispatchResult so a notificationLog
-// row exists for audit regardless of phase.
-//
-// Phase 7 will swap the console.log for an Amazon SES email + (optional)
-// SNS SMS via @aws-sdk/client-sesv2 / @aws-sdk/client-sns.
-//
 // Source: backend/notifications/service.py::NotificationService.
-// We preserve the same template_type dispatch shape:
-//   - reminder_24h, reminder_2h, post_tour_review
-//   - any other type falls back to a generic message (matches source)
-
-"use node";
+//
+// Phase 9: swap console.log stub for real AWS SES email dispatch via
+// fetch + Signature V4 signing (see convex/lib/awsSigV4.ts). Works in
+// the Convex default runtime + Cloudflare Workers without node-specific
+// imports. SMS is still a stub (would use @aws-sdk/client-sns in
+// production).
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import { signSesRequest, buildSesSendEmailXml } from "./lib/awsSigV4";
 
 export type DispatchChannel = "email" | "sms" | "none";
 
@@ -26,8 +19,6 @@ export type DispatchResult = {
 	channel: DispatchChannel;
 	status: "sent" | "failed" | "skipped";
 	error?: string;
-	// Rendered payload — captured for the log row. Phase 7 hands these
-	// to SES/SNS instead of the console.log.
 	rendered: {
 		to: string;
 		subject: string;
@@ -65,7 +56,6 @@ export const dispatchScheduled = internalAction({
 		const subject = humanSubject(template.templateType);
 		const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
 
-		// Pick the destination — email if available, phone if not.
 		const channel: DispatchChannel = customer.email
 			? "email"
 			: customer.phone
@@ -73,32 +63,37 @@ export const dispatchScheduled = internalAction({
 				: "none";
 		const to = customer.email || customer.phone || "";
 
-		// Phase 5 stub: log the payload that Phase 7 will hand to SES.
-		if (channel !== "none") {
-			console.log(
-				`[dispatch-stub] ${template.templateType} → ${to} (${channel}) subject="${subject}"`,
+		let result: DispatchResult;
+		if (channel === "email") {
+			result = await sendEmail({
+				to,
+				subject,
+				bodyText,
+				bodyHtml,
+			});
+		} else if (channel === "sms") {
+			// SMS remains a stub for Phase 9 (would use SNS Publish).
+			console.warn(
+				`[dispatch-stub-sms] ${template.templateType} → ${to} subject="${subject}"`,
 			);
+			result = {
+				channel: "sms",
+				status: "sent",
+				rendered: { to, subject, bodyText, bodyHtml },
+			};
 		} else {
 			console.warn(
-				`[dispatch-stub] ${template.templateType} has no email or phone for customer ${customer.name}`,
+				`[dispatch] ${template.templateType} has no email or phone for customer ${customer.name}`,
 			);
+			result = {
+				channel: "none",
+				status: "skipped",
+				error: "no email or phone on file",
+				rendered: { to, subject, bodyText, bodyHtml },
+			};
 		}
 
-		// Stub always succeeds (no transport in Phase 5). Phase 7
-		// returns "failed" on SES/SNS errors and propagates the error
-		// message; "skipped" if neither email nor phone is present.
-		const status: DispatchResult["status"] =
-			channel === "none" ? "skipped" : "sent";
-		const result: DispatchResult = {
-			channel,
-			status,
-			rendered: { to, subject, bodyText, bodyHtml },
-		};
-
-		// Record the outcome. Mark `sent=true` for both `sent` and
-		// `skipped` — the cron shouldn't re-pick either. Only `failed`
-		// (real transport error) leaves sent=false so the retry path
-		// kicks in via bumpRetryOrAbandon.
+		// Record the outcome.
 		const markSent = result.status === "sent" || result.status === "skipped";
 		await ctx.runMutation(
 			internal.notifications.recordDispatchResult,
@@ -106,8 +101,6 @@ export const dispatchScheduled = internalAction({
 				scheduledId: args.scheduledId,
 				success: markSent,
 				errorMessage: result.error,
-				// Pass through the literal channel — including "none"
-				// — so the log row reflects the actual reason for a skip.
 				channel: result.channel,
 				recipient: to,
 				subject,
@@ -118,6 +111,96 @@ export const dispatchScheduled = internalAction({
 		return result;
 	},
 });
+
+async function sendEmail(params: {
+	to: string;
+	subject: string;
+	bodyText: string;
+	bodyHtml: string;
+}): Promise<DispatchResult> {
+	const region = process.env.AWS_REGION;
+	const accessKey = process.env.AWS_ACCESS_KEY_ID;
+	const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
+	const from = process.env.SES_FROM_ADDRESS;
+
+	if (!region || !accessKey || !secretKey || !from) {
+		console.warn(
+			"[dispatch] SES not configured (AWS_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / SES_FROM_ADDRESS) — skipping email send",
+		);
+		return {
+			channel: "email",
+			status: "skipped",
+			rendered: {
+				to: params.to,
+				subject: params.subject,
+				bodyText: params.bodyText,
+				bodyHtml: params.bodyHtml,
+			},
+		};
+	}
+
+	const xmlBody = buildSesSendEmailXml({
+		from,
+		to: params.to,
+		subject: params.subject,
+		bodyText: params.bodyText,
+		bodyHtml: params.bodyHtml,
+	});
+
+	const signed = await signSesRequest({
+		region,
+		accessKey,
+		secretKey,
+		body: xmlBody,
+	});
+
+	let resp: Response;
+	try {
+		resp = await fetch(signed.url, {
+			method: signed.method,
+			headers: signed.headers,
+			body: signed.body,
+		});
+	} catch (e) {
+		return {
+			channel: "email",
+			status: "failed",
+			error: `fetch error: ${(e as Error).message}`,
+			rendered: {
+				to: params.to,
+				subject: params.subject,
+				bodyText: params.bodyText,
+				bodyHtml: params.bodyHtml,
+			},
+		};
+	}
+
+	if (!resp.ok) {
+		const errText = await resp.text();
+		return {
+			channel: "email",
+			status: "failed",
+			error: `SES ${resp.status}: ${errText.slice(0, 500)}`,
+			rendered: {
+				to: params.to,
+				subject: params.subject,
+				bodyText: params.bodyText,
+				bodyHtml: params.bodyHtml,
+			},
+		};
+	}
+
+	return {
+		channel: "email",
+		status: "sent",
+		rendered: {
+			to: params.to,
+			subject: params.subject,
+			bodyText: params.bodyText,
+			bodyHtml: params.bodyHtml,
+		},
+	};
+}
 
 function renderPlainText(
 	templateType: string,
