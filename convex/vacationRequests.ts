@@ -11,7 +11,7 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
-import { requireRole } from "./lib/authz";
+import { requireMembership, requireRole } from "./lib/authz";
 
 // ---- helpers ----
 
@@ -35,7 +35,6 @@ export function calculateVacationDays(
 
 export const list = query({
 	args: {
-		organizationId: v.string(),
 		status: v.optional(
 			v.union(
 				v.literal("pending"),
@@ -46,16 +45,18 @@ export const list = query({
 		userId: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const orgId = member.organizationId;
 		let q = ctx.db
 			.query("vacationRequests")
-			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
 			.order("desc");
 
 		if (args.status) {
 			q = ctx.db
 				.query("vacationRequests")
 				.withIndex("by_org_status", (q) =>
-					q.eq("organizationId", args.organizationId).eq("status", args.status!),
+					q.eq("organizationId", orgId).eq("status", args.status!),
 				)
 				.order("desc");
 		}

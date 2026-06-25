@@ -111,6 +111,20 @@ function DashboardLayout() {
 							Tours
 						</Link>
 						<Link
+							to="/dashboard/templates"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Templates
+						</Link>
+						<Link
+							to="/dashboard/schedules"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Schedules
+						</Link>
+						<Link
 							to="/dashboard/bookings"
 							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
 							activeProps={{ className: "bg-gray-100 font-medium" }}
@@ -123,6 +137,20 @@ function DashboardLayout() {
 							activeProps={{ className: "bg-gray-100 font-medium" }}
 						>
 							Customers
+						</Link>
+						<Link
+							to="/dashboard/assignments"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Assignments
+						</Link>
+						<Link
+							to="/dashboard/vacations"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Vacations
 						</Link>
 						<Link
 							to="/dashboard/vehicles"
