@@ -27,6 +27,7 @@ import { Route as DashboardCustomersRouteImport } from './routes/dashboard/custo
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
+import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const SignUpRoute = SignUpRouteImport.update({
@@ -119,6 +120,11 @@ const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardToursTourIdRoute = DashboardToursTourIdRouteImport.update({
+  id: '/$tourId',
+  path: '/$tourId',
+  getParentRoute: () => DashboardToursRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -139,12 +145,13 @@ export interface FileRoutesByFullPath {
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
-  '/dashboard/tours': typeof DashboardToursRoute
+  '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRoute
   '/dashboard/vehicles': typeof DashboardVehiclesRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -159,12 +166,13 @@ export interface FileRoutesByTo {
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
-  '/dashboard/tours': typeof DashboardToursRoute
+  '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRoute
   '/dashboard/vehicles': typeof DashboardVehiclesRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -181,12 +189,13 @@ export interface FileRoutesById {
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRoute
   '/dashboard/templates': typeof DashboardTemplatesRoute
-  '/dashboard/tours': typeof DashboardToursRoute
+  '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRoute
   '/dashboard/vehicles': typeof DashboardVehiclesRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -210,6 +219,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/dashboard/'
     | '/api/auth/$'
+    | '/dashboard/tours/$tourId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -230,6 +240,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/dashboard'
     | '/api/auth/$'
+    | '/dashboard/tours/$tourId'
   id:
     | '__root__'
     | '/'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/dashboard/'
     | '/api/auth/$'
+    | '/dashboard/tours/$tourId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -391,6 +403,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAnalyticsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/tours/$tourId': {
+      id: '/dashboard/tours/$tourId'
+      path: '/$tourId'
+      fullPath: '/dashboard/tours/$tourId'
+      preLoaderRoute: typeof DashboardToursTourIdRouteImport
+      parentRoute: typeof DashboardToursRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -401,6 +420,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DashboardToursRouteChildren {
+  DashboardToursTourIdRoute: typeof DashboardToursTourIdRoute
+}
+
+const DashboardToursRouteChildren: DashboardToursRouteChildren = {
+  DashboardToursTourIdRoute: DashboardToursTourIdRoute,
+}
+
+const DashboardToursRouteWithChildren = DashboardToursRoute._addFileChildren(
+  DashboardToursRouteChildren,
+)
+
 interface DashboardRouteChildren {
   DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
   DashboardAssignmentsRoute: typeof DashboardAssignmentsRoute
@@ -410,7 +441,7 @@ interface DashboardRouteChildren {
   DashboardNotificationsRoute: typeof DashboardNotificationsRoute
   DashboardSchedulesRoute: typeof DashboardSchedulesRoute
   DashboardTemplatesRoute: typeof DashboardTemplatesRoute
-  DashboardToursRoute: typeof DashboardToursRoute
+  DashboardToursRoute: typeof DashboardToursRouteWithChildren
   DashboardVacationsRoute: typeof DashboardVacationsRoute
   DashboardVehiclesRoute: typeof DashboardVehiclesRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -425,7 +456,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardNotificationsRoute: DashboardNotificationsRoute,
   DashboardSchedulesRoute: DashboardSchedulesRoute,
   DashboardTemplatesRoute: DashboardTemplatesRoute,
-  DashboardToursRoute: DashboardToursRoute,
+  DashboardToursRoute: DashboardToursRouteWithChildren,
   DashboardVacationsRoute: DashboardVacationsRoute,
   DashboardVehiclesRoute: DashboardVehiclesRoute,
   DashboardIndexRoute: DashboardIndexRoute,
