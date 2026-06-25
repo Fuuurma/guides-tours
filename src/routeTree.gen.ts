@@ -16,6 +16,9 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
 import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
+import { Route as DashboardVehiclesRouteImport } from './routes/dashboard/vehicles'
+import { Route as DashboardToursRouteImport } from './routes/dashboard/tours'
+import { Route as DashboardDriversRouteImport } from './routes/dashboard/drivers'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard/customers'
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -55,6 +58,21 @@ const InviteInvitationIdRoute = InviteInvitationIdRouteImport.update({
   path: '/invite/$invitationId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardVehiclesRoute = DashboardVehiclesRouteImport.update({
+  id: '/vehicles',
+  path: '/vehicles',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardToursRoute = DashboardToursRouteImport.update({
+  id: '/tours',
+  path: '/tours',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardDriversRoute = DashboardDriversRouteImport.update({
+  id: '/drivers',
+  path: '/drivers',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardCustomersRoute = DashboardCustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
@@ -79,6 +97,9 @@ export interface FileRoutesByFullPath {
   '/sign-up': typeof SignUpRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/drivers': typeof DashboardDriversRoute
+  '/dashboard/tours': typeof DashboardToursRoute
+  '/dashboard/vehicles': typeof DashboardVehiclesRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -90,6 +111,9 @@ export interface FileRoutesByTo {
   '/sign-up': typeof SignUpRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/drivers': typeof DashboardDriversRoute
+  '/dashboard/tours': typeof DashboardToursRoute
+  '/dashboard/vehicles': typeof DashboardVehiclesRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -103,6 +127,9 @@ export interface FileRoutesById {
   '/sign-up': typeof SignUpRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/drivers': typeof DashboardDriversRoute
+  '/dashboard/tours': typeof DashboardToursRoute
+  '/dashboard/vehicles': typeof DashboardVehiclesRoute
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -117,6 +144,9 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/dashboard/bookings'
     | '/dashboard/customers'
+    | '/dashboard/drivers'
+    | '/dashboard/tours'
+    | '/dashboard/vehicles'
     | '/invite/$invitationId'
     | '/dashboard/'
     | '/api/auth/$'
@@ -128,6 +158,9 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/dashboard/bookings'
     | '/dashboard/customers'
+    | '/dashboard/drivers'
+    | '/dashboard/tours'
+    | '/dashboard/vehicles'
     | '/invite/$invitationId'
     | '/dashboard'
     | '/api/auth/$'
@@ -140,6 +173,9 @@ export interface FileRouteTypes {
     | '/sign-up'
     | '/dashboard/bookings'
     | '/dashboard/customers'
+    | '/dashboard/drivers'
+    | '/dashboard/tours'
+    | '/dashboard/vehicles'
     | '/invite/$invitationId'
     | '/dashboard/'
     | '/api/auth/$'
@@ -206,6 +242,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InviteInvitationIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/vehicles': {
+      id: '/dashboard/vehicles'
+      path: '/vehicles'
+      fullPath: '/dashboard/vehicles'
+      preLoaderRoute: typeof DashboardVehiclesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/tours': {
+      id: '/dashboard/tours'
+      path: '/tours'
+      fullPath: '/dashboard/tours'
+      preLoaderRoute: typeof DashboardToursRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/drivers': {
+      id: '/dashboard/drivers'
+      path: '/drivers'
+      fullPath: '/dashboard/drivers'
+      preLoaderRoute: typeof DashboardDriversRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/customers': {
       id: '/dashboard/customers'
       path: '/customers'
@@ -233,12 +290,18 @@ declare module '@tanstack/react-router' {
 interface DashboardRouteChildren {
   DashboardBookingsRoute: typeof DashboardBookingsRoute
   DashboardCustomersRoute: typeof DashboardCustomersRoute
+  DashboardDriversRoute: typeof DashboardDriversRoute
+  DashboardToursRoute: typeof DashboardToursRoute
+  DashboardVehiclesRoute: typeof DashboardVehiclesRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardBookingsRoute: DashboardBookingsRoute,
   DashboardCustomersRoute: DashboardCustomersRoute,
+  DashboardDriversRoute: DashboardDriversRoute,
+  DashboardToursRoute: DashboardToursRoute,
+  DashboardVehiclesRoute: DashboardVehiclesRoute,
   DashboardIndexRoute: DashboardIndexRoute,
 }
 

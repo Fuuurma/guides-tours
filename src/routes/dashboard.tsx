@@ -104,11 +104,11 @@ function DashboardLayout() {
 							Home
 						</Link>
 						<Link
-							to="/dashboard/customers"
+							to="/dashboard/tours"
 							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
 							activeProps={{ className: "bg-gray-100 font-medium" }}
 						>
-							Customers
+							Tours
 						</Link>
 						<Link
 							to="/dashboard/bookings"
@@ -116,6 +116,27 @@ function DashboardLayout() {
 							activeProps={{ className: "bg-gray-100 font-medium" }}
 						>
 							Bookings
+						</Link>
+						<Link
+							to="/dashboard/customers"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Customers
+						</Link>
+						<Link
+							to="/dashboard/vehicles"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Vehicles
+						</Link>
+						<Link
+							to="/dashboard/drivers"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							activeProps={{ className: "bg-gray-100 font-medium" }}
+						>
+							Drivers
 						</Link>
 					</div>
 					<div className="ml-auto flex items-center gap-2">
