@@ -19,12 +19,13 @@ import { describe, expect, it } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
-import { internal, api } from "../_generated/api";
+import { internal } from "../_generated/api";
 import {
 	timeToMinutes,
 	minutesToTime,
 	calculateEndTime,
 	rangesOverlap,
+	checkConflictsHelper,
 } from "../assignments";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
@@ -166,13 +167,15 @@ describe("convex/assignments — checkConflicts query", () => {
 				endTime: "11:00",
 			}),
 		);
-		const conflicts = await t.query(api.assignments.checkConflicts, {
-			organizationId: orgId,
-			date: "2026-09-01",
-			startTime: "10:00",
-			endTime: "12:00",
-			guideId,
-		});
+		const conflicts = await t.run(async (ctx) =>
+			checkConflictsHelper(ctx as unknown as TestCtx, {
+				organizationId: orgId,
+				date: "2026-09-01",
+				startTime: "10:00",
+				endTime: "12:00",
+				guideId,
+			}),
+		);
 		expect(conflicts.length).toBe(1);
 		expect(conflicts[0]?.conflictType).toBe("guide");
 	});
@@ -191,13 +194,15 @@ describe("convex/assignments — checkConflicts query", () => {
 				endTime: "11:00",
 			}),
 		);
-		const conflicts = await t.query(api.assignments.checkConflicts, {
-			organizationId: orgId,
-			date: "2026-09-01",
-			startTime: "14:00",
-			endTime: "16:00",
-			guideId,
-		});
+		const conflicts = await t.run(async (ctx) =>
+			checkConflictsHelper(ctx as unknown as TestCtx, {
+				organizationId: orgId,
+				date: "2026-09-01",
+				startTime: "14:00",
+				endTime: "16:00",
+				guideId,
+			}),
+		);
 		expect(conflicts.length).toBe(0);
 	});
 
@@ -215,14 +220,16 @@ describe("convex/assignments — checkConflicts query", () => {
 				endTime: "11:00",
 			}),
 		);
-		const conflicts = await t.query(api.assignments.checkConflicts, {
-			organizationId: orgId,
-			date: "2026-09-01",
-			startTime: "09:30",
-			endTime: "11:30",
-			guideId,
-			excludeAssignmentId: aId,
-		});
+		const conflicts = await t.run(async (ctx) =>
+			checkConflictsHelper(ctx as unknown as TestCtx, {
+				organizationId: orgId,
+				date: "2026-09-01",
+				startTime: "09:30",
+				endTime: "11:30",
+				guideId,
+				excludeAssignmentId: aId,
+			}),
+		);
 		expect(conflicts.length).toBe(0);
 	});
 
@@ -243,14 +250,16 @@ describe("convex/assignments — checkConflicts query", () => {
 				vehicleId,
 			}),
 		);
-		const conflicts = await t.query(api.assignments.checkConflicts, {
-			organizationId: orgId,
-			date: "2026-09-01",
-			startTime: "10:30",
-			endTime: "12:30",
-			guideId: "guide-2",
-			vehicleId,
-		});
+		const conflicts = await t.run(async (ctx) =>
+			checkConflictsHelper(ctx as unknown as TestCtx, {
+				organizationId: orgId,
+				date: "2026-09-01",
+				startTime: "10:30",
+				endTime: "12:30",
+				guideId: "guide-2",
+				vehicleId,
+			}),
+		);
 		expect(conflicts.length).toBe(1);
 		expect(conflicts[0]?.conflictType).toBe("vehicle");
 	});

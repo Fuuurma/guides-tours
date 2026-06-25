@@ -6,6 +6,7 @@
 
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { authComponent, createAuth } from "./auth";
 
 // ---- helpers ----
 
@@ -81,9 +82,26 @@ export const getOverview = query({
 			)
 			.collect();
 
+		// Count active guides via Better Auth org membership.
+		// If auth is not available (e.g., in tests), default to 0.
+		let totalGuides = 0;
+		try {
+			const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+			const memberList = await auth.api.listMembers({
+				headers,
+				query: { organizationId: args.organizationId },
+			});
+			totalGuides = memberList.members.filter(
+				(m: { role: string }) => m.role === "guide",
+			).length;
+		} catch {
+			// No auth context (tests / public callers)
+			totalGuides = 0;
+		}
+
 		return {
 			totalTours: activeTours.length,
-			totalGuides: 0, // count from members with guide role (computed below)
+			totalGuides,
 			totalAssignments: total,
 			completedAssignments: completed,
 			cancelledAssignments: cancelled,

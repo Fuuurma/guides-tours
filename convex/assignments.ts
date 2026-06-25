@@ -24,6 +24,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
+import { authComponent, createAuth } from "./auth";
 
 // ----- Time helpers (string "HH:MM" ↔ minutes-since-midnight) -----
 
@@ -130,7 +131,6 @@ export const get = query({
  */
 export const checkConflicts = query({
 	args: {
-		organizationId: v.string(),
 		date: v.string(),
 		startTime: v.string(),
 		endTime: v.string(),
@@ -140,7 +140,8 @@ export const checkConflicts = query({
 		excludeAssignmentId: v.optional(v.id("assignments")),
 	},
 	handler: async (ctx, args) => {
-		const orgId = args.organizationId;
+		const member = await requireMembership(ctx);
+		const orgId = member.organizationId;
 		const conflicts: Array<{
 			conflictType: "guide" | "vehicle" | "driver";
 			assignmentId: string;
@@ -282,6 +283,30 @@ export const create = mutation({
 	args: createArgs,
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+
+		// Validate guide has the "guide" role in this organization
+		// (source: assignment_service.py validates role__in=["guide","staff"]).
+		const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+		const memberList = await auth.api.listMembers({
+			headers,
+			query: { organizationId: member.organizationId },
+		});
+		const guideMember = memberList.members.find(
+			(m: { userId: string }) => m.userId === args.guideId,
+		);
+		if (!guideMember) {
+			throw new ConvexError("Guide is not a member of this organization");
+		}
+		if (
+			guideMember.role !== "guide" &&
+			guideMember.role !== "owner" &&
+			guideMember.role !== "admin"
+		) {
+			throw new ConvexError(
+				`User with role "${guideMember.role}" cannot be assigned as guide`,
+			);
+		}
+
 		return await ctx.runMutation(
 			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
 			{
@@ -706,7 +731,7 @@ export const internalRemove = internalMutation({
 
 // ----- Helpers -----
 
-async function checkConflictsHelper(
+export async function checkConflictsHelper(
 	ctx: MutationCtx,
 	args: {
 		organizationId: string;
