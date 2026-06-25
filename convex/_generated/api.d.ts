@@ -52,6 +52,7 @@ import type * as public_booking from "../public_booking.js";
 import type * as scheduledNotifications from "../scheduledNotifications.js";
 import type * as tourBlackoutDates from "../tourBlackoutDates.js";
 import type * as tourCategories from "../tourCategories.js";
+import type * as tourImages from "../tourImages.js";
 import type * as tourSchedules from "../tourSchedules.js";
 import type * as tourTemplates from "../tourTemplates.js";
 import type * as tours from "../tours.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   scheduledNotifications: typeof scheduledNotifications;
   tourBlackoutDates: typeof tourBlackoutDates;
   tourCategories: typeof tourCategories;
+  tourImages: typeof tourImages;
   tourSchedules: typeof tourSchedules;
   tourTemplates: typeof tourTemplates;
   tours: typeof tours;
