@@ -28,6 +28,7 @@ import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookin
 import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
 import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
+import { Route as DashboardCustomersCustomerIdRouteImport } from './routes/dashboard/customers/$customerId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const SignUpRoute = SignUpRouteImport.update({
@@ -125,6 +126,12 @@ const DashboardToursTourIdRoute = DashboardToursTourIdRouteImport.update({
   path: '/$tourId',
   getParentRoute: () => DashboardToursRoute,
 } as any)
+const DashboardCustomersCustomerIdRoute =
+  DashboardCustomersCustomerIdRouteImport.update({
+    id: '/$customerId',
+    path: '/$customerId',
+    getParentRoute: () => DashboardCustomersRoute,
+  } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -140,7 +147,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
-  '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
 }
 export interface FileRoutesByTo {
@@ -161,7 +169,7 @@ export interface FileRoutesByTo {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
-  '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRoute
@@ -172,6 +180,7 @@ export interface FileRoutesByTo {
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
 }
 export interface FileRoutesById {
@@ -184,7 +193,7 @@ export interface FileRoutesById {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRoute
   '/dashboard/bookings': typeof DashboardBookingsRoute
-  '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRoute
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRoute
@@ -195,6 +204,7 @@ export interface FileRoutesById {
   '/invite/$invitationId': typeof InviteInvitationIdRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
 }
 export interface FileRouteTypes {
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/dashboard/'
     | '/api/auth/$'
+    | '/dashboard/customers/$customerId'
     | '/dashboard/tours/$tourId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/dashboard'
     | '/api/auth/$'
+    | '/dashboard/customers/$customerId'
     | '/dashboard/tours/$tourId'
   id:
     | '__root__'
@@ -262,6 +274,7 @@ export interface FileRouteTypes {
     | '/invite/$invitationId'
     | '/dashboard/'
     | '/api/auth/$'
+    | '/dashboard/customers/$customerId'
     | '/dashboard/tours/$tourId'
   fileRoutesById: FileRoutesById
 }
@@ -410,6 +423,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardToursTourIdRouteImport
       parentRoute: typeof DashboardToursRoute
     }
+    '/dashboard/customers/$customerId': {
+      id: '/dashboard/customers/$customerId'
+      path: '/$customerId'
+      fullPath: '/dashboard/customers/$customerId'
+      preLoaderRoute: typeof DashboardCustomersCustomerIdRouteImport
+      parentRoute: typeof DashboardCustomersRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -419,6 +439,17 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface DashboardCustomersRouteChildren {
+  DashboardCustomersCustomerIdRoute: typeof DashboardCustomersCustomerIdRoute
+}
+
+const DashboardCustomersRouteChildren: DashboardCustomersRouteChildren = {
+  DashboardCustomersCustomerIdRoute: DashboardCustomersCustomerIdRoute,
+}
+
+const DashboardCustomersRouteWithChildren =
+  DashboardCustomersRoute._addFileChildren(DashboardCustomersRouteChildren)
 
 interface DashboardToursRouteChildren {
   DashboardToursTourIdRoute: typeof DashboardToursTourIdRoute
@@ -436,7 +467,7 @@ interface DashboardRouteChildren {
   DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
   DashboardAssignmentsRoute: typeof DashboardAssignmentsRoute
   DashboardBookingsRoute: typeof DashboardBookingsRoute
-  DashboardCustomersRoute: typeof DashboardCustomersRoute
+  DashboardCustomersRoute: typeof DashboardCustomersRouteWithChildren
   DashboardDriversRoute: typeof DashboardDriversRoute
   DashboardNotificationsRoute: typeof DashboardNotificationsRoute
   DashboardSchedulesRoute: typeof DashboardSchedulesRoute
@@ -451,7 +482,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAnalyticsRoute: DashboardAnalyticsRoute,
   DashboardAssignmentsRoute: DashboardAssignmentsRoute,
   DashboardBookingsRoute: DashboardBookingsRoute,
-  DashboardCustomersRoute: DashboardCustomersRoute,
+  DashboardCustomersRoute: DashboardCustomersRouteWithChildren,
   DashboardDriversRoute: DashboardDriversRoute,
   DashboardNotificationsRoute: DashboardNotificationsRoute,
   DashboardSchedulesRoute: DashboardSchedulesRoute,
