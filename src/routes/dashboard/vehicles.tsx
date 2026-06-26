@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -33,9 +34,22 @@ interface Vehicle {
 }
 
 const columns: DataTableColumn<Vehicle>[] = [
-	{ key: "name", header: "Name", render: (v) => v.name, className: "font-medium" },
-	{ key: "type", header: "Type", render: (v) => v.vehicleType },
-	{ key: "plate", header: "Plate", render: (v) => v.licensePlate },
+	{
+		key: "name",
+		header: "Name",
+		render: (v) => (
+			<Link
+				to="/dashboard/vehicles/$vehicleId"
+				params={{ vehicleId: v._id }}
+				className="font-medium text-blue-600 hover:underline"
+			>
+				{v.name}
+			</Link>
+		),
+		searchValue: (v) => v.name,
+	},
+	{ key: "type", header: "Type", render: (v) => v.vehicleType, searchValue: (v) => v.vehicleType },
+	{ key: "plate", header: "Plate", render: (v) => v.licensePlate, searchValue: (v) => v.licensePlate },
 	{ key: "capacity", header: "Capacity", render: (v) => v.capacity },
 	{
 		key: "status",
@@ -45,6 +59,7 @@ const columns: DataTableColumn<Vehicle>[] = [
 				{v.status}
 			</Badge>
 		),
+		searchValue: (v) => v.status,
 	},
 ];
 
@@ -58,11 +73,16 @@ function VehiclesPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Vehicles</CardTitle>
-					<CardDescription>
-						{itemCount} vehicle{itemCount === 1 ? "" : "s"}
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Vehicles</CardTitle>
+						<CardDescription>
+							{itemCount} vehicle{itemCount === 1 ? "" : "s"}
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/vehicles/new">+ New vehicle</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
@@ -72,6 +92,7 @@ function VehiclesPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No vehicles yet."
+						searchPlaceholder="Search by name, type, plate, or status…"
 					/>
 				</CardContent>
 			</Card>
