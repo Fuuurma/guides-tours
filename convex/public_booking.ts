@@ -18,8 +18,53 @@
 // Rate-limit / CAPTCHA is a Cloudflare concern (not in Convex).
 
 import { v, ConvexError } from "convex/values";
-import { internalAction, internalMutation } from "./_generated/server";
+import { internalAction, internalMutation, query } from "./_generated/server";
 import { components, internal } from "./_generated/api";
+
+// ----- Public query: org + active tours by slug -----
+//
+// Used by the public booking page (no auth required) to render the
+// tour picker. Returns only the fields the form needs — never the
+// org's internal IDs or staff data.
+
+export const getOrgAndToursBySlug = query({
+	args: { slug: v.string() },
+	handler: async (ctx, args) => {
+		const org = (await ctx.runQuery(
+			components.betterAuth.adapter.findOne as never,
+			{
+				model: "organization" as never,
+				where: [{ field: "slug", value: args.slug }] as never,
+			},
+		)) as { id?: string; name?: string } | null;
+		if (!org?.id) return null;
+
+		const tours = await ctx.db
+			.query("tours")
+			.withIndex("by_org", (q) =>
+				q.eq("organizationId", org.id as string),
+			)
+			.filter((q) => q.eq(q.field("isActive"), true))
+			.collect();
+
+		return {
+			organizationId: org.id,
+			organizationName: org.name ?? "Tour operator",
+			tours: tours.map((t) => ({
+				_id: t._id,
+				name: t.name,
+				description: t.description,
+				tourType: t.tourType,
+				durationHours: t.durationHours,
+				capacity: t.capacity,
+				maxGuests: t.maxGuests,
+				currency: t.currency,
+				basePriceCents: t.basePriceCents,
+				languages: t.languages,
+			})),
+		};
+	},
+});
 
 // ----- Action: slug → orgId, then create booking -----
 //

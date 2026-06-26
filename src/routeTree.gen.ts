@@ -27,6 +27,7 @@ import { Route as DashboardCustomersRouteImport } from './routes/dashboard/custo
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
+import { Route as BookSlugRouteImport } from './routes/book/$slug'
 import { Route as DashboardVehiclesNewRouteImport } from './routes/dashboard/vehicles/new'
 import { Route as DashboardVehiclesVehicleIdRouteImport } from './routes/dashboard/vehicles/$vehicleId'
 import { Route as DashboardVacationsNewRouteImport } from './routes/dashboard/vacations/new'
@@ -141,6 +142,11 @@ const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
   getParentRoute: () => DashboardRoute,
+} as any)
+const BookSlugRoute = BookSlugRouteImport.update({
+  id: '/book/$slug',
+  path: '/book/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardVehiclesNewRoute = DashboardVehiclesNewRouteImport.update({
   id: '/new',
@@ -282,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/book/$slug': typeof BookSlugRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
@@ -325,6 +332,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/book/$slug': typeof BookSlugRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
@@ -370,6 +378,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/sign-in': typeof SignInRoute
   '/sign-up': typeof SignUpRoute
+  '/book/$slug': typeof BookSlugRoute
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
@@ -416,6 +425,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
+    | '/book/$slug'
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
@@ -459,6 +469,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
+    | '/book/$slug'
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
@@ -503,6 +514,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/sign-in'
     | '/sign-up'
+    | '/book/$slug'
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
@@ -548,6 +560,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   SignInRoute: typeof SignInRoute
   SignUpRoute: typeof SignUpRoute
+  BookSlugRoute: typeof BookSlugRoute
   InviteInvitationIdRoute: typeof InviteInvitationIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -679,6 +692,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/analytics'
       preLoaderRoute: typeof DashboardAnalyticsRouteImport
       parentRoute: typeof DashboardRoute
+    }
+    '/book/$slug': {
+      id: '/book/$slug'
+      path: '/book/$slug'
+      fullPath: '/book/$slug'
+      preLoaderRoute: typeof BookSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/dashboard/vehicles/new': {
       id: '/dashboard/vehicles/new'
@@ -1055,6 +1075,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   SignInRoute: SignInRoute,
   SignUpRoute: SignUpRoute,
+  BookSlugRoute: BookSlugRoute,
   InviteInvitationIdRoute: InviteInvitationIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
