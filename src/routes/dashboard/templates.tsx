@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -26,9 +27,31 @@ interface Template {
 }
 
 const columns: DataTableColumn<Template>[] = [
-	{ key: "name", header: "Name", render: (t) => t.name, className: "font-medium" },
-	{ key: "type", header: "Type", render: (t) => t.tourType },
-	{ key: "duration", header: "Duration", render: (t) => `${t.durationHours}h` },
+	{
+		key: "name",
+		header: "Name",
+		render: (t) => (
+			<Link
+				to="/dashboard/templates/$templateId"
+				params={{ templateId: t._id }}
+				className="font-medium text-blue-600 hover:underline"
+			>
+				{t.name}
+			</Link>
+		),
+		searchValue: (t) => t.name,
+	},
+	{
+		key: "type",
+		header: "Type",
+		render: (t) => t.tourType,
+		searchValue: (t) => t.tourType,
+	},
+	{
+		key: "duration",
+		header: "Duration",
+		render: (t) => `${t.durationHours}h`,
+	},
 	{ key: "capacity", header: "Capacity", render: (t) => t.capacity },
 	{
 		key: "active",
@@ -39,6 +62,7 @@ const columns: DataTableColumn<Template>[] = [
 			) : (
 				<Badge variant="secondary">Inactive</Badge>
 			),
+		searchValue: (t) => (t.isActive ? "active" : "inactive"),
 	},
 ];
 
@@ -52,12 +76,17 @@ function TemplatesPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Tour templates</CardTitle>
-					<CardDescription>
-						{itemCount} template{itemCount === 1 ? "" : "s"} — use
-						templates to spin up multiple tours with shared defaults.
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Tour templates</CardTitle>
+						<CardDescription>
+							{itemCount} template{itemCount === 1 ? "" : "s"} — use
+							templates to spin up multiple tours with shared defaults.
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/templates/new">+ New template</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
@@ -67,6 +96,7 @@ function TemplatesPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No templates yet."
+						searchPlaceholder="Search by name, type, or status…"
 					/>
 				</CardContent>
 			</Card>

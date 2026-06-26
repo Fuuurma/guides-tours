@@ -33,6 +33,8 @@ import { Route as DashboardVacationsNewRouteImport } from './routes/dashboard/va
 import { Route as DashboardVacationsVacationIdRouteImport } from './routes/dashboard/vacations/$vacationId'
 import { Route as DashboardToursNewRouteImport } from './routes/dashboard/tours/new'
 import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
+import { Route as DashboardTemplatesNewRouteImport } from './routes/dashboard/templates/new'
+import { Route as DashboardTemplatesTemplateIdRouteImport } from './routes/dashboard/templates/$templateId'
 import { Route as DashboardSchedulesNewRouteImport } from './routes/dashboard/schedules/new'
 import { Route as DashboardSchedulesScheduleIdRouteImport } from './routes/dashboard/schedules/$scheduleId'
 import { Route as DashboardDriversNewRouteImport } from './routes/dashboard/drivers/new'
@@ -169,6 +171,17 @@ const DashboardToursTourIdRoute = DashboardToursTourIdRouteImport.update({
   path: '/$tourId',
   getParentRoute: () => DashboardToursRoute,
 } as any)
+const DashboardTemplatesNewRoute = DashboardTemplatesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => DashboardTemplatesRoute,
+} as any)
+const DashboardTemplatesTemplateIdRoute =
+  DashboardTemplatesTemplateIdRouteImport.update({
+    id: '/$templateId',
+    path: '/$templateId',
+    getParentRoute: () => DashboardTemplatesRoute,
+  } as any)
 const DashboardSchedulesNewRoute = DashboardSchedulesNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -255,7 +268,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
-  '/dashboard/templates': typeof DashboardTemplatesRoute
+  '/dashboard/templates': typeof DashboardTemplatesRouteWithChildren
   '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRouteWithChildren
   '/dashboard/vehicles': typeof DashboardVehiclesRouteWithChildren
@@ -272,6 +285,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
+  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
+  '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/vacations/$vacationId': typeof DashboardVacationsVacationIdRoute
@@ -293,7 +308,7 @@ export interface FileRoutesByTo {
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
-  '/dashboard/templates': typeof DashboardTemplatesRoute
+  '/dashboard/templates': typeof DashboardTemplatesRouteWithChildren
   '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRouteWithChildren
   '/dashboard/vehicles': typeof DashboardVehiclesRouteWithChildren
@@ -310,6 +325,8 @@ export interface FileRoutesByTo {
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
+  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
+  '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/vacations/$vacationId': typeof DashboardVacationsVacationIdRoute
@@ -333,7 +350,7 @@ export interface FileRoutesById {
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
-  '/dashboard/templates': typeof DashboardTemplatesRoute
+  '/dashboard/templates': typeof DashboardTemplatesRouteWithChildren
   '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRouteWithChildren
   '/dashboard/vehicles': typeof DashboardVehiclesRouteWithChildren
@@ -350,6 +367,8 @@ export interface FileRoutesById {
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
+  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
+  '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/vacations/$vacationId': typeof DashboardVacationsVacationIdRoute
@@ -391,6 +410,8 @@ export interface FileRouteTypes {
     | '/dashboard/drivers/new'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
+    | '/dashboard/templates/$templateId'
+    | '/dashboard/templates/new'
     | '/dashboard/tours/$tourId'
     | '/dashboard/tours/new'
     | '/dashboard/vacations/$vacationId'
@@ -429,6 +450,8 @@ export interface FileRouteTypes {
     | '/dashboard/drivers/new'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
+    | '/dashboard/templates/$templateId'
+    | '/dashboard/templates/new'
     | '/dashboard/tours/$tourId'
     | '/dashboard/tours/new'
     | '/dashboard/vacations/$vacationId'
@@ -468,6 +491,8 @@ export interface FileRouteTypes {
     | '/dashboard/drivers/new'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
+    | '/dashboard/templates/$templateId'
+    | '/dashboard/templates/new'
     | '/dashboard/tours/$tourId'
     | '/dashboard/tours/new'
     | '/dashboard/vacations/$vacationId'
@@ -658,6 +683,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardToursTourIdRouteImport
       parentRoute: typeof DashboardToursRoute
     }
+    '/dashboard/templates/new': {
+      id: '/dashboard/templates/new'
+      path: '/new'
+      fullPath: '/dashboard/templates/new'
+      preLoaderRoute: typeof DashboardTemplatesNewRouteImport
+      parentRoute: typeof DashboardTemplatesRoute
+    }
+    '/dashboard/templates/$templateId': {
+      id: '/dashboard/templates/$templateId'
+      path: '/$templateId'
+      fullPath: '/dashboard/templates/$templateId'
+      preLoaderRoute: typeof DashboardTemplatesTemplateIdRouteImport
+      parentRoute: typeof DashboardTemplatesRoute
+    }
     '/dashboard/schedules/new': {
       id: '/dashboard/schedules/new'
       path: '/new'
@@ -833,6 +872,19 @@ const DashboardSchedulesRouteChildren: DashboardSchedulesRouteChildren = {
 const DashboardSchedulesRouteWithChildren =
   DashboardSchedulesRoute._addFileChildren(DashboardSchedulesRouteChildren)
 
+interface DashboardTemplatesRouteChildren {
+  DashboardTemplatesTemplateIdRoute: typeof DashboardTemplatesTemplateIdRoute
+  DashboardTemplatesNewRoute: typeof DashboardTemplatesNewRoute
+}
+
+const DashboardTemplatesRouteChildren: DashboardTemplatesRouteChildren = {
+  DashboardTemplatesTemplateIdRoute: DashboardTemplatesTemplateIdRoute,
+  DashboardTemplatesNewRoute: DashboardTemplatesNewRoute,
+}
+
+const DashboardTemplatesRouteWithChildren =
+  DashboardTemplatesRoute._addFileChildren(DashboardTemplatesRouteChildren)
+
 interface DashboardToursTourIdRouteChildren {
   DashboardToursTourIdEditRoute: typeof DashboardToursTourIdEditRoute
 }
@@ -892,7 +944,7 @@ interface DashboardRouteChildren {
   DashboardDriversRoute: typeof DashboardDriversRouteWithChildren
   DashboardNotificationsRoute: typeof DashboardNotificationsRoute
   DashboardSchedulesRoute: typeof DashboardSchedulesRouteWithChildren
-  DashboardTemplatesRoute: typeof DashboardTemplatesRoute
+  DashboardTemplatesRoute: typeof DashboardTemplatesRouteWithChildren
   DashboardToursRoute: typeof DashboardToursRouteWithChildren
   DashboardVacationsRoute: typeof DashboardVacationsRouteWithChildren
   DashboardVehiclesRoute: typeof DashboardVehiclesRouteWithChildren
@@ -907,7 +959,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardDriversRoute: DashboardDriversRouteWithChildren,
   DashboardNotificationsRoute: DashboardNotificationsRoute,
   DashboardSchedulesRoute: DashboardSchedulesRouteWithChildren,
-  DashboardTemplatesRoute: DashboardTemplatesRoute,
+  DashboardTemplatesRoute: DashboardTemplatesRouteWithChildren,
   DashboardToursRoute: DashboardToursRouteWithChildren,
   DashboardVacationsRoute: DashboardVacationsRouteWithChildren,
   DashboardVehiclesRoute: DashboardVehiclesRouteWithChildren,
