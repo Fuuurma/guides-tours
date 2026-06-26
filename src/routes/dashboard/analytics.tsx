@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import {
 	Card,
 	CardContent,
@@ -8,6 +9,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -28,7 +31,7 @@ function AnalyticsPage() {
 	const { data: org, isPending: orgPending } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
-	const range = defaultRange();
+	const [range, setRange] = useState(defaultRange);
 
 	const overviewArgs =
 		org && org.id
@@ -64,11 +67,42 @@ function AnalyticsPage() {
 
 	return (
 		<div className="space-y-6">
-			<header>
-				<h1 className="text-2xl font-semibold">Analytics</h1>
-				<p className="text-muted-foreground text-sm">
-					Last 30 days: {range.startDate} → {range.endDate}
-				</p>
+			<header className="flex flex-wrap items-end justify-between gap-4">
+				<div>
+					<h1 className="text-2xl font-semibold">Analytics</h1>
+					<p className="text-muted-foreground text-sm">
+						{range.startDate} → {range.endDate}
+					</p>
+				</div>
+				<div className="flex flex-wrap items-end gap-2">
+					<label className="text-sm">
+						<span className="block text-muted-foreground text-xs">From</span>
+						<Input
+							type="date"
+							value={range.startDate}
+							onChange={(e) =>
+								setRange({ ...range, startDate: e.target.value })
+							}
+						/>
+					</label>
+					<label className="text-sm">
+						<span className="block text-muted-foreground text-xs">To</span>
+						<Input
+							type="date"
+							value={range.endDate}
+							onChange={(e) =>
+								setRange({ ...range, endDate: e.target.value })
+							}
+						/>
+					</label>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => setRange(defaultRange())}
+					>
+						Reset
+					</Button>
+				</div>
 			</header>
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
