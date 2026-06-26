@@ -63,7 +63,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 
 		return await ctx.runMutation(internal.public_booking.internalCreate, {
 			organizationId,
-			tourId: args.tourId,
+			tourId: args.tourId as never,
 			customerName: args.customerName,
 			customerEmail: args.customerEmail,
 			customerPhone: args.customerPhone,
@@ -84,7 +84,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 export const internalCreate = internalMutation({
 	args: {
 		organizationId: v.string(),
-		tourId: v.string(),
+		tourId: v.id("tours"),
 		customerName: v.string(),
 		customerEmail: v.string(),
 		customerPhone: v.optional(v.string()),
@@ -94,7 +94,7 @@ export const internalCreate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const tour = await ctx.db.get(args.tourId as never);
+		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
 		if (
 			(tour as { organizationId: string }).organizationId !==
@@ -151,8 +151,8 @@ export const internalCreate = internalMutation({
 
 		const bookingId = await ctx.db.insert("bookings", {
 			organizationId: args.organizationId,
-			tourId: args.tourId as never,
-			customerId: customerId as never,
+			tourId: args.tourId,
+			customerId,
 			date: args.date,
 			startTime: args.startTime,
 			guests: args.guests,
@@ -197,7 +197,7 @@ export const internalCreate = internalMutation({
 			internal.scheduledNotifications.scheduleForBooking,
 			{
 				organizationId: args.organizationId,
-				bookingId: bookingId as never,
+				bookingId,
 				date: args.date,
 				startTime: args.startTime,
 			},

@@ -59,7 +59,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			internal.public_booking.internalCreate,
 			{
 				organizationId: orgId,
-				tourId: tourId as string,
+				tourId,
 				customerName: "Alice Visitor",
 				customerEmail: "alice@example.com",
 				date: "2026-08-15",
@@ -85,7 +85,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			internal.public_booking.internalCreate,
 			{
 				organizationId: orgId,
-				tourId: tourId as string,
+				tourId,
 				customerName: "Bob",
 				customerEmail: "bob@example.com",
 				date: "2026-08-20",
@@ -97,7 +97,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			internal.public_booking.internalCreate,
 			{
 				organizationId: orgId,
-				tourId: tourId as string,
+				tourId,
 				customerName: "Bob Updated",
 				customerEmail: "bob@example.com",
 				date: "2026-08-21",
@@ -119,7 +119,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		await expect(
 			t.mutation(internal.public_booking.internalCreate, {
 				organizationId: orgId,
-				tourId: tourId as string,
+				tourId,
 				customerName: "Carol",
 				customerEmail: "carol@example.com",
 				date: "2026-08-22",
@@ -138,7 +138,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		await expect(
 			t.mutation(internal.public_booking.internalCreate, {
 				organizationId: orgId,
-				tourId: tourId as string,
+				tourId,
 				customerName: "Dan",
 				customerEmail: "dan@example.com",
 				date: "2026-08-23",
@@ -156,7 +156,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		await expect(
 			t.mutation(internal.public_booking.internalCreate, {
 				organizationId: "org_pub_e",
-				tourId: tourId as string,
+				tourId,
 				customerName: "Eve",
 				customerEmail: "eve@example.com",
 				date: "2026-08-24",
@@ -174,7 +174,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		);
 		await t.mutation(internal.public_booking.internalCreate, {
 			organizationId: orgId,
-			tourId: tourId as string,
+			tourId,
 			customerName: "Frank",
 			customerEmail: "frank@example.com",
 			date: "2026-08-25",
@@ -203,7 +203,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		);
 		await t.mutation(internal.public_booking.internalCreate, {
 			organizationId: orgId,
-			tourId: tourId as string,
+			tourId,
 			customerName: "Greta",
 			customerEmail: "greta@example.com",
 			date: "2026-09-10",
