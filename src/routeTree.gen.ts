@@ -31,6 +31,7 @@ import { Route as DashboardToursNewRouteImport } from './routes/dashboard/tours/
 import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
 import { Route as DashboardCustomersNewRouteImport } from './routes/dashboard/customers/new'
 import { Route as DashboardCustomersCustomerIdRouteImport } from './routes/dashboard/customers/$customerId'
+import { Route as DashboardBookingsNewRouteImport } from './routes/dashboard/bookings/new'
 import { Route as DashboardBookingsBookingIdRouteImport } from './routes/dashboard/bookings/$bookingId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -145,6 +146,11 @@ const DashboardCustomersCustomerIdRoute =
     path: '/$customerId',
     getParentRoute: () => DashboardCustomersRoute,
   } as any)
+const DashboardBookingsNewRoute = DashboardBookingsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => DashboardBookingsRoute,
+} as any)
 const DashboardBookingsBookingIdRoute =
   DashboardBookingsBookingIdRouteImport.update({
     id: '/$bookingId',
@@ -178,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/dashboard/bookings/$bookingId': typeof DashboardBookingsBookingIdRoute
+  '/dashboard/bookings/new': typeof DashboardBookingsNewRoute
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
@@ -203,6 +210,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/dashboard/bookings/$bookingId': typeof DashboardBookingsBookingIdRoute
+  '/dashboard/bookings/new': typeof DashboardBookingsNewRoute
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
@@ -230,6 +238,7 @@ export interface FileRoutesById {
   '/dashboard/': typeof DashboardIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/dashboard/bookings/$bookingId': typeof DashboardBookingsBookingIdRoute
+  '/dashboard/bookings/new': typeof DashboardBookingsNewRoute
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
@@ -258,6 +267,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/api/auth/$'
     | '/dashboard/bookings/$bookingId'
+    | '/dashboard/bookings/new'
     | '/dashboard/customers/$customerId'
     | '/dashboard/customers/new'
     | '/dashboard/tours/$tourId'
@@ -283,6 +293,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/api/auth/$'
     | '/dashboard/bookings/$bookingId'
+    | '/dashboard/bookings/new'
     | '/dashboard/customers/$customerId'
     | '/dashboard/customers/new'
     | '/dashboard/tours/$tourId'
@@ -309,6 +320,7 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/api/auth/$'
     | '/dashboard/bookings/$bookingId'
+    | '/dashboard/bookings/new'
     | '/dashboard/customers/$customerId'
     | '/dashboard/customers/new'
     | '/dashboard/tours/$tourId'
@@ -481,6 +493,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardCustomersCustomerIdRouteImport
       parentRoute: typeof DashboardCustomersRoute
     }
+    '/dashboard/bookings/new': {
+      id: '/dashboard/bookings/new'
+      path: '/new'
+      fullPath: '/dashboard/bookings/new'
+      preLoaderRoute: typeof DashboardBookingsNewRouteImport
+      parentRoute: typeof DashboardBookingsRoute
+    }
     '/dashboard/bookings/$bookingId': {
       id: '/dashboard/bookings/$bookingId'
       path: '/$bookingId'
@@ -500,10 +519,12 @@ declare module '@tanstack/react-router' {
 
 interface DashboardBookingsRouteChildren {
   DashboardBookingsBookingIdRoute: typeof DashboardBookingsBookingIdRoute
+  DashboardBookingsNewRoute: typeof DashboardBookingsNewRoute
 }
 
 const DashboardBookingsRouteChildren: DashboardBookingsRouteChildren = {
   DashboardBookingsBookingIdRoute: DashboardBookingsBookingIdRoute,
+  DashboardBookingsNewRoute: DashboardBookingsNewRoute,
 }
 
 const DashboardBookingsRouteWithChildren =

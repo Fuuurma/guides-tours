@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -81,11 +82,16 @@ function BookingsPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Bookings</CardTitle>
-					<CardDescription>
-						{itemCount} booking{itemCount === 1 ? "" : "s"}
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Bookings</CardTitle>
+						<CardDescription>
+							{itemCount} booking{itemCount === 1 ? "" : "s"}
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/bookings/new">+ New booking</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
