@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Select,
 	SelectContent,
@@ -261,10 +262,9 @@ function NewIntegrationForm({
 					</FormField>
 
 					<label className="flex items-center gap-2 text-sm">
-						<input
-							type="checkbox"
+						<Checkbox
 							checked={isSandbox}
-							onChange={(e) => setIsSandbox(e.target.checked)}
+							onCheckedChange={(c) => setIsSandbox(c === true)}
 						/>
 						Sandbox / test environment
 					</label>

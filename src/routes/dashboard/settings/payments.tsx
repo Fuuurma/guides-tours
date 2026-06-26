@@ -12,6 +12,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "../../../../convex/_generated/api";
@@ -120,10 +121,9 @@ function PaymentSettingsPage() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						<label className="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
+							<Checkbox
 								checked={stripeEnabled}
-								onChange={(e) => setStripeEnabled(e.target.checked)}
+								onCheckedChange={(c) => setStripeEnabled(c === true)}
 							/>
 							Stripe enabled
 						</label>
@@ -132,10 +132,9 @@ function PaymentSettingsPage() {
 								{stripeIsSandbox ? "Sandbox" : "Live"}
 							</Badge>
 							<label className="text-xs text-muted-foreground flex items-center gap-1">
-								<input
-									type="checkbox"
+								<Checkbox
 									checked={stripeIsSandbox}
-									onChange={(e) => setStripeIsSandbox(e.target.checked)}
+									onCheckedChange={(c) => setStripeIsSandbox(c === true)}
 								/>
 								Use sandbox/test mode
 							</label>
@@ -193,10 +192,9 @@ function PaymentSettingsPage() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						<label className="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
+							<Checkbox
 								checked={acceptDeposits}
-								onChange={(e) => setAcceptDeposits(e.target.checked)}
+								onCheckedChange={(c) => setAcceptDeposits(c === true)}
 							/>
 							Accept deposits
 						</label>

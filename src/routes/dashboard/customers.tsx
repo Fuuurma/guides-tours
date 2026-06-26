@@ -1,16 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { ListPage } from "@/components/list-page";
+import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/customers")({
@@ -41,28 +34,13 @@ const columns: DataTableColumn<Customer>[] = [
 		),
 		searchValue: (c) => c.name,
 	},
-	{
-		key: "email",
-		header: "Email",
-		render: (c) => c.email,
-		searchValue: (c) => c.email,
-	},
-	{
-		key: "phone",
-		header: "Phone",
-		render: (c) => c.phone,
-		searchValue: (c) => c.phone,
-	},
+	{ key: "email", header: "Email", render: (c) => c.email, searchValue: (c) => c.email },
+	{ key: "phone", header: "Phone", render: (c) => c.phone, searchValue: (c) => c.phone },
 	{ key: "visits", header: "Visits", render: (c) => c.totalVisits },
 	{
 		key: "status",
 		header: "Status",
-		render: (c) =>
-			c.vipStatus ? (
-				<Badge>VIP</Badge>
-			) : (
-				<Badge variant="secondary">Regular</Badge>
-			),
+		render: (c) => <StatusBadge status={c.vipStatus ? "vip" : "regular"} />,
 		searchValue: (c) => (c.vipStatus ? "vip" : "regular"),
 	},
 ];
@@ -71,35 +49,24 @@ function CustomersPage() {
 	const { data: customers, isPending, error } = useQuery(
 		convexQuery(api.customers.list, {}),
 	);
-
 	const itemCount = customers?.items?.length ?? 0;
 
 	return (
-		<div className="space-y-6">
-			<Card>
-				<CardHeader className="flex flex-row items-center justify-between space-y-0">
-					<div>
-						<CardTitle>Customers</CardTitle>
-						<CardDescription>
-							{itemCount} customer{itemCount === 1 ? "" : "s"}
-						</CardDescription>
-					</div>
-					<Button asChild>
-						<Link to="/dashboard/customers/new">+ New customer</Link>
-					</Button>
-				</CardHeader>
-				<CardContent>
-					<DataTable
-						data={customers?.items as Customer[] | undefined}
-						columns={columns}
-						rowKey={(c) => c._id}
-						isPending={isPending}
-						error={error}
-						emptyMessage="No customers yet."
-						searchPlaceholder="Search by name, email, or status…"
-					/>
-				</CardContent>
-			</Card>
-		</div>
+		<ListPage
+			title="Customers"
+			description={`${itemCount} customer${itemCount === 1 ? "" : "s"}`}
+			newTo="/dashboard/customers/new"
+			newLabel="+ New customer"
+		>
+			<DataTable
+				data={customers?.items as Customer[] | undefined}
+				columns={columns}
+				rowKey={(c) => c._id}
+				isPending={isPending}
+				error={error}
+				emptyMessage="No customers yet."
+				searchPlaceholder="Search by name, email, or status…"
+			/>
+		</ListPage>
 	);
 }

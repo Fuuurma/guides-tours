@@ -1,27 +1,14 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { ListPage } from "@/components/list-page";
+import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/vacations")({
 	component: VacationsPage,
 });
-
-const statusColors: Record<string, string> = {
-	pending: "bg-yellow-100 text-yellow-800",
-	approved: "bg-green-100 text-green-800",
-	rejected: "bg-red-100 text-red-800",
-};
 
 interface Vacation {
 	_id: string;
@@ -47,42 +34,23 @@ const columns: DataTableColumn<Vacation>[] = [
 		),
 		searchValue: (v) => v.userId,
 	},
-	{
-		key: "start",
-		header: "Start",
-		render: (v) => v.startDate,
-		searchValue: (v) => v.startDate,
-	},
-	{
-		key: "end",
-		header: "End",
-		render: (v) => v.endDate,
-		searchValue: (v) => v.endDate,
-	},
+	{ key: "start", header: "Start", render: (v) => v.startDate, searchValue: (v) => v.startDate },
+	{ key: "end", header: "End", render: (v) => v.endDate, searchValue: (v) => v.endDate },
 	{
 		key: "days",
 		header: "Days",
-		render: (v) =>
-			Math.floor(
-				(Date.parse(v.endDate) - Date.parse(v.startDate)) / 86_400_000 + 1,
-			),
+		render: (v) => Math.floor((Date.parse(v.endDate) - Date.parse(v.startDate)) / 86_400_000 + 1),
 	},
 	{
 		key: "reason",
 		header: "Reason",
-		render: (v) => (
-			<span className="max-w-[200px] truncate inline-block">{v.reason}</span>
-		),
+		render: (v) => <span className="max-w-[200px] truncate inline-block">{v.reason}</span>,
 		searchValue: (v) => v.reason,
 	},
 	{
 		key: "status",
 		header: "Status",
-		render: (v) => (
-			<Badge className={statusColors[v.status] ?? ""} variant="secondary">
-				{v.status}
-			</Badge>
-		),
+		render: (v) => <StatusBadge status={v.status} />,
 		searchValue: (v) => v.status,
 	},
 ];
@@ -91,35 +59,24 @@ function VacationsPage() {
 	const { data: vacations, isPending, error } = useQuery(
 		convexQuery(api.vacationRequests.list, {}),
 	);
-
 	const itemCount = vacations?.length ?? 0;
 
 	return (
-		<div className="space-y-6">
-			<Card>
-				<CardHeader className="flex flex-row items-center justify-between space-y-0">
-					<div>
-						<CardTitle>Vacation requests</CardTitle>
-						<CardDescription>
-							{itemCount} request{itemCount === 1 ? "" : "s"}
-						</CardDescription>
-					</div>
-					<Button asChild>
-						<Link to="/dashboard/vacations/new">+ New request</Link>
-					</Button>
-				</CardHeader>
-				<CardContent>
-					<DataTable
-						data={vacations as Vacation[] | undefined}
-						columns={columns}
-						rowKey={(v) => v._id}
-						isPending={isPending}
-						error={error}
-						emptyMessage="No vacation requests yet."
-						searchPlaceholder="Search by guide, dates, reason, or status…"
-					/>
-				</CardContent>
-			</Card>
-		</div>
+		<ListPage
+			title="Vacation requests"
+			description={`${itemCount} request${itemCount === 1 ? "" : "s"}`}
+			newTo="/dashboard/vacations/new"
+			newLabel="+ New request"
+		>
+			<DataTable
+				data={vacations as Vacation[] | undefined}
+				columns={columns}
+				rowKey={(v) => v._id}
+				isPending={isPending}
+				error={error}
+				emptyMessage="No vacation requests yet."
+				searchPlaceholder="Search by guide, dates, reason, or status…"
+			/>
+		</ListPage>
 	);
 }

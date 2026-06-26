@@ -51,6 +51,14 @@ export const STATUS_CLASSES: Record<string, string> = {
 	email: "bg-blue-100 text-blue-800",
 	sms: "bg-green-100 text-green-800",
 	both: "bg-purple-100 text-purple-800",
+
+	// Generic active/inactive (tours, drivers, templates)
+	active: "bg-green-100 text-green-800",
+	inactive: "bg-gray-100 text-gray-800",
+
+	// Customer VIP
+	vip: "bg-amber-100 text-amber-800",
+	regular: "bg-gray-100 text-gray-800",
 };
 
 // Variant lookup for StatusBadge (semantic shadcn variants).
@@ -77,6 +85,14 @@ export const STATUS_VARIANTS: Record<string, StatusVariant> = {
 	email: "secondary",
 	sms: "default",
 	both: "outline",
+
+	// Generic active/inactive
+	active: "default",
+	inactive: "secondary",
+
+	// Customer VIP
+	vip: "outline",
+	regular: "secondary",
 };
 
 /**

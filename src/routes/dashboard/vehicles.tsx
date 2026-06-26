@@ -1,28 +1,14 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { ListPage } from "@/components/list-page";
+import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/vehicles")({
 	component: VehiclesPage,
 });
-
-const statusColors: Record<string, string> = {
-	available: "bg-green-100 text-green-800",
-	in_use: "bg-blue-100 text-blue-800",
-	maintenance: "bg-yellow-100 text-yellow-800",
-	retired: "bg-gray-100 text-gray-800",
-};
 
 interface Vehicle {
 	_id: string;
@@ -54,11 +40,7 @@ const columns: DataTableColumn<Vehicle>[] = [
 	{
 		key: "status",
 		header: "Status",
-		render: (v) => (
-			<Badge className={statusColors[v.status] ?? ""} variant="secondary">
-				{v.status}
-			</Badge>
-		),
+		render: (v) => <StatusBadge status={v.status} />,
 		searchValue: (v) => v.status,
 	},
 ];
@@ -67,35 +49,24 @@ function VehiclesPage() {
 	const { data: vehicles, isPending, error } = useQuery(
 		convexQuery(api.vehicles.list, {}),
 	);
-
 	const itemCount = vehicles?.length ?? 0;
 
 	return (
-		<div className="space-y-6">
-			<Card>
-				<CardHeader className="flex flex-row items-center justify-between space-y-0">
-					<div>
-						<CardTitle>Vehicles</CardTitle>
-						<CardDescription>
-							{itemCount} vehicle{itemCount === 1 ? "" : "s"}
-						</CardDescription>
-					</div>
-					<Button asChild>
-						<Link to="/dashboard/vehicles/new">+ New vehicle</Link>
-					</Button>
-				</CardHeader>
-				<CardContent>
-					<DataTable
-						data={vehicles as Vehicle[] | undefined}
-						columns={columns}
-						rowKey={(v) => v._id}
-						isPending={isPending}
-						error={error}
-						emptyMessage="No vehicles yet."
-						searchPlaceholder="Search by name, type, plate, or status…"
-					/>
-				</CardContent>
-			</Card>
-		</div>
+		<ListPage
+			title="Vehicles"
+			description={`${itemCount} vehicle${itemCount === 1 ? "" : "s"}`}
+			newTo="/dashboard/vehicles/new"
+			newLabel="+ New vehicle"
+		>
+			<DataTable
+				data={vehicles as Vehicle[] | undefined}
+				columns={columns}
+				rowKey={(v) => v._id}
+				isPending={isPending}
+				error={error}
+				emptyMessage="No vehicles yet."
+				searchPlaceholder="Search by name, type, plate, or status…"
+			/>
+		</ListPage>
 	);
 }
