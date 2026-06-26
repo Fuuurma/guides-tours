@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -34,13 +35,25 @@ const channelColors: Record<string, string> = {
 };
 
 const columns: DataTableColumn<NotificationTemplate>[] = [
-	{ key: "name", header: "Name", render: (t) => t.name, className: "font-medium" },
+	{
+		key: "name",
+		header: "Name",
+		render: (t) => (
+			<Link
+				to="/dashboard/notifications/$templateId"
+				params={{ templateId: t._id }}
+				className="font-medium text-blue-600 hover:underline"
+			>
+				{t.name}
+			</Link>
+		),
+		searchValue: (t) => t.name,
+	},
 	{
 		key: "type",
 		header: "Type",
-		render: (t) => (
-			<span className="font-mono text-xs">{t.templateType}</span>
-		),
+		render: (t) => <span className="font-mono text-xs">{t.templateType}</span>,
+		searchValue: (t) => t.templateType,
 	},
 	{
 		key: "channel",
@@ -50,6 +63,7 @@ const columns: DataTableColumn<NotificationTemplate>[] = [
 				{t.channel}
 			</Badge>
 		),
+		searchValue: (t) => t.channel,
 	},
 	{
 		key: "subject",
@@ -57,11 +71,13 @@ const columns: DataTableColumn<NotificationTemplate>[] = [
 		render: (t) => (
 			<span className="max-w-[300px] truncate inline-block">{t.emailSubject}</span>
 		),
+		searchValue: (t) => t.emailSubject,
 	},
 	{
 		key: "timing",
 		header: "Timing",
 		render: (t) => <span className="font-mono text-xs">{t.sendTiming}</span>,
+		searchValue: (t) => t.sendTiming,
 	},
 	{
 		key: "retries",
@@ -77,6 +93,7 @@ const columns: DataTableColumn<NotificationTemplate>[] = [
 			) : (
 				<Badge variant="secondary">Inactive</Badge>
 			),
+		searchValue: (t) => (t.isActive ? "active" : "inactive"),
 	},
 ];
 
@@ -90,12 +107,17 @@ function NotificationTemplatesPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Notification templates</CardTitle>
-					<CardDescription>
-						{itemCount} template{itemCount === 1 ? "" : "s"} — these
-						control which messages go out for booking events.
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Notification templates</CardTitle>
+						<CardDescription>
+							{itemCount} template{itemCount === 1 ? "" : "s"} — these
+							control which messages go out for booking events.
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/notifications/new">+ New template</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
@@ -105,6 +127,7 @@ function NotificationTemplatesPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No notification templates yet."
+						searchPlaceholder="Search by name, type, subject, or status…"
 					/>
 				</CardContent>
 			</Card>
