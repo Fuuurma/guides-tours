@@ -1,27 +1,15 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { DetailPage, DetailSection } from "@/components/detail-page";
+import { DetailRow, MetricCard } from "@/components/metric-card";
+import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/vehicles/$vehicleId")({
 	component: VehicleDetailPage,
 });
-
-const statusColors: Record<string, string> = {
-	available: "bg-green-100 text-green-800",
-	in_use: "bg-blue-100 text-blue-800",
-	maintenance: "bg-yellow-100 text-yellow-800",
-	retired: "bg-gray-100 text-gray-800",
-};
 
 function VehicleDetailPage() {
 	const { vehicleId } = Route.useParams();
@@ -33,127 +21,61 @@ function VehicleDetailPage() {
 		return <p className="text-muted-foreground">Loading...</p>;
 	}
 	if (error) {
-		return (
-			<p className="text-destructive text-sm">Error: {error.message}</p>
-		);
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	}
 	if (!vehicle) {
 		return (
 			<div className="space-y-4">
 				<p className="text-muted-foreground">Vehicle not found.</p>
 				<Button asChild variant="outline">
-					<Link to="/dashboard/vehicles">← Back to vehicles</Link>
+					<a href="/dashboard/vehicles">← Back to vehicles</a>
 				</Button>
 			</div>
 		);
 	}
 
 	return (
-		<div className="space-y-6">
-			<header className="flex items-center justify-between">
-				<div>
-					<h1 className="text-2xl font-semibold">{vehicle.name}</h1>
-					<p className="text-muted-foreground text-sm">
-						{vehicle.vehicleType}
-						{vehicle.licensePlate ? ` · ${vehicle.licensePlate}` : ""}
-					</p>
-				</div>
-				<div className="flex gap-2">
-					<Button asChild variant="outline">
-						<Link to="/dashboard/vehicles">← Back</Link>
-					</Button>
-				</div>
-			</header>
-
+		<DetailPage
+			title={vehicle.name}
+			subtitle={`${vehicle.vehicleType}${
+				vehicle.licensePlate ? ` · ${vehicle.licensePlate}` : ""
+			}`}
+			backTo="/dashboard/vehicles"
+		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<Metric label="Capacity" value={`${vehicle.capacity} guests`} />
-				<Metric
+				<MetricCard label="Capacity" value={`${vehicle.capacity} guests`} />
+				<MetricCard
 					label="Status"
 					value={vehicle.status}
-					customBadge={
-						<Badge
-							className={statusColors[vehicle.status] ?? ""}
-							variant="secondary"
-						>
-							{vehicle.status}
-						</Badge>
-					}
-				/>
-				<Metric
+					badgeVariant="secondary"
+				>
+					<StatusBadge status={vehicle.status} />
+				</MetricCard>
+				<MetricCard
 					label="Ownership"
 					value={vehicle.ownershipType || "(unset)"}
 				/>
-				<Metric
+				<MetricCard
 					label="Year"
 					value={vehicle.year?.toString() ?? "—"}
 				/>
 			</div>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Specifications</CardTitle>
-					<CardDescription>Make, model, and identification</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-2 text-sm">
-					<Row label="Make" value={vehicle.make || "—"} />
-					<Row label="Model" value={vehicle.model || "—"} />
-					<Row label="Color" value={vehicle.color || "—"} />
-					<Row label="License plate" value={vehicle.licensePlate || "—"} />
-				</CardContent>
-			</Card>
+			<DetailSection
+				title="Specifications"
+				description="Make, model, and identification"
+			>
+				<DetailRow label="Make" value={vehicle.make || "—"} />
+				<DetailRow label="Model" value={vehicle.model || "—"} />
+				<DetailRow label="Color" value={vehicle.color || "—"} />
+				<DetailRow label="License plate" value={vehicle.licensePlate || "—"} />
+			</DetailSection>
 
 			{vehicle.notes && (
-				<Card>
-					<CardHeader>
-						<CardTitle>Notes</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<p className="text-sm whitespace-pre-wrap">{vehicle.notes}</p>
-					</CardContent>
-				</Card>
+				<DetailSection title="Notes">
+					<p className="text-sm whitespace-pre-wrap">{vehicle.notes}</p>
+				</DetailSection>
 			)}
-		</div>
-	);
-}
-
-function Metric({
-	label,
-	value,
-	customBadge,
-}: {
-	label: string;
-	value: string;
-	customBadge?: React.ReactNode;
-}) {
-	return (
-		<Card>
-			<CardHeader className="pb-2">
-				<CardDescription>{label}</CardDescription>
-			</CardHeader>
-			<CardContent>
-				{customBadge ?? <p className="text-2xl font-semibold">{value}</p>}
-			</CardContent>
-		</Card>
-	);
-}
-
-function Row({
-	label,
-	value,
-	mono,
-}: {
-	label: string;
-	value: string;
-	mono?: boolean;
-}) {
-	return (
-		<div className="flex items-baseline justify-between gap-4">
-			<span className="text-muted-foreground">{label}</span>
-			{mono ? (
-				<span className="font-mono text-xs">{value}</span>
-			) : (
-				<span>{value}</span>
-			)}
-		</div>
+		</DetailPage>
 	);
 }

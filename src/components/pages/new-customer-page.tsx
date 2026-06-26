@@ -1,125 +1,101 @@
 import { useMutation } from "convex/react";
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
-import { FormActions, FormField } from "../form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FormField } from "../form";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+
+interface FormValues extends Record<string, unknown> {
+	name: string;
+	email: string;
+	phone: string;
+	preferredLanguage: string;
+	notes: string;
+}
+
+const INITIAL: FormValues = {
+	name: "",
+	email: "",
+	phone: "",
+	preferredLanguage: "en",
+	notes: "",
+};
 
 export function NewCustomerPage() {
-	const navigate = useNavigate();
 	const create = useMutation(api.customers.create);
-	const [name, setName] = useState("");
-	const [email, setEmail] = useState("");
-	const [phone, setPhone] = useState("");
-	const [preferredLanguage, setPreferredLanguage] = useState("en");
-	const [notes, setNotes] = useState("");
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const onSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setPending(true);
-		setError(null);
-		try {
+	const form = useEntityForm<FormValues, string>({
+		mutation: async (values) => {
 			const id = await create({
-				name,
-				email,
-				phone: phone || undefined,
-				preferredLanguage: preferredLanguage || "en",
-				notes: notes || undefined,
+				name: values.name,
+				email: values.email,
+				phone: values.phone || undefined,
+				preferredLanguage: values.preferredLanguage || "en",
+				notes: values.notes || undefined,
 			});
-			toast.success("Customer created");
-			void navigate({
-				to: "/dashboard/customers/$customerId",
-				params: { customerId: id },
-			});
-		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
-		} finally {
-			setPending(false);
-		}
-	};
+			return id;
+		},
+		initialValues: INITIAL,
+		redirectTo: (id) => `/dashboard/customers/${id}`,
+		successMessage: "Customer created",
+	});
 
 	return (
-		<div className="mx-auto max-w-2xl">
-			<Card>
-				<CardHeader>
-					<CardTitle>New customer</CardTitle>
-					<CardDescription>
-						Add a customer to your organization
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form onSubmit={onSubmit} className="space-y-4">
-						<FormField label="Name *" htmlFor="name">
-							<Input
-								id="name"
-								required
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								placeholder="Jane Doe"
-							/>
-						</FormField>
+		<EntityFormPage
+			form={form}
+			title="New customer"
+			description="Add a customer to your organization"
+			backTo="/dashboard/customers"
+			submitLabel="Create customer"
+		>
+			<FormField label="Name *" htmlFor="name">
+				<Input
+					id="name"
+					required
+					value={form.values.name}
+					onChange={(e) => form.set("name", e.target.value)}
+					placeholder="Jane Doe"
+				/>
+			</FormField>
 
-						<FormField label="Email *" htmlFor="email">
-							<Input
-								id="email"
-								type="email"
-								required
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								placeholder="jane@example.com"
-							/>
-						</FormField>
+			<FormField label="Email *" htmlFor="email">
+				<Input
+					id="email"
+					type="email"
+					required
+					value={form.values.email}
+					onChange={(e) => form.set("email", e.target.value)}
+					placeholder="jane@example.com"
+				/>
+			</FormField>
 
-						<FormField label="Phone" htmlFor="phone">
-							<Input
-								id="phone"
-								type="tel"
-								value={phone}
-								onChange={(e) => setPhone(e.target.value)}
-								placeholder="+1 555 555 5555"
-							/>
-						</FormField>
+			<FormField label="Phone" htmlFor="phone">
+				<Input
+					id="phone"
+					type="tel"
+					value={form.values.phone}
+					onChange={(e) => form.set("phone", e.target.value)}
+					placeholder="+1 555 555 5555"
+				/>
+			</FormField>
 
-						<FormField label="Preferred language" htmlFor="lang">
-							<Input
-								id="lang"
-								value={preferredLanguage}
-								onChange={(e) => setPreferredLanguage(e.target.value)}
-								placeholder="en"
-							/>
-						</FormField>
+			<FormField label="Preferred language" htmlFor="lang">
+				<Input
+					id="lang"
+					value={form.values.preferredLanguage}
+					onChange={(e) => form.set("preferredLanguage", e.target.value)}
+					placeholder="en"
+				/>
+			</FormField>
 
-						<FormField label="Notes" htmlFor="notes">
-							<textarea
-								id="notes"
-								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
-								rows={3}
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-							/>
-						</FormField>
-
-						{error && <p className="text-destructive text-sm">{error}</p>}
-
-						<FormActions
-							onCancel={() => navigate({ to: "/dashboard/customers" })}
-							pending={pending}
-							submitLabel="Create customer"
-						/>
-					</form>
-				</CardContent>
-			</Card>
-		</div>
+			<FormField label="Notes" htmlFor="notes">
+				<Textarea
+					id="notes"
+					value={form.values.notes}
+					onChange={(e) => form.set("notes", e.target.value)}
+					rows={3}
+					placeholder="Optional"
+				/>
+			</FormField>
+		</EntityFormPage>
 	);
 }

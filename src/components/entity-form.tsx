@@ -65,7 +65,7 @@ export interface EntityFormHandle<TValues, TResult> {
 	result: TResult | null;
 }
 
-export function useEntityForm<TValues extends Record<string, unknown>, TResult>(opts: {
+export function useEntityForm<TValues extends object, TResult>(opts: {
 	mutation: (args: TValues) => Promise<TResult>;
 	redirectTo: (result: TResult) => string;
 	initialValues: TValues;
@@ -139,7 +139,7 @@ export function useEntityForm<TValues extends Record<string, unknown>, TResult>(
  *     <FormField label="Name" htmlFor="name"> ... </FormField>
  *   </EntityFormPage>
  */
-export interface EntityFormPageProps<TValues extends Record<string, unknown>, TResult> {
+export interface EntityFormPageProps<TValues extends object, TResult> {
 	form: EntityFormHandle<TValues, TResult>;
 	title: string;
 	description?: string;
