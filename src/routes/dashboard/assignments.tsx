@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -33,7 +34,20 @@ interface Assignment {
 }
 
 const columns: DataTableColumn<Assignment>[] = [
-	{ key: "date", header: "Date", render: (a) => a.date },
+	{
+		key: "date",
+		header: "Date",
+		render: (a) => (
+			<Link
+				to="/dashboard/assignments/$assignmentId"
+				params={{ assignmentId: a._id }}
+				className="font-medium text-blue-600 hover:underline"
+			>
+				{a.date}
+			</Link>
+		),
+		searchValue: (a) => a.date,
+	},
 	{
 		key: "time",
 		header: "Time",
@@ -42,16 +56,19 @@ const columns: DataTableColumn<Assignment>[] = [
 				{a.startTime}–{a.endTime}
 			</span>
 		),
+		searchValue: (a) => `${a.startTime} ${a.endTime}`,
 	},
 	{
 		key: "guide",
 		header: "Guide",
 		render: (a) => <span className="font-mono text-xs">{a.guideId}</span>,
+		searchValue: (a) => a.guideId,
 	},
 	{
 		key: "tour",
 		header: "Tour",
 		render: (a) => <span className="font-mono text-xs">{a.tourId}</span>,
+		searchValue: (a) => a.tourId,
 	},
 	{
 		key: "status",
@@ -61,6 +78,7 @@ const columns: DataTableColumn<Assignment>[] = [
 				{a.status}
 			</Badge>
 		),
+		searchValue: (a) => a.status,
 	},
 ];
 
@@ -74,11 +92,16 @@ function AssignmentsPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Assignments</CardTitle>
-					<CardDescription>
-						{itemCount} assignment{itemCount === 1 ? "" : "s"}
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Assignments</CardTitle>
+						<CardDescription>
+							{itemCount} assignment{itemCount === 1 ? "" : "s"}
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/assignments/new">+ New assignment</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
@@ -88,6 +111,7 @@ function AssignmentsPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No assignments yet."
+						searchPlaceholder="Search by date, time, guide, or status…"
 					/>
 				</CardContent>
 			</Card>
