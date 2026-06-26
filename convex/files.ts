@@ -56,8 +56,21 @@ export const get = query({
 
 export const getUrl = query({
 	args: { storageId: v.id("_storage") },
-	handler: async (_ctx, args) => {
-		return await _ctx.storage.getUrl(args.storageId);
+	handler: async (ctx, args) => {
+		// SECURITY: require membership + verify the storageId is
+		// tracked under this org's files table. Without this check,
+		// any signed-in user could fetch a signed URL for any blob
+		// in Convex storage by guessing/iterating IDs.
+		const member = await requireMembership(ctx);
+		const f = await ctx.db
+			.query("files")
+			.withIndex("by_org", (q) =>
+				q.eq("organizationId", member.organizationId),
+			)
+			.filter((q) => q.eq(q.field("storageId"), args.storageId))
+			.first();
+		if (!f) return null;
+		return await ctx.storage.getUrl(args.storageId);
 	},
 });
 
