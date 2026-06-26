@@ -35,7 +35,6 @@ const ALLOWED_UPDATE_FIELDS = new Set([
 	"guestNames",
 	"languageRequired",
 	"notes",
-	"status",
 	"depositAmountCents",
 	"totalAmountCents",
 	"paymentMethod",
@@ -321,15 +320,11 @@ export const update = mutation({
 		guestNames: v.optional(v.string()),
 		languageRequired: v.optional(v.string()),
 		notes: v.optional(v.string()),
-		status: v.optional(
-			v.union(
-				v.literal("pending"),
-				v.literal("confirmed"),
-				v.literal("checked_in"),
-				v.literal("completed"),
-				v.literal("cancelled"),
-			),
-		),
+		// SECURITY: `status` is intentionally NOT in the args. State
+		// transitions must go through checkIn / complete / cancel so
+		// the side effects (audit log, customer stats, schedule
+		// capacity) are consistent. Adding status here would let
+		// callers bypass the state machine.
 		depositAmountCents: v.optional(v.int64()),
 		totalAmountCents: v.optional(v.int64()),
 		paymentMethod: v.optional(v.string()),
@@ -579,6 +574,15 @@ export const recordReview = mutation({
 		if (!booking) throw new ConvexError("Booking not found");
 		if (booking.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
+		}
+		// SECURITY: only completed bookings can have reviews recorded.
+		// Cancelled / future / no-show bookings should never get a
+		// rating (would distort analytics + let staff pad their
+		// tours' reviews).
+		if (booking.status !== "completed") {
+			throw new ConvexError(
+				"Reviews can only be recorded for completed bookings",
+			);
 		}
 		if (args.rating < 1 || args.rating > 5) {
 			throw new ConvexError("Rating must be 1..5");
