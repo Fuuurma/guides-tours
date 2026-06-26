@@ -64,6 +64,26 @@ export const upsertOtaBooking = internalMutation({
 			)
 			.unique();
 
+		// Compute commission + net revenue.
+		// Some OTAs send only commissionRate, others send only
+		// commissionCents, some both, some neither. Derive a single
+		// source of truth per row.
+		const rate = event.commissionRate ?? product?.commissionRate ?? 0;
+		const paidCents = event.totalPaidCents;
+		let commissionCents = event.commissionCents;
+		if (commissionCents === undefined && paidCents !== undefined && rate > 0) {
+			// Derive from rate × totalPaid, rounded to whole cents.
+			// Use BigInt arithmetic to avoid floating-point loss.
+			commissionCents =
+				(BigInt(Math.round(rate * 1_000_000)) * paidCents) / 1_000_000n;
+		}
+		const netRevenueCents =
+			paidCents !== undefined
+				? commissionCents !== undefined
+					? paidCents - commissionCents
+					: paidCents
+				: undefined;
+
 		const patch = {
 			organizationId,
 			integrationId,
@@ -80,15 +100,11 @@ export const upsertOtaBooking = internalMutation({
 			otaTourDate: event.tourDate,
 			otaTourTime: event.tourTime,
 			otaGuests: event.guests,
-			otaTotalPaidCents: event.totalPaidCents,
+			otaTotalPaidCents: paidCents,
 			otaCurrency: event.currency ?? "USD",
-			commissionRate: event.commissionRate ?? product?.commissionRate,
-			commissionAmountCents: event.commissionCents,
-			netRevenueCents: event.totalPaidCents
-				? event.commissionCents
-					? event.totalPaidCents - event.commissionCents
-					: event.totalPaidCents
-				: undefined,
+			commissionRate: rate,
+			commissionAmountCents: commissionCents,
+			netRevenueCents,
 			status: "confirmed" as const,
 			lastSyncAt: now,
 			rawOtaData: rawData,
