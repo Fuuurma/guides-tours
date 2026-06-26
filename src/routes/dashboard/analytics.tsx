@@ -33,31 +33,15 @@ function AnalyticsPage() {
 	);
 	const [range, setRange] = useState(defaultRange);
 
-	const overviewArgs =
-		org && org.id
-			? ({
-					organizationId: org.id,
-					startDate: range.startDate,
-					endDate: range.endDate,
-				} as const)
-			: null;
+	const rangeArgs = {
+		startDate: range.startDate,
+		endDate: range.endDate,
+	} as const;
 	const { data: overview, isPending: overviewPending } = useQuery(
-		overviewArgs
-			? convexQuery(api.analytics.getOverview, overviewArgs)
-			: convexQuery(api.analytics.getOverview, {
-					organizationId: "",
-					startDate: range.startDate,
-					endDate: range.endDate,
-				}),
+		convexQuery(api.analytics.getOverview, rangeArgs),
 	);
 	const { data: revenue } = useQuery(
-		overviewArgs
-			? convexQuery(api.analytics.getRevenueSummary, overviewArgs)
-			: convexQuery(api.analytics.getRevenueSummary, {
-					organizationId: "",
-					startDate: range.startDate,
-					endDate: range.endDate,
-				}),
+		convexQuery(api.analytics.getRevenueSummary, rangeArgs),
 	);
 
 	if (orgPending) return <p className="text-muted-foreground">Loading...</p>;

@@ -31,20 +31,11 @@ function DashboardIndex() {
 	const { data: customers } = useQuery(convexQuery(api.customers.list, {}));
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 
-	const orgId = org?.id;
-
 	const { data: overview } = useQuery(
-		orgId
-			? convexQuery(api.analytics.getOverview, {
-					organizationId: orgId,
-					startDate: today,
-					endDate: today,
-				})
-			: convexQuery(api.analytics.getOverview, {
-					organizationId: "",
-					startDate: today,
-					endDate: today,
-				}),
+		convexQuery(api.analytics.getOverview, {
+			startDate: today,
+			endDate: today,
+		}),
 	);
 
 	const todaysBookings = (bookings?.items ?? []).filter(

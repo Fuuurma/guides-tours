@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
-import { api } from "../_generated/api";
+import { internal } from "../_generated/api";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -129,11 +129,14 @@ describe("analytics", () => {
 			}),
 		);
 
-		const overview = await t.query(api.analytics.getOverview, {
-			organizationId: orgId,
-			startDate: "2026-07-01",
-			endDate: "2026-07-31",
-		});
+		const overview = await t.query(
+			internal.analytics.getOverviewInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-07-01",
+				endDate: "2026-07-31",
+			},
+		);
 		expect(overview.totalTours).toBe(1);
 		expect(overview.totalAssignments).toBe(3);
 		expect(overview.completedAssignments).toBe(1);
@@ -154,11 +157,14 @@ describe("analytics", () => {
 			seedAssignment(ctx, orgId, t2, { date: "2026-07-17" }),
 		);
 
-		const stats = await t.query(api.analytics.getTourStats, {
-			organizationId: orgId,
-			startDate: "2026-07-01",
-			endDate: "2026-07-31",
-		});
+		const stats = await t.query(
+			internal.analytics.getTourStatsInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-07-01",
+				endDate: "2026-07-31",
+			},
+		);
 		expect(stats.length).toBe(2);
 		expect(stats[0]!.tourName).toBe("Tour A");
 		expect(stats[0]!.totalAssignments).toBe(2);
@@ -169,11 +175,14 @@ describe("analytics", () => {
 	it("getDailyStats: fills zeros for empty days", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a3";
-		const stats = await t.query(api.analytics.getDailyStats, {
-			organizationId: orgId,
-			startDate: "2026-07-01",
-			endDate: "2026-07-03",
-		});
+		const stats = await t.query(
+			internal.analytics.getDailyStatsInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-07-01",
+				endDate: "2026-07-03",
+			},
+		);
 		expect(stats.length).toBe(3);
 		expect(stats[0]!.total).toBe(0);
 		expect(stats[1]!.total).toBe(0);
@@ -192,11 +201,14 @@ describe("analytics", () => {
 			seedBooking(ctx, orgId, tourId, custId, { guests: 2, totalAmountCents: 5000n, netRevenueCents: 5000n }),
 		);
 
-		const summary = await t.query(api.analytics.getRevenueSummary, {
-			organizationId: orgId,
-			startDate: "2026-07-01",
-			endDate: "2026-07-31",
-		});
+		const summary = await t.query(
+			internal.analytics.getRevenueSummaryInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-07-01",
+				endDate: "2026-07-31",
+			},
+		);
 		expect(summary.totalBookings).toBe(2);
 		expect(summary.totalGuests).toBe(6);
 		expect(summary.totalRevenueCents).toBe(15000);
@@ -218,15 +230,54 @@ describe("analytics", () => {
 			seedBooking(ctx, orgId, tourId, custId, { source: "direct" }),
 		);
 
-		const sources = await t.query(api.analytics.getBookingSources, {
-			organizationId: orgId,
-			startDate: "2026-07-01",
-			endDate: "2026-07-31",
-		});
+		const sources = await t.query(
+			internal.analytics.getBookingSourcesInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-07-01",
+				endDate: "2026-07-31",
+			},
+		);
 		expect(sources.length).toBe(2);
 		expect(sources[0]!.source).toBe("viator");
 		expect(sources[0]!.totalBookings).toBe(2);
 		expect(sources[1]!.source).toBe("direct");
 		expect(sources[1]!.totalBookings).toBe(1);
+	});
+
+	// Tenant isolation: queries for one org must not see another org's data,
+	// even when given the wrong orgId via the internal path.
+	it("getOverviewInternal: scoped to organizationId (tenant isolation)", async () => {
+		const t = convexTest(schema, modules);
+		const orgA = "org_iso_a";
+		const orgB = "org_iso_b";
+		const tourIdA = await t.run((ctx: any) => seedTour(ctx, orgA));
+		const tourIdB = await t.run((ctx: any) => seedTour(ctx, orgB));
+		await t.run((ctx: any) => seedAssignment(ctx, orgA, tourIdA));
+		await t.run((ctx: any) => seedAssignment(ctx, orgA, tourIdA, { date: "2026-07-16" }));
+		await t.run((ctx: any) => seedAssignment(ctx, orgB, tourIdB));
+		await t.run((ctx: any) => seedAssignment(ctx, orgB, tourIdB, { date: "2026-07-17" }));
+		await t.run((ctx: any) => seedAssignment(ctx, orgB, tourIdB, { date: "2026-07-18" }));
+
+		const aOverview = await t.query(
+			internal.analytics.getOverviewInternal,
+			{
+				organizationId: orgA,
+				startDate: "2026-07-01",
+				endDate: "2026-07-31",
+			},
+		);
+		const bOverview = await t.query(
+			internal.analytics.getOverviewInternal,
+			{
+				organizationId: orgB,
+				startDate: "2026-07-01",
+				endDate: "2026-07-31",
+			},
+		);
+		expect(aOverview.totalTours).toBe(1);
+		expect(aOverview.totalAssignments).toBe(2);
+		expect(bOverview.totalTours).toBe(1);
+		expect(bOverview.totalAssignments).toBe(3);
 	});
 });
