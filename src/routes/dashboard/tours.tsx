@@ -40,8 +40,14 @@ const columns: DataTableColumn<Tour>[] = [
 				{t.name}
 			</Link>
 		),
+		searchValue: (t) => t.name,
 	},
-	{ key: "type", header: "Type", render: (t) => t.tourType },
+	{
+		key: "type",
+		header: "Type",
+		render: (t) => t.tourType,
+		searchValue: (t) => t.tourType,
+	},
 	{ key: "duration", header: "Duration", render: (t) => `${t.durationHours}h` },
 	{ key: "capacity", header: "Capacity", render: (t) => `${t.minGuests}–${t.maxGuests}` },
 	{
@@ -49,6 +55,7 @@ const columns: DataTableColumn<Tour>[] = [
 		header: "Status",
 		render: (t) =>
 			t.isActive ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>,
+		searchValue: (t) => (t.isActive ? "active" : "inactive"),
 	},
 ];
 
@@ -81,6 +88,7 @@ function ToursPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No tours yet."
+						searchPlaceholder="Search by name or type…"
 					/>
 				</CardContent>
 			</Card>

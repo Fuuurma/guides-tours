@@ -39,9 +39,20 @@ const columns: DataTableColumn<Customer>[] = [
 				{c.name}
 			</Link>
 		),
+		searchValue: (c) => c.name,
 	},
-	{ key: "email", header: "Email", render: (c) => c.email },
-	{ key: "phone", header: "Phone", render: (c) => c.phone },
+	{
+		key: "email",
+		header: "Email",
+		render: (c) => c.email,
+		searchValue: (c) => c.email,
+	},
+	{
+		key: "phone",
+		header: "Phone",
+		render: (c) => c.phone,
+		searchValue: (c) => c.phone,
+	},
 	{ key: "visits", header: "Visits", render: (c) => c.totalVisits },
 	{
 		key: "status",
@@ -52,6 +63,7 @@ const columns: DataTableColumn<Customer>[] = [
 			) : (
 				<Badge variant="secondary">Regular</Badge>
 			),
+		searchValue: (c) => (c.vipStatus ? "vip" : "regular"),
 	},
 ];
 
@@ -84,6 +96,7 @@ function CustomersPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No customers yet."
+						searchPlaceholder="Search by name, email, or status…"
 					/>
 				</CardContent>
 			</Card>

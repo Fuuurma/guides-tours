@@ -36,7 +36,7 @@ interface Booking {
 }
 
 const columns: DataTableColumn<Booking>[] = [
-	{ key: "date", header: "Date", render: (b) => b.date },
+	{ key: "date", header: "Date", render: (b) => b.date, searchValue: (b) => b.date },
 	{
 		key: "tour",
 		header: "Tour",
@@ -49,6 +49,7 @@ const columns: DataTableColumn<Booking>[] = [
 				{b.date} · {b.guests} guests
 			</Link>
 		),
+		searchValue: (b) => `${b.date} ${b.guests}`,
 	},
 	{ key: "guests", header: "Guests", render: (b) => b.guests },
 	{
@@ -60,6 +61,7 @@ const columns: DataTableColumn<Booking>[] = [
 		key: "source",
 		header: "Source",
 		render: (b) => <Badge variant="outline">{b.source}</Badge>,
+		searchValue: (b) => b.source,
 	},
 	{
 		key: "status",
@@ -69,6 +71,7 @@ const columns: DataTableColumn<Booking>[] = [
 				{b.status}
 			</Badge>
 		),
+		searchValue: (b) => b.status,
 	},
 ];
 
@@ -101,6 +104,7 @@ function BookingsPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No bookings yet."
+						searchPlaceholder="Search by date, status, or source…"
 					/>
 				</CardContent>
 			</Card>
