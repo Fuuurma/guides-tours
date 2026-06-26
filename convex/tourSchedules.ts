@@ -247,6 +247,43 @@ export const incrementBooked = internalMutation({
 	},
 });
 
+/**
+ * Inverse of incrementBooked. Restores a schedule's capacityBooked
+ * counter when a booking is cancelled or refunded.
+ *
+ * NOTE: the bookings → tourSchedules wiring is not yet complete —
+ * the bookings module does not currently look up the matching
+ * tourSchedule. Callers that have a scheduleId (e.g. future
+ * OTA sync actions) can call this directly.
+ */
+export const decrementBooked = internalMutation({
+	args: {
+		organizationId: v.string(),
+		scheduleId: v.id("tourSchedules"),
+		guests: v.number(),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db.get(args.scheduleId);
+		if (!existing) throw new ConvexError("Schedule not found");
+		if (existing.organizationId !== args.organizationId) {
+			throw new ConvexError("Forbidden: wrong organization");
+		}
+		const newBooked = Math.max(0, existing.capacityBooked - args.guests);
+		// If the schedule was full, dropping below capacity flips it
+		// back to available.
+		const newStatus =
+			existing.status === "full" && newBooked < existing.capacityTotal
+				? "available"
+				: existing.status;
+		await ctx.db.patch(args.scheduleId, {
+			capacityBooked: newBooked,
+			status: newStatus,
+			updatedAt: Date.now(),
+		});
+		return args.scheduleId;
+	},
+});
+
 export const remove = mutation({
 	args: { scheduleId: v.id("tourSchedules") },
 	handler: async (ctx, args) => {

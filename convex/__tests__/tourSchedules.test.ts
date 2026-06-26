@@ -166,6 +166,69 @@ describe("tour schedules", () => {
 		).rejects.toThrow(/below current bookings/);
 	});
 
+	it("decrementBooked: decreases count, flips full→available", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ts_decr";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const id = await t.mutation(internal.tourSchedules.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			date: "2026-09-01",
+			startTime: "09:00",
+			endTime: "11:00",
+			capacityTotal: 10,
+		});
+		// Fill the schedule to flip status to "full".
+		await t.mutation(internal.tourSchedules.incrementBooked, {
+			organizationId: orgId,
+			scheduleId: id,
+			guests: 10,
+		});
+		let s = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(s?.capacityBooked).toBe(10);
+		expect(s?.status).toBe("full");
+		// Cancel 4 guests.
+		await t.mutation(internal.tourSchedules.decrementBooked, {
+			organizationId: orgId,
+			scheduleId: id,
+			guests: 4,
+		});
+		s = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(s?.capacityBooked).toBe(6);
+		expect(s?.status).toBe("available");
+		// Clamp at 0 (no negative result).
+		await t.mutation(internal.tourSchedules.decrementBooked, {
+			organizationId: orgId,
+			scheduleId: id,
+			guests: 100,
+		});
+		s = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(s?.capacityBooked).toBe(0);
+	});
+
+	it("decrementBooked: rejects cross-org", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ts_decr_x";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const id = await t.mutation(internal.tourSchedules.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			date: "2026-09-01",
+			startTime: "09:00",
+			endTime: "11:00",
+			capacityTotal: 10,
+		});
+		await expect(
+			t.mutation(internal.tourSchedules.decrementBooked, {
+				organizationId: "org_other",
+				scheduleId: id,
+				guests: 1,
+			}),
+		).rejects.toThrow(/wrong organization/);
+	});
+
 	it("remove: blocks delete when bookings exist", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_ts7";
