@@ -27,6 +27,7 @@ import { Route as DashboardCustomersRouteImport } from './routes/dashboard/custo
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
+import { Route as DashboardToursNewRouteImport } from './routes/dashboard/tours/new'
 import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
 import { Route as DashboardCustomersNewRouteImport } from './routes/dashboard/customers/new'
 import { Route as DashboardCustomersCustomerIdRouteImport } from './routes/dashboard/customers/$customerId'
@@ -123,6 +124,11 @@ const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardToursNewRoute = DashboardToursNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => DashboardToursRoute,
+} as any)
 const DashboardToursTourIdRoute = DashboardToursTourIdRouteImport.update({
   id: '/$tourId',
   path: '/$tourId',
@@ -175,6 +181,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
+  '/dashboard/tours/new': typeof DashboardToursNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -199,6 +206,7 @@ export interface FileRoutesByTo {
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
+  '/dashboard/tours/new': typeof DashboardToursNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -225,6 +233,7 @@ export interface FileRoutesById {
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRoute
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
+  '/dashboard/tours/new': typeof DashboardToursNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -252,6 +261,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers/$customerId'
     | '/dashboard/customers/new'
     | '/dashboard/tours/$tourId'
+    | '/dashboard/tours/new'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -276,6 +286,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers/$customerId'
     | '/dashboard/customers/new'
     | '/dashboard/tours/$tourId'
+    | '/dashboard/tours/new'
   id:
     | '__root__'
     | '/'
@@ -301,6 +312,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers/$customerId'
     | '/dashboard/customers/new'
     | '/dashboard/tours/$tourId'
+    | '/dashboard/tours/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -441,6 +453,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardAnalyticsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/tours/new': {
+      id: '/dashboard/tours/new'
+      path: '/new'
+      fullPath: '/dashboard/tours/new'
+      preLoaderRoute: typeof DashboardToursNewRouteImport
+      parentRoute: typeof DashboardToursRoute
+    }
     '/dashboard/tours/$tourId': {
       id: '/dashboard/tours/$tourId'
       path: '/$tourId'
@@ -505,10 +524,12 @@ const DashboardCustomersRouteWithChildren =
 
 interface DashboardToursRouteChildren {
   DashboardToursTourIdRoute: typeof DashboardToursTourIdRoute
+  DashboardToursNewRoute: typeof DashboardToursNewRoute
 }
 
 const DashboardToursRouteChildren: DashboardToursRouteChildren = {
   DashboardToursTourIdRoute: DashboardToursTourIdRoute,
+  DashboardToursNewRoute: DashboardToursNewRoute,
 }
 
 const DashboardToursRouteWithChildren = DashboardToursRoute._addFileChildren(
