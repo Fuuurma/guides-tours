@@ -19,8 +19,23 @@
 
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
+import type { FunctionReference } from "convex/server";
 
 const crons = cronJobs();
+
+// Cast the internal API to access lib/rate_limit (generated
+// FilterApi strips subdirectory modules; same pattern used by
+// ota/integrations_mutations and rate_limit.test.ts).
+const purgeOldRateLimit = (internal as unknown as {
+	"lib/rate_limit": {
+		purgeOld: FunctionReference<
+			"mutation",
+			"internal",
+			Record<string, never>,
+			{ deleted: number }
+		>;
+	};
+})["lib/rate_limit"].purgeOld;
 
 // Every 5 minutes — picks up pending scheduled notifications.
 // Source ran this manually; we run on a fixed interval.
@@ -46,6 +61,16 @@ crons.daily(
 	"cleanup_old_notifications",
 	{ hourUTC: 4, minuteUTC: 0 },
 	internal.notifications.cleanupOldNotifications,
+);
+
+// Daily at 04:30 UTC — drop public-booking rate-limit rows older
+// than 2× the window (30 minutes). Keeps the table from growing
+// unbounded while preserving rows that are still relevant for
+// rate-limit decisions (window = 15 min).
+crons.daily(
+	"cleanup_old_public_booking_attempts",
+	{ hourUTC: 4, minuteUTC: 30 },
+	purgeOldRateLimit,
 );
 
 export default crons;

@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as __tests___helpers from "../__tests__/helpers.js";
 import type * as analytics from "../analytics.js";
 import type * as assignments from "../assignments.js";
 import type * as auth from "../auth.js";
@@ -22,6 +23,7 @@ import type * as http from "../http.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_awsSigV4 from "../lib/awsSigV4.js";
 import type * as lib_crypto from "../lib/crypto.js";
+import type * as lib_rate_limit from "../lib/rate_limit.js";
 import type * as notificationSettings from "../notificationSettings.js";
 import type * as notificationTemplates from "../notificationTemplates.js";
 import type * as notification_dispatch from "../notification_dispatch.js";
@@ -73,6 +75,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "__tests__/helpers": typeof __tests___helpers;
   analytics: typeof analytics;
   assignments: typeof assignments;
   auth: typeof auth;
@@ -87,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authz": typeof lib_authz;
   "lib/awsSigV4": typeof lib_awsSigV4;
   "lib/crypto": typeof lib_crypto;
+  "lib/rate_limit": typeof lib_rate_limit;
   notificationSettings: typeof notificationSettings;
   notificationTemplates: typeof notificationTemplates;
   notification_dispatch: typeof notification_dispatch;

@@ -29,6 +29,18 @@ http.route({
 // Public booking endpoint — POST /api/public/book/:slug. No auth
 // required (visitors from the marketing site). The slug identifies
 // the organization; the body identifies tour + customer.
+//
+// Hardening:
+// - Origin allowlist via PUBLIC_BOOKING_ALLOWED_ORIGINS env var.
+//   If unset, all origins are allowed (development-friendly
+//   default). Set this in production to your marketing-site domain
+//   (e.g. "https://tours.example.com,https://www.example.com").
+//   The Origin header is optional in modern browsers for same-origin
+//   POST; we only reject when an Origin is present and not allowed.
+// - Per-email rate limit (5 attempts / 15 min) via
+//   convex/lib/rate_limit.ts. Enforced inside the createForSlug
+//   action so it can't be bypassed by hitting the httpAction
+//   repeatedly with different slugs.
 http.route({
 	path: "/api/public/book/:slug",
 	method: "POST",
@@ -36,6 +48,20 @@ http.route({
 		if (request.method !== "POST") {
 			return new Response("method not allowed", { status: 405 });
 		}
+
+		// Origin check (only if explicitly configured).
+		const origin = request.headers.get("origin");
+		const allowedOriginsRaw = process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS;
+		if (origin && allowedOriginsRaw) {
+			const allowed = allowedOriginsRaw
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean);
+			if (allowed.length > 0 && !allowed.includes(origin)) {
+				return new Response("origin not allowed", { status: 403 });
+			}
+		}
+
 		const url = new URL(request.url);
 		const segments = url.pathname.split("/").filter(Boolean);
 		const slugIdx = segments.indexOf("book");
@@ -112,10 +138,11 @@ http.route({
 					: err instanceof Error
 						? err.message
 						: "internal error";
-			const status =
-				typeof message === "string" && message.includes("not found")
-					? 404
-					: 400;
+			let status = 400;
+			if (typeof message === "string") {
+				if (message.includes("not found")) status = 404;
+				else if (message.includes("rate limit")) status = 429;
+			}
 			return new Response(JSON.stringify({ error: message }), {
 				status,
 				headers: { "content-type": "application/json" },

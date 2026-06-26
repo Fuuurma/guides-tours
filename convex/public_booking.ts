@@ -20,6 +20,7 @@
 import { v, ConvexError } from "convex/values";
 import { internalAction, internalMutation, query } from "./_generated/server";
 import { components, internal } from "./_generated/api";
+import type { FunctionReference } from "convex/server";
 
 // ----- Public query: org + active tours by slug -----
 //
@@ -86,6 +87,39 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		// Rate-limit check (per-email). Recorded BEFORE the slug
+		// lookup so an attacker can't burn through unknown slugs
+		// without consuming their email's quota.
+		// Cast via FunctionReference since the generated internal
+		// type strips lib/ subdirectory modules (those containing
+		// query/mutation exports). Same pattern as ota/integrations.
+		const recordAttemptRef = (internal as unknown as {
+			"lib/rate_limit": {
+				recordAttempt: FunctionReference<
+					"mutation",
+					"internal",
+					{
+						email: string;
+						slug: string;
+						organizationId: string | undefined;
+						outcome: string;
+					},
+					{ allowed: boolean; attempts: number }
+				>;
+			};
+		})["lib/rate_limit"].recordAttempt;
+		const rateCheck = await ctx.runMutation(recordAttemptRef, {
+			email: args.customerEmail,
+			slug: args.slug,
+			organizationId: undefined,
+			outcome: "pending",
+		});
+		if (!rateCheck.allowed) {
+			throw new ConvexError(
+				`rate limit exceeded: try again later (${rateCheck.attempts} attempts in window)`,
+			);
+		}
+
 		// Resolve organization via Better Auth component adapter query.
 		// `model: "organization"` is added at runtime by the org plugin;
 		// the static type only includes the default tables, so we cast.

@@ -817,4 +817,28 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_org_purpose", ["organizationId", "purpose"])
 		.index("by_uploader", ["uploadedBy"]),
+
+	// ----- Public booking attempts (rate limit + audit) -----
+	//
+	// One row per POST /api/public/book/:slug attempt. Used by
+	// convex/lib/rate_limit.ts to enforce a per-email cap on
+	// unauthenticated booking submissions (5 / 15min by default).
+	// Cron cleanup deletes rows older than the window.
+	//
+	// organizationId is set only when the slug resolves to a real org
+	// — failed lookups (unknown slug) still record so attackers can't
+	// spray arbitrary slugs.
+
+	publicBookingAttempts: defineTable({
+		organizationId: v.optional(orgId),
+		email: v.string(),
+		// success | rejected_unknown_slug | rejected_rate_limit |
+		// rejected_validation | rejected_capacity
+		outcome: v.string(),
+		slug: v.string(),
+		createdAt: v.number(),
+	})
+		.index("by_email_created", ["email", "createdAt"])
+		.index("by_org_created", ["organizationId", "createdAt"])
+		.index("by_created", ["createdAt"]),
 });

@@ -53,6 +53,7 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 | `OTA_KLOOK_API_KEY` | Klook | optional |
 | `OTA_BOOKING_API_KEY` | Booking.com | optional |
 | `OTA_EXPEDIA_API_KEY` | Expedia | optional |
+| `PUBLIC_BOOKING_ALLOWED_ORIGINS` | public booking form | comma-separated origins (e.g. `https://tours.example.com,https://www.example.com`); if unset, all origins allowed (dev only) |
 
 ## Deploy
 
