@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -13,8 +13,11 @@ import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../form";
 
-export function EditCustomerPage() {
-	const { customerId } = useParams({ strict: false }) as { customerId: string };
+interface EditCustomerPageProps {
+	customerId: string;
+}
+
+export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 	const navigate = useNavigate();
 	const customer = useQuery(api.customers.get, { customerId: customerId as never });
 	const update = useMutation(api.customers.update);

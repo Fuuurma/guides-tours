@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "convex/react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -13,8 +13,11 @@ import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../form";
 
-export function EditTourPage() {
-	const { tourId } = useParams({ strict: false }) as { tourId: string };
+interface EditTourPageProps {
+	tourId: string;
+}
+
+export function EditTourPage({ tourId }: EditTourPageProps) {
 	const navigate = useNavigate();
 	const tour = useQuery(api.tours.get, { tourId: tourId as never });
 	const update = useMutation(api.tours.update);
