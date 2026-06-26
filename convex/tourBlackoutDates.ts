@@ -24,11 +24,13 @@ export const list = query({
 			.query("tourBlackoutDates")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
 		if (args.tourId) {
+			// SECURITY: scope to org even when filtering by tourId.
 			q = ctx.db
 				.query("tourBlackoutDates")
 				.withIndex("by_tour_start", (q) =>
 					q.eq("tourId", args.tourId!),
-				);
+				)
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		const all = await q.collect();
 		return all.sort((a, b) => a.startDate.localeCompare(b.startDate));

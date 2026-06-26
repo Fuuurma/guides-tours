@@ -27,16 +27,20 @@ export const list = query({
 			.query("otaProducts")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
 		if (args.integrationId) {
+			// SECURITY: scope to org even when filtering by integrationId.
 			q = ctx.db
 				.query("otaProducts")
 				.withIndex("by_integration", (q) =>
 					q.eq("integrationId", args.integrationId!),
-				);
+				)
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		if (args.tourId) {
+			// SECURITY: scope to org even when filtering by tourId.
 			q = ctx.db
 				.query("otaProducts")
-				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!));
+				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!))
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		const all = await q.collect();
 		return all

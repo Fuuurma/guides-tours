@@ -26,9 +26,11 @@ export const list = query({
 			.query("tourImages")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
 		if (args.tourId) {
+			// SECURITY: scope to org even when filtering by tourId.
 			q = ctx.db
 				.query("tourImages")
-				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!));
+				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!))
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		const rows = await q.collect();
 		return rows.sort((a, b) => a.displayOrder - b.displayOrder);

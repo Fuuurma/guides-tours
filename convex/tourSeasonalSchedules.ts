@@ -27,11 +27,13 @@ export const list = query({
 			.query("tourSeasonalSchedules")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
 		if (args.tourId) {
+			// SECURITY: scope to org even when filtering by tourId.
 			q = ctx.db
 				.query("tourSeasonalSchedules")
 				.withIndex("by_tour_active", (q) =>
 					q.eq("tourId", args.tourId!),
-				);
+				)
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		const all = await q.collect();
 		return all

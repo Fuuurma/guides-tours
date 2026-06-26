@@ -32,11 +32,13 @@ export const list = query({
 				q.eq("organizationId", orgId),
 			);
 		if (args.userId) {
+			// SECURITY: scope to org even when filtering by userId.
 			q = ctx.db
 				.query("availabilities")
 				.withIndex("by_user_date", (q) =>
 					q.eq("userId", args.userId!),
-				);
+				)
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		const all = await q.collect();
 		return all
