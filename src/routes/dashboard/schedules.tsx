@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -33,7 +34,20 @@ interface Schedule {
 }
 
 const columns: DataTableColumn<Schedule>[] = [
-	{ key: "date", header: "Date", render: (s) => s.date },
+	{
+		key: "date",
+		header: "Date",
+		render: (s) => (
+			<Link
+				to="/dashboard/schedules/$scheduleId"
+				params={{ scheduleId: s._id }}
+				className="font-medium text-blue-600 hover:underline"
+			>
+				{s.date}
+			</Link>
+		),
+		searchValue: (s) => s.date,
+	},
 	{
 		key: "time",
 		header: "Time",
@@ -42,6 +56,7 @@ const columns: DataTableColumn<Schedule>[] = [
 				{s.startTime}–{s.endTime}
 			</span>
 		),
+		searchValue: (s) => `${s.startTime} ${s.endTime}`,
 	},
 	{ key: "booked", header: "Booked", render: (s) => s.capacityBooked },
 	{ key: "capacity", header: "Capacity", render: (s) => s.capacityTotal },
@@ -53,6 +68,7 @@ const columns: DataTableColumn<Schedule>[] = [
 				{s.status}
 			</Badge>
 		),
+		searchValue: (s) => s.status,
 	},
 ];
 
@@ -66,12 +82,17 @@ function SchedulesPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Tour schedules</CardTitle>
-					<CardDescription>
-						{itemCount} schedule{itemCount === 1 ? "" : "s"} — concrete
-						tour instances that customers can book against.
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Tour schedules</CardTitle>
+						<CardDescription>
+							{itemCount} schedule{itemCount === 1 ? "" : "s"} — concrete
+							tour instances that customers can book against.
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/schedules/new">+ New schedule</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
@@ -81,6 +102,7 @@ function SchedulesPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No schedules yet."
+						searchPlaceholder="Search by date, time, or status…"
 					/>
 				</CardContent>
 			</Card>
