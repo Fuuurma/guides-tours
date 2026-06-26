@@ -359,9 +359,12 @@ export const getBookingForCheckout = internalQuery({
 	},
 });
 
-/** Internal: look up a payment by Stripe PaymentIntent ID. */
+/** Internal: look up a payment by Stripe PaymentIntent ID, scoped to org. */
 export const getPaymentByIntent = internalQuery({
-	args: { stripePaymentIntentId: v.string() },
+	args: {
+		stripePaymentIntentId: v.string(),
+		organizationId: v.string(),
+	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db
 			.query("payments")
@@ -369,7 +372,14 @@ export const getPaymentByIntent = internalQuery({
 				q.eq("stripePaymentIntentId", args.stripePaymentIntentId),
 			)
 			.unique();
-		return p?._id ?? null;
+		if (!p) return null;
+		// Defense in depth: verify the payment belongs to the org
+		// that claimed ownership via metadata.organizationId. This
+		// blocks cross-tenant payment-status updates if a PaymentIntent
+		// id ever leaks across orgs (Stripe re-use, manual data fix,
+		// replay attack with re-routed metadata, etc.).
+		if (p.organizationId !== args.organizationId) return null;
+		return p._id;
 	},
 });
 

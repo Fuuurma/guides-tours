@@ -187,4 +187,55 @@ describe("stripe webhook dispatch", () => {
 		expect(parsed!.timestamp).toBe(1700000000);
 		expect(parsed!.signature.length).toBeGreaterThan(0);
 	});
+
+	it("getPaymentByIntent: returns paymentId when org matches", async () => {
+		const t = convexTest(schema, modules);
+		_resetKeyForTest();
+		const orgId = "org_sw_get1";
+		const bookingId = await t.run((ctx) => seedBooking(ctx, orgId));
+		await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			stripePaymentIntentId: "pi_match_1",
+			amountCents: 10000n,
+			currency: "USD",
+		});
+		const paymentId = await t.query(internal.payments.getPaymentByIntent, {
+			stripePaymentIntentId: "pi_match_1",
+			organizationId: orgId,
+		});
+		expect(paymentId).not.toBeNull();
+	});
+
+	it("getPaymentByIntent: rejects cross-org lookup (returns null)", async () => {
+		// Stripe sends a webhook claiming org=orgA in metadata but the
+		// PaymentIntent was actually created under orgB. The org-scoped
+		// lookup must return null so we don't update a payment we don't
+		// own. This prevents cross-tenant status writes if an intent id
+		// ever appears in a different org's webhook.
+		const t = convexTest(schema, modules);
+		_resetKeyForTest();
+		const realOrg = "org_sw_realone";
+		const attackerOrg = "org_sw_attacker";
+		const bookingId = await t.run((ctx) => seedBooking(ctx, realOrg));
+		await t.mutation(internal.payments.recordFromAction, {
+			organizationId: realOrg,
+			bookingId,
+			stripePaymentIntentId: "pi_xorg_1",
+			amountCents: 10000n,
+			currency: "USD",
+		});
+		// Lookup from the wrong org → null
+		const result = await t.query(internal.payments.getPaymentByIntent, {
+			stripePaymentIntentId: "pi_xorg_1",
+			organizationId: attackerOrg,
+		});
+		expect(result).toBeNull();
+		// Lookup from the real org → not null
+		const ok = await t.query(internal.payments.getPaymentByIntent, {
+			stripePaymentIntentId: "pi_xorg_1",
+			organizationId: realOrg,
+		});
+		expect(ok).not.toBeNull();
+	});
 });

@@ -186,13 +186,14 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		}
 		const paymentId = await ctx.runQuery(
 			internal.payments.getPaymentByIntent,
-			{ stripePaymentIntentId: intentId },
+			{ stripePaymentIntentId: intentId, organizationId: orgId },
 		);
 		if (!paymentId) {
-			// We don't know about this intent — probably from a
-			// different system. Ack so Stripe stops retrying.
+			// We don't know about this intent — or it belongs to
+			// a different org. Either way, ack so Stripe stops
+			// retrying but never update a payment we don't own.
 			console.log(
-				`[stripe-webhook] unknown intent ${intentId} (event=${eventType})`,
+				`[stripe-webhook] unknown/cross-org intent ${intentId} (event=${eventType}, org=${orgId})`,
 			);
 			return new Response("ok", { status: 200 });
 		}
