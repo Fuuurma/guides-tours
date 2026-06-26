@@ -54,9 +54,19 @@ function TourDetailPage() {
 						{tour.tourType} · {tour.durationHours}h
 					</p>
 				</div>
-				<Button asChild variant="outline">
-					<Link to="/dashboard/tours">← Back</Link>
-				</Button>
+				<div className="flex gap-2">
+					<Button asChild>
+						<Link
+							to="/dashboard/tours/$tourId/edit"
+							params={{ tourId: tour._id }}
+						>
+							Edit
+						</Link>
+					</Button>
+					<Button asChild variant="outline">
+						<Link to="/dashboard/tours">← Back</Link>
+					</Button>
+				</div>
 			</header>
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

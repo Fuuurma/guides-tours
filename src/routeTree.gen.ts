@@ -34,6 +34,7 @@ import { Route as DashboardCustomersCustomerIdRouteImport } from './routes/dashb
 import { Route as DashboardBookingsNewRouteImport } from './routes/dashboard/bookings/new'
 import { Route as DashboardBookingsBookingIdRouteImport } from './routes/dashboard/bookings/$bookingId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as DashboardToursTourIdEditRouteImport } from './routes/dashboard/tours/$tourId/edit'
 import { Route as DashboardCustomersCustomerIdEditRouteImport } from './routes/dashboard/customers/$customerId/edit'
 
 const SignUpRoute = SignUpRouteImport.update({
@@ -163,6 +164,12 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardToursTourIdEditRoute =
+  DashboardToursTourIdEditRouteImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => DashboardToursTourIdRoute,
+  } as any)
 const DashboardCustomersCustomerIdEditRoute =
   DashboardCustomersCustomerIdEditRouteImport.update({
     id: '/edit',
@@ -194,9 +201,10 @@ export interface FileRoutesByFullPath {
   '/dashboard/bookings/new': typeof DashboardBookingsNewRoute
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRouteWithChildren
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
-  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
+  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/customers/$customerId/edit': typeof DashboardCustomersCustomerIdEditRoute
+  '/dashboard/tours/$tourId/edit': typeof DashboardToursTourIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -221,9 +229,10 @@ export interface FileRoutesByTo {
   '/dashboard/bookings/new': typeof DashboardBookingsNewRoute
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRouteWithChildren
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
-  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
+  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/customers/$customerId/edit': typeof DashboardCustomersCustomerIdEditRoute
+  '/dashboard/tours/$tourId/edit': typeof DashboardToursTourIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -250,9 +259,10 @@ export interface FileRoutesById {
   '/dashboard/bookings/new': typeof DashboardBookingsNewRoute
   '/dashboard/customers/$customerId': typeof DashboardCustomersCustomerIdRouteWithChildren
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
-  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRoute
+  '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/customers/$customerId/edit': typeof DashboardCustomersCustomerIdEditRoute
+  '/dashboard/tours/$tourId/edit': typeof DashboardToursTourIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -283,6 +293,7 @@ export interface FileRouteTypes {
     | '/dashboard/tours/$tourId'
     | '/dashboard/tours/new'
     | '/dashboard/customers/$customerId/edit'
+    | '/dashboard/tours/$tourId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -310,6 +321,7 @@ export interface FileRouteTypes {
     | '/dashboard/tours/$tourId'
     | '/dashboard/tours/new'
     | '/dashboard/customers/$customerId/edit'
+    | '/dashboard/tours/$tourId/edit'
   id:
     | '__root__'
     | '/'
@@ -338,6 +350,7 @@ export interface FileRouteTypes {
     | '/dashboard/tours/$tourId'
     | '/dashboard/tours/new'
     | '/dashboard/customers/$customerId/edit'
+    | '/dashboard/tours/$tourId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -527,6 +540,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/tours/$tourId/edit': {
+      id: '/dashboard/tours/$tourId/edit'
+      path: '/edit'
+      fullPath: '/dashboard/tours/$tourId/edit'
+      preLoaderRoute: typeof DashboardToursTourIdEditRouteImport
+      parentRoute: typeof DashboardToursTourIdRoute
+    }
     '/dashboard/customers/$customerId/edit': {
       id: '/dashboard/customers/$customerId/edit'
       path: '/edit'
@@ -579,13 +599,24 @@ const DashboardCustomersRouteChildren: DashboardCustomersRouteChildren = {
 const DashboardCustomersRouteWithChildren =
   DashboardCustomersRoute._addFileChildren(DashboardCustomersRouteChildren)
 
+interface DashboardToursTourIdRouteChildren {
+  DashboardToursTourIdEditRoute: typeof DashboardToursTourIdEditRoute
+}
+
+const DashboardToursTourIdRouteChildren: DashboardToursTourIdRouteChildren = {
+  DashboardToursTourIdEditRoute: DashboardToursTourIdEditRoute,
+}
+
+const DashboardToursTourIdRouteWithChildren =
+  DashboardToursTourIdRoute._addFileChildren(DashboardToursTourIdRouteChildren)
+
 interface DashboardToursRouteChildren {
-  DashboardToursTourIdRoute: typeof DashboardToursTourIdRoute
+  DashboardToursTourIdRoute: typeof DashboardToursTourIdRouteWithChildren
   DashboardToursNewRoute: typeof DashboardToursNewRoute
 }
 
 const DashboardToursRouteChildren: DashboardToursRouteChildren = {
-  DashboardToursTourIdRoute: DashboardToursTourIdRoute,
+  DashboardToursTourIdRoute: DashboardToursTourIdRouteWithChildren,
   DashboardToursNewRoute: DashboardToursNewRoute,
 }
 
