@@ -22,8 +22,10 @@
 //   - recordReview (post-tour review rating/comment)
 
 import { v, ConvexError } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
 
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
@@ -199,6 +201,10 @@ export const create = mutation({
 		totalAmountCents: v.optional(v.int64()),
 		paymentMethod: v.optional(v.string()),
 		source: v.optional(v.string()),
+		// Optional link to a concrete tourSchedule. When provided,
+		// the schedule's capacityBooked is incremented atomically
+		// (throws "Schedule over capacity" if there's no room).
+		scheduleId: v.optional(v.id("tourSchedules")),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, [
@@ -226,6 +232,23 @@ export const create = mutation({
 			);
 		}
 
+		// If a scheduleId was provided, validate it belongs to the
+		// same tour + org before we attempt to increment its counter.
+		if (args.scheduleId) {
+			const schedule = await ctx.db.get(args.scheduleId);
+			if (!schedule) throw new ConvexError("Schedule not found");
+			if (schedule.organizationId !== member.organizationId) {
+				throw new ConvexError(
+					"Forbidden: schedule belongs to a different organization",
+				);
+			}
+			if (schedule.tourId !== args.tourId) {
+				throw new ConvexError(
+					"Schedule does not belong to the specified tour",
+				);
+			}
+		}
+
 		const deposit = args.depositAmountCents ?? 0n;
 		const total = args.totalAmountCents ?? 0n;
 		const balance = total - deposit;
@@ -234,6 +257,7 @@ export const create = mutation({
 		const bookingId = await ctx.db.insert("bookings", {
 			organizationId: member.organizationId,
 			tourId: args.tourId,
+			scheduleId: args.scheduleId,
 			customerId: args.customerId,
 			date: args.date,
 			startTime: args.startTime,
@@ -260,6 +284,22 @@ export const create = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+
+		// Atomically increment the schedule's booked counter. Throws
+		// "Schedule over capacity" if there's no room — Convex will
+		// roll back the insert above.
+		if (args.scheduleId) {
+			await ctx.runMutation(
+				internal.tourSchedules.incrementBooked as unknown as Parameters<
+					typeof ctx.runMutation
+				>[0],
+				{
+					organizationId: member.organizationId,
+					scheduleId: args.scheduleId,
+					guests: args.guests,
+				},
+			);
+		}
 
 		// Source pattern: unconditionally set customer.nextBookingDate
 		// when the booking is in the future. Source doesn't max() —
@@ -409,34 +449,73 @@ export const cancel = mutation({
 		if (booking.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
-		// Source: backend/tours/services/booking_service.py:206-207.
-		// Terminal states cannot be cancelled.
-		if (booking.status === "cancelled") {
-			throw new ConvexError("Already cancelled");
-		}
-		if (booking.status === "completed") {
-			throw new ConvexError("Cannot cancel a completed booking");
-		}
-		if (booking.status === "checked_in") {
-			throw new ConvexError(
-				"Cannot cancel a checked-in booking; complete it first",
-			);
-		}
+		await performCancel(ctx, booking, args.reason, member.userId);
+		return args.bookingId;
+	},
+});
 
-		const now = Date.now();
-		await ctx.db.patch(args.bookingId, {
-			status: "cancelled",
-			notes: args.reason
-				? booking.notes
-					? `${booking.notes}\n[CANCELLED] ${args.reason}`
-					: `[CANCELLED] ${args.reason}`
-				: booking.notes,
-			updatedAt: now,
-		});
+/** Internal mirror of cancel — no auth, used by tests + scheduled
+ *  job that auto-cancels stale pending bookings (future work). */
+export const internalCancel = internalMutation({
+	args: {
+		bookingId: v.id("bookings"),
+		reason: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) throw new ConvexError("Booking not found");
+		await performCancel(ctx, booking, args.reason, "system");
+		return args.bookingId;
+	},
+});
 
-		// Restore the matching tourSchedule's capacityBooked counter.
-		// Best-effort: if the schedule was deleted or the lookup
-		// fails, the booking cancellation still succeeds.
+async function performCancel(
+	ctx: MutationCtx,
+	booking: {
+		_id: Id<"bookings">;
+		organizationId: string;
+		tourId: Id<"tours">;
+		scheduleId?: Id<"tourSchedules">;
+		status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
+		notes: string;
+		date: string;
+		startTime: string;
+		guests: number;
+	},
+	reason: string | undefined,
+	userIdForAudit: string,
+): Promise<void> {
+	// Source: backend/tours/services/booking_service.py:206-207.
+	// Terminal states cannot be cancelled.
+	if (booking.status === "cancelled") {
+		throw new ConvexError("Already cancelled");
+	}
+	if (booking.status === "completed") {
+		throw new ConvexError("Cannot cancel a completed booking");
+	}
+	if (booking.status === "checked_in") {
+		throw new ConvexError(
+			"Cannot cancel a checked-in booking; complete it first",
+		);
+	}
+
+	const now = Date.now();
+	await ctx.db.patch(booking._id, {
+		status: "cancelled",
+		notes: reason
+			? booking.notes
+				? `${booking.notes}\n[CANCELLED] ${reason}`
+				: `[CANCELLED] ${reason}`
+			: booking.notes,
+		updatedAt: now,
+	});
+
+	// Restore the matching tourSchedule's capacityBooked counter.
+	// Prefer the explicit scheduleId on the booking; fall back to
+	// a (tourId, date, startTime) lookup for older bookings that
+	// predate the scheduleId field.
+	let scheduleId: Id<"tourSchedules"> | undefined = booking.scheduleId;
+	if (!scheduleId) {
 		const schedule = await ctx.db
 			.query("tourSchedules")
 			.withIndex("by_tour_date", (q) =>
@@ -449,39 +528,38 @@ export const cancel = mutation({
 				),
 			)
 			.first();
-		if (schedule) {
-			try {
-				await ctx.runMutation(
-					internal.tourSchedules.decrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: booking.organizationId,
-						scheduleId: schedule._id,
-						guests: booking.guests,
-					},
-				);
-			} catch {
-				// Capacity restore is best-effort; the cancellation
-				// is the source of truth and the schedule can be
-				// reconciled manually if needed.
-			}
+		scheduleId = schedule?._id;
+	}
+	if (scheduleId) {
+		try {
+			await ctx.runMutation(
+				internal.tourSchedules.decrementBooked as unknown as Parameters<
+					typeof ctx.runMutation
+				>[0],
+				{
+					organizationId: booking.organizationId,
+					scheduleId,
+					guests: booking.guests,
+				},
+			);
+		} catch {
+			// Capacity restore is best-effort; the cancellation
+			// is the source of truth and the schedule can be
+			// reconciled manually if needed.
 		}
+	}
 
-		await ctx.db.insert("auditLogs", {
-			organizationId: booking.organizationId,
-			userId: member.userId,
-			action: "booking.cancelled",
-			resourceType: "booking",
-			resourceId: args.bookingId,
-			oldValues: { status: booking.status },
-			newValues: { status: "cancelled", reason: args.reason ?? "" },
-			timestamp: now,
-		});
-
-		return args.bookingId;
-	},
-});
+	await ctx.db.insert("auditLogs", {
+		organizationId: booking.organizationId,
+		userId: userIdForAudit,
+		action: "booking.cancelled",
+		resourceType: "booking",
+		resourceId: booking._id,
+		oldValues: { status: booking.status },
+		newValues: { status: "cancelled", reason: reason ?? "" },
+		timestamp: now,
+	});
+}
 
 /** Mark a confirmed booking as checked in. */
 export const checkIn = mutation({

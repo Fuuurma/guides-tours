@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { internal } from "../_generated/api";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -284,5 +285,183 @@ describe("convex/bookings — balance math", () => {
 		expect(row?.totalAmountCents).toBe(100000n);
 		expect(row?.balanceDueCents).toBe(80000n);
 		expect(row?.netRevenueCents).toBe(100000n); // gross, not balance
+	});
+});
+
+describe("convex/bookings — schedule wiring", () => {
+	// Phase 47 wiring: bookings can optionally link to a
+	// tourSchedule. When set, capacityBooked is incremented at
+	// create time and decremented at cancel time atomically.
+
+	async function seedSchedule(
+		ctx: TestCtx,
+		orgId: string,
+		tourId: Id<"tours">,
+		capacity: number,
+	): Promise<Id<"tourSchedules">> {
+		const now = Date.now();
+		return await ctx.db.insert("tourSchedules", {
+			organizationId: orgId,
+			tourId,
+			date: "2026-12-01",
+			startTime: "09:00",
+			endTime: "11:00",
+			capacityTotal: capacity,
+			capacityBooked: 0,
+			status: "available",
+			notes: "",
+			createdAt: now,
+			updatedAt: now,
+		});
+	}
+
+	it("cancel via explicit scheduleId decrements booked count", async () => {
+		const t = convexTest(schema, modules);
+		// Seed a booking with an explicit scheduleId (simulates a
+		// booking created via the new internalCreate path).
+		const { bookingId, scheduleId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_sched_a");
+			const customerId = await seedCustomer(c, "org_sched_a");
+			const scheduleId = await seedSchedule(c, "org_sched_a", tourId, 10);
+			// Manually increment the schedule's counter (simulates
+			// what bookings.create does when scheduleId is provided).
+			await c.db.patch(scheduleId, { capacityBooked: 5 });
+			const bookingId = await c.db.insert("bookings", {
+				organizationId: "org_sched_a",
+				tourId,
+				scheduleId,
+				customerId,
+				date: "2026-12-01",
+				startTime: "09:00",
+				guests: 3,
+				guestNames: "",
+				languageRequired: "",
+				notes: "",
+				status: "confirmed",
+				depositAmountCents: 0n,
+				totalAmountCents: 30000n,
+				balanceDueCents: 30000n,
+				paymentMethod: "",
+				checkedInAt: undefined,
+				checkedInBy: "",
+				completedAt: undefined,
+				netRevenueCents: 30000n,
+				source: "direct",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId, scheduleId };
+		});
+
+		// Cancel via the internalCancel path (which is what
+		// bookings.cancel calls requireRole'd public mutation).
+		await t.mutation(internal.bookings.internalCancel, {
+			bookingId,
+			reason: "Test cancel",
+		});
+
+		const schedule = (await t.run(async (ctx) =>
+			ctx.db.get(scheduleId),
+		)) as { capacityBooked: number; status: string };
+		expect(schedule?.capacityBooked).toBe(2); // 5 - 3 = 2
+	});
+
+	it("cancel falls back to (tourId, date, startTime) lookup when scheduleId is unset", async () => {
+		// Regression for older bookings that predate the scheduleId
+		// field — the cancel path must still find and decrement
+		// the matching schedule by lookup.
+		const t = convexTest(schema, modules);
+		const { bookingId, scheduleId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_sched_b");
+			const customerId = await seedCustomer(c, "org_sched_b");
+			const scheduleId = await seedSchedule(c, "org_sched_b", tourId, 10);
+			await c.db.patch(scheduleId, { capacityBooked: 4 });
+			// Booking without scheduleId (legacy / OTA path).
+			const bookingId = await c.db.insert("bookings", {
+				organizationId: "org_sched_b",
+				tourId,
+				customerId,
+				date: "2026-12-01",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "",
+				languageRequired: "",
+				notes: "",
+				status: "confirmed",
+				depositAmountCents: 0n,
+				totalAmountCents: 20000n,
+				balanceDueCents: 20000n,
+				paymentMethod: "",
+				checkedInAt: undefined,
+				checkedInBy: "",
+				completedAt: undefined,
+				netRevenueCents: 20000n,
+				source: "viator",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId, scheduleId };
+		});
+
+		await t.mutation(internal.bookings.internalCancel, {
+			bookingId,
+			reason: "Test fallback",
+		});
+
+		const schedule = (await t.run(async (ctx) =>
+			ctx.db.get(scheduleId),
+		)) as { capacityBooked: number };
+		expect(schedule?.capacityBooked).toBe(2); // 4 - 2 = 2 (found via lookup)
+	});
+
+	it("cancel succeeds even when no matching schedule exists (best-effort)", async () => {
+		// Bookings for tours without a schedule row (e.g. ad-hoc
+		// tours not yet instantiated) should cancel cleanly without
+		// capacity errors.
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_sched_c");
+			const customerId = await seedCustomer(c, "org_sched_c");
+			return await c.db.insert("bookings", {
+				organizationId: "org_sched_c",
+				tourId,
+				customerId,
+				date: "2026-12-01",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "",
+				languageRequired: "",
+				notes: "",
+				status: "confirmed",
+				depositAmountCents: 0n,
+				totalAmountCents: 20000n,
+				balanceDueCents: 20000n,
+				paymentMethod: "",
+				checkedInAt: undefined,
+				checkedInBy: "",
+				completedAt: undefined,
+				netRevenueCents: 20000n,
+				source: "direct",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await t.mutation(internal.bookings.internalCancel, {
+			bookingId,
+			reason: "no schedule exists",
+		});
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as { status: string };
+		expect(booking?.status).toBe("cancelled");
 	});
 });

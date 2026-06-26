@@ -409,6 +409,13 @@ export default defineSchema({
 	bookings: defineTable({
 		organizationId: orgId,
 		tourId: v.id("tours"),
+		// Optional link to a concrete tourSchedule. When set, the
+		// schedule's capacityBooked counter is incremented atomically
+		// at create time and decremented at cancel time. OTA bookings
+		// created before the schedule was instantiated may have this
+		// unset — they fall back to the (tourId, date, startTime) lookup
+		// at cancel time.
+		scheduleId: v.optional(v.id("tourSchedules")),
 		customerId: v.id("customers"),
 		date: v.string(),
 		startTime: v.string(),
@@ -443,7 +450,8 @@ export default defineSchema({
 		.index("by_org_date", ["organizationId", "date"])
 		.index("by_org_status", ["organizationId", "status"])
 		.index("by_customer_date", ["customerId", "date"])
-		.index("by_tour_date", ["tourId", "date"]),
+		.index("by_tour_date", ["tourId", "date"])
+		.index("by_schedule", ["scheduleId"]),
 
 	// ----- OTA -----
 
