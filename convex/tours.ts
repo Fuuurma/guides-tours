@@ -7,7 +7,8 @@
 
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { FunctionReference } from "convex/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 
 // ----- Queries -----
@@ -70,9 +71,45 @@ export const create = mutation({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
+		return await ctx.runMutation(
+			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			{
+				organizationId: member.organizationId,
+				userId: member.userId,
+				...args,
+			},
+		);
+	},
+});
+
+export const internalCreate = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		name: v.string(),
+		description: v.optional(v.string()),
+		defaultTime: v.optional(v.string()),
+		durationHours: v.number(),
+		capacity: v.number(),
+		minGuests: v.optional(v.number()),
+		maxGuests: v.optional(v.number()),
+		bookingCutoffHours: v.optional(v.number()),
+		requiredGuides: v.optional(v.number()),
+		bufferMinutes: v.optional(v.number()),
+		tourType: v.optional(v.string()),
+		languages: v.optional(v.array(v.string())),
+		inclusions: v.optional(v.array(v.string())),
+		exclusions: v.optional(v.array(v.string())),
+		highlights: v.optional(v.array(v.string())),
+		basePriceCents: v.optional(v.int64()),
+		currency: v.optional(v.string()),
+		categoryId: v.optional(v.id("tourCategories")),
+		templateId: v.optional(v.id("tourTemplates")),
+	},
+	handler: async (ctx, args) => {
 		const now = Date.now();
 		const tourId = await ctx.db.insert("tours", {
-			organizationId: member.organizationId,
+			organizationId: args.organizationId,
 			name: args.name,
 			description: args.description ?? "",
 			defaultTime: args.defaultTime,
@@ -100,8 +137,8 @@ export const create = mutation({
 			updatedAt: now,
 		});
 		await ctx.db.insert("auditLogs", {
-			organizationId: member.organizationId,
-			userId: member.userId,
+			organizationId: args.organizationId,
+			userId: args.userId,
 			action: "tour.created",
 			resourceType: "tour",
 			resourceId: tourId,
@@ -128,20 +165,47 @@ export const update = mutation({
 		basePriceCents: v.optional(v.int64()),
 	},
 	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin"]);
+		return await ctx.runMutation(
+			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			{
+				organizationId: member.organizationId,
+				userId: member.userId,
+				...args,
+			},
+		);
+	},
+});
+
+export const internalUpdate = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		tourId: v.id("tours"),
+		name: v.optional(v.string()),
+		description: v.optional(v.string()),
+		defaultTime: v.optional(v.string()),
+		durationHours: v.optional(v.number()),
+		capacity: v.optional(v.number()),
+		minGuests: v.optional(v.number()),
+		maxGuests: v.optional(v.number()),
+		isActive: v.optional(v.boolean()),
+		basePriceCents: v.optional(v.int64()),
+	},
+	handler: async (ctx, args) => {
 		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
-		const member = await requireRole(ctx, ["owner", "admin"]);
-		if (member.organizationId !== tour.organizationId) {
+		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError(
 				`Forbidden: tour belongs to a different organization`,
 			);
 		}
 		const now = Date.now();
-		const { tourId, ...patch } = args;
+		const { tourId, organizationId, userId, ...patch } = args;
 		await ctx.db.patch(args.tourId, { ...patch, updatedAt: now });
 		await ctx.db.insert("auditLogs", {
 			organizationId: tour.organizationId,
-			userId: member.userId,
+			userId: args.userId,
 			action: "tour.updated",
 			resourceType: "tour",
 			resourceId: args.tourId,
@@ -157,10 +221,28 @@ export const update = mutation({
 export const remove = mutation({
 	args: { tourId: v.id("tours") },
 	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin"]);
+		return await ctx.runMutation(
+			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			{
+				organizationId: member.organizationId,
+				userId: member.userId,
+				tourId: args.tourId,
+			},
+		);
+	},
+});
+
+export const internalRemove = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		tourId: v.id("tours"),
+	},
+	handler: async (ctx, args) => {
 		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
-		const member = await requireRole(ctx, ["owner", "admin"]);
-		if (member.organizationId !== tour.organizationId) {
+		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError(
 				`Forbidden: tour belongs to a different organization`,
 			);
@@ -173,7 +255,7 @@ export const remove = mutation({
 		});
 		await ctx.db.insert("auditLogs", {
 			organizationId: tour.organizationId,
-			userId: member.userId,
+			userId: args.userId,
 			action: "tour.soft_deleted",
 			resourceType: "tour",
 			resourceId: args.tourId,
@@ -182,5 +264,40 @@ export const remove = mutation({
 			timestamp: now,
 		});
 		return args.tourId;
+	},
+});
+
+// ----- Internal mirrors (no auth, for tests + internal callers) -----
+
+/**
+ * Internal mirror of `list` that takes organizationId directly.
+ * Excludes soft-deleted tours. Used by tests + scheduled jobs
+ * that already have a verified orgId.
+ */
+export const listInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		onlyActive: v.optional(v.boolean()),
+	},
+	handler: async (ctx, args) => {
+		const all = await ctx.db
+			.query("tours")
+			.withIndex("by_org", (q) =>
+				q.eq("organizationId", args.organizationId),
+			)
+			.collect();
+		const visible = all.filter((t) => t.deletedAt === undefined);
+		return args.onlyActive === true
+			? visible.filter((t) => t.isActive)
+			: visible;
+	},
+});
+
+/** Internal mirror of `get`. Returns the row regardless of deletedAt
+ *  — callers should re-check deletedAt if they need live-only. */
+export const getInternal = internalQuery({
+	args: { tourId: v.id("tours") },
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.tourId);
 	},
 });

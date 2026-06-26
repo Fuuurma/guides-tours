@@ -266,13 +266,13 @@ export async function seedOrg(
 	opts: SeedOrgOptions = {},
 ): Promise<string> {
 	const id = opts.id ?? `org-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	await ctx.db.insert("organizations", {
+	await ctx.db.insert("organizations" as never, {
 		id,
 		name: opts.name ?? "Test Org",
 		slug: opts.slug ?? id,
 		createdAt: 0,
 		updatedAt: 0,
-	});
+	} as never);
 	return id;
 }
 
@@ -285,13 +285,15 @@ export interface SeedMemberOptions {
 export async function seedMember(
 	ctx: TestCtx,
 	opts: SeedMemberOptions,
-): Promise<Id<"members">> {
-	return await ctx.db.insert("members", {
+): Promise<string> {
+	// `members` is a Better Auth runtime table (not in our schema),
+	// so we use `as never` and return a string ID.
+	return (await ctx.db.insert("members" as never, {
 		organizationId: opts.orgId,
 		userId: opts.userId,
 		role: opts.role ?? "owner",
 		createdAt: 0,
-	});
+	} as never)) as unknown as string;
 }
 
 export interface SeedSessionOptions {
@@ -301,14 +303,14 @@ export interface SeedSessionOptions {
 export async function seedSession(
 	ctx: TestCtx,
 	opts: SeedSessionOptions,
-): Promise<Id<"sessions">> {
-	return await ctx.db.insert("sessions", {
+): Promise<string> {
+	return (await ctx.db.insert("sessions" as never, {
 		userId: opts.userId,
 		expiresAt: Date.now() + 60 * 60 * 1000,
 		createdAt: Date.now(),
 		updatedAt: Date.now(),
 		token: `test-token-${opts.userId}-${Math.random()}`,
-	});
+	} as never)) as unknown as string;
 }
 
 // ---- Tour Blackout Dates ----
