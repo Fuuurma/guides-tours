@@ -781,6 +781,9 @@ export async function checkConflictsHelper(
 			.withIndex("by_guide_date", (q) =>
 				q.eq("guideId", args.guideId).eq("date", args.date),
 			)
+			// SECURITY: scope to org — a guideId from another org must
+			// not surface as a "conflict" in this org's UI.
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.collect();
 		await checkOne("guide", rows, "(guide conflict)");
 	}
@@ -790,6 +793,8 @@ export async function checkConflictsHelper(
 			.withIndex("by_vehicle_date", (q) =>
 				q.eq("vehicleId", args.vehicleId).eq("date", args.date),
 			)
+			// SECURITY: scope to org.
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.collect();
 		await checkOne("vehicle", rows, "(vehicle conflict)");
 	}
@@ -799,6 +804,8 @@ export async function checkConflictsHelper(
 			.withIndex("by_driver_date", (q) =>
 				q.eq("driverId", args.driverId).eq("date", args.date),
 			)
+			// SECURITY: scope to org.
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.collect();
 		await checkOne("driver", rows, "(driver conflict)");
 	}
