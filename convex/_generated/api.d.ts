@@ -37,6 +37,7 @@ import type * as ota_getyourguide from "../ota/getyourguide.js";
 import type * as ota_getyourguide_webhook from "../ota/getyourguide_webhook.js";
 import type * as ota_http_client from "../ota/http_client.js";
 import type * as ota_integrations from "../ota/integrations.js";
+import type * as ota_integrations_mutations from "../ota/integrations_mutations.js";
 import type * as ota_klook from "../ota/klook.js";
 import type * as ota_klook_webhook from "../ota/klook_webhook.js";
 import type * as ota_router from "../ota/router.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   "ota/getyourguide_webhook": typeof ota_getyourguide_webhook;
   "ota/http_client": typeof ota_http_client;
   "ota/integrations": typeof ota_integrations;
+  "ota/integrations_mutations": typeof ota_integrations_mutations;
   "ota/klook": typeof ota_klook;
   "ota/klook_webhook": typeof ota_klook_webhook;
   "ota/router": typeof ota_router;
