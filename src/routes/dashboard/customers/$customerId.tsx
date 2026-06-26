@@ -111,9 +111,19 @@ function CustomerDetailPage() {
 						)}
 					</p>
 				</div>
-				<Button asChild variant="outline">
-					<Link to="/dashboard/customers">← Back</Link>
-				</Button>
+				<div className="flex gap-2">
+					<Button asChild>
+						<Link
+							to="/dashboard/customers/$customerId/edit"
+							params={{ customerId: c._id }}
+						>
+							Edit
+						</Link>
+					</Button>
+					<Button asChild variant="outline">
+						<Link to="/dashboard/customers">← Back</Link>
+					</Button>
+				</div>
 			</header>
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
