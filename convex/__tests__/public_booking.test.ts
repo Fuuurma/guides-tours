@@ -220,4 +220,228 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		expect(greta?.emailConsent).toBe(false);
 		expect(greta?.smsConsent).toBe(false);
 	});
+
+	it("rejects guests <= 0", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_zero";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Hank",
+				customerEmail: "hank@example.com",
+				date: "2026-09-11",
+				startTime: "10:00",
+				guests: 0,
+			}),
+		).rejects.toThrow(/guests must be > 0/);
+	});
+
+	it("persists phone and notes on new customer", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_phone";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: orgId,
+			tourId,
+			customerName: "Ivy",
+			customerEmail: "ivy@example.com",
+			customerPhone: "+1-555-0100",
+			date: "2026-09-12",
+			startTime: "10:00",
+			guests: 2,
+			notes: "Vegetarian lunch",
+		});
+		const customers = await t.run(async (ctx) =>
+			ctx.db.query("customers").collect(),
+		);
+		const ivy = customers.find(
+			(c: { email: string }) => c.email === "ivy@example.com",
+		);
+		expect(ivy?.phone).toBe("+1-555-0100");
+		expect(ivy?.notes).toBe("Vegetarian lunch");
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.query("bookings").first(),
+		)) as { notes: string };
+		expect(booking?.notes).toBe("Vegetarian lunch");
+	});
+
+	it("booking has zero totalAmountCents (payment happens later)", async () => {
+		// Public bookings are created as confirmed with no money — the
+		// payment is captured separately via Stripe. Verify the fields
+		// are bigint 0n rather than undefined.
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_amounts";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		const bookingId = await t.mutation(
+			internal.public_booking.internalCreate,
+			{
+				organizationId: orgId,
+				tourId,
+				customerName: "Jane",
+				customerEmail: "jane@example.com",
+				date: "2026-09-13",
+				startTime: "10:00",
+				guests: 2,
+			},
+		);
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		expect(String(booking.totalAmountCents)).toBe("0");
+		expect(String(booking.depositAmountCents)).toBe("0");
+		expect(String(booking.balanceDueCents)).toBe("0");
+		expect(String(booking.netRevenueCents)).toBe("0");
+		expect(booking.paymentMethod).toBe("");
+	});
+
+	it("reuses existing customer without overwriting phone/notes", async () => {
+		// When the same email re-books, internalCreate should NOT
+		// overwrite the existing customer's phone/notes with the
+		// new booking's values — only created on first insert.
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_reuse";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: orgId,
+			tourId,
+			customerName: "Karen",
+			customerEmail: "karen@example.com",
+			customerPhone: "+1-555-0001",
+			notes: "Allergic to nuts",
+			date: "2026-09-14",
+			startTime: "10:00",
+			guests: 1,
+		});
+		await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: orgId,
+			tourId,
+			customerName: "Karen Updated",
+			customerEmail: "karen@example.com",
+			customerPhone: "+1-555-9999",
+			notes: "Vegetarian",
+			date: "2026-09-15",
+			startTime: "11:00",
+			guests: 1,
+		});
+		const customers = await t.run(async (ctx) =>
+			ctx.db.query("customers").collect(),
+		);
+		const karen = customers.find(
+			(c: { email: string }) => c.email === "karen@example.com",
+		);
+		expect(karen?.phone).toBe("+1-555-0001");
+		expect(karen?.notes).toBe("Allergic to nuts");
+	});
+
+	it("schedules 24h + 2h reminder notifications", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_notify";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		// Seed the reminder templates so scheduleForBooking finds them.
+		await t.run(async (ctx) => {
+			await ctx.db.insert("notificationTemplates", {
+				organizationId: orgId,
+				name: "24h reminder",
+				templateType: "reminder_24h",
+				channel: "email",
+				emailSubject: "Tour tomorrow",
+				emailBodyText: "Reminder for {tourName}",
+				emailBodyHtml: "",
+				smsBody: "",
+				variables: [],
+				sendTiming: "24h_before",
+				requireConsent: false,
+				retryOnFailure: true,
+				retryCount: 3,
+				isActive: true,
+				isDefault: false,
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			await ctx.db.insert("notificationTemplates", {
+				organizationId: orgId,
+				name: "2h reminder",
+				templateType: "reminder_2h",
+				channel: "email",
+				emailSubject: "Tour in 2 hours",
+				emailBodyText: "See you soon",
+				emailBodyHtml: "",
+				smsBody: "",
+				variables: [],
+				sendTiming: "2h_before",
+				requireConsent: false,
+				retryOnFailure: true,
+				retryCount: 3,
+				isActive: true,
+				isDefault: false,
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: orgId,
+			tourId,
+			customerName: "Liam",
+			customerEmail: "liam@example.com",
+			// Far enough in the future that both reminders are still
+			// scheduled (24h and 2h before now).
+			date: "2027-12-31",
+			startTime: "10:00",
+			guests: 2,
+		});
+		const notifs = (await t.run(async (ctx) =>
+			ctx.db.query("scheduledNotifications").collect(),
+		)) as Array<{ templateId: string; sent: boolean }>;
+		// We seeded 2 active templates → scheduleForBooking should
+		// have queued 2 notifications.
+		expect(notifs.length).toBe(2);
+		expect(notifs.every((n) => !n.sent)).toBe(true);
+	});
+
+	it("audit log includes tour/email/guests in newValues", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_audit";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		const bookingId = await t.mutation(
+			internal.public_booking.internalCreate,
+			{
+				organizationId: orgId,
+				tourId,
+				customerName: "Maya",
+				customerEmail: "maya@example.com",
+				date: "2026-09-17",
+				startTime: "10:00",
+				guests: 4,
+			},
+		);
+		const auditLogs = await t.run(async (ctx) =>
+			ctx.db.query("auditLogs").collect(),
+		);
+		const log = auditLogs.find(
+			(l: { action: string; resourceId: string }) =>
+				l.action === "booking.created_public" &&
+				l.resourceId === bookingId,
+		) as any;
+		expect(log).toBeDefined();
+		expect(log.userId).toBe("anonymous");
+		expect(log.resourceType).toBe("booking");
+		expect(log.newValues.tourId).toBe(tourId);
+		expect(log.newValues.customerEmail).toBe("maya@example.com");
+		expect(log.newValues.guests).toBe(4);
+		expect(log.newValues.source).toBe("public_booking");
+	});
 });
