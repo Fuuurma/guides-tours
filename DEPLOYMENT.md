@@ -62,8 +62,8 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 npx convex deploy --prod
 
 # Frontend (Cloudflare Worker)
-npm run build
-npx wrangler deploy
+pnpm build
+pnpm wrangler deploy
 ```
 
 ## Post-deploy verification
@@ -75,6 +75,19 @@ npx wrangler deploy
 5. Create a tour + schedule + booking — end-to-end smoke test
 6. `/book/<org-slug>` — public booking page should list active tours
 7. Check Convex dashboard for cron runs (`process_pending_notifications`)
+
+## Automated smoke
+
+Run the Playwright smoke suite against the deployed Worker before declaring
+the deploy successful:
+
+```bash
+PLAYWRIGHT_BASE_URL=https://guides-tours.fuurma.tech pnpm test:e2e
+```
+
+Smoke covers: root page, sign-in/up routes, public booking page renders
+without 500 (404 acceptable for unknown slugs). For deeper flows, add
+Playwright specs under `e2e/` — the suite is intentionally minimal.
 
 ## OTA webhook URLs (to give to providers)
 

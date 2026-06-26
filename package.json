@@ -2,6 +2,7 @@
   "name": "guides-tours",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@10.30.2",
   "imports": {
     "#/*": "./src/*"
   },
@@ -11,10 +12,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "pnpm build && wrangler deploy"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.26.0",
@@ -49,6 +51,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.5",
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/typography": "^0.5.16",
     "@tanstack/devtools-vite": "latest",
     "@tanstack/router-cli": "^1.132.0",
