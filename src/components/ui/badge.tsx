@@ -46,3 +46,5 @@ function Badge({
 }
 
 export { Badge, badgeVariants };
+export type BadgeProps = React.ComponentProps<"span"> &
+	VariantProps<typeof badgeVariants> & { asChild?: boolean };
