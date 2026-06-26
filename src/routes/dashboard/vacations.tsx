@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -35,10 +36,29 @@ const columns: DataTableColumn<Vacation>[] = [
 	{
 		key: "userId",
 		header: "Guide",
-		render: (v) => <span className="font-mono text-xs">{v.userId}</span>,
+		render: (v) => (
+			<Link
+				to="/dashboard/vacations/$vacationId"
+				params={{ vacationId: v._id }}
+				className="font-mono text-xs text-blue-600 hover:underline"
+			>
+				{v.userId}
+			</Link>
+		),
+		searchValue: (v) => v.userId,
 	},
-	{ key: "start", header: "Start", render: (v) => v.startDate },
-	{ key: "end", header: "End", render: (v) => v.endDate },
+	{
+		key: "start",
+		header: "Start",
+		render: (v) => v.startDate,
+		searchValue: (v) => v.startDate,
+	},
+	{
+		key: "end",
+		header: "End",
+		render: (v) => v.endDate,
+		searchValue: (v) => v.endDate,
+	},
 	{
 		key: "days",
 		header: "Days",
@@ -53,6 +73,7 @@ const columns: DataTableColumn<Vacation>[] = [
 		render: (v) => (
 			<span className="max-w-[200px] truncate inline-block">{v.reason}</span>
 		),
+		searchValue: (v) => v.reason,
 	},
 	{
 		key: "status",
@@ -62,6 +83,7 @@ const columns: DataTableColumn<Vacation>[] = [
 				{v.status}
 			</Badge>
 		),
+		searchValue: (v) => v.status,
 	},
 ];
 
@@ -75,11 +97,16 @@ function VacationsPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Vacation requests</CardTitle>
-					<CardDescription>
-						{itemCount} request{itemCount === 1 ? "" : "s"}
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Vacation requests</CardTitle>
+						<CardDescription>
+							{itemCount} request{itemCount === 1 ? "" : "s"}
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/vacations/new">+ New request</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
@@ -89,6 +116,7 @@ function VacationsPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No vacation requests yet."
+						searchPlaceholder="Search by guide, dates, reason, or status…"
 					/>
 				</CardContent>
 			</Card>
