@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -64,11 +65,16 @@ function CustomersPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Customers</CardTitle>
-					<CardDescription>
-						{itemCount} customer{itemCount === 1 ? "" : "s"}
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Customers</CardTitle>
+						<CardDescription>
+							{itemCount} customer{itemCount === 1 ? "" : "s"}
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/customers/new">+ New customer</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
