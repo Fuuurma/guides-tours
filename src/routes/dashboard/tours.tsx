@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -8,25 +8,55 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/tours")({
 	component: ToursPage,
 });
 
+interface Tour {
+	_id: string;
+	name: string;
+	tourType: string;
+	durationHours: number;
+	minGuests: number;
+	maxGuests: number;
+	isActive: boolean;
+}
+
+const columns: DataTableColumn<Tour>[] = [
+	{
+		key: "name",
+		header: "Name",
+		render: (t) => (
+			<Link
+				to="/dashboard/tours/$tourId"
+				params={{ tourId: t._id }}
+				className="font-medium text-blue-600 hover:underline"
+			>
+				{t.name}
+			</Link>
+		),
+	},
+	{ key: "type", header: "Type", render: (t) => t.tourType },
+	{ key: "duration", header: "Duration", render: (t) => `${t.durationHours}h` },
+	{ key: "capacity", header: "Capacity", render: (t) => `${t.minGuests}–${t.maxGuests}` },
+	{
+		key: "status",
+		header: "Status",
+		render: (t) =>
+			t.isActive ? <Badge>Active</Badge> : <Badge variant="secondary">Inactive</Badge>,
+	},
+];
+
 function ToursPage() {
-	const { data: tours, isPending } = useQuery(
+	const { data: tours, isPending, error } = useQuery(
 		convexQuery(api.tours.list, {}),
 	);
+
+	const itemCount = tours?.length ?? 0;
 
 	return (
 		<div className="space-y-6">
@@ -34,46 +64,18 @@ function ToursPage() {
 				<CardHeader>
 					<CardTitle>Tours</CardTitle>
 					<CardDescription>
-						{tours?.length ?? 0} tour{(tours?.length ?? 0) === 1 ? "" : "s"}
+						{itemCount} tour{itemCount === 1 ? "" : "s"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading...</p>
-					) : !tours?.length ? (
-						<p className="text-muted-foreground text-sm">No tours yet.</p>
-					) : (
-						<Table>
-							<TableHeader>
-								<TableRow>
-									<TableHead>Name</TableHead>
-									<TableHead>Type</TableHead>
-									<TableHead>Duration</TableHead>
-									<TableHead>Capacity</TableHead>
-									<TableHead>Status</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{tours.map((t) => (
-									<TableRow key={t._id}>
-										<TableCell className="font-medium">{t.name}</TableCell>
-										<TableCell>{t.tourType}</TableCell>
-										<TableCell>{t.durationHours}h</TableCell>
-										<TableCell>
-											{t.minGuests}-{t.maxGuests}
-										</TableCell>
-										<TableCell>
-											{t.isActive ? (
-												<Badge>Active</Badge>
-											) : (
-												<Badge variant="secondary">Inactive</Badge>
-											)}
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					)}
+					<DataTable
+						data={tours as Tour[] | undefined}
+						columns={columns}
+						rowKey={(t) => t._id}
+						isPending={isPending}
+						error={error}
+						emptyMessage="No tours yet."
+					/>
 				</CardContent>
 			</Card>
 		</div>

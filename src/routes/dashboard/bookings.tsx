@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -40,7 +40,13 @@ const columns: DataTableColumn<Booking>[] = [
 		key: "tour",
 		header: "Tour",
 		render: (b) => (
-			<span className="font-mono text-xs">{b.tourId}</span>
+			<Link
+				to="/dashboard/bookings/$bookingId"
+				params={{ bookingId: b._id }}
+				className="text-blue-600 hover:underline"
+			>
+				{b.date} · {b.guests} guests
+			</Link>
 		),
 	},
 	{ key: "guests", header: "Guests", render: (b) => b.guests },
@@ -52,9 +58,7 @@ const columns: DataTableColumn<Booking>[] = [
 	{
 		key: "source",
 		header: "Source",
-		render: (b) => (
-			<Badge variant="outline">{b.source}</Badge>
-		),
+		render: (b) => <Badge variant="outline">{b.source}</Badge>,
 	},
 	{
 		key: "status",
