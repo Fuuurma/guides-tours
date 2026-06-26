@@ -17,6 +17,8 @@ export const tripAdvisorWebhook = httpAction(async (ctx, request) => {
 		return new Response("missing signature", { status: 400 });
 	}
 
+	const timestampHeader = request.headers.get("x-tripadvisor-timestamp");
+
 	const rawBody = await request.text();
 
 	const url = new URL(request.url);
@@ -43,12 +45,16 @@ export const tripAdvisorWebhook = httpAction(async (ctx, request) => {
 	}
 
 	const secret = await decrypt(integration.webhookSecret);
-	const valid = await TripAdvisorClient.verifyWebhook(
+	const verifyResult = await TripAdvisorClient.verifyWebhookWithTimestamp(
 		rawBody,
 		signature,
+		timestampHeader,
 		secret,
 	);
-	if (!valid) {
+	if (!verifyResult.valid) {
+		if (verifyResult.reason && verifyResult.reason !== undefined) {
+			return new Response(`rejected: ${verifyResult.reason}`, { status: 401 });
+		}
 		return new Response("invalid signature", { status: 401 });
 	}
 

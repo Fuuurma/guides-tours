@@ -120,3 +120,91 @@ export const WEBHOOK_HEADER = {
 } as const;
 
 export type ProviderSlug = keyof typeof WEBHOOK_HEADER;
+
+/**
+ * Per-provider timestamp header name. OTAs typically include this
+ * as the epoch-seconds (or ms) they signed the payload, so we can
+ * reject replays of old captured payloads.
+ *
+ * Header value: epoch milliseconds (integer string).
+ */
+export const WEBHOOK_TIMESTAMP_HEADER = {
+	viator: "x-viator-timestamp",
+	getYourGuide: "x-getyourguide-timestamp",
+	airbnb: "x-airbnb-timestamp",
+	tripAdvisor: "x-tripadvisor-timestamp",
+	klook: "x-klook-timestamp",
+	booking: "x-booking-timestamp",
+	expedia: "x-expedia-timestamp",
+} as const;
+
+/**
+ * How old a webhook timestamp can be (and how far in the future)
+ * before we reject it. 5 minutes is a common default (Stripe, GitHub)
+ * — covers clock skew while preventing long-window replay attacks.
+ */
+export const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000;
+
+export interface TimestampCheckResult {
+	valid: boolean;
+	/** When valid is false, why. Useful for logging / metrics. */
+	reason?: "missing" | "not_numeric" | "too_old" | "too_future";
+}
+
+/**
+ * Check whether a webhook timestamp is within an acceptable window.
+ *
+ * Pure function — no signature/HMAC logic, no I/O. Tests assert
+ * boundary conditions without needing a fake clock.
+ */
+export function checkWebhookTimestamp(
+	timestampHeader: string | null,
+	nowMs: number = Date.now(),
+	maxAgeMs: number = WEBHOOK_MAX_AGE_MS,
+): TimestampCheckResult {
+	if (timestampHeader === null || timestampHeader === "") {
+		return { valid: false, reason: "missing" };
+	}
+	// Reject anything that isn't a pure integer string. parseInt is
+	// too lenient — "123.45" would parse as 123 and slip through.
+	if (!/^-?\d+$/.test(timestampHeader)) {
+		return { valid: false, reason: "not_numeric" };
+	}
+	const ts = Number.parseInt(timestampHeader, 10);
+	if (!Number.isFinite(ts)) {
+		return { valid: false, reason: "not_numeric" };
+	}
+	if (ts < nowMs - maxAgeMs) {
+		return { valid: false, reason: "too_old" };
+	}
+	if (ts > nowMs + maxAgeMs) {
+		return { valid: false, reason: "too_future" };
+	}
+	return { valid: true };
+}
+
+/**
+ * Verify a webhook signature + timestamp window.
+ *
+ * The signature is still HMAC over the body only (matches what real
+ * OTAs send). The timestamp header is checked separately against
+ * an acceptable window — protects against replay of old captured
+ * payloads without breaking provider compatibility.
+ */
+export async function verifyWebhookSignatureWithTimestamp(
+	payload: string | Buffer | Uint8Array,
+	signature: string,
+	timestampHeader: string | null,
+	secret: string,
+	nowMs?: number,
+): Promise<TimestampCheckResult & { signatureOk: boolean }> {
+	const tsCheck = checkWebhookTimestamp(timestampHeader, nowMs);
+	if (!tsCheck.valid) {
+		return { ...tsCheck, signatureOk: false };
+	}
+	const signatureOk = await verifyWebhookSignature(payload, signature, secret);
+	if (!signatureOk) {
+		return { valid: false, reason: undefined, signatureOk: false };
+	}
+	return { valid: true, signatureOk: true };
+}

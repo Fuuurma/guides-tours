@@ -13,7 +13,7 @@
 //               x-airbnb-signature header (no `sha256=` prefix).
 
 import { OTAHttpClient, HttpError } from "./http_client";
-import { verifyWebhookSignature } from "./webhook_verify";
+import { verifyWebhookSignature, verifyWebhookSignatureWithTimestamp } from "./webhook_verify";
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
 const PROD_BASE_URL = "https://api.airbnb.com/v1";
@@ -108,6 +108,22 @@ export class AirbnbClient {
 		secret: string,
 	): Promise<boolean> {
 		return await verifyWebhookSignature(payload, signature, secret);
+	}
+
+	static async verifyWebhookWithTimestamp(
+		payload: string | Buffer,
+		signature: string,
+		timestampHeader: string | null,
+		secret: string,
+		nowMs?: number,
+	) {
+		return await verifyWebhookSignatureWithTimestamp(
+			payload,
+			signature,
+			timestampHeader,
+			secret,
+			nowMs,
+		);
 	}
 
 	/**

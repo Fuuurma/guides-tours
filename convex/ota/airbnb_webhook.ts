@@ -17,6 +17,8 @@ export const airbnbWebhook = httpAction(async (ctx, request) => {
 		return new Response("missing signature", { status: 400 });
 	}
 
+	const timestampHeader = request.headers.get("x-airbnb-timestamp");
+
 	const rawBody = await request.text();
 
 	const url = new URL(request.url);
@@ -43,8 +45,16 @@ export const airbnbWebhook = httpAction(async (ctx, request) => {
 	}
 
 	const secret = await decrypt(integration.webhookSecret);
-	const valid = await AirbnbClient.verifyWebhook(rawBody, signature, secret);
-	if (!valid) {
+	const verifyResult = await AirbnbClient.verifyWebhookWithTimestamp(
+		rawBody,
+		signature,
+		timestampHeader,
+		secret,
+	);
+	if (!verifyResult.valid) {
+		if (verifyResult.reason && verifyResult.reason !== undefined) {
+			return new Response(`rejected: ${verifyResult.reason}`, { status: 401 });
+		}
 		return new Response("invalid signature", { status: 401 });
 	}
 

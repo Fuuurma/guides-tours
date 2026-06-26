@@ -11,7 +11,7 @@ import { httpAction, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { ViatorClient } from "./viator";
 import { decrypt } from "../lib/crypto";
-import { verifyWebhookSignature } from "./webhook_verify";
+import { verifyWebhookSignatureWithTimestamp } from "./webhook_verify";
 import type { Id } from "../_generated/dataModel";
 import type { NormalizedProviderEvent } from "./types";
 
@@ -24,6 +24,8 @@ export const viatorWebhook = httpAction(async (ctx, request) => {
 	if (!signature) {
 		return new Response("missing signature", { status: 400 });
 	}
+
+	const timestampHeader = request.headers.get("x-viator-timestamp");
 
 	// Read raw body for HMAC verification. We must verify before
 	// parsing — otherwise a malformed payload could slip through.
@@ -56,8 +58,16 @@ export const viatorWebhook = httpAction(async (ctx, request) => {
 	}
 
 	const secret = await decrypt(integration.webhookSecret);
-	const valid = await verifyWebhookSignature(rawBody, signature, secret);
-	if (!valid) {
+	const verifyResult = await verifyWebhookSignatureWithTimestamp(
+		rawBody,
+		signature,
+		timestampHeader,
+		secret,
+	);
+	if (!verifyResult.valid) {
+		if (verifyResult.reason && verifyResult.reason !== undefined) {
+			return new Response(`rejected: ${verifyResult.reason}`, { status: 401 });
+		}
 		return new Response("invalid signature", { status: 401 });
 	}
 
