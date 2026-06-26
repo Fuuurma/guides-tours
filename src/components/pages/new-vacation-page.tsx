@@ -1,115 +1,61 @@
 import { useMutation } from "convex/react";
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
-import { FormActions, FormField } from "../form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { FormField } from "../form";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+
+interface FormValues extends Record<string, unknown> {
+	startDate: string;
+	endDate: string;
+	reason: string;
+}
+
+const INITIAL: FormValues = {
+	startDate: "",
+	endDate: "",
+	reason: "",
+};
 
 export function NewVacationPage() {
-	const navigate = useNavigate();
 	const create = useMutation(api.vacationRequests.create);
-	const [startDate, setStartDate] = useState("");
-	const [endDate, setEndDate] = useState("");
-	const [reason, setReason] = useState("");
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const onSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setPending(true);
-		setError(null);
-
-		if (!startDate || !endDate) {
-			setError("Start and end dates are required");
-			setPending(false);
-			return;
-		}
-		if (Date.parse(endDate) < Date.parse(startDate)) {
-			setError("End date cannot be before start date");
-			setPending(false);
-			return;
-		}
-
-		try {
+	const form = useEntityForm<FormValues, string>({
+		mutation: async (v) => {
+			if (!v.startDate || !v.endDate) throw new Error("Start and end dates are required");
+			if (Date.parse(v.endDate) < Date.parse(v.startDate))
+				throw new Error("End date cannot be before start date");
 			const id = await create({
-				startDate,
-				endDate,
-				reason: reason || undefined,
+				startDate: v.startDate,
+				endDate: v.endDate,
+				reason: v.reason || undefined,
 			});
-			toast.success("Vacation request submitted");
-			void navigate({
-				to: "/dashboard/vacations/$vacationId",
-				params: { vacationId: id },
-			});
-		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
-		} finally {
-			setPending(false);
-		}
-	};
+			return id;
+		},
+		initialValues: INITIAL,
+		redirectTo: (id) => `/dashboard/vacations/${id}`,
+		successMessage: "Vacation request submitted",
+	});
 
 	return (
-		<div className="mx-auto max-w-2xl">
-			<Card>
-				<CardHeader>
-					<CardTitle>New vacation request</CardTitle>
-					<CardDescription>
-						Request time off — pending review by an admin
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form onSubmit={onSubmit} className="space-y-4">
-						<div className="grid gap-4 md:grid-cols-2">
-							<FormField label="Start date *" htmlFor="start">
-								<Input
-									id="start"
-									type="date"
-									required
-									value={startDate}
-									onChange={(e) => setStartDate(e.target.value)}
-								/>
-							</FormField>
-							<FormField label="End date *" htmlFor="end">
-								<Input
-									id="end"
-									type="date"
-									required
-									value={endDate}
-									onChange={(e) => setEndDate(e.target.value)}
-								/>
-							</FormField>
-						</div>
+		<EntityFormPage
+			form={form}
+			title="New vacation request"
+			description="Request time off — pending review by an admin"
+			backTo="/dashboard/vacations"
+			submitLabel="Submit request"
+		>
+			<div className="grid gap-4 md:grid-cols-2">
+				<FormField label="Start date *" htmlFor="start">
+					<Input id="start" type="date" required value={form.values.startDate} onChange={(e) => form.set("startDate", e.target.value)} />
+				</FormField>
+				<FormField label="End date *" htmlFor="end">
+					<Input id="end" type="date" required value={form.values.endDate} onChange={(e) => form.set("endDate", e.target.value)} />
+				</FormField>
+			</div>
 
-						<FormField label="Reason" htmlFor="reason">
-							<textarea
-								id="reason"
-								value={reason}
-								onChange={(e) => setReason(e.target.value)}
-								rows={3}
-								placeholder="Optional — short note for the reviewer"
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-							/>
-						</FormField>
-
-						{error && <p className="text-destructive text-sm">{error}</p>}
-
-						<FormActions
-							onCancel={() => navigate({ to: "/dashboard/vacations" })}
-							pending={pending}
-							submitLabel="Submit request"
-						/>
-					</form>
-				</CardContent>
-			</Card>
-		</div>
+			<FormField label="Reason" htmlFor="reason">
+				<Textarea id="reason" value={form.values.reason} onChange={(e) => form.set("reason", e.target.value)} rows={3} placeholder="Optional — short note for the reviewer" />
+			</FormField>
+		</EntityFormPage>
 	);
 }

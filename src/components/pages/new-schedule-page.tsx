@@ -1,173 +1,103 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
-import { FormActions, FormField } from "../form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { FormField } from "../form";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 
-interface Tour {
-	_id: string;
-	name: string;
+interface Tour { _id: string; name: string }
+
+interface FormValues extends Record<string, unknown> {
+	tourId: string;
+	date: string;
+	startTime: string;
+	endTime: string;
+	capacityTotal: string;
+	notes: string;
 }
 
+const INITIAL: FormValues = {
+	tourId: "",
+	date: "",
+	startTime: "",
+	endTime: "",
+	capacityTotal: "10",
+	notes: "",
+};
+
 export function NewSchedulePage() {
-	const navigate = useNavigate();
 	const create = useMutation(api.tourSchedules.create);
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 
-	const [tourId, setTourId] = useState("");
-	const [date, setDate] = useState("");
-	const [startTime, setStartTime] = useState("");
-	const [endTime, setEndTime] = useState("");
-	const [capacityTotal, setCapacityTotal] = useState("10");
-	const [notes, setNotes] = useState("");
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const onSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setPending(true);
-		setError(null);
-
-		const cap = Number(capacityTotal);
-		if (!tourId) {
-			setError("Please select a tour");
-			setPending(false);
-			return;
-		}
-		if (!date || !startTime || !endTime) {
-			setError("Date and times are required");
-			setPending(false);
-			return;
-		}
-		if (cap <= 0) {
-			setError("Capacity must be positive");
-			setPending(false);
-			return;
-		}
-
-		try {
+	const form = useEntityForm<FormValues, string>({
+		mutation: async (v) => {
+			const cap = Number(v.capacityTotal);
+			if (!v.tourId) throw new Error("Please select a tour");
+			if (!v.date || !v.startTime || !v.endTime) throw new Error("Date and times are required");
+			if (cap <= 0) throw new Error("Capacity must be positive");
 			const id = await create({
-				tourId: tourId as never,
-				date,
-				startTime,
-				endTime,
+				tourId: v.tourId as never,
+				date: v.date,
+				startTime: v.startTime,
+				endTime: v.endTime,
 				capacityTotal: cap,
-				notes: notes || undefined,
+				notes: v.notes || undefined,
 			});
-			toast.success("Schedule created");
-			void navigate({
-				to: "/dashboard/schedules/$scheduleId",
-				params: { scheduleId: id },
-			});
-		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
-		} finally {
-			setPending(false);
-		}
-	};
+			return id;
+		},
+		initialValues: INITIAL,
+		redirectTo: (id) => `/dashboard/schedules/${id}`,
+		successMessage: "Schedule created",
+	});
 
 	return (
-		<div className="mx-auto max-w-2xl">
-			<Card>
-				<CardHeader>
-					<CardTitle>New tour schedule</CardTitle>
-					<CardDescription>
-						Schedule a concrete tour instance
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form onSubmit={onSubmit} className="space-y-4">
-						<FormField label="Tour *" htmlFor="tour">
-							<select
-								id="tour"
-								required
-								value={tourId}
-								onChange={(e) => setTourId(e.target.value)}
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-							>
-								<option value="">Select a tour…</option>
-								{(tours as Tour[] | undefined)?.map((t) => (
-									<option key={t._id} value={t._id}>
-										{t.name}
-									</option>
-								))}
-							</select>
-						</FormField>
+		<EntityFormPage
+			form={form}
+			title="New tour schedule"
+			description="Schedule a concrete tour instance"
+			backTo="/dashboard/schedules"
+			submitLabel="Create schedule"
+		>
+			<FormField label="Tour *" htmlFor="tour">
+				<Select value={form.values.tourId} onValueChange={(v) => form.set("tourId", v)}>
+					<SelectTrigger id="tour"><SelectValue placeholder="Select a tour…" /></SelectTrigger>
+					<SelectContent>
+						{(tours as Tour[] | undefined)?.map((t) => (
+							<SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+			</FormField>
 
-						<FormField label="Date *" htmlFor="date">
-							<Input
-								id="date"
-								type="date"
-								required
-								value={date}
-								onChange={(e) => setDate(e.target.value)}
-							/>
-						</FormField>
+			<FormField label="Date *" htmlFor="date">
+				<Input id="date" type="date" required value={form.values.date} onChange={(e) => form.set("date", e.target.value)} />
+			</FormField>
 
-						<div className="grid gap-4 md:grid-cols-2">
-							<FormField label="Start time *" htmlFor="start">
-								<Input
-									id="start"
-									type="time"
-									required
-									value={startTime}
-									onChange={(e) => setStartTime(e.target.value)}
-								/>
-							</FormField>
-							<FormField label="End time *" htmlFor="end">
-								<Input
-									id="end"
-									type="time"
-									required
-									value={endTime}
-									onChange={(e) => setEndTime(e.target.value)}
-								/>
-							</FormField>
-						</div>
+			<div className="grid gap-4 md:grid-cols-2">
+				<FormField label="Start time *" htmlFor="start">
+					<Input id="start" type="time" required value={form.values.startTime} onChange={(e) => form.set("startTime", e.target.value)} />
+				</FormField>
+				<FormField label="End time *" htmlFor="end">
+					<Input id="end" type="time" required value={form.values.endTime} onChange={(e) => form.set("endTime", e.target.value)} />
+				</FormField>
+			</div>
 
-						<FormField label="Capacity *" htmlFor="cap">
-							<Input
-								id="cap"
-								type="number"
-								min="1"
-								required
-								value={capacityTotal}
-								onChange={(e) => setCapacityTotal(e.target.value)}
-							/>
-						</FormField>
+			<FormField label="Capacity *" htmlFor="cap">
+				<Input id="cap" type="number" min="1" required value={form.values.capacityTotal} onChange={(e) => form.set("capacityTotal", e.target.value)} />
+			</FormField>
 
-						<FormField label="Notes" htmlFor="notes">
-							<textarea
-								id="notes"
-								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
-								rows={3}
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-							/>
-						</FormField>
-
-						{error && <p className="text-destructive text-sm">{error}</p>}
-
-						<FormActions
-							onCancel={() => navigate({ to: "/dashboard/schedules" })}
-							pending={pending}
-							submitLabel="Create schedule"
-						/>
-					</form>
-				</CardContent>
-			</Card>
-		</div>
+			<FormField label="Notes" htmlFor="notes">
+				<Textarea id="notes" value={form.values.notes} onChange={(e) => form.set("notes", e.target.value)} rows={3} placeholder="Optional" />
+			</FormField>
+		</EntityFormPage>
 	);
 }

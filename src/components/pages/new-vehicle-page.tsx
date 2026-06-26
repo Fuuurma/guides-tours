@@ -1,223 +1,139 @@
 import { useMutation } from "convex/react";
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { toast } from "sonner";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
-import { FormActions, FormField } from "../form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { FormField } from "../form";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 
-const VEHICLE_TYPES = [
-	"minivan",
-	"van",
-	"bus",
-	"car",
-	"boat",
-	"other",
-] as const;
-
+const VEHICLE_TYPES = ["minivan", "van", "bus", "car", "boat", "other"] as const;
 const OWNERSHIP_TYPES = ["owned", "rented", "leased"] as const;
 
+interface FormValues extends Record<string, unknown> {
+	name: string;
+	vehicleType: string;
+	capacity: string;
+	licensePlate: string;
+	make: string;
+	model: string;
+	year: string;
+	color: string;
+	ownershipType: string;
+	notes: string;
+}
+
+const INITIAL: FormValues = {
+	name: "",
+	vehicleType: "minivan",
+	capacity: "8",
+	licensePlate: "",
+	make: "",
+	model: "",
+	year: "",
+	color: "",
+	ownershipType: "owned",
+	notes: "",
+};
+
 export function NewVehiclePage() {
-	const navigate = useNavigate();
 	const create = useMutation(api.vehicles.create);
-	const [name, setName] = useState("");
-	const [vehicleType, setVehicleType] = useState<string>("minivan");
-	const [capacity, setCapacity] = useState("8");
-	const [licensePlate, setLicensePlate] = useState("");
-	const [make, setMake] = useState("");
-	const [model, setModel] = useState("");
-	const [year, setYear] = useState("");
-	const [color, setColor] = useState("");
-	const [ownershipType, setOwnershipType] = useState<string>("owned");
-	const [notes, setNotes] = useState("");
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const onSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setPending(true);
-		setError(null);
-
-		const cap = Number(capacity);
-		const yr = year ? Number(year) : undefined;
-		if (cap <= 0) {
-			setError("Capacity must be positive");
-			setPending(false);
-			return;
-		}
-		if (yr !== undefined && (yr < 1900 || yr > 2100)) {
-			setError("Year must be between 1900 and 2100");
-			setPending(false);
-			return;
-		}
-
-		try {
+	const form = useEntityForm<FormValues, string>({
+		mutation: async (v) => {
+			const cap = Number(v.capacity);
+			const yr = v.year ? Number(v.year) : undefined;
+			if (cap <= 0) throw new Error("Capacity must be positive");
+			if (yr !== undefined && (yr < 1900 || yr > 2100))
+				throw new Error("Year must be between 1900 and 2100");
 			const id = await create({
-				name,
-				vehicleType,
+				name: v.name,
+				vehicleType: v.vehicleType,
 				capacity: cap,
-				licensePlate: licensePlate || undefined,
-				make: make || undefined,
-				model: model || undefined,
+				licensePlate: v.licensePlate || undefined,
+				make: v.make || undefined,
+				model: v.model || undefined,
 				year: yr,
-				color: color || undefined,
-				ownershipType,
-				notes: notes || undefined,
+				color: v.color || undefined,
+				ownershipType: v.ownershipType,
+				notes: v.notes || undefined,
 			});
-			toast.success("Vehicle created");
-			void navigate({
-				to: "/dashboard/vehicles/$vehicleId",
-				params: { vehicleId: id },
-			});
-		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
-		} finally {
-			setPending(false);
-		}
-	};
+			return id;
+		},
+		initialValues: INITIAL,
+		redirectTo: (id) => `/dashboard/vehicles/${id}`,
+		successMessage: "Vehicle created",
+	});
 
 	return (
-		<div className="mx-auto max-w-2xl">
-			<Card>
-				<CardHeader>
-					<CardTitle>New vehicle</CardTitle>
-					<CardDescription>
-						Add a vehicle to your fleet
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form onSubmit={onSubmit} className="space-y-4">
-						<FormField label="Name *" htmlFor="name">
-							<Input
-								id="name"
-								required
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								placeholder="Minivan #1"
-							/>
-						</FormField>
+		<EntityFormPage
+			form={form}
+			title="New vehicle"
+			description="Add a vehicle to your fleet"
+			backTo="/dashboard/vehicles"
+			submitLabel="Create vehicle"
+		>
+			<FormField label="Name *" htmlFor="name">
+				<Input
+					id="name"
+					required
+					value={form.values.name}
+					onChange={(e) => form.set("name", e.target.value)}
+					placeholder="Minivan #1"
+				/>
+			</FormField>
 
-						<div className="grid gap-4 md:grid-cols-2">
-							<FormField label="Type" htmlFor="type">
-								<select
-									id="type"
-									value={vehicleType}
-									onChange={(e) => setVehicleType(e.target.value)}
-									className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-								>
-									{VEHICLE_TYPES.map((t) => (
-										<option key={t} value={t}>
-											{t}
-										</option>
-									))}
-								</select>
-							</FormField>
+			<div className="grid gap-4 md:grid-cols-2">
+				<FormField label="Type" htmlFor="type">
+					<Select value={form.values.vehicleType} onValueChange={(v) => form.set("vehicleType", v)}>
+						<SelectTrigger id="type"><SelectValue /></SelectTrigger>
+						<SelectContent>
+							{VEHICLE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+						</SelectContent>
+					</Select>
+				</FormField>
+				<FormField label="Capacity *" htmlFor="cap">
+					<Input id="cap" type="number" min="1" required value={form.values.capacity} onChange={(e) => form.set("capacity", e.target.value)} />
+				</FormField>
+			</div>
 
-							<FormField label="Capacity *" htmlFor="cap">
-								<Input
-									id="cap"
-									type="number"
-									min="1"
-									required
-									value={capacity}
-									onChange={(e) => setCapacity(e.target.value)}
-								/>
-							</FormField>
-						</div>
+			<div className="grid gap-4 md:grid-cols-2">
+				<FormField label="License plate" htmlFor="plate">
+					<Input id="plate" value={form.values.licensePlate} onChange={(e) => form.set("licensePlate", e.target.value)} placeholder="ABC-1234" />
+				</FormField>
+				<FormField label="Ownership" htmlFor="own">
+					<Select value={form.values.ownershipType} onValueChange={(v) => form.set("ownershipType", v)}>
+						<SelectTrigger id="own"><SelectValue /></SelectTrigger>
+						<SelectContent>
+							{OWNERSHIP_TYPES.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+						</SelectContent>
+					</Select>
+				</FormField>
+			</div>
 
-						<div className="grid gap-4 md:grid-cols-2">
-							<FormField label="License plate" htmlFor="plate">
-								<Input
-									id="plate"
-									value={licensePlate}
-									onChange={(e) => setLicensePlate(e.target.value)}
-									placeholder="ABC-1234"
-								/>
-							</FormField>
+			<div className="grid gap-4 md:grid-cols-3">
+				<FormField label="Make" htmlFor="make">
+					<Input id="make" value={form.values.make} onChange={(e) => form.set("make", e.target.value)} placeholder="Mercedes" />
+				</FormField>
+				<FormField label="Model" htmlFor="model">
+					<Input id="model" value={form.values.model} onChange={(e) => form.set("model", e.target.value)} placeholder="Sprinter" />
+				</FormField>
+				<FormField label="Year" htmlFor="year">
+					<Input id="year" type="number" min="1900" max="2100" value={form.values.year} onChange={(e) => form.set("year", e.target.value)} placeholder="2022" />
+				</FormField>
+			</div>
 
-							<FormField label="Ownership" htmlFor="own">
-								<select
-									id="own"
-									value={ownershipType}
-									onChange={(e) => setOwnershipType(e.target.value)}
-									className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-								>
-									{OWNERSHIP_TYPES.map((o) => (
-										<option key={o} value={o}>
-											{o}
-										</option>
-									))}
-								</select>
-							</FormField>
-						</div>
+			<FormField label="Color" htmlFor="color">
+				<Input id="color" value={form.values.color} onChange={(e) => form.set("color", e.target.value)} placeholder="White" />
+			</FormField>
 
-						<div className="grid gap-4 md:grid-cols-3">
-							<FormField label="Make" htmlFor="make">
-								<Input
-									id="make"
-									value={make}
-									onChange={(e) => setMake(e.target.value)}
-									placeholder="Mercedes"
-								/>
-							</FormField>
-							<FormField label="Model" htmlFor="model">
-								<Input
-									id="model"
-									value={model}
-									onChange={(e) => setModel(e.target.value)}
-									placeholder="Sprinter"
-								/>
-							</FormField>
-							<FormField label="Year" htmlFor="year">
-								<Input
-									id="year"
-									type="number"
-									min="1900"
-									max="2100"
-									value={year}
-									onChange={(e) => setYear(e.target.value)}
-									placeholder="2022"
-								/>
-							</FormField>
-						</div>
-
-						<FormField label="Color" htmlFor="color">
-							<Input
-								id="color"
-								value={color}
-								onChange={(e) => setColor(e.target.value)}
-								placeholder="White"
-							/>
-						</FormField>
-
-						<FormField label="Notes" htmlFor="notes">
-							<textarea
-								id="notes"
-								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
-								rows={3}
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-							/>
-						</FormField>
-
-						{error && <p className="text-destructive text-sm">{error}</p>}
-
-						<FormActions
-							onCancel={() => navigate({ to: "/dashboard/vehicles" })}
-							pending={pending}
-							submitLabel="Create vehicle"
-						/>
-					</form>
-				</CardContent>
-			</Card>
-		</div>
+			<FormField label="Notes" htmlFor="notes">
+				<Textarea id="notes" value={form.values.notes} onChange={(e) => form.set("notes", e.target.value)} rows={3} placeholder="Optional" />
+			</FormField>
+		</EntityFormPage>
 	);
 }

@@ -10,6 +10,14 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../form";
 
@@ -86,37 +94,25 @@ export function NewBookingPage() {
 				<CardContent>
 					<form onSubmit={onSubmit} className="space-y-4">
 						<FormField label="Tour *" htmlFor="tour">
-							<select
-								id="tour"
-								required
-								value={tourId}
-								onChange={(e) => setTourId(e.target.value)}
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-							>
-								<option value="">Select a tour…</option>
-								{(tours ?? []).map((t) => (
-									<option key={t._id} value={t._id}>
-										{t.name}
-									</option>
-								))}
-							</select>
+							<Select value={tourId} onValueChange={setTourId}>
+								<SelectTrigger id="tour"><SelectValue placeholder="Select a tour…" /></SelectTrigger>
+								<SelectContent>
+									{(tours ?? []).map((t) => (
+										<SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 						</FormField>
 
 						<FormField label="Customer *" htmlFor="customer">
-							<select
-								id="customer"
-								required
-								value={customerId}
-								onChange={(e) => setCustomerId(e.target.value)}
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-							>
-								<option value="">Select a customer…</option>
-								{(customers?.items ?? []).map((c) => (
-									<option key={c._id} value={c._id}>
-										{c.name} ({c.email})
-									</option>
-								))}
-							</select>
+							<Select value={customerId} onValueChange={setCustomerId}>
+								<SelectTrigger id="customer"><SelectValue placeholder="Select a customer…" /></SelectTrigger>
+								<SelectContent>
+									{(customers?.items ?? []).map((c) => (
+										<SelectItem key={c._id} value={c._id}>{c.name} ({c.email})</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
 						</FormField>
 
 						<div className="grid gap-4 md:grid-cols-3">
@@ -187,12 +183,12 @@ export function NewBookingPage() {
 						</div>
 
 						<FormField label="Notes" htmlFor="notes">
-							<textarea
+							<Textarea
 								id="notes"
 								value={notes}
 								onChange={(e) => setNotes(e.target.value)}
 								rows={3}
-								className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+								placeholder="Optional"
 							/>
 						</FormField>
 

@@ -27,7 +27,7 @@ export interface DetailPageProps {
 	backTo: string;
 	backLabel?: string;
 	actions?: React.ReactNode;
-	children: React.ReactNode;
+	children?: React.ReactNode;
 	className?: string;
 }
 

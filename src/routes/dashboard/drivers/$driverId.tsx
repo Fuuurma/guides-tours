@@ -1,15 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { createFileRoute } from "@tanstack/react-router";
+import { StatusBadge } from "@/components/status-badge";
+import { DetailPage, DetailSection } from "@/components/detail-page";
+import { DetailRow, MetricCard } from "@/components/metric-card";
 import { api } from "../../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/drivers/$driverId")({
@@ -22,99 +16,30 @@ function DriverDetailPage() {
 		convexQuery(api.drivers.get, { driverId: driverId as never }),
 	);
 
-	if (isPending) {
-		return <p className="text-muted-foreground">Loading...</p>;
-	}
-	if (error) {
-		return (
-			<p className="text-destructive text-sm">Error: {error.message}</p>
-		);
-	}
-	if (!driver) {
-		return (
-			<div className="space-y-4">
-				<p className="text-muted-foreground">Driver not found.</p>
-				<Button asChild variant="outline">
-					<Link to="/dashboard/drivers">← Back to drivers</Link>
-				</Button>
-			</div>
-		);
-	}
+	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
+	if (!driver) return <DetailPage title="Driver not found" backTo="/dashboard/drivers" />;
 
 	return (
-		<div className="space-y-6">
-			<header className="flex items-center justify-between">
-				<div>
-					<h1 className="text-2xl font-semibold">Driver</h1>
-					<p className="text-muted-foreground text-sm font-mono">
-						{driver.userId}
-					</p>
-				</div>
-				<div className="flex gap-2">
-					<Button asChild variant="outline">
-						<Link to="/dashboard/drivers">← Back</Link>
-					</Button>
-				</div>
-			</header>
-
+		<DetailPage title="Driver" subtitle={driver.userId} backTo="/dashboard/drivers">
 			<div className="grid gap-4 md:grid-cols-2">
-				<Card>
-					<CardHeader className="pb-2">
-						<CardDescription>Status</CardDescription>
-					</CardHeader>
-					<CardContent>
-						{driver.isActive ? (
-							<Badge>Active</Badge>
-						) : (
-							<Badge variant="secondary">Inactive</Badge>
-						)}
-					</CardContent>
-				</Card>
-				<Card>
-					<CardHeader className="pb-2">
-						<CardDescription>License</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<p className="text-sm">{driver.licenseInfo}</p>
-					</CardContent>
-				</Card>
+				<MetricCard label="Status" value={driver.isActive ? "Active" : "Inactive"}>
+					<StatusBadge status={driver.isActive ? "active" : "inactive"} />
+				</MetricCard>
+				<MetricCard label="License" value={driver.licenseInfo} />
 			</div>
 
 			{driver.notes && (
-				<Card>
-					<CardHeader>
-						<CardTitle>Notes</CardTitle>
-					</CardHeader>
-					<CardContent>
-						<p className="text-sm whitespace-pre-wrap">{driver.notes}</p>
-					</CardContent>
-				</Card>
+				<DetailSection title="Notes">
+					<p className="text-sm whitespace-pre-wrap">{driver.notes}</p>
+				</DetailSection>
 			)}
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Metadata</CardTitle>
-					<CardDescription>System fields</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-2 text-sm">
-					<div className="flex items-baseline justify-between gap-4">
-						<span className="text-muted-foreground">Driver ID</span>
-						<span className="font-mono text-xs">{driver._id}</span>
-					</div>
-					<div className="flex items-baseline justify-between gap-4">
-						<span className="text-muted-foreground">Created at</span>
-						<span>
-							{new Date(driver.createdAt).toLocaleString()}
-						</span>
-					</div>
-					<div className="flex items-baseline justify-between gap-4">
-						<span className="text-muted-foreground">Updated at</span>
-						<span>
-							{new Date(driver.updatedAt).toLocaleString()}
-						</span>
-					</div>
-				</CardContent>
-			</Card>
-		</div>
+			<DetailSection title="Metadata" description="System fields">
+				<DetailRow label="Driver ID" value={driver._id} mono />
+				<DetailRow label="Created at" value={new Date(driver.createdAt).toLocaleString()} />
+				<DetailRow label="Updated at" value={new Date(driver.updatedAt).toLocaleString()} />
+			</DetailSection>
+		</DetailPage>
 	);
 }

@@ -14,6 +14,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../../components/form";
 
@@ -203,18 +210,16 @@ function NewIntegrationForm({
 			<CardContent>
 				<form onSubmit={onSubmit} className="space-y-4">
 					<FormField label="Provider" htmlFor="provider">
-						<select
-							id="provider"
-							value={provider}
-							onChange={(e) => setProvider(e.target.value)}
-							className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-						>
-							{available.map((p) => (
-								<option key={p} value={p}>
-									{ALL_PROVIDERS.find((x) => x.id === p)?.label ?? p}
-								</option>
-							))}
-						</select>
+						<Select value={provider} onValueChange={setProvider}>
+							<SelectTrigger id="provider"><SelectValue /></SelectTrigger>
+							<SelectContent>
+								{available.map((p) => (
+									<SelectItem key={p} value={p}>
+										{ALL_PROVIDERS.find((x) => x.id === p)?.label ?? p}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
 					</FormField>
 
 					<FormField
