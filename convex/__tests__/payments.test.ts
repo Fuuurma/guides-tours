@@ -121,7 +121,7 @@ describe("convex/payments — record (idempotent by stripePaymentIntentId)", () 
 			currency: "usd",
 			stripePaymentIntentId: "pi_test_001",
 		});
-		const row = await t.run(async (ctx) => ctx.db.get(paymentId));
+		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(row?.status).toBe("pending");
 		expect(row?.provider).toBe("stripe");
 		expect(row?.amountCents).toBe(10000n);
@@ -166,7 +166,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			stripePaymentIntentId: "pi_test_003",
 		});
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
-		const row = await t.run(async (ctx) => ctx.db.get(paymentId));
+		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(row?.status).toBe("succeeded");
 		expect(row?.processedAt).toBeGreaterThan(0);
 	});
@@ -185,9 +185,9 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			stripePaymentIntentId: "pi_test_004",
 		});
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
-		const first = await t.run(async (ctx) => ctx.db.get(paymentId));
+		const first = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
-		const second = await t.run(async (ctx) => ctx.db.get(paymentId));
+		const second = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(second?.processedAt).toBe(first?.processedAt);
 	});
 
@@ -208,7 +208,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			paymentId,
 			reason: "Your card was declined.",
 		});
-		const row = await t.run(async (ctx) => ctx.db.get(paymentId));
+		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(row?.status).toBe("failed");
 	});
 });

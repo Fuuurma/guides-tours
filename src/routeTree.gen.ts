@@ -37,6 +37,7 @@ import { Route as DashboardToursNewRouteImport } from './routes/dashboard/tours/
 import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
 import { Route as DashboardTemplatesNewRouteImport } from './routes/dashboard/templates/new'
 import { Route as DashboardTemplatesTemplateIdRouteImport } from './routes/dashboard/templates/$templateId'
+import { Route as DashboardSettingsPaymentsRouteImport } from './routes/dashboard/settings/payments'
 import { Route as DashboardSchedulesNewRouteImport } from './routes/dashboard/schedules/new'
 import { Route as DashboardSchedulesScheduleIdRouteImport } from './routes/dashboard/schedules/$scheduleId'
 import { Route as DashboardNotificationsSettingsRouteImport } from './routes/dashboard/notifications/settings'
@@ -197,6 +198,12 @@ const DashboardTemplatesTemplateIdRoute =
     path: '/$templateId',
     getParentRoute: () => DashboardTemplatesRoute,
   } as any)
+const DashboardSettingsPaymentsRoute =
+  DashboardSettingsPaymentsRouteImport.update({
+    id: '/settings/payments',
+    path: '/settings/payments',
+    getParentRoute: () => DashboardRoute,
+  } as any)
 const DashboardSchedulesNewRoute = DashboardSchedulesNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -323,6 +330,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
+  '/dashboard/settings/payments': typeof DashboardSettingsPaymentsRoute
   '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
   '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
@@ -368,6 +376,7 @@ export interface FileRoutesByTo {
   '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
+  '/dashboard/settings/payments': typeof DashboardSettingsPaymentsRoute
   '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
   '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
@@ -415,6 +424,7 @@ export interface FileRoutesById {
   '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
+  '/dashboard/settings/payments': typeof DashboardSettingsPaymentsRoute
   '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
   '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
@@ -463,6 +473,7 @@ export interface FileRouteTypes {
     | '/dashboard/notifications/settings'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
+    | '/dashboard/settings/payments'
     | '/dashboard/templates/$templateId'
     | '/dashboard/templates/new'
     | '/dashboard/tours/$tourId'
@@ -508,6 +519,7 @@ export interface FileRouteTypes {
     | '/dashboard/notifications/settings'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
+    | '/dashboard/settings/payments'
     | '/dashboard/templates/$templateId'
     | '/dashboard/templates/new'
     | '/dashboard/tours/$tourId'
@@ -554,6 +566,7 @@ export interface FileRouteTypes {
     | '/dashboard/notifications/settings'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
+    | '/dashboard/settings/payments'
     | '/dashboard/templates/$templateId'
     | '/dashboard/templates/new'
     | '/dashboard/tours/$tourId'
@@ -774,6 +787,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/templates/$templateId'
       preLoaderRoute: typeof DashboardTemplatesTemplateIdRouteImport
       parentRoute: typeof DashboardTemplatesRoute
+    }
+    '/dashboard/settings/payments': {
+      id: '/dashboard/settings/payments'
+      path: '/settings/payments'
+      fullPath: '/dashboard/settings/payments'
+      preLoaderRoute: typeof DashboardSettingsPaymentsRouteImport
+      parentRoute: typeof DashboardRoute
     }
     '/dashboard/schedules/new': {
       id: '/dashboard/schedules/new'
@@ -1068,6 +1088,7 @@ interface DashboardRouteChildren {
   DashboardVacationsRoute: typeof DashboardVacationsRouteWithChildren
   DashboardVehiclesRoute: typeof DashboardVehiclesRouteWithChildren
   DashboardIndexRoute: typeof DashboardIndexRoute
+  DashboardSettingsPaymentsRoute: typeof DashboardSettingsPaymentsRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
@@ -1084,6 +1105,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardVacationsRoute: DashboardVacationsRouteWithChildren,
   DashboardVehiclesRoute: DashboardVehiclesRouteWithChildren,
   DashboardIndexRoute: DashboardIndexRoute,
+  DashboardSettingsPaymentsRoute: DashboardSettingsPaymentsRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
@@ -1103,12 +1125,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

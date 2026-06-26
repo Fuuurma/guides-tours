@@ -28,6 +28,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ to: "/dashboard/drivers", label: "Drivers" },
 	{ to: "/dashboard/ota", label: "OTA" },
 	{ to: "/dashboard/notifications", label: "Notifications" },
+	{ to: "/dashboard/settings/payments", label: "Payments" },
 ];
 
 export function NavBar({ orgName, userName, role }: NavBarProps) {

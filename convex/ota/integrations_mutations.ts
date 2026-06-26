@@ -7,7 +7,6 @@
 import { v, ConvexError } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import { internalMutation, mutation } from "../_generated/server";
-import { internal } from "../_generated/api";
 import { requireRole } from "../lib/authz";
 import { decrypt, encrypt } from "../lib/crypto";
 
@@ -39,7 +38,7 @@ export const create = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internal.createInternal as unknown as FunctionReference<
+			createInternal as unknown as FunctionReference<
 				"mutation",
 				"public" | "internal"
 			>,
@@ -69,7 +68,7 @@ export const update = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internal.updateInternal as unknown as FunctionReference<
+			updateInternal as unknown as FunctionReference<
 				"mutation",
 				"public" | "internal"
 			>,
@@ -87,7 +86,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internal.removeInternal as unknown as FunctionReference<
+			removeInternal as unknown as FunctionReference<
 				"mutation",
 				"public" | "internal"
 			>,

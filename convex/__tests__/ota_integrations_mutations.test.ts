@@ -88,7 +88,7 @@ describe("convex/ota/integrations_mutations", () => {
 					isSandbox: false,
 				},
 			);
-			const row = await t.run(async (ctx) => ctx.db.get(id));
+			const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
 			expect(row?.apiKey).not.toContain("super-secret-key");
 			expect(row?.apiKey).toBeTruthy();
 		});
@@ -143,7 +143,7 @@ describe("convex/ota/integrations_mutations", () => {
 					syncIntervalMinutes: 30,
 				},
 			);
-			const row = await t.run(async (ctx) => ctx.db.get(id));
+			const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
 			expect(row?.isActive).toBe(false);
 			expect(row?.syncIntervalMinutes).toBe(30);
 		});
@@ -194,7 +194,7 @@ describe("convex/ota/integrations_mutations", () => {
 					apiKey: "new-key",
 				},
 			);
-			const row = await t.run(async (ctx) => ctx.db.get(id));
+			const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
 			expect(row?.apiKey).not.toContain("old-key");
 			expect(row?.apiKey).not.toContain("new-key");
 		});
@@ -221,7 +221,7 @@ describe("convex/ota/integrations_mutations", () => {
 					integrationId: id,
 				},
 			);
-			const row = await t.run(async (ctx) => ctx.db.get(id));
+			const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
 			expect(row?.isActive).toBe(false);
 			expect(row).not.toBeNull();
 		});
