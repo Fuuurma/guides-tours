@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Card,
 	CardContent,
@@ -9,6 +9,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { api } from "../../../convex/_generated/api";
 
@@ -27,9 +28,23 @@ const columns: DataTableColumn<Driver>[] = [
 	{
 		key: "userId",
 		header: "User ID",
-		render: (d) => <span className="font-mono text-xs">{d.userId}</span>,
+		render: (d) => (
+			<Link
+				to="/dashboard/drivers/$driverId"
+				params={{ driverId: d._id }}
+				className="font-mono text-xs text-blue-600 hover:underline"
+			>
+				{d.userId}
+			</Link>
+		),
+		searchValue: (d) => d.userId,
 	},
-	{ key: "license", header: "License", render: (d) => d.licenseInfo },
+	{
+		key: "license",
+		header: "License",
+		render: (d) => d.licenseInfo,
+		searchValue: (d) => d.licenseInfo,
+	},
 	{
 		key: "status",
 		header: "Status",
@@ -39,6 +54,7 @@ const columns: DataTableColumn<Driver>[] = [
 			) : (
 				<Badge variant="secondary">Inactive</Badge>
 			),
+		searchValue: (d) => (d.isActive ? "active" : "inactive"),
 	},
 ];
 
@@ -52,11 +68,16 @@ function DriversPage() {
 	return (
 		<div className="space-y-6">
 			<Card>
-				<CardHeader>
-					<CardTitle>Drivers</CardTitle>
-					<CardDescription>
-						{itemCount} driver{itemCount === 1 ? "" : "s"}
-					</CardDescription>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Drivers</CardTitle>
+						<CardDescription>
+							{itemCount} driver{itemCount === 1 ? "" : "s"}
+						</CardDescription>
+					</div>
+					<Button asChild>
+						<Link to="/dashboard/drivers/new">+ New driver</Link>
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<DataTable
@@ -66,6 +87,7 @@ function DriversPage() {
 						isPending={isPending}
 						error={error}
 						emptyMessage="No drivers yet."
+						searchPlaceholder="Search by user ID, license, or status…"
 					/>
 				</CardContent>
 			</Card>
