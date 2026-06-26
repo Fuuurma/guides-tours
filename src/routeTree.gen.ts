@@ -37,6 +37,7 @@ import { Route as DashboardTemplatesNewRouteImport } from './routes/dashboard/te
 import { Route as DashboardTemplatesTemplateIdRouteImport } from './routes/dashboard/templates/$templateId'
 import { Route as DashboardSchedulesNewRouteImport } from './routes/dashboard/schedules/new'
 import { Route as DashboardSchedulesScheduleIdRouteImport } from './routes/dashboard/schedules/$scheduleId'
+import { Route as DashboardNotificationsSettingsRouteImport } from './routes/dashboard/notifications/settings'
 import { Route as DashboardNotificationsNewRouteImport } from './routes/dashboard/notifications/new'
 import { Route as DashboardNotificationsTemplateIdRouteImport } from './routes/dashboard/notifications/$templateId'
 import { Route as DashboardDriversNewRouteImport } from './routes/dashboard/drivers/new'
@@ -195,6 +196,12 @@ const DashboardSchedulesScheduleIdRoute =
     path: '/$scheduleId',
     getParentRoute: () => DashboardSchedulesRoute,
   } as any)
+const DashboardNotificationsSettingsRoute =
+  DashboardNotificationsSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => DashboardNotificationsRoute,
+  } as any)
 const DashboardNotificationsNewRoute =
   DashboardNotificationsNewRouteImport.update({
     id: '/new',
@@ -299,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
   '/dashboard/notifications/$templateId': typeof DashboardNotificationsTemplateIdRoute
   '/dashboard/notifications/new': typeof DashboardNotificationsNewRoute
+  '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
   '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
@@ -341,6 +349,7 @@ export interface FileRoutesByTo {
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
   '/dashboard/notifications/$templateId': typeof DashboardNotificationsTemplateIdRoute
   '/dashboard/notifications/new': typeof DashboardNotificationsNewRoute
+  '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
   '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
@@ -385,6 +394,7 @@ export interface FileRoutesById {
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
   '/dashboard/notifications/$templateId': typeof DashboardNotificationsTemplateIdRoute
   '/dashboard/notifications/new': typeof DashboardNotificationsNewRoute
+  '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
   '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
@@ -430,6 +440,7 @@ export interface FileRouteTypes {
     | '/dashboard/drivers/new'
     | '/dashboard/notifications/$templateId'
     | '/dashboard/notifications/new'
+    | '/dashboard/notifications/settings'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
     | '/dashboard/templates/$templateId'
@@ -472,6 +483,7 @@ export interface FileRouteTypes {
     | '/dashboard/drivers/new'
     | '/dashboard/notifications/$templateId'
     | '/dashboard/notifications/new'
+    | '/dashboard/notifications/settings'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
     | '/dashboard/templates/$templateId'
@@ -515,6 +527,7 @@ export interface FileRouteTypes {
     | '/dashboard/drivers/new'
     | '/dashboard/notifications/$templateId'
     | '/dashboard/notifications/new'
+    | '/dashboard/notifications/settings'
     | '/dashboard/schedules/$scheduleId'
     | '/dashboard/schedules/new'
     | '/dashboard/templates/$templateId'
@@ -737,6 +750,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSchedulesScheduleIdRouteImport
       parentRoute: typeof DashboardSchedulesRoute
     }
+    '/dashboard/notifications/settings': {
+      id: '/dashboard/notifications/settings'
+      path: '/settings'
+      fullPath: '/dashboard/notifications/settings'
+      preLoaderRoute: typeof DashboardNotificationsSettingsRouteImport
+      parentRoute: typeof DashboardNotificationsRoute
+    }
     '/dashboard/notifications/new': {
       id: '/dashboard/notifications/new'
       path: '/new'
@@ -902,6 +922,7 @@ const DashboardDriversRouteWithChildren =
 interface DashboardNotificationsRouteChildren {
   DashboardNotificationsTemplateIdRoute: typeof DashboardNotificationsTemplateIdRoute
   DashboardNotificationsNewRoute: typeof DashboardNotificationsNewRoute
+  DashboardNotificationsSettingsRoute: typeof DashboardNotificationsSettingsRoute
 }
 
 const DashboardNotificationsRouteChildren: DashboardNotificationsRouteChildren =
@@ -909,6 +930,7 @@ const DashboardNotificationsRouteChildren: DashboardNotificationsRouteChildren =
     DashboardNotificationsTemplateIdRoute:
       DashboardNotificationsTemplateIdRoute,
     DashboardNotificationsNewRoute: DashboardNotificationsNewRoute,
+    DashboardNotificationsSettingsRoute: DashboardNotificationsSettingsRoute,
   }
 
 const DashboardNotificationsRouteWithChildren =

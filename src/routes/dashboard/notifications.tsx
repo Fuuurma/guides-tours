@@ -115,9 +115,14 @@ function NotificationTemplatesPage() {
 							control which messages go out for booking events.
 						</CardDescription>
 					</div>
-					<Button asChild>
-						<Link to="/dashboard/notifications/new">+ New template</Link>
-					</Button>
+					<div className="flex gap-2">
+						<Button asChild variant="outline">
+							<Link to="/dashboard/notifications/settings">Settings</Link>
+						</Button>
+						<Button asChild>
+							<Link to="/dashboard/notifications/new">+ New template</Link>
+						</Button>
+					</div>
 				</CardHeader>
 				<CardContent>
 					<DataTable
