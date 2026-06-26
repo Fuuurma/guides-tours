@@ -62,9 +62,12 @@ export const list = query({
 		}
 
 		if (args.userId) {
+			// SECURITY: scope to org even when filtering by userId —
+			// a userId from another org must not be readable here.
 			q = ctx.db
 				.query("vacationRequests")
 				.withIndex("by_user", (q) => q.eq("userId", args.userId!))
+				.filter((q) => q.eq(q.field("organizationId"), orgId))
 				.order("desc");
 		}
 
@@ -73,6 +76,26 @@ export const list = query({
 });
 
 export const get = query({
+	args: { requestId: v.id("vacationRequests") },
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const vr = await ctx.db.get(args.requestId);
+		if (!vr) return null;
+		if (vr.organizationId !== member.organizationId) {
+			// SECURITY: do not reveal existence of cross-org rows.
+			// Return null (same as not-found) rather than throw.
+			return null;
+		}
+		return vr;
+	},
+});
+
+/**
+ * Internal mirror of `get` that skips the authz check. Use only from
+ * server-side code that has already verified the caller (e.g. an
+ * internal mutation that just inserted the row).
+ */
+export const getInternal = internalMutation({
 	args: { requestId: v.id("vacationRequests") },
 	handler: async (ctx, args) => {
 		return await ctx.db.get(args.requestId);
