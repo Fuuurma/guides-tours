@@ -23,8 +23,8 @@
 
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { requireMembership, requireRole } from "./lib/authz";
 import { internal } from "./_generated/api";
+import { requireMembership, requireRole } from "./lib/authz";
 
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
 // minus currency/conversion noise (we are cents-only).
@@ -433,6 +433,40 @@ export const cancel = mutation({
 				: booking.notes,
 			updatedAt: now,
 		});
+
+		// Restore the matching tourSchedule's capacityBooked counter.
+		// Best-effort: if the schedule was deleted or the lookup
+		// fails, the booking cancellation still succeeds.
+		const schedule = await ctx.db
+			.query("tourSchedules")
+			.withIndex("by_tour_date", (q) =>
+				q.eq("tourId", booking.tourId).eq("date", booking.date),
+			)
+			.filter((q) =>
+				q.and(
+					q.eq(q.field("organizationId"), booking.organizationId),
+					q.eq(q.field("startTime"), booking.startTime),
+				),
+			)
+			.first();
+		if (schedule) {
+			try {
+				await ctx.runMutation(
+					internal.tourSchedules.decrementBooked as unknown as Parameters<
+						typeof ctx.runMutation
+					>[0],
+					{
+						organizationId: booking.organizationId,
+						scheduleId: schedule._id,
+						guests: booking.guests,
+					},
+				);
+			} catch {
+				// Capacity restore is best-effort; the cancellation
+				// is the source of truth and the schedule can be
+				// reconciled manually if needed.
+			}
+		}
 
 		await ctx.db.insert("auditLogs", {
 			organizationId: booking.organizationId,

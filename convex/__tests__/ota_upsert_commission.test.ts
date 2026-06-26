@@ -15,66 +15,6 @@ const modules = import.meta.glob("../**/*.{ts,tsx}");
 
 type TestCtx = GenericMutationCtx<DataModel>;
 
-async function seedOtaBooking(
-	ctx: TestCtx,
-	organizationId: string,
-	productId: string,
-) {
-	const integrationId = await ctx.db.insert("otaIntegrations", {
-		organizationId,
-		provider: "viator",
-		apiKey: "enc",
-		isActive: true,
-		isSandbox: true,
-		autoSyncAvailability: false,
-		autoSyncPricing: false,
-		syncIntervalMinutes: 60,
-		settings: {},
-		createdAt: 0,
-		updatedAt: 0,
-	});
-	const tourId = await ctx.db.insert("tours", {
-		organizationId,
-		name: "Test Tour",
-		description: "",
-		durationHours: 2,
-		isActive: true,
-		recurrenceType: "none" as const,
-		recurrenceDaysOfWeek: [],
-		capacity: 10,
-		bufferMinutes: 15,
-		minGuests: 1,
-		maxGuests: 10,
-		bookingCutoffHours: 24,
-		tourType: "walking",
-		languages: ["en"],
-		requiredGuides: 1,
-		inclusions: [],
-		exclusions: [],
-		highlights: [],
-		currency: "USD",
-		createdAt: 0,
-		updatedAt: 0,
-	});
-	const otaProductId = await ctx.db.insert("otaProducts", {
-		organizationId,
-		tourId,
-		integrationId,
-		otaProductId: productId,
-		otaTitle: "Test OTA Product",
-		otaCurrency: "USD",
-		commissionRate: 0.2,
-		otaPhotos: [],
-		minAdvanceBookingHours: 24,
-		maxAdvanceBookingDays: 365,
-		syncStatus: "synced",
-		settings: {},
-		createdAt: 0,
-		updatedAt: 0,
-	});
-	return { integrationId, tourId, otaProductId };
-}
-
 async function seedOtaProductLookup(
 	ctx: TestCtx,
 	organizationId: string,
