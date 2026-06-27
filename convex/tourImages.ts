@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -141,6 +142,18 @@ export const internalAdd = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourImage.added",
+			resourceType: "tourImage",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				tourId: args.tourId,
+				isPrimary: args.isPrimary ?? false,
+			},
+		});
 		return id;
 	},
 });
@@ -190,10 +203,38 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
-		if (args.altText !== undefined) patch.altText = args.altText;
-		if (args.isPrimary !== undefined) patch.isPrimary = args.isPrimary;
-		if (args.displayOrder !== undefined) patch.displayOrder = args.displayOrder;
+		const changes: Record<string, { old: unknown; new: unknown }> = {};
+		if (args.altText !== undefined && args.altText !== existing.altText) {
+			patch.altText = args.altText;
+			changes.altText = { old: existing.altText, new: args.altText };
+		}
+		if (args.isPrimary !== undefined && args.isPrimary !== existing.isPrimary) {
+			patch.isPrimary = args.isPrimary;
+			changes.isPrimary = { old: existing.isPrimary, new: args.isPrimary };
+		}
+		if (
+			args.displayOrder !== undefined &&
+			args.displayOrder !== existing.displayOrder
+		) {
+			patch.displayOrder = args.displayOrder;
+			changes.displayOrder = {
+				old: existing.displayOrder,
+				new: args.displayOrder,
+			};
+		}
+		if (Object.keys(changes).length === 0) {
+			return args.imageId;
+		}
 		await ctx.db.patch(args.imageId, patch);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourImage.updated",
+			resourceType: "tourImage",
+			resourceId: args.imageId,
+			oldValues: {},
+			newValues: { changes },
+		});
 		return args.imageId;
 	},
 });
@@ -228,6 +269,18 @@ export const internalRemove = internalMutation({
 		} catch {
 			// ignore — blob may already be gone
 		}
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourImage.deleted",
+			resourceType: "tourImage",
+			resourceId: args.imageId,
+			oldValues: {
+				tourId: existing.tourId,
+				isPrimary: existing.isPrimary,
+			},
+			newValues: {},
+		});
 		return args.imageId;
 	},
 });
