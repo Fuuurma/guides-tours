@@ -73,20 +73,33 @@ describe("availabilities", () => {
 		expect(id1).not.toBe(id2);
 	});
 
-	it("upsert: rejects cross-org patch", async () => {
+	it("upsert: org-scoped lookup means a same-guideId in another org doesn't conflict", async () => {
 		const t = convexTest(schema, modules);
 		await t.run((ctx) =>
 			seedAvailability(ctx, "org_av4a", "guide-1", "2026-08-04", true),
 		);
-		await expect(
-			t.mutation(internal.availabilities.internalUpsert, {
-				organizationId: "org_av4b",
-				callerUserId: "admin-1",
-				userIdTarget: "guide-1",
-				date: "2026-08-04",
-				isAvailable: false,
-			}),
-		).rejects.toThrow(/Forbidden/);
+		// Upserting for the same guideId+date but a DIFFERENT org must
+		// succeed (org-scoped lookup doesn't see the other-org row) and
+		// produce a brand-new availability row in the calling org.
+		const newId = await t.mutation(internal.availabilities.internalUpsert, {
+			organizationId: "org_av4b",
+			callerUserId: "admin-1",
+			userIdTarget: "guide-1",
+			date: "2026-08-04",
+			isAvailable: false,
+		});
+		const rows = (await t.run((ctx) => ctx.db.query("availabilities").collect())) as Array<{
+			_id: string;
+			organizationId: string;
+			isAvailable: boolean;
+		}>;
+		expect(rows.length).toBe(2);
+		const orgB = rows.find((r) => r.organizationId === "org_av4b");
+		expect(orgB?._id).toBe(newId);
+		expect(orgB?.isAvailable).toBe(false);
+		// Original org_av4a row is untouched.
+		const orgA = rows.find((r) => r.organizationId === "org_av4a");
+		expect(orgA?.isAvailable).toBe(true);
 	});
 
 	it("remove: deletes availability row", async () => {

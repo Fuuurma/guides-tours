@@ -13,6 +13,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -95,26 +96,55 @@ export const internalUpsert = internalMutation({
 		isAvailable: v.boolean(),
 	},
 	handler: async (ctx, args) => {
+		// Defense-in-depth: use the org-scoped compound index, not the
+		// raw by_user_date index. A guide belonging to multiple orgs
+		// shouldn't get their availability in another org matched here.
 		const existing = await ctx.db
 			.query("availabilities")
-			.withIndex("by_user_date", (q) =>
-				q.eq("userId", args.userIdTarget).eq("date", args.date),
+			.withIndex("by_org_user_date", (q) =>
+				q
+					.eq("organizationId", args.organizationId)
+					.eq("userId", args.userIdTarget)
+					.eq("date", args.date),
 			)
-			.first();
+			.unique();
 		if (existing) {
-			if (existing.organizationId !== args.organizationId) {
-				throw new ConvexError("Forbidden: wrong organization");
-			}
-			await ctx.db.patch(existing._id, { isAvailable: args.isAvailable });
+			const wasAvailable = existing.isAvailable;
+			await ctx.db.patch(existing._id, {
+				isAvailable: args.isAvailable,
+			});
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: args.callerUserId,
+				action: "availability.updated",
+				resourceType: "availability",
+				resourceId: existing._id,
+				oldValues: { isAvailable: wasAvailable },
+				newValues: { isAvailable: args.isAvailable },
+			});
 			return existing._id;
 		}
-		return await ctx.db.insert("availabilities", {
+		const id = await ctx.db.insert("availabilities", {
 			organizationId: args.organizationId,
 			userId: args.userIdTarget,
 			date: args.date,
 			isAvailable: args.isAvailable,
 			createdAt: Date.now(),
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.callerUserId,
+			action: "availability.created",
+			resourceType: "availability",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				userId: args.userIdTarget,
+				date: args.date,
+				isAvailable: args.isAvailable,
+			},
+		});
+		return id;
 	},
 });
 
@@ -146,6 +176,19 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.availabilityId);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "availability.deleted",
+			resourceType: "availability",
+			resourceId: args.availabilityId,
+			oldValues: {
+				userId: existing.userId,
+				date: existing.date,
+				isAvailable: existing.isAvailable,
+			},
+			newValues: {},
+		});
 		return args.availabilityId;
 	},
 });
