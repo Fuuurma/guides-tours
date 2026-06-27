@@ -9,7 +9,9 @@ import {
 	query,
 	mutation,
 	internalMutation,
+	internalQuery,
 } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 
@@ -102,40 +104,87 @@ export const getInternal = internalMutation({
 	},
 });
 
+// Helper — pure aggregation used by both the public query and the
+// internal mirror for tests. Caller is responsible for org-scoping.
+async function _calcStats(
+	ctx: QueryCtx,
+	targetUserId: string,
+	orgId: string,
+	year: number,
+) {
+	const approved = await ctx.db
+		.query("vacationRequests")
+		.withIndex("by_user_status", (q) =>
+			q.eq("userId", targetUserId).eq("status", "approved"),
+		)
+		.collect();
+	const approvedInOrg = approved.filter(
+		(vr) => vr.organizationId === orgId,
+	);
+
+	let usedDays = 0;
+	for (const vr of approvedInOrg) {
+		usedDays += calculateVacationDays(vr.startDate, vr.endDate, year);
+	}
+
+	const pending = await ctx.db
+		.query("vacationRequests")
+		.withIndex("by_user_status", (q) =>
+			q.eq("userId", targetUserId).eq("status", "pending"),
+		)
+		.collect();
+	const pendingInOrg = pending.filter(
+		(vr) => vr.organizationId === orgId,
+	);
+
+	const totalDays = 20; // matches source User.vacation_days default
+	return {
+		year,
+		totalDays,
+		usedDays,
+		remainingDays: totalDays - usedDays,
+		pendingCount: pendingInOrg.length,
+	};
+}
+
 export const getStats = query({
 	args: {
-		organizationId: v.string(),
-		userId: v.string(),
+		// userId defaults to the caller's own user id. Admins/owners
+		// may pass another user's id to look up their stats.
+		userId: v.optional(v.string()),
 		year: v.number(),
 	},
 	handler: async (ctx, args) => {
-		const approved = await ctx.db
-			.query("vacationRequests")
-			.withIndex("by_user_status", (q) =>
-				q.eq("userId", args.userId).eq("status", "approved"),
-			)
-			.collect();
-
-		let usedDays = 0;
-		for (const vr of approved) {
-			usedDays += calculateVacationDays(vr.startDate, vr.endDate, args.year);
+		const member = await requireMembership(ctx);
+		// SECURITY: derive org from session, never accept it as arg
+		// (prevents IDOR — same fix pattern as analytics.ts).
+		const orgId = member.organizationId;
+		// If the caller is looking up someone else's stats, they must
+		// be an admin/owner in this org. Guides can only see their own.
+		const targetUserId = args.userId ?? member.userId;
+		if (targetUserId !== member.userId) {
+			if (!["owner", "admin"].includes(member.role as string)) {
+				throw new ConvexError(
+					"Forbidden: only admins/owners can view another user's stats",
+				);
+			}
 		}
+		return await _calcStats(ctx, targetUserId, orgId, args.year);
+	},
+});
 
-		const pending = await ctx.db
-			.query("vacationRequests")
-			.withIndex("by_user_status", (q) =>
-				q.eq("userId", args.userId).eq("status", "pending"),
-			)
-			.collect();
-
-		const totalDays = 20; // matches source User.vacation_days default
-		return {
-			year: args.year,
-			totalDays,
-			usedDays,
-			remainingDays: totalDays - usedDays,
-			pendingCount: pending.length,
-		};
+/**
+ * Internal mirror of getStats. Takes organizationId directly so
+ * tests + cron jobs can call it without going through Better Auth.
+ */
+export const internalGetStats = internalQuery({
+	args: {
+		userId: v.string(),
+		organizationId: v.string(),
+		year: v.number(),
+	},
+	handler: async (ctx, args) => {
+		return await _calcStats(ctx, args.userId, args.organizationId, args.year);
 	},
 });
 

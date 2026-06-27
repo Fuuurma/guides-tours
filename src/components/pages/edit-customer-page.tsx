@@ -1,37 +1,54 @@
 import { useMutation, useQuery } from "convex/react";
-import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { FormField } from "../form";
 import { api } from "../../../convex/_generated/api";
-import { FormActions, FormField } from "../form";
+
+interface FormValues extends Record<string, unknown> {
+	name: string;
+	email: string;
+	phone: string;
+	preferredLanguage: string;
+	notes: string;
+	vipStatus: boolean;
+}
 
 interface EditCustomerPageProps {
 	customerId: string;
 }
 
 export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
-	const navigate = useNavigate();
 	const customer = useQuery(api.customers.get, { customerId: customerId as never });
 	const update = useMutation(api.customers.update);
-
-	const [name, setName] = useState("");
-	const [email, setEmail] = useState("");
-	const [phone, setPhone] = useState("");
-	const [preferredLanguage, setPreferredLanguage] = useState("en");
-	const [notes, setNotes] = useState("");
-	const [vipStatus, setVipStatus] = useState(false);
 	const [loaded, setLoaded] = useState(false);
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+
+	const form = useEntityForm<FormValues, string>({
+		mutation: async (v) => {
+			await update({
+				customerId: customerId as never,
+				name: v.name,
+				email: v.email,
+				phone: v.phone || undefined,
+				preferredLanguage: v.preferredLanguage || "en",
+				notes: v.notes || undefined,
+				vipStatus: v.vipStatus,
+			});
+			return customerId;
+		},
+		initialValues: {
+			name: "",
+			email: "",
+			phone: "",
+			preferredLanguage: "en",
+			notes: "",
+			vipStatus: false,
+		},
+		redirectTo: (id) => `/dashboard/customers/${id}`,
+		successMessage: "Customer updated",
+	});
 
 	useEffect(() => {
 		if (customer && !loaded) {
@@ -43,42 +60,15 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				notes: string;
 				vipStatus: boolean;
 			};
-			setName(c.name);
-			setEmail(c.email);
-			setPhone(c.phone ?? "");
-			setPreferredLanguage(c.preferredLanguage ?? "en");
-			setNotes(c.notes ?? "");
-			setVipStatus(!!c.vipStatus);
+			form.set("name", c.name);
+			form.set("email", c.email);
+			form.set("phone", c.phone ?? "");
+			form.set("preferredLanguage", c.preferredLanguage ?? "en");
+			form.set("notes", c.notes ?? "");
+			form.set("vipStatus", !!c.vipStatus);
 			setLoaded(true);
 		}
-	}, [customer, loaded]);
-
-	const onSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setPending(true);
-		setError(null);
-		try {
-			await update({
-				customerId: customerId as never,
-				name,
-				email,
-				phone: phone || undefined,
-				preferredLanguage: preferredLanguage || "en",
-				notes: notes || undefined,
-				vipStatus,
-			});
-			toast.success("Customer updated");
-			void navigate({
-				to: "/dashboard/customers/$customerId",
-				params: { customerId },
-			});
-		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
-		} finally {
-			setPending(false);
-		}
-	};
+	}, [customer, loaded, form]);
 
 	if (customer === undefined) {
 		return <p className="text-muted-foreground">Loading…</p>;
@@ -87,96 +77,78 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 		return (
 			<div className="space-y-4">
 				<p className="text-muted-foreground">Customer not found.</p>
-				<button
-					type="button"
-					className="text-blue-600 hover:underline"
-					onClick={() => navigate({ to: "/dashboard/customers" })}
-				>
-					← Back to customers
-				</button>
 			</div>
 		);
 	}
 
 	return (
-		<div className="mx-auto max-w-2xl">
-			<Card>
-				<CardHeader>
-					<CardTitle>Edit customer</CardTitle>
-					<CardDescription>Update customer profile</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<form onSubmit={onSubmit} className="space-y-4">
-						<FormField label="Name *" htmlFor="name">
-							<Input
-								id="name"
-								required
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-							/>
-						</FormField>
+		<EntityFormPage
+			form={form}
+			title="Edit customer"
+			description="Update customer profile"
+			backTo={`/dashboard/customers/${customerId}`}
+			submitLabel="Save changes"
+		>
+			<FormField label="Name *" htmlFor="edit-customer-name">
+				<Input
+					id="edit-customer-name"
+					required
+					value={form.values.name}
+					onChange={(e) => form.set("name", e.target.value)}
+				/>
+			</FormField>
 
-						<FormField label="Email *" htmlFor="email">
-							<Input
-								id="email"
-								type="email"
-								required
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-							/>
-						</FormField>
+			<FormField label="Email *" htmlFor="edit-customer-email">
+				<Input
+					id="edit-customer-email"
+					type="email"
+					required
+					value={form.values.email}
+					onChange={(e) => form.set("email", e.target.value)}
+				/>
+			</FormField>
 
-						<FormField label="Phone" htmlFor="phone">
-							<Input
-								id="phone"
-								type="tel"
-								value={phone}
-								onChange={(e) => setPhone(e.target.value)}
-							/>
-						</FormField>
+			<FormField label="Phone" htmlFor="edit-customer-phone">
+				<Input
+					id="edit-customer-phone"
+					type="tel"
+					value={form.values.phone}
+					onChange={(e) => form.set("phone", e.target.value)}
+				/>
+			</FormField>
 
-						<FormField label="Preferred language" htmlFor="lang">
-							<Input
-								id="lang"
-								value={preferredLanguage}
-								onChange={(e) => setPreferredLanguage(e.target.value)}
-							/>
-						</FormField>
+			<FormField label="Preferred language" htmlFor="edit-customer-lang">
+				<Input
+					id="edit-customer-lang"
+					value={form.values.preferredLanguage}
+					onChange={(e) => form.set("preferredLanguage", e.target.value)}
+				/>
+			</FormField>
 
-						<FormField label="Notes" htmlFor="notes">
-							<Textarea
-								id="notes"
-								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
-								rows={3}
-								placeholder="Optional"
-							/>
-						</FormField>
+			<FormField label="Notes" htmlFor="edit-customer-notes">
+				<Textarea
+					id="edit-customer-notes"
+					value={form.values.notes}
+					onChange={(e) => form.set("notes", e.target.value)}
+					rows={3}
+					placeholder="Optional"
+				/>
+			</FormField>
 
-						<label className="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
-								checked={vipStatus}
-								onChange={(e) => setVipStatus(e.target.checked)}
-							/>
-							VIP customer
-						</label>
-
-						{error && <p className="text-destructive text-sm">{error}</p>}
-
-						<FormActions
-							onCancel={() =>
-								navigate({
-									to: "/dashboard/customers/$customerId",
-									params: { customerId },
-								})
-							}
-							pending={pending}
-							submitLabel="Save changes"
-						/>
-					</form>
-				</CardContent>
-			</Card>
-		</div>
+			<label className="flex items-center gap-2 text-sm">
+				<Checkbox
+					id="edit-customer-vip"
+					checked={form.values.vipStatus}
+					onCheckedChange={(checked) =>
+						form.set("vipStatus", checked === true)
+					}
+				/>
+				VIP customer
+			</label>
+		</EntityFormPage>
 	);
 }
+
+// Route declaration lives in
+// src/routes/dashboard/customers/$customerId/edit.tsx to keep page
+// components decoupled from TanStack Router wiring.

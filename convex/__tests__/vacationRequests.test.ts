@@ -285,14 +285,28 @@ describe("vacation requests", () => {
 				updatedAt: 0,
 			}),
 		);
-		const stats = await t.query(api.vacationRequests.getStats, {
-			organizationId: orgId,
-			userId,
-			year: 2026,
-		});
+		const stats = await t.query(
+			internal.vacationRequests.internalGetStats,
+			{
+				userId,
+				organizationId: orgId,
+				year: 2026,
+			},
+		);
 		expect(stats.usedDays).toBe(10);
 		expect(stats.remainingDays).toBe(10);
 		expect(stats.pendingCount).toBe(1);
 		expect(stats.totalDays).toBe(20);
+	});
+
+	it("getStats (public): rejects unauthenticated callers", async () => {
+		// convexTest doesn't fake Better Auth (Phase 4 mocking deferred
+		// per customers.test.ts header), so we can only verify the
+		// unauthenticated branch. The data path is covered by the
+		// internalGetStats test above.
+		const t = convexTest(schema, modules);
+		await expect(
+			t.query(api.vacationRequests.getStats, { year: 2026 }),
+		).rejects.toThrow(/Unauth/i);
 	});
 });
