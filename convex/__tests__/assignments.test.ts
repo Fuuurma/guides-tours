@@ -180,6 +180,58 @@ describe("convex/assignments — checkConflicts query", () => {
 		expect(conflicts[0]?.conflictType).toBe("guide");
 	});
 
+	it("does not surface conflicts from other orgs (tenant isolation)", async () => {
+		const t = convexTest(schema, modules);
+		const orgA = "org_iso_a";
+		const orgB = "org_iso_b";
+		const guideId = "shared-guide-id";
+		const tourA = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgA),
+		);
+		const tourB = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgB),
+		);
+		// Both orgs have an overlapping assignment for the same guideId.
+		// The same guide belongs to both orgs (multi-org membership).
+		await t.run(async (ctx) =>
+			seedAssignment(ctx as unknown as TestCtx, orgA, tourA, guideId, {
+				date: "2026-09-01",
+				startTime: "09:00",
+				endTime: "11:00",
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedAssignment(ctx as unknown as TestCtx, orgB, tourB, guideId, {
+				date: "2026-09-01",
+				startTime: "09:30",
+				endTime: "10:30",
+			}),
+		);
+		// orgA checks — must only see its own (1 conflict, not 2).
+		const aConflicts = await t.run(async (ctx) =>
+			checkConflictsHelper(ctx as unknown as TestCtx, {
+				organizationId: orgA,
+				date: "2026-09-01",
+				startTime: "10:00",
+				endTime: "12:00",
+				guideId,
+			}),
+		);
+		expect(aConflicts.length).toBe(1);
+		expect(aConflicts[0]?.conflictType).toBe("guide");
+		// orgB checks — must only see its own (1 conflict).
+		const bConflicts = await t.run(async (ctx) =>
+			checkConflictsHelper(ctx as unknown as TestCtx, {
+				organizationId: orgB,
+				date: "2026-09-01",
+				startTime: "10:00",
+				endTime: "12:00",
+				guideId,
+			}),
+		);
+		expect(bConflicts.length).toBe(1);
+	});
+
 	it("reports no conflict for a non-overlapping time", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_b";

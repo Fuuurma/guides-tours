@@ -163,6 +163,10 @@ export const checkConflicts = query({
 				.withIndex("by_guide_date", (q) =>
 					q.eq("guideId", args.guideId!).eq("date", args.date),
 				)
+				// SECURITY: scope by org. A guide belonging to multiple
+				// orgs shouldn't surface other-org assignments as
+				// conflicts in this org's conflict-check UI.
+				.filter((q) => q.eq(q.field("organizationId"), orgId))
 				.collect();
 			for (const a of guideRows) {
 				if (a.deletedAt) continue;
@@ -197,6 +201,8 @@ export const checkConflicts = query({
 				.withIndex("by_vehicle_date", (q) =>
 					q.eq("vehicleId", args.vehicleId!).eq("date", args.date),
 				)
+				// SECURITY: scope by org (see guide conflicts above).
+				.filter((q) => q.eq(q.field("organizationId"), orgId))
 				.collect();
 			for (const a of rows) {
 				if (a.deletedAt) continue;
@@ -231,6 +237,8 @@ export const checkConflicts = query({
 				.withIndex("by_driver_date", (q) =>
 					q.eq("driverId", args.driverId!).eq("date", args.date),
 				)
+				// SECURITY: scope by org (see guide conflicts above).
+				.filter((q) => q.eq(q.field("organizationId"), orgId))
 				.collect();
 			for (const a of rows) {
 				if (a.deletedAt) continue;
@@ -354,9 +362,13 @@ export const internalCreate = internalMutation({
 	}
 
 	// Check guide vacation overlap (source: 270-277).
+	// Defense-in-depth: scope by orgId too. A guide belonging to
+	// multiple orgs (Better Auth allows this) shouldn't have their
+	// vacation in another org block an assignment in this org.
 	const vacations = await ctx.db
 		.query("vacationRequests")
-		.withIndex("by_user", (q) => q.eq("userId", args.guideId))
+		.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+		.filter((q) => q.eq(q.field("userId"), args.guideId))
 		.collect();
 	const onVacation = vacations.some(
 		(vr) =>
@@ -368,11 +380,16 @@ export const internalCreate = internalMutation({
 		throw new ConvexError("Guide is on approved vacation on this date");
 	}
 
-	// Check guide availability row.
+	// Check guide availability row. Same defense-in-depth: scope
+	// by org so a guide's unavailability in another org doesn't
+	// block an assignment here.
 	const avail = await ctx.db
 		.query("availabilities")
-		.withIndex("by_user_date", (q) =>
-			q.eq("userId", args.guideId).eq("date", args.date),
+		.withIndex("by_org_user_date", (q) =>
+			q
+				.eq("organizationId", args.organizationId)
+				.eq("userId", args.guideId)
+				.eq("date", args.date),
 		)
 		.unique();
 	if (avail && !avail.isAvailable) {
