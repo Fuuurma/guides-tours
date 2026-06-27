@@ -121,6 +121,7 @@ export function NewBookingPage() {
 									id="date"
 									type="date"
 									required
+									min={new Date().toISOString().slice(0, 10)}
 									value={date}
 									onChange={(e) => setDate(e.target.value)}
 								/>

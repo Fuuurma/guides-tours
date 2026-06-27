@@ -237,13 +237,14 @@ function PublicBookingPage() {
 									>
 										Date *
 									</label>
-									<Input
-										id="date"
-										type="date"
-										required
-										value={date}
-										onChange={(e) => setDate(e.target.value)}
-									/>
+								<Input
+									id="date"
+									type="date"
+									required
+									min={new Date().toISOString().slice(0, 10)}
+									value={date}
+									onChange={(e) => setDate(e.target.value)}
+								/>
 								</div>
 								<div className="space-y-1">
 									<label
