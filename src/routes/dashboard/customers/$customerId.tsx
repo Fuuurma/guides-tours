@@ -1,10 +1,11 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
+import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/customers/$customerId")({
@@ -26,7 +27,19 @@ interface Customer {
 }
 
 const bookingColumns: DataTableColumn<Record<string, unknown>>[] = [
-	{ key: "date", header: "Date", render: (b) => String(b.date) },
+	{
+		key: "date",
+		header: "Date",
+		render: (b) => (
+			<Link
+				to="/dashboard/bookings/$bookingId"
+				params={{ bookingId: String(b._id) }}
+				className="font-medium text-blue-600 hover:underline"
+			>
+				{String(b.date)}
+			</Link>
+		),
+	},
 	{ key: "tour", header: "Tour", render: (b) => String(b.tourName) },
 	{ key: "guests", header: "Guests", render: (b) => String(b.guests) },
 	{
@@ -37,7 +50,7 @@ const bookingColumns: DataTableColumn<Record<string, unknown>>[] = [
 	{
 		key: "status",
 		header: "Status",
-		render: (b) => <Badge variant="secondary">{String(b.status)}</Badge>,
+		render: (b) => <StatusBadge status={String(b.status)} />,
 	},
 ];
 
