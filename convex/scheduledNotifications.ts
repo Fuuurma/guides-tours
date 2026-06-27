@@ -9,6 +9,7 @@
 import { v, ConvexError } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { parseBookingTime } from "./lib/time";
 
 // Hours-before-tour that each reminder fires at.
 const REMINDER_OFFSETS = {
@@ -98,19 +99,5 @@ async function getTemplateMaxRetries(
 // Lightweight Function type alias so we don't pull the full DataModel.
 type Function = (...args: any[]) => any;
 
-function parseBookingTime(
-	date: string,
-	startTime: string,
-): number | null {
-	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-	const t = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(startTime);
-	if (!m || !t) return null;
-	const year = Number(m[1]);
-	const month = Number(m[2]);
-	const day = Number(m[3]);
-	const hh = Number(t[1]);
-	const mm = Number(t[2]);
-	const ss = t[3] ? Number(t[3]) : 0;
-	const ts = Date.UTC(year, month - 1, day, hh, mm, ss);
-	return Number.isFinite(ts) ? ts : null;
-}
+// parseBookingTime moved to convex/lib/time.ts (shared with
+// public_booking.ts so date validation uses the same parser).

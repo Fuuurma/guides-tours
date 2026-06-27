@@ -21,6 +21,7 @@ import { v, ConvexError } from "convex/values";
 import { internalAction, internalMutation, query } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { FunctionReference } from "convex/server";
+import { parseBookingTime } from "./lib/time";
 
 // ----- Public query: org + active tours by slug -----
 //
@@ -183,6 +184,29 @@ export const internalCreate = internalMutation({
 		}
 		if (!(tour as { isActive: boolean }).isActive) {
 			throw new ConvexError("Tour is not active");
+		}
+		// Reject past dates and dates that fall inside the
+		// bookingCutoffHours window (operator-defined lead time).
+		// parseBookingTime returns a UTC timestamp for the tour start,
+		// or null if the date/time is malformed.
+		const tourTs = parseBookingTime(args.date, args.startTime);
+		if (tourTs === null) {
+			throw new ConvexError(
+				`Invalid date or time: "${args.date} ${args.startTime}"`,
+			);
+		}
+		const nowMs = Date.now();
+		if (tourTs <= nowMs) {
+			throw new ConvexError(
+				"Cannot book a tour in the past or starting within the next minute",
+			);
+		}
+		const cutoffMs =
+			(tour as { bookingCutoffHours?: number }).bookingCutoffHours ?? 0;
+		if (cutoffMs > 0 && tourTs - nowMs < cutoffMs * 3_600_000) {
+			throw new ConvexError(
+				`Bookings must be made at least ${cutoffMs}h before the tour`,
+			);
 		}
 		if (args.guests <= 0) {
 			throw new ConvexError("guests must be > 0");

@@ -240,6 +240,92 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		).rejects.toThrow(/guests must be > 0/);
 	});
 
+	it("rejects past dates", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_past";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Ivy",
+				customerEmail: "ivy@example.com",
+				// 2020 is solidly in the past
+				date: "2020-01-15",
+				startTime: "10:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/past/);
+	});
+
+	it("rejects malformed date/time strings", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_bad";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Jake",
+				customerEmail: "jake@example.com",
+				date: "not-a-date",
+				startTime: "10:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/Invalid date/);
+	});
+
+	it("rejects bookings inside the bookingCutoffHours window", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_cutoff";
+		// Seed a tour with a 48h cutoff
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("tours", {
+				organizationId: orgId,
+				name: "Tomorrow tour",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 48, // 48h cutoff
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		// Tomorrow at 10am = ~24h from now, inside the 48h cutoff
+		const tomorrow = new Date(Date.now() + 24 * 3_600_000)
+			.toISOString()
+			.slice(0, 10);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Kira",
+				customerEmail: "kira@example.com",
+				date: tomorrow,
+				startTime: "10:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/at least 48h/);
+	});
+
 	it("persists phone and notes on new customer", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub_phone";

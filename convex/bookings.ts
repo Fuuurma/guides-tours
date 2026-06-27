@@ -27,6 +27,7 @@ import type { MutationCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
+import { parseBookingTime } from "./lib/time";
 
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
 // minus currency/conversion noise (we are cents-only).
@@ -228,6 +229,26 @@ export const create = mutation({
 		if (!customer) throw new ConvexError("Customer not found");
 		if (customer.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: customer belongs to a different organization");
+		}
+		// Reject past dates and dates inside the bookingCutoffHours
+		// window. parseBookingTime returns null on malformed input.
+		const tourTs = parseBookingTime(args.date, args.startTime);
+		if (tourTs === null) {
+			throw new ConvexError(
+				`Invalid date or time: "${args.date} ${args.startTime}"`,
+			);
+		}
+		const nowMs = Date.now();
+		if (tourTs <= nowMs) {
+			throw new ConvexError(
+				"Cannot book a tour in the past or starting within the next minute",
+			);
+		}
+		const cutoffMs = tour.bookingCutoffHours ?? 0;
+		if (cutoffMs > 0 && tourTs - nowMs < cutoffMs * 3_600_000) {
+			throw new ConvexError(
+				`Bookings must be made at least ${tour.bookingCutoffHours}h before the tour`,
+			);
 		}
 		if (args.guests <= 0) {
 			throw new ConvexError("guests must be > 0");
