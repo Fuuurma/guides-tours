@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -127,6 +128,20 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourSeasonalSchedule.created",
+			resourceType: "tourSeasonalSchedule",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				tourId: args.tourId,
+				name: args.name,
+				startDate: args.startDate,
+				endDate: args.endDate,
+			},
+		});
 		return id;
 	},
 });
@@ -188,6 +203,7 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
+		const changes: Record<string, { old: unknown; new: unknown }> = {};
 		for (const field of [
 			"name",
 			"startDate",
@@ -198,11 +214,26 @@ export const internalUpdate = internalMutation({
 			"isActive",
 			"priority",
 			"notes",
-		]) {
-			const value = (args as Record<string, unknown>)[field];
-			if (value !== undefined) patch[field] = value;
+		] as const) {
+			const value = args[field];
+			if (value !== undefined && value !== existing[field]) {
+				patch[field] = value;
+				changes[field] = { old: existing[field], new: value };
+			}
+		}
+		if (Object.keys(changes).length === 0) {
+			return args.scheduleId;
 		}
 		await ctx.db.patch(args.scheduleId, patch);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourSeasonalSchedule.updated",
+			resourceType: "tourSeasonalSchedule",
+			resourceId: args.scheduleId,
+			oldValues: {},
+			newValues: { changes },
+		});
 		return args.scheduleId;
 	},
 });
@@ -231,6 +262,20 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.scheduleId);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourSeasonalSchedule.deleted",
+			resourceType: "tourSeasonalSchedule",
+			resourceId: args.scheduleId,
+			oldValues: {
+				tourId: existing.tourId,
+				name: existing.name,
+				startDate: existing.startDate,
+				endDate: existing.endDate,
+			},
+			newValues: {},
+		});
 		return args.scheduleId;
 	},
 });
