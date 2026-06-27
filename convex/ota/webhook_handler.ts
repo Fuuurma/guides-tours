@@ -128,7 +128,6 @@ export function createWebhookHandler(config: WebhookConfig) {
 			integration.organizationId,
 			event,
 			config.provider,
-			config.logPrefix,
 		);
 
 		return new Response("ok", { status: 200 });
@@ -141,7 +140,6 @@ async function dispatchEvent(
 	organizationId: string,
 	event: NormalizedProviderEvent,
 	provider: string,
-	logPrefix: string,
 ): Promise<void> {
 	if (event.kind === "booking.created") {
 		await ctx.runMutation(internal.ota.upsert.upsertOtaBooking, {
@@ -159,9 +157,5 @@ async function dispatchEvent(
 			reservationId: event.reservationId,
 			rawData: event.rawPayload,
 		});
-		return;
 	}
-	console.log(
-		`${logPrefix} availability.update on ${integrationId} — handled by scheduled sync`,
-	);
 }
