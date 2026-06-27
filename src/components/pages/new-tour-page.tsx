@@ -1,5 +1,8 @@
 import { useMutation } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -18,6 +21,7 @@ interface FormValues extends Record<string, unknown> {
 	name: string;
 	description: string;
 	tourType: string;
+	categoryId: string;
 	durationHours: string;
 	capacity: string;
 	minGuests: string;
@@ -30,6 +34,7 @@ const INITIAL: FormValues = {
 	name: "",
 	description: "",
 	tourType: "walking",
+	categoryId: "",
 	durationHours: "2",
 	capacity: "10",
 	minGuests: "1",
@@ -40,6 +45,7 @@ const INITIAL: FormValues = {
 
 export function NewTourPage() {
 	const create = useMutation(api.tours.create);
+	const { data: categories } = useQuery(convexQuery(api.tourCategories.list, {}));
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
@@ -57,6 +63,9 @@ export function NewTourPage() {
 				name: v.name,
 				description: v.description || undefined,
 				tourType: v.tourType,
+				categoryId: v.categoryId
+					? (v.categoryId as Id<"tourCategories">)
+					: undefined,
 				durationHours: dur,
 				capacity: cap,
 				minGuests: minG,
@@ -76,6 +85,10 @@ export function NewTourPage() {
 		redirectTo: (id) => `/dashboard/tours/${id}`,
 		successMessage: "Tour created",
 	});
+
+	const activeCategories = (categories ?? []).filter(
+		(c: { isActive: boolean }) => c.isActive,
+	);
 
 	return (
 		<EntityFormPage
@@ -120,6 +133,27 @@ export function NewTourPage() {
 									{t}
 								</SelectItem>
 							))}
+						</SelectContent>
+					</Select>
+				</FormField>
+
+				<FormField label="Category" htmlFor="category" hint="Group tours on the public booking page">
+					<Select
+						value={form.values.categoryId}
+						onValueChange={(v) => form.set("categoryId", v)}
+					>
+						<SelectTrigger id="category">
+							<SelectValue placeholder="No category" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="">No category</SelectItem>
+							{activeCategories.map(
+								(c: { _id: string; name: string; icon: string }) => (
+									<SelectItem key={c._id} value={c._id}>
+										{c.icon ? `${c.icon} ${c.name}` : c.name}
+									</SelectItem>
+								),
+							)}
 						</SelectContent>
 					</Select>
 				</FormField>
