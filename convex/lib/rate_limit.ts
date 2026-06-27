@@ -16,10 +16,31 @@
 
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
+import type { GenericMutationCtx, GenericQueryCtx } from "convex/server";
+import type { DataModel } from "../_generated/dataModel";
 
 /** Sliding-window cap: 5 attempts per 15 minutes per email. */
 export const MAX_ATTEMPTS_PER_EMAIL = 5;
 export const WINDOW_MS = 15 * 60 * 1000;
+
+type CountCtx = GenericMutationCtx<DataModel> | GenericQueryCtx<DataModel>;
+
+/** Collect all attempts for this email within the current window.
+ *  Shared by recordAttempt and countAttempts so the window math
+ *  stays in one place. */
+async function collectRecentAttempts(
+	ctx: CountCtx,
+	email: string,
+	now: number = Date.now(),
+) {
+	const windowStart = now - WINDOW_MS;
+	return await ctx.db
+		.query("publicBookingAttempts")
+		.withIndex("by_email_created", (q) =>
+			q.eq("email", email).gte("createdAt", windowStart),
+		)
+		.collect();
+}
 
 /** Records an attempt. Returns true if it's allowed (under cap),
  *  false if the email is rate-limited. */
@@ -32,15 +53,7 @@ export const recordAttempt = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const now = Date.now();
-		const windowStart = now - WINDOW_MS;
-
-		// Count recent attempts for this email.
-		const recent = await ctx.db
-			.query("publicBookingAttempts")
-			.withIndex("by_email_created", (q) =>
-				q.eq("email", args.email).gte("createdAt", windowStart),
-			)
-			.collect();
+		const recent = await collectRecentAttempts(ctx, args.email, now);
 
 		const allowed = recent.length < MAX_ATTEMPTS_PER_EMAIL;
 
@@ -63,13 +76,7 @@ export const recordAttempt = internalMutation({
 export const countAttempts = internalQuery({
 	args: { email: v.string() },
 	handler: async (ctx, args) => {
-		const windowStart = Date.now() - WINDOW_MS;
-		const recent = await ctx.db
-			.query("publicBookingAttempts")
-			.withIndex("by_email_created", (q) =>
-				q.eq("email", args.email).gte("createdAt", windowStart),
-			)
-			.collect();
+		const recent = await collectRecentAttempts(ctx, args.email);
 		return {
 			count: recent.length,
 			limit: MAX_ATTEMPTS_PER_EMAIL,
