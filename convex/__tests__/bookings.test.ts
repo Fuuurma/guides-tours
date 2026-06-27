@@ -465,3 +465,216 @@ describe("convex/bookings — schedule wiring", () => {
 		expect(booking?.status).toBe("cancelled");
 	});
 });
+
+describe("convex/bookings — internalUpdate (edit-booking flow)", () => {
+	// Tests for the internal mirror of bookings.update. The public
+	// update requires role + auth (hard to mock in vitest), so the
+	// edit-booking page routes through internalUpdate after the page
+	// loads. These tests assert the same invariants: terminal-state
+	// guard, balance math on total/deposit changes, audit log shape.
+
+	it("updates only the fields passed in", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_a");
+			const customerId = await seedCustomer(c, "org_bu_a");
+			// Insert directly so we can set guestNames (seedBooking
+			// helper doesn't expose it).
+			return await c.db.insert("bookings", {
+				organizationId: "org_bu_a",
+				tourId,
+				customerId,
+				date: "2026-07-15",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "Alice, Bob",
+				languageRequired: "",
+				notes: "Original notes",
+				status: "pending",
+				depositAmountCents: 0n,
+				totalAmountCents: 10000n,
+				balanceDueCents: 10000n,
+				paymentMethod: "",
+				checkedInBy: "",
+				netRevenueCents: 10000n,
+				source: "direct",
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await t.mutation(internal.bookings.internalUpdate, {
+			bookingId,
+			notes: "Updated notes",
+		});
+		const row = (await t.run(async (ctx) => ctx.db.get(bookingId))) as {
+			notes: string;
+			guestNames: string;
+		};
+		expect(row?.notes).toBe("Updated notes");
+		expect(row?.guestNames).toBe("Alice, Bob"); // untouched
+	});
+
+	it("rebalances balanceDueCents when totalAmountCents changes", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_b");
+			const customerId = await seedCustomer(c, "org_bu_b");
+			return await seedBooking(c, "org_bu_b", tourId, customerId, {
+				totalAmountCents: 100000n,
+				depositAmountCents: 20000n,
+			});
+		});
+		await t.mutation(internal.bookings.internalUpdate, {
+			bookingId,
+			totalAmountCents: 150000n,
+		});
+		const row = (await t.run(async (ctx) => ctx.db.get(bookingId))) as {
+			balanceDueCents: bigint;
+			netRevenueCents: bigint;
+			depositAmountCents: bigint;
+		};
+		expect(String(row?.balanceDueCents)).toBe("130000"); // 150000 - 20000
+		expect(String(row?.netRevenueCents)).toBe("150000"); // = gross
+		expect(String(row?.depositAmountCents)).toBe("20000"); // unchanged
+	});
+
+	it("rebalances balanceDueCents when depositAmountCents changes", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_c");
+			const customerId = await seedCustomer(c, "org_bu_c");
+			return await seedBooking(c, "org_bu_c", tourId, customerId, {
+				totalAmountCents: 100000n,
+				depositAmountCents: 20000n,
+			});
+		});
+		await t.mutation(internal.bookings.internalUpdate, {
+			bookingId,
+			depositAmountCents: 50000n,
+		});
+		const row = (await t.run(async (ctx) => ctx.db.get(bookingId))) as {
+			balanceDueCents: bigint;
+			netRevenueCents: bigint;
+		};
+		expect(String(row?.balanceDueCents)).toBe("50000"); // 100000 - 50000
+		expect(String(row?.netRevenueCents)).toBe("100000");
+	});
+
+	it("rejects update on cancelled bookings", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_d");
+			const customerId = await seedCustomer(c, "org_bu_d");
+			return await seedBooking(c, "org_bu_d", tourId, customerId, {
+				status: "cancelled",
+			});
+		});
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				notes: "should fail",
+			}),
+		).rejects.toThrow(/Cannot modify a cancelled booking/);
+	});
+
+	it("rejects update on completed bookings", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_e");
+			const customerId = await seedCustomer(c, "org_bu_e");
+			return await seedBooking(c, "org_bu_e", tourId, customerId, {
+				status: "completed",
+			});
+		});
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				notes: "should fail",
+			}),
+		).rejects.toThrow(/Cannot modify a completed booking/);
+	});
+
+	it("allows update on pending and confirmed bookings", async () => {
+		for (const status of ["pending", "confirmed"] as const) {
+			const t = convexTest(schema, modules);
+			const bookingId = await t.run(async (ctx) => {
+				const c = ctx as unknown as TestCtx;
+				const tourId = await seedTour(c, `org_bu_${status}`);
+				const customerId = await seedCustomer(c, `org_bu_${status}`);
+				return await seedBooking(c, `org_bu_${status}`, tourId, customerId, {
+					status,
+				});
+			});
+			await t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				notes: `updated from ${status}`,
+			});
+			const row = (await t.run(async (ctx) => ctx.db.get(bookingId))) as {
+				notes: string;
+			};
+			expect(row?.notes).toBe(`updated from ${status}`);
+		}
+	});
+
+	it("writes audit log with old + new values for changed fields", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_f");
+			const customerId = await seedCustomer(c, "org_bu_f");
+			// Insert directly to set both notes and guestNames.
+			return await c.db.insert("bookings", {
+				organizationId: "org_bu_f",
+				tourId,
+				customerId,
+				date: "2026-07-15",
+				startTime: "09:00",
+				guests: 1,
+				guestNames: "Alice",
+				languageRequired: "",
+				notes: "before",
+				status: "pending",
+				depositAmountCents: 0n,
+				totalAmountCents: 10000n,
+				balanceDueCents: 10000n,
+				paymentMethod: "",
+				checkedInBy: "",
+				netRevenueCents: 10000n,
+				source: "direct",
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await t.mutation(internal.bookings.internalUpdate, {
+			bookingId,
+			notes: "after",
+		});
+		const logs = (await t.run(async (ctx) =>
+			ctx.db
+				.query("auditLogs")
+				.withIndex("by_resource", (q) =>
+					q
+						.eq("resourceType", "booking")
+						.eq("resourceId", bookingId),
+				)
+				.collect(),
+		)) as Array<{ action: string; newValues: Record<string, unknown> }>;
+		const updateLog = logs.find((l) => l.action === "booking.updated");
+		expect(updateLog).toBeDefined();
+		const changes = updateLog?.newValues?.changes as Record<
+			string,
+			{ old: string; new: string }
+		>;
+		expect(changes?.notes?.old).toBe("before");
+		expect(changes?.notes?.new).toBe("after");
+		// guestNames was unchanged, so should NOT appear in changes.
+		expect(changes?.guestNames).toBeUndefined();
+	});
+});

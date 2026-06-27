@@ -475,6 +475,75 @@ if (booking.status === "cancelled" || booking.status === "completed") {
 	},
 });
 
+/** Internal mirror of update — no auth, used by tests + the
+ *  edit-booking page's flow. Same logic as the public update. */
+export const internalUpdate = internalMutation({
+	args: {
+		bookingId: v.id("bookings"),
+		date: v.optional(v.string()),
+		startTime: v.optional(v.string()),
+		guests: v.optional(v.number()),
+		guestNames: v.optional(v.string()),
+		languageRequired: v.optional(v.string()),
+		notes: v.optional(v.string()),
+		depositAmountCents: v.optional(v.int64()),
+		totalAmountCents: v.optional(v.int64()),
+		paymentMethod: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) throw new ConvexError("Booking not found");
+		if (booking.status === "cancelled" || booking.status === "completed") {
+			throw new ConvexError(
+				`Cannot modify a ${booking.status} booking`,
+			);
+		}
+
+		const now = Date.now();
+		const patch: Record<string, unknown> = {};
+		const changes: Record<string, { old: unknown; new: unknown }> = {};
+
+		for (const field of ALLOWED_UPDATE_FIELDS) {
+			const incoming = (args as Record<string, unknown>)[field];
+			if (incoming === undefined) continue;
+			const oldValue = (booking as Record<string, unknown>)[field];
+			if (oldValue !== incoming) {
+				changes[field] = { old: oldValue, new: incoming };
+			}
+			patch[field] = incoming;
+		}
+
+		if (patch.totalAmountCents !== undefined) {
+			const newTotal = patch.totalAmountCents as bigint;
+			const dep =
+				(patch.depositAmountCents as bigint | undefined) ??
+				booking.depositAmountCents;
+			patch.balanceDueCents = newTotal - dep;
+			patch.netRevenueCents = newTotal;
+		} else if (patch.depositAmountCents !== undefined) {
+			const dep = patch.depositAmountCents as bigint;
+			patch.balanceDueCents = booking.totalAmountCents - dep;
+			patch.netRevenueCents = booking.totalAmountCents;
+		}
+
+		patch.updatedAt = now;
+		await ctx.db.patch(args.bookingId, patch);
+
+		await ctx.db.insert("auditLogs", {
+			organizationId: booking.organizationId,
+			userId: "system",
+			action: "booking.updated",
+			resourceType: "booking",
+			resourceId: args.bookingId,
+			oldValues: {},
+			newValues: { changes },
+			timestamp: now,
+		});
+
+		return args.bookingId;
+	},
+});
+
 /** Cancel a booking. Terminal — cannot be undone. */
 export const cancel = mutation({
 	args: {
