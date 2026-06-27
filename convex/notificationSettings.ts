@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 import { encrypt } from "./lib/crypto";
 
 // ---- queries ----
@@ -175,7 +176,7 @@ export const internalUpsert = internalMutation({
 			updatedAt: now,
 			...(patch as Record<string, unknown>),
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "notification_settings.created",
@@ -183,7 +184,6 @@ export const internalUpsert = internalMutation({
 			resourceId: id,
 			oldValues: {},
 			newValues: { twilioEnabled: args.twilioEnabled ?? false },
-			timestamp: now,
 		});
 		return id;
 	},
@@ -212,7 +212,7 @@ export const internalRemove = internalMutation({
 			.first();
 		if (!existing) throw new ConvexError("Settings not found");
 		await ctx.db.delete(existing._id);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "notification_settings.deleted",
@@ -220,7 +220,6 @@ export const internalRemove = internalMutation({
 			resourceId: existing._id,
 			oldValues: {},
 			newValues: {},
-			timestamp: Date.now(),
 		});
 		return existing._id;
 	},

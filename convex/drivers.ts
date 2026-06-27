@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 const ALLOWED_UPDATE_FIELDS = ["licenseInfo", "notes", "isActive"] as const;
 
@@ -102,7 +103,7 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.createdByUserId,
 			action: "driver.created",
@@ -110,7 +111,6 @@ export const internalCreate = internalMutation({
 			resourceId: driverId,
 			oldValues: {},
 			newValues: { userId: args.userId, licenseInfo: args.licenseInfo },
-			timestamp: now,
 		});
 		return driverId;
 	},
@@ -161,7 +161,7 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		await ctx.db.patch(args.driverId, patch);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "driver.updated",
@@ -169,7 +169,6 @@ export const internalUpdate = internalMutation({
 			resourceId: args.driverId,
 			oldValues: { isActive: existing.isActive },
 			newValues: patch,
-			timestamp: Date.now(),
 		});
 		return args.driverId;
 	},
@@ -211,7 +210,7 @@ export const internalSetActive = internalMutation({
 			isActive: args.isActive,
 			updatedAt: Date.now(),
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "driver.active_changed",
@@ -219,7 +218,6 @@ export const internalSetActive = internalMutation({
 			resourceId: args.driverId,
 			oldValues: { isActive: existing.isActive },
 			newValues: { isActive: args.isActive },
-			timestamp: Date.now(),
 		});
 		return args.driverId;
 	},
@@ -253,7 +251,7 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.driverId);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "driver.deleted",
@@ -261,7 +259,6 @@ export const internalRemove = internalMutation({
 			resourceId: args.driverId,
 			oldValues: { userId: existing.userId },
 			newValues: {},
-			timestamp: Date.now(),
 		});
 		return args.driverId;
 	},

@@ -14,6 +14,7 @@ import {
 import type { QueryCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- helpers ----
 
@@ -254,7 +255,7 @@ export const internalCreate = internalMutation({
 			updatedAt: now,
 		});
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vacation_request.created",
@@ -266,7 +267,6 @@ export const internalCreate = internalMutation({
 				endDate: args.endDate,
 				reason: args.reason ?? "",
 			},
-			timestamp: now,
 		});
 
 		return requestId;
@@ -322,7 +322,7 @@ export const internalApprove = internalMutation({
 			await ctx.db.patch(args.requestId, { reason: args.reason });
 		}
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vacation_request.approved",
@@ -330,7 +330,6 @@ export const internalApprove = internalMutation({
 			resourceId: args.requestId,
 			oldValues: { status: vr.status },
 			newValues: { status: "approved" },
-			timestamp: now,
 		});
 
 		return args.requestId;
@@ -386,7 +385,7 @@ export const internalReject = internalMutation({
 			await ctx.db.patch(args.requestId, { reason: args.reason });
 		}
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vacation_request.rejected",
@@ -394,7 +393,6 @@ export const internalReject = internalMutation({
 			resourceId: args.requestId,
 			oldValues: { status: vr.status },
 			newValues: { status: "rejected" },
-			timestamp: now,
 		});
 
 		return args.requestId;

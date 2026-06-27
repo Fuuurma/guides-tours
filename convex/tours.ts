@@ -10,6 +10,7 @@ import { ConvexError } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ----- Queries -----
 
@@ -136,7 +137,7 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour.created",
@@ -144,7 +145,6 @@ export const internalCreate = internalMutation({
 			resourceId: tourId,
 			oldValues: {},
 			newValues: { name: args.name, capacity: args.capacity },
-			timestamp: now,
 		});
 		return tourId;
 	},
@@ -220,7 +220,7 @@ export const internalUpdate = internalMutation({
 		const now = Date.now();
 		const { tourId, organizationId, userId, ...patch } = args;
 		await ctx.db.patch(args.tourId, { ...patch, updatedAt: now });
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: tour.organizationId,
 			userId: args.userId,
 			action: "tour.updated",
@@ -228,7 +228,6 @@ export const internalUpdate = internalMutation({
 			resourceId: args.tourId,
 			oldValues: tour,
 			newValues: patch,
-			timestamp: now,
 		});
 		return args.tourId;
 	},
@@ -270,7 +269,7 @@ export const internalRemove = internalMutation({
 			deletedAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: tour.organizationId,
 			userId: args.userId,
 			action: "tour.soft_deleted",
@@ -278,7 +277,6 @@ export const internalRemove = internalMutation({
 			resourceId: args.tourId,
 			oldValues: { isActive: true },
 			newValues: { isActive: false, deletedAt: now },
-			timestamp: now,
 		});
 		return args.tourId;
 	},

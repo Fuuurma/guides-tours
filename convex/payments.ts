@@ -22,6 +22,7 @@ import {
 	query,
 } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ----- Queries -----
 
@@ -138,7 +139,7 @@ export const record = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: member.organizationId,
 			userId: member.userId,
 			action: "payment.recorded",
@@ -150,7 +151,6 @@ export const record = mutation({
 				currency: args.currency,
 				bookingId: args.bookingId ?? null,
 			},
-			timestamp: now,
 		});
 		return paymentId;
 	},
@@ -174,7 +174,7 @@ export const markSucceeded = internalMutation({
 			processedAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",
 			action: "payment.succeeded",
@@ -182,7 +182,6 @@ export const markSucceeded = internalMutation({
 			resourceId: args.paymentId,
 			oldValues: { status: p.status },
 			newValues: { status: "succeeded", processedAt: now },
-			timestamp: now,
 		});
 		return args.paymentId;
 	},
@@ -203,7 +202,7 @@ export const markFailed = internalMutation({
 			processedAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",
 			action: "payment.failed",
@@ -215,7 +214,6 @@ export const markFailed = internalMutation({
 				reason: args.reason ?? "",
 				processedAt: now,
 			},
-			timestamp: now,
 		});
 		return args.paymentId;
 	},
@@ -247,7 +245,7 @@ export const refund = mutation({
 			status: "refunded",
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: member.userId,
 			action: "payment.refunded",
@@ -258,7 +256,6 @@ export const refund = mutation({
 				status: "refunded",
 				reason: args.reason ?? "",
 			},
-			timestamp: now,
 		});
 		return args.paymentId;
 	},
@@ -427,7 +424,7 @@ export const markRefunded = internalMutation({
 			status: "refunded",
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",
 			action: "payment.refunded",
@@ -435,7 +432,6 @@ export const markRefunded = internalMutation({
 			resourceId: args.paymentId,
 			oldValues: { status: p.status },
 			newValues: { status: "refunded" },
-			timestamp: now,
 		});
 		return args.paymentId;
 	},

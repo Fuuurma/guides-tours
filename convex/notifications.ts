@@ -31,6 +31,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
+import { logAudit } from "./lib/audit";
 
 const BATCH_SIZE = 100;
 const NOTIFICATION_CUTOFF_MINUTES = 10;
@@ -285,7 +286,7 @@ export const recordImmediateDispatchResult = internalMutation({
 		templateName: v.string(),
 	},
 	handler: async (ctx, args) => {
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: "system",
 			action: args.success
@@ -301,7 +302,6 @@ export const recordImmediateDispatchResult = internalMutation({
 				templateName: args.templateName,
 				error: args.errorMessage ?? "",
 			},
-			timestamp: Date.now(),
 		});
 	},
 });

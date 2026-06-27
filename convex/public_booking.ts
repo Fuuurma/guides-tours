@@ -22,6 +22,7 @@ import { internalAction, internalMutation, query } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { FunctionReference } from "convex/server";
 import { parseBookingTime } from "./lib/time";
+import { logAudit } from "./lib/audit";
 
 // ----- Public query: org + active tours by slug -----
 //
@@ -278,7 +279,7 @@ export const internalCreate = internalMutation({
 			updatedAt: now,
 		});
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: "anonymous",
 			action: "booking.created_public",
@@ -292,7 +293,6 @@ export const internalCreate = internalMutation({
 				guests: args.guests,
 				source: "public_booking",
 			},
-			timestamp: now,
 		});
 
 		// Send an immediate booking-confirmation email/SMS using

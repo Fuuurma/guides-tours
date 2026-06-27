@@ -15,6 +15,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -119,7 +120,7 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_schedule.created",
@@ -131,7 +132,6 @@ export const internalCreate = internalMutation({
 				date: args.date,
 				startTime: args.startTime,
 			},
-			timestamp: now,
 		});
 		return id;
 	},
@@ -203,7 +203,7 @@ export const internalUpdate = internalMutation({
 			patch.status = "full";
 		}
 		await ctx.db.patch(args.scheduleId, patch);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_schedule.updated",
@@ -211,7 +211,6 @@ export const internalUpdate = internalMutation({
 			resourceId: args.scheduleId,
 			oldValues: { date: existing.date, status: existing.status },
 			newValues: patch,
-			timestamp: Date.now(),
 		});
 		return args.scheduleId;
 	},
@@ -311,7 +310,7 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Cannot delete schedule with existing bookings");
 		}
 		await ctx.db.delete(args.scheduleId);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_schedule.deleted",
@@ -319,7 +318,6 @@ export const internalRemove = internalMutation({
 			resourceId: args.scheduleId,
 			oldValues: { date: existing.date },
 			newValues: {},
-			timestamp: Date.now(),
 		});
 		return args.scheduleId;
 	},

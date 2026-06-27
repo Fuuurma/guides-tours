@@ -10,6 +10,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -109,7 +110,7 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_blackout.created",
@@ -121,7 +122,6 @@ export const internalCreate = internalMutation({
 				startDate: args.startDate,
 				endDate: args.endDate,
 			},
-			timestamp: now,
 		});
 		return id;
 	},

@@ -11,6 +11,7 @@ import {
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -119,7 +120,7 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_template.created",
@@ -127,7 +128,6 @@ export const internalCreate = internalMutation({
 			resourceId: id,
 			oldValues: {},
 			newValues: { name: args.name, tourType: args.tourType },
-			timestamp: now,
 		});
 		return id;
 	},
@@ -208,7 +208,7 @@ export const internalUpdate = internalMutation({
 			if (value !== undefined) patch[field] = value;
 		}
 		await ctx.db.patch(args.templateId, patch);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_template.updated",
@@ -216,7 +216,6 @@ export const internalUpdate = internalMutation({
 			resourceId: args.templateId,
 			oldValues: { name: existing.name },
 			newValues: patch,
-			timestamp: Date.now(),
 		});
 		return args.templateId;
 	},
@@ -258,7 +257,7 @@ export const instantiate = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: member.organizationId,
 			userId: member.userId,
 			action: "tour.created_from_template",
@@ -266,7 +265,6 @@ export const instantiate = mutation({
 			resourceId: tourId,
 			oldValues: {},
 			newValues: { templateId: tmpl._id, name: tmpl.name },
-			timestamp: now,
 		});
 		return tourId;
 	},
@@ -296,7 +294,7 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.templateId);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_template.deleted",
@@ -304,7 +302,6 @@ export const internalRemove = internalMutation({
 			resourceId: args.templateId,
 			oldValues: { name: existing.name },
 			newValues: {},
-			timestamp: Date.now(),
 		});
 		return args.templateId;
 	},

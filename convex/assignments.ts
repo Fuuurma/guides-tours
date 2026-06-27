@@ -24,6 +24,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 import { authComponent, createAuth } from "./auth";
 
 // ----- Time helpers (string "HH:MM" ↔ minutes-since-midnight) -----
@@ -440,7 +441,7 @@ export const internalCreate = internalMutation({
 		updatedAt: now,
 	});
 
-	await ctx.db.insert("auditLogs", {
+	await logAudit(ctx, {
 		organizationId: args.organizationId,
 		userId: args.userId,
 		action: "assignment.created",
@@ -454,7 +455,6 @@ export const internalCreate = internalMutation({
 			startTime,
 			endTime,
 		},
-		timestamp: now,
 	});
 
 	return assignmentId;
@@ -547,7 +547,7 @@ export const internalUpdate = internalMutation({
 			endTime,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: existing.organizationId,
 			userId: args.userId,
 			action: "assignment.updated",
@@ -559,7 +559,6 @@ export const internalUpdate = internalMutation({
 				startTime: existing.startTime,
 			},
 			newValues: next,
-			timestamp: now,
 		});
 		return args.assignmentId;
 	},
@@ -609,7 +608,7 @@ export const internalCancel = internalMutation({
 			status: "cancelled",
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: a.organizationId,
 			userId: args.userId,
 			action: "assignment.cancelled",
@@ -617,7 +616,6 @@ export const internalCancel = internalMutation({
 			resourceId: args.assignmentId,
 			oldValues: { status: a.status },
 			newValues: { status: "cancelled", reason: args.reason ?? "" },
-			timestamp: now,
 		});
 		return args.assignmentId;
 	},
@@ -667,7 +665,7 @@ export const internalComplete = internalMutation({
 			status: "completed",
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: a.organizationId,
 			userId: args.userId,
 			action: "assignment.completed",
@@ -675,7 +673,6 @@ export const internalComplete = internalMutation({
 			resourceId: args.assignmentId,
 			oldValues: { status: "scheduled" },
 			newValues: { status: "completed" },
-			timestamp: now,
 		});
 		return args.assignmentId;
 	},
@@ -715,7 +712,7 @@ export const internalRemove = internalMutation({
 			deletedAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: a.organizationId,
 			userId: args.userId,
 			action: "assignment.soft_deleted",
@@ -723,7 +720,6 @@ export const internalRemove = internalMutation({
 			resourceId: args.assignmentId,
 			oldValues: {},
 			newValues: { deletedAt: now },
-			timestamp: now,
 		});
 		return args.assignmentId;
 	},

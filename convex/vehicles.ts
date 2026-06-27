@@ -12,6 +12,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 const ALLOWED_UPDATE_FIELDS = [
 	"name",
@@ -138,7 +139,7 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vehicle.created",
@@ -146,7 +147,6 @@ export const internalCreate = internalMutation({
 			resourceId: vehicleId,
 			oldValues: {},
 			newValues: { name: args.name, vehicleType: args.vehicleType },
-			timestamp: now,
 		});
 		return vehicleId;
 	},
@@ -213,7 +213,7 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		await ctx.db.patch(args.vehicleId, patch);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vehicle.updated",
@@ -221,7 +221,6 @@ export const internalUpdate = internalMutation({
 			resourceId: args.vehicleId,
 			oldValues: { name: existing.name },
 			newValues: patch,
-			timestamp: Date.now(),
 		});
 		return args.vehicleId;
 	},
@@ -263,7 +262,7 @@ export const internalSetStatus = internalMutation({
 			status: args.status,
 			updatedAt: Date.now(),
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vehicle.status_changed",
@@ -271,7 +270,6 @@ export const internalSetStatus = internalMutation({
 			resourceId: args.vehicleId,
 			oldValues: { status: existing.status },
 			newValues: { status: args.status },
-			timestamp: Date.now(),
 		});
 		return args.vehicleId;
 	},
@@ -305,7 +303,7 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.vehicleId);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vehicle.deleted",
@@ -313,7 +311,6 @@ export const internalRemove = internalMutation({
 			resourceId: args.vehicleId,
 			oldValues: { name: existing.name },
 			newValues: {},
-			timestamp: Date.now(),
 		});
 		return args.vehicleId;
 	},

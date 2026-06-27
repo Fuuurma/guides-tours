@@ -14,6 +14,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -129,7 +130,7 @@ export const internalCreate = internalMutation({
 			updatedAt: now,
 			createdBy: args.createdBy,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.createdBy ?? "system",
 			action: "notification_template.created",
@@ -137,7 +138,6 @@ export const internalCreate = internalMutation({
 			resourceId: id,
 			oldValues: {},
 			newValues: { name: args.name, templateType: args.templateType },
-			timestamp: now,
 		});
 		return id;
 	},
@@ -215,7 +215,7 @@ export const internalUpdate = internalMutation({
 			if (value !== undefined) patch[field] = value;
 		}
 		await ctx.db.patch(args.templateId, patch);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "notification_template.updated",
@@ -223,7 +223,6 @@ export const internalUpdate = internalMutation({
 			resourceId: args.templateId,
 			oldValues: { name: existing.name },
 			newValues: patch,
-			timestamp: Date.now(),
 		});
 		return args.templateId;
 	},
@@ -253,7 +252,7 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.templateId);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "notification_template.deleted",
@@ -261,7 +260,6 @@ export const internalRemove = internalMutation({
 			resourceId: args.templateId,
 			oldValues: { name: existing.name },
 			newValues: {},
-			timestamp: Date.now(),
 		});
 		return args.templateId;
 	},
