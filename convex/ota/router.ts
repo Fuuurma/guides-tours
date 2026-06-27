@@ -20,40 +20,18 @@ import { klookWebhook } from "./klook_webhook";
 import { bookingWebhook } from "./booking_webhook";
 import { expediaWebhook } from "./expedia_webhook";
 
+const ROUTES = [
+	{ path: "/api/ota/webhooks/viator", handler: viatorWebhook },
+	{ path: "/api/ota/webhooks/getYourGuide", handler: getYourGuideWebhook },
+	{ path: "/api/ota/webhooks/airbnb", handler: airbnbWebhook },
+	{ path: "/api/ota/webhooks/tripAdvisor", handler: tripAdvisorWebhook },
+	{ path: "/api/ota/webhooks/klook", handler: klookWebhook },
+	{ path: "/api/ota/webhooks/booking", handler: bookingWebhook },
+	{ path: "/api/ota/webhooks/expedia", handler: expediaWebhook },
+] as const;
+
 export function registerOtaRoutes(http: HttpRouter): void {
-	http.route({
-		path: "/api/ota/webhooks/viator",
-		method: "POST",
-		handler: viatorWebhook,
-	});
-	http.route({
-		path: "/api/ota/webhooks/getYourGuide",
-		method: "POST",
-		handler: getYourGuideWebhook,
-	});
-	http.route({
-		path: "/api/ota/webhooks/airbnb",
-		method: "POST",
-		handler: airbnbWebhook,
-	});
-	http.route({
-		path: "/api/ota/webhooks/tripAdvisor",
-		method: "POST",
-		handler: tripAdvisorWebhook,
-	});
-	http.route({
-		path: "/api/ota/webhooks/klook",
-		method: "POST",
-		handler: klookWebhook,
-	});
-	http.route({
-		path: "/api/ota/webhooks/booking",
-		method: "POST",
-		handler: bookingWebhook,
-	});
-	http.route({
-		path: "/api/ota/webhooks/expedia",
-		method: "POST",
-		handler: expediaWebhook,
-	});
+	for (const { path, handler } of ROUTES) {
+		http.route({ path, method: "POST", handler });
+	}
 }
