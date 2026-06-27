@@ -195,6 +195,123 @@ describe("tours", () => {
 				}),
 			).rejects.toThrow(/different organization/);
 		});
+
+		it("updates tourType, categoryId, languages", async () => {
+			// Regression for Phase 4: tours.update originally only
+			// accepted the legacy fields. The Phase 4.4 schema added
+			// tourType/categoryId/languages/templateId but the update
+			// mutation wasn't extended — the edit form silently
+			// failed to persist these.
+			const t = convexTest(schema, modules);
+			const { tourId, categoryId } = await t.run(async (ctx) => {
+				const c = ctx as any;
+				const catId = await c.db.insert("tourCategories", {
+					organizationId: "org_tour_k",
+					name: "Walking",
+					slug: "walking",
+					description: "",
+					icon: "🚶",
+					color: "",
+					displayOrder: 0,
+					isActive: true,
+					createdAt: 0,
+					updatedAt: 0,
+				});
+				const tid = await c.db.insert("tours", {
+					organizationId: "org_tour_k",
+					name: "T",
+					description: "",
+					durationHours: 2,
+					isActive: true,
+					recurrenceType: "none",
+					recurrenceDaysOfWeek: [],
+					capacity: 10,
+					bufferMinutes: 15,
+					minGuests: 1,
+					maxGuests: 10,
+					bookingCutoffHours: 24,
+					tourType: "walking",
+					languages: ["en"],
+					requiredGuides: 1,
+					inclusions: [],
+					exclusions: [],
+					highlights: [],
+					currency: "USD",
+					createdAt: 0,
+					updatedAt: 0,
+				});
+				return { tourId: tid, categoryId: catId };
+			});
+			await t.mutation(internal.tours.internalUpdate, {
+				organizationId: "org_tour_k",
+				userId: "user-1",
+				tourId,
+				tourType: "bus",
+				categoryId,
+				languages: ["en", "es", "fr"],
+			});
+			const tour = (await t.run(async (ctx) =>
+				ctx.db.get(tourId),
+			)) as any;
+			expect(tour?.tourType).toBe("bus");
+			expect(String(tour?.categoryId)).toBe(String(categoryId));
+			expect(tour?.languages).toEqual(["en", "es", "fr"]);
+		});
+
+		it("rejects categoryId from a different organization", async () => {
+			// Defense in depth: even though the public mutation goes
+			// through requireRole, an internal caller could pass a
+			// foreign categoryId. Verify the update validates.
+			const t = convexTest(schema, modules);
+			const { tourId, foreignCategoryId } = await t.run(async (ctx) => {
+				const c = ctx as any;
+				// Category belongs to a different org
+				const catId = await c.db.insert("tourCategories", {
+					organizationId: "org_tour_other_cat",
+					name: "Other",
+					slug: "other",
+					description: "",
+					icon: "",
+					color: "",
+					displayOrder: 0,
+					isActive: true,
+					createdAt: 0,
+					updatedAt: 0,
+				});
+				const tid = await c.db.insert("tours", {
+					organizationId: "org_tour_l",
+					name: "T",
+					description: "",
+					durationHours: 2,
+					isActive: true,
+					recurrenceType: "none",
+					recurrenceDaysOfWeek: [],
+					capacity: 10,
+					bufferMinutes: 15,
+					minGuests: 1,
+					maxGuests: 10,
+					bookingCutoffHours: 24,
+					tourType: "walking",
+					languages: ["en"],
+					requiredGuides: 1,
+					inclusions: [],
+					exclusions: [],
+					highlights: [],
+					currency: "USD",
+					createdAt: 0,
+					updatedAt: 0,
+				});
+				return { tourId: tid, foreignCategoryId: catId };
+			});
+			await expect(
+				t.mutation(internal.tours.internalUpdate, {
+					organizationId: "org_tour_l",
+					userId: "user-1",
+					tourId,
+					categoryId: foreignCategoryId,
+				}),
+			).rejects.toThrow(/different organization/);
+		});
 	});
 
 	describe("internalRemove", () => {

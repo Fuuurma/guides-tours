@@ -163,6 +163,10 @@ export const update = mutation({
 		maxGuests: v.optional(v.number()),
 		isActive: v.optional(v.boolean()),
 		basePriceCents: v.optional(v.int64()),
+		tourType: v.optional(v.string()),
+		languages: v.optional(v.array(v.string())),
+		categoryId: v.optional(v.id("tourCategories")),
+		templateId: v.optional(v.id("tourTemplates")),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -191,6 +195,10 @@ export const internalUpdate = internalMutation({
 		maxGuests: v.optional(v.number()),
 		isActive: v.optional(v.boolean()),
 		basePriceCents: v.optional(v.int64()),
+		tourType: v.optional(v.string()),
+		languages: v.optional(v.array(v.string())),
+		categoryId: v.optional(v.id("tourCategories")),
+		templateId: v.optional(v.id("tourTemplates")),
 	},
 	handler: async (ctx, args) => {
 		const tour = await ctx.db.get(args.tourId);
@@ -199,6 +207,15 @@ export const internalUpdate = internalMutation({
 			throw new ConvexError(
 				`Forbidden: tour belongs to a different organization`,
 			);
+		}
+		// SECURITY: validate categoryId belongs to this org (defense
+		// in depth — a malicious client could submit a foreign ID).
+		if (args.categoryId !== undefined) {
+			const cat = await ctx.db.get(args.categoryId);
+			if (!cat) throw new ConvexError("Category not found");
+			if ((cat as { organizationId: string }).organizationId !== args.organizationId) {
+				throw new ConvexError("Category belongs to a different organization");
+			}
 		}
 		const now = Date.now();
 		const { tourId, organizationId, userId, ...patch } = args;
