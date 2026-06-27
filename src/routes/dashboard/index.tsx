@@ -8,10 +8,10 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MetricCard } from "@/components/metric-card";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/")({
 	component: DashboardIndex,
@@ -37,6 +37,10 @@ function DashboardIndex() {
 			startDate: today,
 			endDate: today,
 		}),
+	);
+
+	const tourNameById = new Map<string, string>(
+		(tours ?? []).map((t) => [String(t._id), t.name]),
 	);
 
 	const todaysBookings = (bookings?.items ?? []).filter(
@@ -127,22 +131,35 @@ function DashboardIndex() {
 						</p>
 					) : (
 						<ul className="space-y-2">
-							{upcomingAssignments.map((a) => (
-								<li
-									key={a._id}
-									className="flex items-center justify-between border-b pb-2 last:border-0"
-								>
-									<div>
-										<p className="font-medium">
-											{a.date} · {a.startTime}–{a.endTime}
-										</p>
-										<p className="text-muted-foreground text-xs">
-											Guide: {a.guideId}
-										</p>
-									</div>
-									<Badge variant="secondary">{a.status}</Badge>
-								</li>
-							))}
+							{upcomingAssignments.map((a) => {
+								const tourName = tourNameById.get(String(a.tourId));
+								return (
+									<li
+										key={a._id}
+										className="flex items-center justify-between border-b pb-2 last:border-0"
+									>
+										<div className="min-w-0 flex-1">
+											<p className="font-medium truncate">
+												{tourName ?? (
+													<span className="text-muted-foreground italic">
+														Unknown tour
+													</span>
+												)}
+											</p>
+											<p className="text-muted-foreground text-xs">
+												{a.date} · {a.startTime}–{a.endTime} · Guide {a.guideId}
+											</p>
+										</div>
+										<Link
+											to="/dashboard/assignments/$assignmentId"
+											params={{ assignmentId: a._id as Id<"assignments"> }}
+											className="text-blue-600 hover:underline text-xs ml-2"
+										>
+											View →
+										</Link>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 				</CardContent>
