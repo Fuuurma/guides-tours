@@ -28,6 +28,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
 import { parseBookingTime } from "./lib/time";
+import { logAudit } from "./lib/audit";
 
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
 // minus currency/conversion noise (we are cents-only).
@@ -419,7 +420,7 @@ export const create = mutation({
 			});
 		}
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: member.organizationId,
 			userId: member.userId,
 			action: "booking.created",
@@ -432,9 +433,7 @@ export const create = mutation({
 				date: args.date,
 				startTime: args.startTime,
 				guests: args.guests,
-				status: args.status ?? "pending",
 			},
-			timestamp: now,
 		});
 
 		// Schedule reminder notifications (24h + 2h before tour).
@@ -539,7 +538,7 @@ if (booking.status === "cancelled" || booking.status === "completed") {
 		patch.updatedAt = now;
 		await ctx.db.patch(args.bookingId, patch);
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: booking.organizationId,
 			userId: member.userId,
 			action: "booking.updated",
@@ -547,7 +546,6 @@ if (booking.status === "cancelled" || booking.status === "completed") {
 			resourceId: args.bookingId,
 			oldValues: {},
 			newValues: { changes },
-			timestamp: now,
 		});
 
 		return args.bookingId;
@@ -608,7 +606,7 @@ export const internalUpdate = internalMutation({
 		patch.updatedAt = now;
 		await ctx.db.patch(args.bookingId, patch);
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: booking.organizationId,
 			userId: "system",
 			action: "booking.updated",
@@ -616,7 +614,6 @@ export const internalUpdate = internalMutation({
 			resourceId: args.bookingId,
 			oldValues: {},
 			newValues: { changes },
-			timestamp: now,
 		});
 
 		return args.bookingId;
@@ -736,7 +733,7 @@ async function performCancel(
 		}
 	}
 
-	await ctx.db.insert("auditLogs", {
+	await logAudit(ctx, {
 		organizationId: booking.organizationId,
 		userId: userIdForAudit,
 		action: "booking.cancelled",
@@ -744,7 +741,6 @@ async function performCancel(
 		resourceId: booking._id,
 		oldValues: { status: booking.status },
 		newValues: { status: "cancelled", reason: reason ?? "" },
-		timestamp: now,
 	});
 }
 
@@ -775,7 +771,7 @@ export const checkIn = mutation({
 			checkedInBy: member.userId,
 			updatedAt: now,
 		});
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: booking.organizationId,
 			userId: member.userId,
 			action: "booking.checked_in",
@@ -787,7 +783,6 @@ export const checkIn = mutation({
 				checkedInAt: now,
 				checkedInBy: member.userId,
 			},
-			timestamp: now,
 		});
 		return args.bookingId;
 	},
@@ -841,7 +836,7 @@ export const complete = mutation({
 			});
 		}
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: booking.organizationId,
 			userId: member.userId,
 			action: "booking.completed",
@@ -849,7 +844,6 @@ export const complete = mutation({
 			resourceId: args.bookingId,
 			oldValues: { status: "checked_in" },
 			newValues: { status: "completed", completedAt: now },
-			timestamp: now,
 		});
 
 		return args.bookingId;

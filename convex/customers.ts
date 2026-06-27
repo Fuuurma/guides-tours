@@ -16,6 +16,7 @@
 import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // Whitelisted update fields. Source's ALLOWED_CUSTOMER_UPDATE_FIELDS.
 const ALLOWED_UPDATE_FIELDS = new Set([
@@ -251,7 +252,7 @@ export const create = mutation({
 			updatedAt: now,
 		});
 
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: member.organizationId,
 			userId: member.userId,
 			action: "customer.created",
@@ -263,7 +264,6 @@ export const create = mutation({
 				name: args.name,
 				source: args.source ?? "",
 			},
-			timestamp: now,
 		});
 
 		return customerId;
@@ -340,7 +340,7 @@ export const update = mutation({
 		await ctx.db.patch(args.customerId, patch);
 
 		if (Object.keys(changes).length > 0) {
-			await ctx.db.insert("auditLogs", {
+			await logAudit(ctx, {
 				organizationId: customer.organizationId,
 				userId: member.userId,
 				action: "customer.updated",
@@ -348,7 +348,6 @@ export const update = mutation({
 				resourceId: args.customerId,
 				oldValues: {},
 				newValues: { changes },
-				timestamp: now,
 			});
 		}
 
@@ -386,9 +385,8 @@ export const remove = mutation({
 			);
 		}
 
-		const now = Date.now();
 		await ctx.db.delete(args.customerId);
-		await ctx.db.insert("auditLogs", {
+		await logAudit(ctx, {
 			organizationId: customer.organizationId,
 			userId: member.userId,
 			action: "customer.deleted",
@@ -399,7 +397,6 @@ export const remove = mutation({
 				name: customer.name,
 			},
 			newValues: {},
-			timestamp: now,
 		});
 		return args.customerId;
 	},
