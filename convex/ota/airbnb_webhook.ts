@@ -8,5 +8,5 @@ export const airbnbWebhook = createWebhookHandler({
 	signatureHeader: "x-airbnb-signature",
 	timestampHeader: "x-airbnb-timestamp",
 	logPrefix: "[airbnb-webhook]",
-	client: AirbnbClient,
+	normalize: AirbnbClient.normalize,
 });

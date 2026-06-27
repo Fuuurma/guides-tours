@@ -8,5 +8,5 @@ export const bookingWebhook = createWebhookHandler({
 	signatureHeader: "x-booking-signature",
 	timestampHeader: "x-booking-timestamp",
 	logPrefix: "[booking-webhook]",
-	client: BookingClient,
+	normalize: BookingClient.normalize,
 });

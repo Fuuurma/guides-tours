@@ -8,5 +8,5 @@ export const tripAdvisorWebhook = createWebhookHandler({
 	signatureHeader: "x-tripadvisor-signature",
 	timestampHeader: "x-tripadvisor-timestamp",
 	logPrefix: "[tripadvisor-webhook]",
-	client: TripAdvisorClient,
+	normalize: TripAdvisorClient.normalize,
 });

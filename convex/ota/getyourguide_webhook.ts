@@ -12,5 +12,5 @@ export const getYourGuideWebhook = createWebhookHandler({
 	signatureHeader: "x-getyourguide-signature",
 	timestampHeader: "x-getyourguide-timestamp",
 	logPrefix: "[getyourguide-webhook]",
-	client: GetYourGuideClient,
+	normalize: GetYourGuideClient.normalize,
 });

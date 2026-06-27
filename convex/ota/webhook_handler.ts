@@ -25,6 +25,7 @@ import { httpAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { decrypt } from "../lib/crypto";
 import type { Id } from "../_generated/dataModel";
+import { verifyWebhookSignatureWithTimestamp } from "./webhook_verify";
 import type { NormalizedProviderEvent } from "./types";
 
 export interface WebhookConfig {
@@ -36,16 +37,8 @@ export interface WebhookConfig {
 	timestampHeader: string;
 	/** Log prefix for this provider, e.g. "[airbnb-webhook]". */
 	logPrefix: string;
-	/** Client class with verifyWebhookWithTimestamp + normalize statics. */
-	client: {
-		verifyWebhookWithTimestamp(
-			rawBody: string,
-			signature: string,
-			timestampHeader: string | null,
-			secret: string,
-		): Promise<{ valid: boolean; reason?: string }>;
-		normalize(parsed: unknown): NormalizedProviderEvent | null;
-	};
+	/** Normalize a parsed payload into our internal event shape. */
+	normalize: (parsed: unknown) => NormalizedProviderEvent | null;
 }
 
 /**
@@ -55,7 +48,7 @@ export interface WebhookConfig {
  *   - Rejects non-POST with 405
  *   - Reads signature + timestamp from configured headers
  *   - Looks up the integration by `integrationId` query param
- *   - Verifies HMAC + timestamp; returns 401 on failure
+ *   - Verifies HMAC + timestamp (via the shared helper); 401 on failure
  *   - Parses JSON; returns 400 on parse error
  *   - Normalizes the event; returns 200 + "ignored" for unknown kinds
  *   - Dispatches upsert/cancel via shared mutations
@@ -100,7 +93,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 		}
 
 		const secret = await decrypt(integration.webhookSecret);
-		const verifyResult = await config.client.verifyWebhookWithTimestamp(
+		const verifyResult = await verifyWebhookSignatureWithTimestamp(
 			rawBody,
 			signature,
 			timestampHeader,
@@ -121,7 +114,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 		} catch {
 			return new Response("invalid JSON", { status: 400 });
 		}
-		const event = config.client.normalize(parsed);
+		const event = config.normalize(parsed);
 		if (!event) {
 			console.log(
 				`${config.logPrefix} ignored event type on integration ${integrationId}`,

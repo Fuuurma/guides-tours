@@ -8,5 +8,5 @@ export const klookWebhook = createWebhookHandler({
 	signatureHeader: "x-klook-signature",
 	timestampHeader: "x-klook-timestamp",
 	logPrefix: "[klook-webhook]",
-	client: KlookClient,
+	normalize: KlookClient.normalize,
 });

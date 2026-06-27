@@ -8,5 +8,5 @@ export const expediaWebhook = createWebhookHandler({
 	signatureHeader: "x-expedia-signature",
 	timestampHeader: "x-expedia-timestamp",
 	logPrefix: "[expedia-webhook]",
-	client: ExpediaClient,
+	normalize: ExpediaClient.normalize,
 });

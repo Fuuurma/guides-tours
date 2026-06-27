@@ -11,5 +11,5 @@ export const viatorWebhook = createWebhookHandler({
 	signatureHeader: "x-viator-signature",
 	timestampHeader: "x-viator-timestamp",
 	logPrefix: "[viator-webhook]",
-	client: ViatorClient,
+	normalize: ViatorClient.normalize,
 });
