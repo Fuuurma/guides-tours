@@ -14,6 +14,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -136,6 +137,19 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourException.created",
+			resourceType: "tourException",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				tourId: args.tourId,
+				date: args.date,
+				exceptionType: args.exceptionType,
+			},
+		});
 		return id;
 	},
 });
@@ -182,12 +196,33 @@ export const internalUpdate = internalMutation({
 			throw new ConvexError("endTime must be on or after startTime");
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
-		if (args.startTime !== undefined) patch.startTime = args.startTime;
-		if (args.endTime !== undefined) patch.endTime = args.endTime;
-		if (args.capacityOverride !== undefined) patch.capacityOverride = args.capacityOverride;
-		if (args.reason !== undefined) patch.reason = args.reason;
-		if (args.notes !== undefined) patch.notes = args.notes;
+		const changes: Record<string, { old: unknown; new: unknown }> = {};
+		for (const field of [
+			"startTime",
+			"endTime",
+			"capacityOverride",
+			"reason",
+			"notes",
+		] as const) {
+			const incoming = args[field];
+			if (incoming !== undefined && incoming !== existing[field]) {
+				patch[field] = incoming;
+				changes[field] = { old: existing[field], new: incoming };
+			}
+		}
+		if (Object.keys(changes).length === 0) {
+			return args.exceptionId;
+		}
 		await ctx.db.patch(args.exceptionId, patch);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourException.updated",
+			resourceType: "tourException",
+			resourceId: args.exceptionId,
+			oldValues: {},
+			newValues: { changes },
+		});
 		return args.exceptionId;
 	},
 });
@@ -216,6 +251,19 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.exceptionId);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourException.deleted",
+			resourceType: "tourException",
+			resourceId: args.exceptionId,
+			oldValues: {
+				tourId: existing.tourId,
+				date: existing.date,
+				exceptionType: existing.exceptionType,
+			},
+			newValues: {},
+		});
 		return args.exceptionId;
 	},
 });
