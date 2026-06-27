@@ -15,7 +15,8 @@
 //   3. Get-or-create customer by email within that org
 //   4. Create booking in "confirmed" state
 //
-// Rate-limit / CAPTCHA is a Cloudflare concern (not in Convex).
+// Rate-limit lives in Convex (lib/rate_limit.ts). CAPTCHA is a
+// Cloudflare concern if needed.
 
 import { v, ConvexError } from "convex/values";
 import { internalAction, internalMutation, query } from "./_generated/server";
