@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ to: "/dashboard", label: "Home", exact: true },
 	{ to: "/dashboard/tours", label: "Tours" },
 	{ to: "/dashboard/templates", label: "Templates" },
+	{ to: "/dashboard/categories", label: "Categories" },
 	{ to: "/dashboard/schedules", label: "Schedules" },
 	{ to: "/dashboard/bookings", label: "Bookings" },
 	{ to: "/dashboard/customers", label: "Customers" },

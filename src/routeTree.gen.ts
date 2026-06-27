@@ -25,6 +25,7 @@ import { Route as DashboardOtaRouteImport } from './routes/dashboard/ota'
 import { Route as DashboardNotificationsRouteImport } from './routes/dashboard/notifications'
 import { Route as DashboardDriversRouteImport } from './routes/dashboard/drivers'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard/customers'
+import { Route as DashboardCategoriesRouteImport } from './routes/dashboard/categories'
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
@@ -133,6 +134,11 @@ const DashboardDriversRoute = DashboardDriversRouteImport.update({
 const DashboardCustomersRoute = DashboardCustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardCategoriesRoute = DashboardCategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardBookingsRoute = DashboardBookingsRouteImport.update({
@@ -305,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
+  '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
@@ -351,6 +358,7 @@ export interface FileRoutesByTo {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
+  '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
@@ -399,6 +407,7 @@ export interface FileRoutesById {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
+  '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
@@ -448,6 +457,7 @@ export interface FileRouteTypes {
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
+    | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
     | '/dashboard/notifications'
@@ -494,6 +504,7 @@ export interface FileRouteTypes {
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
+    | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
     | '/dashboard/notifications'
@@ -541,6 +552,7 @@ export interface FileRouteTypes {
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
+    | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
     | '/dashboard/notifications'
@@ -702,6 +714,13 @@ declare module '@tanstack/react-router' {
       path: '/customers'
       fullPath: '/dashboard/customers'
       preLoaderRoute: typeof DashboardCustomersRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/categories': {
+      id: '/dashboard/categories'
+      path: '/categories'
+      fullPath: '/dashboard/categories'
+      preLoaderRoute: typeof DashboardCategoriesRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/bookings': {
@@ -1078,6 +1097,7 @@ interface DashboardRouteChildren {
   DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
   DashboardAssignmentsRoute: typeof DashboardAssignmentsRouteWithChildren
   DashboardBookingsRoute: typeof DashboardBookingsRouteWithChildren
+  DashboardCategoriesRoute: typeof DashboardCategoriesRoute
   DashboardCustomersRoute: typeof DashboardCustomersRouteWithChildren
   DashboardDriversRoute: typeof DashboardDriversRouteWithChildren
   DashboardNotificationsRoute: typeof DashboardNotificationsRouteWithChildren
@@ -1095,6 +1115,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAnalyticsRoute: DashboardAnalyticsRoute,
   DashboardAssignmentsRoute: DashboardAssignmentsRouteWithChildren,
   DashboardBookingsRoute: DashboardBookingsRouteWithChildren,
+  DashboardCategoriesRoute: DashboardCategoriesRoute,
   DashboardCustomersRoute: DashboardCustomersRouteWithChildren,
   DashboardDriversRoute: DashboardDriversRouteWithChildren,
   DashboardNotificationsRoute: DashboardNotificationsRouteWithChildren,
