@@ -14,6 +14,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -87,7 +88,7 @@ export const upsert = mutation({
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
 			internalUpsert as unknown as FunctionReference<"mutation", "public" | "internal">,
-			{ organizationId: member.organizationId, ...args },
+			{ organizationId: member.organizationId, userId: member.userId, ...args },
 		);
 	},
 });
@@ -95,6 +96,7 @@ export const upsert = mutation({
 export const internalUpsert = internalMutation({
 	args: {
 		organizationId: v.string(),
+		userId: v.string(),
 		tourId: v.id("tours"),
 		periodDate: v.string(),
 		periodType: v.union(
@@ -146,9 +148,36 @@ export const internalUpsert = internalMutation({
 		};
 		if (existing) {
 			await ctx.db.patch(existing._id, patch);
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+				action: "tourAnalytics.updated",
+				resourceType: "tourAnalytics",
+				resourceId: existing._id,
+				oldValues: {},
+				newValues: {
+					totalBookings: args.totalBookings,
+					totalGuests: args.totalGuests,
+					grossRevenueCents: args.grossRevenueCents.toString(),
+				},
+			});
 			return existing._id;
 		}
-		return await ctx.db.insert("tourAnalytics", patch);
+		const id = await ctx.db.insert("tourAnalytics", patch);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourAnalytics.created",
+			resourceType: "tourAnalytics",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				tourId: args.tourId,
+				periodDate: args.periodDate,
+				periodType: args.periodType,
+			},
+		});
+		return id;
 	},
 });
 
@@ -158,7 +187,7 @@ export const remove = mutation({
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
 			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
-			{ organizationId: member.organizationId, analyticsId: args.analyticsId },
+			{ organizationId: member.organizationId, userId: member.userId, analyticsId: args.analyticsId },
 		);
 	},
 });
@@ -166,6 +195,7 @@ export const remove = mutation({
 export const internalRemove = internalMutation({
 	args: {
 		organizationId: v.string(),
+		userId: v.string(),
 		analyticsId: v.id("tourAnalytics"),
 	},
 	handler: async (ctx, args) => {
@@ -175,6 +205,19 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.analyticsId);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourAnalytics.deleted",
+			resourceType: "tourAnalytics",
+			resourceId: args.analyticsId,
+			oldValues: {
+				tourId: existing.tourId,
+				periodDate: existing.periodDate,
+				periodType: existing.periodType,
+			},
+			newValues: {},
+		});
 		return args.analyticsId;
 	},
 });

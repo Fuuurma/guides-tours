@@ -38,6 +38,7 @@ describe("tour analytics cache", () => {
 		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
 		const id = await t.mutation(internal.tourAnalytics.internalUpsert, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			periodDate: "2026-09-01",
 			periodType: "daily",
@@ -63,6 +64,7 @@ describe("tour analytics cache", () => {
 		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
 		await t.mutation(internal.tourAnalytics.internalUpsert, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			periodDate: "2026-09-01",
 			periodType: "daily",
@@ -78,6 +80,7 @@ describe("tour analytics cache", () => {
 		});
 		await t.mutation(internal.tourAnalytics.internalUpsert, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			periodDate: "2026-09-01",
 			periodType: "daily",
@@ -105,6 +108,7 @@ describe("tour analytics cache", () => {
 		await expect(
 			t.mutation(internal.tourAnalytics.internalUpsert, {
 				organizationId: orgId,
+				userId: "test-user",
 				tourId,
 				periodDate: "2026-09-01",
 				periodType: "daily",
@@ -127,6 +131,7 @@ describe("tour analytics cache", () => {
 		await expect(
 			t.mutation(internal.tourAnalytics.internalUpsert, {
 				organizationId: "org_ta4b",
+				userId: "test-user",
 				tourId,
 				periodDate: "2026-09-01",
 				periodType: "daily",
@@ -149,6 +154,7 @@ describe("tour analytics cache", () => {
 		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
 		const id = await t.mutation(internal.tourAnalytics.internalUpsert, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			periodDate: "2026-09-01",
 			periodType: "daily",
@@ -164,6 +170,7 @@ describe("tour analytics cache", () => {
 		});
 		await t.mutation(internal.tourAnalytics.internalRemove, {
 			organizationId: orgId,
+			userId: "test-user",
 			analyticsId: id,
 		});
 		const row = await t.run((ctx) => ctx.db.get(id));
