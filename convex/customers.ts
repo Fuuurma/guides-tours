@@ -176,7 +176,7 @@ export const history = query({
 			),
 		);
 		return bookings.map((b) => ({
-			id: b._id,
+			_id: b._id,
 			tourId: b.tourId,
 			tourName: tourMap.get(b.tourId) ?? "(deleted tour)",
 			date: b.date,

@@ -79,14 +79,18 @@ function CustomerDetailPage() {
 	}
 
 	const c = customer as unknown as Customer;
-	const bookings = ((history ?? []) as unknown as Array<{
-		id: string;
-		date: string;
+	const bookings = (history ?? []) as unknown as Array<{
+		_id: string;
+		tourId: string;
 		tourName: string;
+		date: string;
+		startTime: string;
 		guests: number;
-		totalAmountCents: number;
 		status: string;
-	}>).map((b) => ({ ...b, _id: b.id }));
+		totalAmountCents: number | bigint;
+		reviewRating: number | null;
+		createdAt: number;
+	}>;
 
 	return (
 		<DetailPage
