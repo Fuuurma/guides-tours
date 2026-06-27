@@ -26,6 +26,85 @@ export type DispatchResult = {
 	};
 };
 
+type DispatchContext = {
+	template: { templateType: string; name: string; isActive?: boolean };
+	booking: {
+		tourName: string;
+		date: string;
+		startTime: string;
+		// Only required for the immediate dispatch audit log.
+		organizationId?: string;
+	};
+	customer: { name: string; email?: string; phone?: string };
+};
+
+/**
+ * Render the template body, pick the channel based on which
+ * contact info the customer has on file, and dispatch via email
+ * (SES) or SMS (stub). Returns a DispatchResult describing the
+ * outcome — never throws (email failure → skipped result).
+ *
+ * Shared by dispatchScheduled and dispatchImmediateBookingConfirmation
+ * so the rendering + channel-selection logic stays in one place.
+ */
+async function renderAndDispatch(
+	ctx: DispatchContext,
+	tag: "scheduled" | "immediate",
+): Promise<DispatchResult> {
+	const { template, booking, customer } = ctx;
+
+	if (template.isActive === false) {
+		return {
+			channel: "none",
+			status: "skipped",
+			error: "template is inactive",
+			rendered: { to: "", subject: "", bodyText: "", bodyHtml: "" },
+		};
+	}
+
+	const bodyText = renderPlainText(template.templateType, {
+		customerName: customer.name,
+		tourName: booking.tourName,
+		date: booking.date,
+		startTime: booking.startTime,
+	});
+	const subject = humanSubject(template.templateType);
+	const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
+
+	const channel: DispatchChannel = customer.email
+		? "email"
+		: customer.phone
+			? "sms"
+			: "none";
+	const to = customer.email || customer.phone || "";
+
+	let result: DispatchResult;
+	if (channel === "email") {
+		result = await sendEmail({ to, subject, bodyText, bodyHtml });
+	} else if (channel === "sms") {
+		console.warn(
+			`[dispatch-stub-sms-${tag}] ${template.templateType} → ${to} subject="${subject}"`,
+		);
+		result = {
+			channel: "sms",
+			status: "sent",
+			rendered: { to, subject, bodyText, bodyHtml },
+		};
+	} else {
+		console.warn(
+			`[dispatch] ${template.templateType} has no email or phone for customer ${customer.name}`,
+		);
+		result = {
+			channel: "none",
+			status: "skipped",
+			error: "no email or phone on file",
+			rendered: { to, subject, bodyText, bodyHtml },
+		};
+	}
+
+	return result;
+}
+
 export const dispatchScheduled = internalAction({
 	args: {
 		scheduledId: v.id("scheduledNotifications"),
@@ -44,53 +123,9 @@ export const dispatchScheduled = internalAction({
 			};
 		}
 
-		const { template, booking, customer } = scheduled;
-
-		const bodyText = renderPlainText(template.templateType, {
-			customerName: customer.name,
-			tourName: booking.tourName,
-			date: booking.date,
-			startTime: booking.startTime,
-		});
-		const subject = humanSubject(template.templateType);
-		const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
-
-		const channel: DispatchChannel = customer.email
-			? "email"
-			: customer.phone
-				? "sms"
-				: "none";
-		const to = customer.email || customer.phone || "";
-
-		let result: DispatchResult;
-		if (channel === "email") {
-			result = await sendEmail({
-				to,
-				subject,
-				bodyText,
-				bodyHtml,
-			});
-		} else if (channel === "sms") {
-			// SMS remains a stub (would use SNS Publish).
-			console.warn(
-				`[dispatch-stub-sms] ${template.templateType} → ${to} subject="${subject}"`,
-			);
-			result = {
-				channel: "sms",
-				status: "sent",
-				rendered: { to, subject, bodyText, bodyHtml },
-			};
-		} else {
-			console.warn(
-				`[dispatch] ${template.templateType} has no email or phone for customer ${customer.name}`,
-			);
-			result = {
-				channel: "none",
-				status: "skipped",
-				error: "no email or phone on file",
-				rendered: { to, subject, bodyText, bodyHtml },
-			};
-		}
+		const result = await renderAndDispatch(scheduled, "scheduled");
+		const to = scheduled.customer.email || scheduled.customer.phone || "";
+		const subject = humanSubject(scheduled.template.templateType);
 
 		// Record the outcome.
 		const markSent = result.status === "sent" || result.status === "skipped";
@@ -103,7 +138,7 @@ export const dispatchScheduled = internalAction({
 				channel: result.channel,
 				recipient: to,
 				subject,
-				templateName: template.name,
+				templateName: scheduled.template.name,
 			},
 		);
 
@@ -139,54 +174,10 @@ export const dispatchImmediateBookingConfirmation = internalAction({
 				rendered: { to: "", subject: "", bodyText: "", bodyHtml: "" },
 			};
 		}
-		const { template, booking, customer } = ctx_;
 
-		// Skip if template is inactive.
-		if (!template.isActive) {
-			return {
-				channel: "none",
-				status: "skipped",
-				error: "booking_confirmation template is inactive",
-				rendered: { to: "", subject: "", bodyText: "", bodyHtml: "" },
-			};
-		}
-
-		const bodyText = renderPlainText(template.templateType, {
-			customerName: customer.name,
-			tourName: booking.tourName,
-			date: booking.date,
-			startTime: booking.startTime,
-		});
-		const subject = humanSubject(template.templateType);
-		const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
-
-		const channel: DispatchChannel = customer.email
-			? "email"
-			: customer.phone
-				? "sms"
-				: "none";
-		const to = customer.email || customer.phone || "";
-
-		let result: DispatchResult;
-		if (channel === "email") {
-			result = await sendEmail({ to, subject, bodyText, bodyHtml });
-		} else if (channel === "sms") {
-			console.warn(
-				`[dispatch-stub-sms-immediate] ${template.templateType} → ${to} subject="${subject}"`,
-			);
-			result = {
-				channel: "sms",
-				status: "sent",
-				rendered: { to, subject, bodyText, bodyHtml },
-			};
-		} else {
-			result = {
-				channel: "none",
-				status: "skipped",
-				error: "no email or phone on file",
-				rendered: { to, subject, bodyText, bodyHtml },
-			};
-		}
+		const result = await renderAndDispatch(ctx_, "immediate");
+		const to = ctx_.customer.email || ctx_.customer.phone || "";
+		const subject = humanSubject(ctx_.template.templateType);
 
 		// Best-effort audit log so operators can see confirmation
 		// delivery state in the audit log. We don't write to a
@@ -195,14 +186,14 @@ export const dispatchImmediateBookingConfirmation = internalAction({
 		await ctx.runMutation(
 			internal.notifications.recordImmediateDispatchResult,
 			{
-				organizationId: booking.organizationId,
+				organizationId: ctx_.booking.organizationId ?? "",
 				bookingId: args.bookingId,
 				channel: result.channel,
 				success: result.status === "sent" || result.status === "skipped",
 				errorMessage: result.error,
 				recipient: to,
 				subject,
-				templateName: template.name,
+				templateName: ctx_.template.name,
 			},
 		);
 
