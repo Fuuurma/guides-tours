@@ -22,7 +22,7 @@ interface Customer {
 	source: string;
 	vipStatus: boolean;
 	totalVisits: number;
-	totalRevenueCents: number;
+	totalRevenueCents: bigint | number;
 	loyaltyPoints: number;
 	tags: string[];
 }

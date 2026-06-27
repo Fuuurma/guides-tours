@@ -78,8 +78,8 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				guestNames: string;
 				languageRequired: string;
 				notes: string;
-				depositAmountCents: number;
-				totalAmountCents: number;
+				depositAmountCents: bigint | number;
+				totalAmountCents: bigint | number;
 				paymentMethod: string;
 			};
 			form.set("date", b.date);

@@ -71,10 +71,10 @@ function BookingDetailPage() {
 		guests: number;
 		status: string;
 		source: string;
-		totalAmountCents: number;
-		depositAmountCents: number;
-		balanceDueCents: number;
-		netRevenueCents: number;
+		totalAmountCents: bigint | number;
+		depositAmountCents: bigint | number;
+		balanceDueCents: bigint | number;
+		netRevenueCents: bigint | number;
 		paymentMethod: string;
 		guestNames: string;
 		notes: string;

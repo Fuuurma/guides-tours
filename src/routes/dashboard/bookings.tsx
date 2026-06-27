@@ -19,7 +19,7 @@ interface Booking {
 	date: string;
 	tourId: string;
 	guests: number;
-	totalAmountCents: number;
+	totalAmountCents: bigint | number;
 	source: string;
 	status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
 }
