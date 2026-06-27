@@ -15,6 +15,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -109,7 +110,7 @@ export const internalTrack = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		if (args.size < 0) throw new ConvexError("size must be non-negative");
-		return await ctx.db.insert("files", {
+		const id = await ctx.db.insert("files", {
 			organizationId: args.organizationId,
 			storageId: args.storageId,
 			filename: args.filename,
@@ -119,6 +120,20 @@ export const internalTrack = internalMutation({
 			uploadedBy: args.uploadedBy,
 			createdAt: Date.now(),
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.uploadedBy,
+			action: "file.tracked",
+			resourceType: "file",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				filename: args.filename,
+				purpose: args.purpose,
+				size: args.size,
+			},
+		});
+		return id;
 	},
 });
 
@@ -151,6 +166,19 @@ export const internalRemove = internalMutation({
 		} catch {
 			// ignore — blob may already be gone
 		}
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "file.deleted",
+			resourceType: "file",
+			resourceId: args.fileId,
+			oldValues: {
+				filename: existing.filename,
+				purpose: existing.purpose,
+				size: existing.size,
+			},
+			newValues: {},
+		});
 		return args.fileId;
 	},
 });
