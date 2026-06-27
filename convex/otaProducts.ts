@@ -11,6 +11,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
@@ -93,7 +94,7 @@ export const create = mutation({
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
 			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
-			{ organizationId: member.organizationId, ...args },
+			{ organizationId: member.organizationId, userId: member.userId, ...args },
 		);
 	},
 });
@@ -101,6 +102,7 @@ export const create = mutation({
 export const internalCreate = internalMutation({
 	args: {
 		organizationId: v.string(),
+		userId: v.string(),
 		tourId: v.id("tours"),
 		integrationId: v.id("otaIntegrations"),
 		otaProductId: v.string(),
@@ -139,7 +141,7 @@ export const internalCreate = internalMutation({
 			throw new ConvexError("Forbidden: integration belongs to a different organization");
 		}
 		const now = Date.now();
-		return await ctx.db.insert("otaProducts", {
+		const id = await ctx.db.insert("otaProducts", {
 			organizationId: args.organizationId,
 			tourId: args.tourId,
 			integrationId: args.integrationId,
@@ -164,6 +166,20 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "otaProduct.created",
+			resourceType: "otaProduct",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				tourId: args.tourId,
+				integrationId: args.integrationId,
+				otaProductId: args.otaProductId,
+			},
+		});
+		return id;
 	},
 });
 
@@ -193,7 +209,7 @@ export const update = mutation({
 		const { productId, ...rest } = args;
 		return await ctx.runMutation(
 			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
-			{ organizationId: member.organizationId, productId, ...rest },
+			{ organizationId: member.organizationId, userId: member.userId, productId, ...rest },
 		);
 	},
 });
@@ -201,6 +217,7 @@ export const update = mutation({
 export const internalUpdate = internalMutation({
 	args: {
 		organizationId: v.string(),
+		userId: v.string(),
 		productId: v.id("otaProducts"),
 		otaProductCode: v.optional(v.string()),
 		otaProductUrl: v.optional(v.string()),
@@ -232,6 +249,7 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
+		const changes: Record<string, { old: unknown; new: unknown }> = {};
 		for (const field of [
 			"otaProductCode",
 			"otaProductUrl",
@@ -250,11 +268,26 @@ export const internalUpdate = internalMutation({
 			"minAdvanceBookingHours",
 			"maxAdvanceBookingDays",
 			"settings",
-		]) {
-			const value = (args as Record<string, unknown>)[field];
-			if (value !== undefined) patch[field] = value;
+		] as const) {
+			const value = args[field];
+			if (value !== undefined && value !== existing[field]) {
+				patch[field] = value;
+				changes[field] = { old: existing[field], new: value };
+			}
+		}
+		if (Object.keys(changes).length === 0) {
+			return args.productId;
 		}
 		await ctx.db.patch(args.productId, patch);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "otaProduct.updated",
+			resourceType: "otaProduct",
+			resourceId: args.productId,
+			oldValues: {},
+			newValues: { changes },
+		});
 		return args.productId;
 	},
 });
@@ -265,7 +298,7 @@ export const remove = mutation({
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
 			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
-			{ organizationId: member.organizationId, productId: args.productId },
+			{ organizationId: member.organizationId, userId: member.userId, productId: args.productId },
 		);
 	},
 });
@@ -273,6 +306,7 @@ export const remove = mutation({
 export const internalRemove = internalMutation({
 	args: {
 		organizationId: v.string(),
+		userId: v.string(),
 		productId: v.id("otaProducts"),
 	},
 	handler: async (ctx, args) => {
@@ -282,6 +316,19 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.productId);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "otaProduct.deleted",
+			resourceType: "otaProduct",
+			resourceId: args.productId,
+			oldValues: {
+				tourId: existing.tourId,
+				integrationId: existing.integrationId,
+				otaProductId: existing.otaProductId,
+			},
+			newValues: {},
+		});
 		return args.productId;
 	},
 });

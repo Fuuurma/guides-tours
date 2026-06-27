@@ -57,6 +57,7 @@ describe("OTA products", () => {
 		);
 		const id = await t.mutation(internal.otaProducts.internalCreate, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			integrationId,
 			otaProductId: "VR-100",
@@ -78,6 +79,7 @@ describe("OTA products", () => {
 		await expect(
 			t.mutation(internal.otaProducts.internalCreate, {
 				organizationId: orgId,
+				userId: "test-user",
 				tourId,
 				integrationId,
 				otaProductId: "VR-101",
@@ -95,6 +97,7 @@ describe("OTA products", () => {
 		await expect(
 			t.mutation(internal.otaProducts.internalCreate, {
 				organizationId: "org_op3b",
+				userId: "test-user",
 				tourId,
 				integrationId,
 				otaProductId: "VR-102",
@@ -112,6 +115,7 @@ describe("OTA products", () => {
 		await expect(
 			t.mutation(internal.otaProducts.internalCreate, {
 				organizationId: "org_op4a",
+				userId: "test-user",
 				tourId,
 				integrationId,
 				otaProductId: "VR-103",
@@ -129,6 +133,7 @@ describe("OTA products", () => {
 		);
 		const id = await t.mutation(internal.otaProducts.internalCreate, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			integrationId,
 			otaProductId: "VR-104",
@@ -136,6 +141,7 @@ describe("OTA products", () => {
 		});
 		await t.mutation(internal.otaProducts.internalUpdate, {
 			organizationId: orgId,
+			userId: "test-user",
 			productId: id,
 			syncStatus: "SYNCED",
 			otaTitle: "Listed title",
@@ -154,6 +160,7 @@ describe("OTA products", () => {
 		);
 		const id = await t.mutation(internal.otaProducts.internalCreate, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			integrationId,
 			otaProductId: "VR-105",
@@ -162,6 +169,7 @@ describe("OTA products", () => {
 		await expect(
 			t.mutation(internal.otaProducts.internalUpdate, {
 				organizationId: "org_op6b",
+				userId: "test-user",
 				productId: id,
 				syncStatus: "DISABLED",
 			}),
@@ -177,6 +185,7 @@ describe("OTA products", () => {
 		);
 		const id = await t.mutation(internal.otaProducts.internalCreate, {
 			organizationId: orgId,
+			userId: "test-user",
 			tourId,
 			integrationId,
 			otaProductId: "VR-106",
@@ -184,6 +193,7 @@ describe("OTA products", () => {
 		});
 		await t.mutation(internal.otaProducts.internalRemove, {
 			organizationId: orgId,
+			userId: "test-user",
 			productId: id,
 		});
 		const row = await t.run((ctx) => ctx.db.get(id));
