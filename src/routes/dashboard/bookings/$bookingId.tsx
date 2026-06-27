@@ -58,7 +58,7 @@ function BookingDetailPage() {
 		});
 	};
 
-	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!booking) {
 		return <DetailPage title="Booking not found" backTo="/dashboard/bookings" />;

@@ -16,7 +16,7 @@ function DriverDetailPage() {
 		convexQuery(api.drivers.get, { driverId: driverId as never }),
 	);
 
-	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!driver) return <DetailPage title="Driver not found" backTo="/dashboard/drivers" />;
 

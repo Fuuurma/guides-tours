@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../form";
 
@@ -110,7 +111,7 @@ export function NotificationSettingsPage() {
 	};
 
 	if (isPending) {
-		return <p className="text-muted-foreground">Loading...</p>;
+		return <p className="text-muted-foreground">Loading…</p>;
 	}
 
 	return (
@@ -137,10 +138,12 @@ export function NotificationSettingsPage() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						<label className="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
+							<Checkbox
+								id="email-enabled"
 								checked={emailEnabled}
-								onChange={(e) => setEmailEnabled(e.target.checked)}
+								onCheckedChange={(checked) =>
+									setEmailEnabled(checked === true)
+								}
 							/>
 							Email channel enabled
 						</label>
@@ -175,10 +178,12 @@ export function NotificationSettingsPage() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						<label className="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
+							<Checkbox
+								id="twilio-enabled"
 								checked={twilioEnabled}
-								onChange={(e) => setTwilioEnabled(e.target.checked)}
+								onCheckedChange={(checked) =>
+									setTwilioEnabled(checked === true)
+								}
 							/>
 							Twilio channel enabled
 						</label>
@@ -240,10 +245,12 @@ export function NotificationSettingsPage() {
 					</CardHeader>
 					<CardContent className="space-y-4">
 						<label className="flex items-center gap-2 text-sm">
-							<input
-								type="checkbox"
+							<Checkbox
+								id="whatsapp-enabled"
 								checked={whatsappEnabled}
-								onChange={(e) => setWhatsappEnabled(e.target.checked)}
+								onCheckedChange={(checked) =>
+									setWhatsappEnabled(checked === true)
+								}
 							/>
 							WhatsApp channel enabled
 						</label>

@@ -51,7 +51,7 @@ function AnalyticsPage() {
 		convexQuery(api.analytics.getBookingSources, rangeArgs),
 	);
 
-	if (orgPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (orgPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (!org) {
 		return <p className="text-muted-foreground">No organization selected.</p>;
 	}

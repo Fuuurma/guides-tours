@@ -16,7 +16,7 @@ function TemplateDetailPage() {
 		convexQuery(api.tourTemplates.get, { templateId: templateId as never }),
 	);
 
-	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!template) return <DetailPage title="Template not found" backTo="/dashboard/templates" />;
 

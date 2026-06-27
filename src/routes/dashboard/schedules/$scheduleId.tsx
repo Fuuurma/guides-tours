@@ -34,7 +34,7 @@ function ScheduleDetailPage() {
 		convexQuery(api.bookings.listBySchedule, { scheduleId: scheduleId as never }),
 	);
 
-	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!schedule) return <DetailPage title="Schedule not found" backTo="/dashboard/schedules" />;
 

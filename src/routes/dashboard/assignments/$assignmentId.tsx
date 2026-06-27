@@ -25,7 +25,7 @@ function AssignmentDetailPage() {
 		convexQuery(api.drivers.get, { driverId: assignment?.driverId as never }),
 	);
 
-	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!assignment) return <DetailPage title="Assignment not found" backTo="/dashboard/assignments" />;
 

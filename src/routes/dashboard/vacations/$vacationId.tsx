@@ -24,7 +24,7 @@ function VacationDetailPage() {
 	const [pending, setPending] = useState(false);
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
+	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!vacation) return <DetailPage title="Vacation request not found" backTo="/dashboard/vacations" />;
 

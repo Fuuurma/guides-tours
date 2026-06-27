@@ -94,7 +94,7 @@ function PaymentSettingsPage() {
 	};
 
 	if (isPending) {
-		return <p className="text-muted-foreground">Loading...</p>;
+		return <p className="text-muted-foreground">Loading…</p>;
 	}
 
 	return (

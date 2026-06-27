@@ -17,7 +17,7 @@ function TourDetailPage() {
 	);
 
 	if (isPending) {
-		return <p className="text-muted-foreground">Loading...</p>;
+		return <p className="text-muted-foreground">Loading…</p>;
 	}
 	if (error) {
 		return <p className="text-destructive text-sm">Error: {error.message}</p>;
