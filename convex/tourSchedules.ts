@@ -223,6 +223,13 @@ export const incrementBooked = internalMutation({
 		guests: v.number(),
 	},
 	handler: async (ctx, args) => {
+		// Defense-in-depth: callers (bookings.create, public_booking)
+		// already validate guests > 0, but if a future caller forgets,
+		// we'd silently let capacityBooked go negative. Floor first to
+		// reject non-integer guests before they reach the math.
+		if (args.guests <= 0 || !Number.isInteger(args.guests)) {
+			throw new ConvexError("guests must be a positive integer");
+		}
 		const existing = await ctx.db.get(args.scheduleId);
 		if (!existing) throw new ConvexError("Schedule not found");
 		if (existing.organizationId !== args.organizationId) {
@@ -249,11 +256,6 @@ export const incrementBooked = internalMutation({
 /**
  * Inverse of incrementBooked. Restores a schedule's capacityBooked
  * counter when a booking is cancelled or refunded.
- *
- * NOTE: the bookings → tourSchedules wiring is not yet complete —
- * the bookings module does not currently look up the matching
- * tourSchedule. Callers that have a scheduleId (e.g. future
- * OTA sync actions) can call this directly.
  */
 export const decrementBooked = internalMutation({
 	args: {
@@ -262,6 +264,12 @@ export const decrementBooked = internalMutation({
 		guests: v.number(),
 	},
 	handler: async (ctx, args) => {
+		// Same defense-in-depth as incrementBooked. A non-positive or
+		// non-integer guests arg would either underflow capacityBooked
+		// (silently capped at 0) or partial-decrement — both mask bugs.
+		if (args.guests <= 0 || !Number.isInteger(args.guests)) {
+			throw new ConvexError("guests must be a positive integer");
+		}
 		const existing = await ctx.db.get(args.scheduleId);
 		if (!existing) throw new ConvexError("Schedule not found");
 		if (existing.organizationId !== args.organizationId) {

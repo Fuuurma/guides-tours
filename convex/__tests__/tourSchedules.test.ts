@@ -252,4 +252,86 @@ describe("tour schedules", () => {
 		const s = await t.run((ctx) => ctx.db.get(id));
 		expect(s).toBeNull();
 	});
+
+	it("incrementBooked: rejects non-positive guests (defense-in-depth)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ts_guard_a";
+		const tourId = await t.run((ctx) => seedTour(ctx, { orgId }));
+		const id = await t.mutation(internal.tourSchedules.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			date: "2026-09-01",
+			startTime: "09:00",
+			endTime: "11:00",
+			capacityTotal: 10,
+		});
+		// Zero guests — must reject
+		await expect(
+			t.mutation(internal.tourSchedules.incrementBooked, {
+				organizationId: orgId,
+				scheduleId: id,
+				guests: 0,
+			}),
+		).rejects.toThrow(/positive integer/);
+		// Negative guests — must reject
+		await expect(
+			t.mutation(internal.tourSchedules.incrementBooked, {
+				organizationId: orgId,
+				scheduleId: id,
+				guests: -3,
+			}),
+		).rejects.toThrow(/positive integer/);
+	});
+
+	it("incrementBooked: rejects non-integer guests", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ts_guard_b";
+		const tourId = await t.run((ctx) => seedTour(ctx, { orgId }));
+		const id = await t.mutation(internal.tourSchedules.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			date: "2026-09-01",
+			startTime: "09:00",
+			endTime: "11:00",
+			capacityTotal: 10,
+		});
+		await expect(
+			t.mutation(internal.tourSchedules.incrementBooked, {
+				organizationId: orgId,
+				scheduleId: id,
+				guests: 2.5,
+			}),
+		).rejects.toThrow(/positive integer/);
+	});
+
+	it("decrementBooked: rejects non-positive guests", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ts_guard_c";
+		const tourId = await t.run((ctx) => seedTour(ctx, { orgId }));
+		const id = await t.mutation(internal.tourSchedules.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			date: "2026-09-01",
+			startTime: "09:00",
+			endTime: "11:00",
+			capacityTotal: 10,
+		});
+		await expect(
+			t.mutation(internal.tourSchedules.decrementBooked, {
+				organizationId: orgId,
+				scheduleId: id,
+				guests: 0,
+			}),
+		).rejects.toThrow(/positive integer/);
+		await expect(
+			t.mutation(internal.tourSchedules.decrementBooked, {
+				organizationId: orgId,
+				scheduleId: id,
+				guests: -1,
+			}),
+		).rejects.toThrow(/positive integer/);
+	});
 });
