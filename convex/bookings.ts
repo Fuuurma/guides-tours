@@ -67,6 +67,9 @@ export const list = query({
 		customerId: v.optional(v.id("customers")),
 		dateFrom: v.optional(v.string()), // YYYY-MM-DD
 		dateTo: v.optional(v.string()),
+		// Filter by booking source ("direct", "viator", "airbnb", etc.)
+		// — enables an OTA-only view for tour operators.
+		source: v.optional(v.string()),
 		sortBy: v.optional(
 			v.union(
 				v.literal("date"),
@@ -108,6 +111,9 @@ export const list = query({
 		}
 		if (args.dateTo) {
 			filtered = filtered.filter((b) => b.date <= args.dateTo!);
+		}
+		if (args.source) {
+			filtered = filtered.filter((b) => b.source === args.source);
 		}
 		if (args.search) {
 			const q = args.search.toLowerCase();
