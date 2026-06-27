@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { MetricCard } from "@/components/metric-card";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/")({
@@ -102,11 +103,7 @@ function DashboardIndex() {
 				/>
 				<StatCard
 					label="Completion rate (today)"
-					value={
-						overview
-							? `${overview.completionRate.toFixed(1)}%`
-							: "—"
-					}
+					value={overview ? `${overview.completionRate.toFixed(1)}%` : "—"}
 					link="/dashboard/analytics"
 				/>
 				<StatCard
@@ -168,14 +165,7 @@ function StatCard({
 			to={link}
 			className="block transition-colors hover:bg-gray-50 rounded-md"
 		>
-			<Card>
-				<CardHeader className="pb-2">
-					<CardDescription>{label}</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<p className="text-3xl font-semibold">{value}</p>
-				</CardContent>
-			</Card>
+			<MetricCard label={label} value={value} />
 		</Link>
 	);
 }

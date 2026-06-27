@@ -13,6 +13,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/book/$slug")({
@@ -340,12 +341,12 @@ function PublicBookingPage() {
 								>
 									Special requests (optional)
 								</label>
-								<textarea
+								<Textarea
 									id="notes"
 									value={notes}
 									onChange={(e) => setNotes(e.target.value)}
 									rows={3}
-									className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex min-h-[80px] w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+									placeholder="Allergies, accessibility needs, etc."
 								/>
 							</div>
 						</CardContent>

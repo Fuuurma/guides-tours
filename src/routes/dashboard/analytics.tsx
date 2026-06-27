@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { MetricCard } from "@/components/metric-card";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -181,28 +182,5 @@ function AnalyticsPage() {
 				</CardContent>
 			</Card>
 		</div>
-	);
-}
-
-function MetricCard({
-	label,
-	value,
-	isPending,
-}: {
-	label: string;
-	value: number | string | undefined;
-	isPending: boolean;
-}) {
-	return (
-		<Card>
-			<CardHeader className="pb-2">
-				<CardDescription>{label}</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<p className="text-2xl font-semibold">
-					{isPending ? "…" : (value ?? "—")}
-				</p>
-			</CardContent>
-		</Card>
 	);
 }
