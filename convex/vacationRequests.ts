@@ -227,9 +227,12 @@ export const internalCreate = internalMutation({
 		}
 
 		// Overlap check: no existing pending/approved request may overlap (source: 123-130).
+		// Defense-in-depth: scope by org. A user belonging to multiple orgs
+		// shouldn't have their vacation in another org block a request here.
 		const existing = await ctx.db
 			.query("vacationRequests")
-			.withIndex("by_user", (q) => q.eq("userId", args.userId))
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.filter((q) => q.eq(q.field("userId"), args.userId))
 			.collect();
 		const overlap = existing.some(
 			(vr) =>
