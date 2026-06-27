@@ -271,6 +271,17 @@ export const internalCreate = internalMutation({
 			timestamp: now,
 		});
 
+		// Send an immediate booking-confirmation email/SMS using
+		// the org's active `booking_confirmation` template. Same
+		// path as the dashboard create flow — best-effort.
+		await ctx.scheduler.runAfter(
+			0,
+			internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
+				typeof ctx.scheduler.runAfter
+			>[2],
+			{ bookingId },
+		);
+
 		// Schedule reminder notifications (24h + 2h before tour).
 		await ctx.runMutation(
 			internal.scheduledNotifications.scheduleForBooking,

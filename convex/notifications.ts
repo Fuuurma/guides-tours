@@ -220,6 +220,92 @@ async function bumpRetryOrAbandon(
 	}
 }
 
+/**
+ * Load the booking + customer + active `booking_confirmation`
+ * template for immediate dispatch. Returns null if the booking was
+ * deleted, the customer was deleted, or no active template exists
+ * (the dispatcher logs/skips in all three cases).
+ */
+export const getBookingForImmediateDispatch = internalQuery({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) return null;
+		const customer = await ctx.db.get(booking.customerId);
+		if (!customer) return null;
+		const tour = await ctx.db.get(booking.tourId);
+		const tourName = tour?.name ?? "your tour";
+		const template = await ctx.db
+			.query("notificationTemplates")
+			.withIndex("by_org_type", (q) =>
+				q
+					.eq("organizationId", booking.organizationId)
+					.eq("templateType", "booking_confirmation"),
+			)
+			.filter((q) => q.eq(q.field("isActive"), true))
+			.first();
+		if (!template) return null;
+		return {
+			template: {
+				name: template.name,
+				templateType: template.templateType,
+				channel: template.channel,
+				isActive: template.isActive,
+			},
+			booking: {
+				organizationId: booking.organizationId,
+				date: booking.date,
+				startTime: booking.startTime,
+				tourName,
+			},
+			customer: {
+				name: customer.name,
+				email: customer.email,
+				phone: customer.phone,
+			},
+		};
+	},
+});
+
+/**
+ * Record the outcome of an immediate booking-confirmation send.
+ * We don't have a `scheduledNotifications` row (immediate sends
+ * bypass the scheduler), so we write directly to the audit log
+ * with a structured action that operators can filter on.
+ */
+export const recordImmediateDispatchResult = internalMutation({
+	args: {
+		organizationId: v.string(),
+		bookingId: v.id("bookings"),
+		channel: v.string(),
+		success: v.boolean(),
+		errorMessage: v.optional(v.string()),
+		recipient: v.string(),
+		subject: v.string(),
+		templateName: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.insert("auditLogs", {
+			organizationId: args.organizationId,
+			userId: "system",
+			action: args.success
+				? "notification.immediate_sent"
+				: "notification.immediate_failed",
+			resourceType: "booking",
+			resourceId: args.bookingId,
+			oldValues: {},
+			newValues: {
+				channel: args.channel,
+				recipient: args.recipient,
+				subject: args.subject,
+				templateName: args.templateName,
+				error: args.errorMessage ?? "",
+			},
+			timestamp: Date.now(),
+		});
+	},
+});
+
 export const cleanupOldAssignments = internalMutation({
 	args: {},
 	handler: async (ctx) => {

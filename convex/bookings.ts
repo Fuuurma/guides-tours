@@ -341,6 +341,18 @@ export const create = mutation({
 		// Source had this defined but never called — we wire it here.
 		// See backend/notifications/service.py::schedule_booking_reminders.
 		if (args.status !== "cancelled") {
+			// Send an immediate booking-confirmation email/SMS using
+			// the org's active `booking_confirmation` template.
+			// Runs after the booking is inserted so the dispatcher
+			// can reference bookingId in its audit log.
+			// Best-effort: email failure does not fail the booking.
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
+					typeof ctx.scheduler.runAfter
+				>[2],
+				{ bookingId },
+			);
 			await ctx.runMutation(
 				internal.scheduledNotifications.scheduleForBooking,
 				{

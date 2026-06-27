@@ -112,6 +112,105 @@ export const dispatchScheduled = internalAction({
 	},
 });
 
+/**
+ * Send an immediate booking-confirmation email (or SMS stub) for
+ * a booking. Looks up the org's active `booking_confirmation`
+ * template + customer contact info + tour name, then dispatches
+ * via the same SES path as scheduled reminders.
+ *
+ * Called from bookings.create and public_booking.internalCreate
+ * so the customer always gets a confirmation — not just 24h/2h
+ * reminders. Returns DispatchResult for observability; never
+ * throws (failure to send email doesn't fail the booking create).
+ */
+export const dispatchImmediateBookingConfirmation = internalAction({
+	args: {
+		bookingId: v.id("bookings"),
+	},
+	handler: async (ctx, args): Promise<DispatchResult> => {
+		const ctx_ = await ctx.runQuery(
+			internal.notifications.getBookingForImmediateDispatch,
+			{ bookingId: args.bookingId },
+		);
+		if (!ctx_) {
+			return {
+				channel: "none",
+				status: "skipped",
+				error: "booking/customer/template not found",
+				rendered: { to: "", subject: "", bodyText: "", bodyHtml: "" },
+			};
+		}
+		const { template, booking, customer } = ctx_;
+
+		// Skip if template is inactive.
+		if (!template.isActive) {
+			return {
+				channel: "none",
+				status: "skipped",
+				error: "booking_confirmation template is inactive",
+				rendered: { to: "", subject: "", bodyText: "", bodyHtml: "" },
+			};
+		}
+
+		const bodyText = renderPlainText(template.templateType, {
+			customerName: customer.name,
+			tourName: booking.tourName,
+			date: booking.date,
+			startTime: booking.startTime,
+		});
+		const subject = humanSubject(template.templateType);
+		const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
+
+		const channel: DispatchChannel = customer.email
+			? "email"
+			: customer.phone
+				? "sms"
+				: "none";
+		const to = customer.email || customer.phone || "";
+
+		let result: DispatchResult;
+		if (channel === "email") {
+			result = await sendEmail({ to, subject, bodyText, bodyHtml });
+		} else if (channel === "sms") {
+			console.warn(
+				`[dispatch-stub-sms-immediate] ${template.templateType} → ${to} subject="${subject}"`,
+			);
+			result = {
+				channel: "sms",
+				status: "sent",
+				rendered: { to, subject, bodyText, bodyHtml },
+			};
+		} else {
+			result = {
+				channel: "none",
+				status: "skipped",
+				error: "no email or phone on file",
+				rendered: { to, subject, bodyText, bodyHtml },
+			};
+		}
+
+		// Best-effort audit log so operators can see confirmation
+		// delivery state in the audit log. We don't write to a
+		// dedicated table because immediate sends don't have a
+		// scheduledFor row.
+		await ctx.runMutation(
+			internal.notifications.recordImmediateDispatchResult,
+			{
+				organizationId: booking.organizationId,
+				bookingId: args.bookingId,
+				channel: result.channel,
+				success: result.status === "sent" || result.status === "skipped",
+				errorMessage: result.error,
+				recipient: to,
+				subject,
+				templateName: template.name,
+			},
+		);
+
+		return result;
+	},
+});
+
 async function sendEmail(params: {
 	to: string;
 	subject: string;
@@ -212,6 +311,8 @@ function renderPlainText(
 	},
 ): string {
 	switch (templateType) {
+		case "booking_confirmation":
+			return `Hi ${vars.customerName}, your booking for ${vars.tourName} on ${vars.date} at ${vars.startTime} is confirmed. We look forward to seeing you!`;
 		case "reminder_24h":
 			return `Hi ${vars.customerName}, this is a friendly reminder of your ${vars.tourName} tour on ${vars.date} at ${vars.startTime}.`;
 		case "reminder_2h":
@@ -225,6 +326,8 @@ function renderPlainText(
 
 function humanSubject(templateType: string): string {
 	switch (templateType) {
+		case "booking_confirmation":
+			return "Booking confirmed";
 		case "reminder_24h":
 			return "Your tour is tomorrow";
 		case "reminder_2h":
