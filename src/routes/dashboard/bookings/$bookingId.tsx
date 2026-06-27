@@ -10,6 +10,7 @@ import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/bookings/$bookingId")({
 	component: BookingDetailPage,
@@ -94,6 +95,16 @@ function BookingDetailPage() {
 			actions={
 				<>
 					<StatusBadge status={b.status} />
+					{["pending", "confirmed", "checked_in"].includes(b.status) && (
+						<Button asChild variant="outline">
+							<Link
+								to="/dashboard/bookings/$bookingId/edit"
+								params={{ bookingId: b._id as Id<"bookings"> }}
+							>
+								Edit
+							</Link>
+						</Button>
+					)}
 					{b.status === "confirmed" && (
 						<Button onClick={onCheckIn} disabled={pending}>Check in</Button>
 					)}
