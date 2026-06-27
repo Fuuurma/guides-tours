@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
@@ -28,7 +28,7 @@ function VehicleDetailPage() {
 			<div className="space-y-4">
 				<p className="text-muted-foreground">Vehicle not found.</p>
 				<Button asChild variant="outline">
-					<a href="/dashboard/vehicles">← Back to vehicles</a>
+					<Link to="/dashboard/vehicles">← Back to vehicles</Link>
 				</Button>
 			</div>
 		);
