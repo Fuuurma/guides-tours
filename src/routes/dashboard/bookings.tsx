@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
@@ -59,41 +60,101 @@ const columns: DataTableColumn<Booking>[] = [
 	},
 ];
 
+function defaultRange(): { from: string; to: string } {
+	const to = new Date();
+	const from = new Date(to.getTime() - 30 * 86_400_000);
+	return {
+		from: from.toISOString().slice(0, 10),
+		to: to.toISOString().slice(0, 10),
+	};
+}
+
 function BookingsPage() {
 	const [source, setSource] = useState<string | null>(null);
+	const [range, setRange] = useState(defaultRange);
+
+	const args: {
+		source?: string;
+		dateFrom?: string;
+		dateTo?: string;
+	} = {};
+	if (source) args.source = source;
+	if (range.from) args.dateFrom = range.from;
+	if (range.to) args.dateTo = range.to;
+
 	const { data: bookings, isPending, error } = useQuery(
-		convexQuery(api.bookings.list, source ? { source } : {}),
+		convexQuery(api.bookings.list, args),
 	);
 	const itemCount = bookings?.items?.length ?? 0;
+	const filtersActive =
+		source !== null || range.from !== defaultRange().from;
 
 	return (
 		<ListPage
 			title="Bookings"
 			description={`${itemCount} booking${itemCount === 1 ? "" : "s"}${
-				source ? ` · filtered by ${source}` : ""
+				source || filtersActive
+					? ` · filtered${source ? ` by ${source}` : ""}${
+							range.from
+								? ` from ${range.from}${range.to ? ` to ${range.to}` : ""}`
+								: ""
+						}`
+					: ""
 			}`}
 			newTo="/dashboard/bookings/new"
 			newLabel="+ New booking"
 		>
-			<div className="mb-4 flex flex-wrap items-center gap-2">
-				<span className="text-muted-foreground text-sm">Source:</span>
-				{["direct", "viator", "getyourguide", "airbnb", "klook", "booking", "expedia", "tripadvisor"].map(
-					(s) => (
-						<Button
-							key={s}
-							variant={source === s ? "default" : "outline"}
-							size="sm"
-							onClick={() => setSource(source === s ? null : s)}
-						>
-							{s}
-						</Button>
-					),
-				)}
-				{source && (
-					<Button variant="ghost" size="sm" onClick={() => setSource(null)}>
-						Clear
+			<div className="mb-4 space-y-3">
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="text-muted-foreground text-sm">Source:</span>
+					{["direct", "viator", "getyourguide", "airbnb", "klook", "booking", "expedia", "tripadvisor"].map(
+						(s) => (
+							<Button
+								key={s}
+								variant={source === s ? "default" : "outline"}
+								size="sm"
+								onClick={() => setSource(source === s ? null : s)}
+							>
+								{s}
+							</Button>
+						),
+					)}
+				</div>
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="text-muted-foreground text-sm">Date range:</span>
+					<Input
+						type="date"
+						value={range.from}
+						onChange={(e) => setRange({ ...range, from: e.target.value })}
+						className="w-auto"
+					/>
+					<span className="text-muted-foreground text-sm">→</span>
+					<Input
+						type="date"
+						value={range.to}
+						onChange={(e) => setRange({ ...range, to: e.target.value })}
+						className="w-auto"
+					/>
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => setRange(defaultRange())}
+					>
+						Last 30 days
 					</Button>
-				)}
+					{filtersActive && (
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => {
+								setSource(null);
+								setRange(defaultRange());
+							}}
+						>
+							Clear all
+						</Button>
+					)}
+				</div>
 			</div>
 			<DataTable
 				data={bookings?.items as Booking[] | undefined}
@@ -102,7 +163,9 @@ function BookingsPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage={
-					source ? `No bookings from ${source}.` : "No bookings yet."
+					source
+						? `No bookings from ${source} in this date range.`
+						: "No bookings yet."
 				}
 				searchPlaceholder="Search by date, status, or source…"
 			/>

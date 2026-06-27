@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
@@ -39,11 +40,31 @@ function TourCell({ tourId, tourNameById }: { tourId: string; tourNameById: Map<
 	);
 }
 
+function defaultRange(): { from: string; to: string } {
+	const to = new Date();
+	const from = new Date(to.getTime() - 30 * 86_400_000);
+	return {
+		from: from.toISOString().slice(0, 10),
+		to: to.toISOString().slice(0, 10),
+	};
+}
+
 function SchedulesPage() {
 	const [status, setStatus] = useState<"available" | "full" | "cancelled" | null>(null);
+	const [range, setRange] = useState(defaultRange);
+
+	const args: {
+		status?: string;
+		dateFrom?: string;
+		dateTo?: string;
+	} = {};
+	if (status) args.status = status;
+	if (range.from) args.dateFrom = range.from;
+	if (range.to) args.dateTo = range.to;
+
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 	const { data: schedules, isPending, error } = useQuery(
-		convexQuery(api.tourSchedules.list, status ? { status } : {}),
+		convexQuery(api.tourSchedules.list, args),
 	);
 
 	const tourNameById = new Map<string, string>(
@@ -51,6 +72,7 @@ function SchedulesPage() {
 	);
 	const items = (schedules ?? []) as Schedule[];
 	const itemCount = items.length;
+	const filtersActive = status !== null || range.from !== defaultRange().from;
 
 	const columns: DataTableColumn<Schedule>[] = [
 		{
@@ -99,28 +121,66 @@ function SchedulesPage() {
 		<ListPage
 			title="Tour schedules"
 			description={`${itemCount} schedule${itemCount === 1 ? "" : "s"} — concrete tour instances that customers can book against.${
-				status ? ` Filtered by ${status}.` : ""
+				status || filtersActive
+					? ` Filtered${status ? ` by ${status}` : ""}${
+							range.from
+								? ` from ${range.from}${range.to ? ` to ${range.to}` : ""}`
+								: ""
+						}.`
+					: ""
 			}`}
 			newTo="/dashboard/schedules/new"
 			newLabel="+ New schedule"
 		>
-			<div className="mb-4 flex flex-wrap items-center gap-2">
-				<span className="text-muted-foreground text-sm">Status:</span>
-				{(["available", "full", "cancelled"] as const).map((s) => (
+			<div className="mb-4 space-y-3">
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="text-muted-foreground text-sm">Status:</span>
+					{(["available", "full", "cancelled"] as const).map((s) => (
+						<Button
+							key={s}
+							variant={status === s ? "default" : "outline"}
+							size="sm"
+							onClick={() => setStatus(status === s ? null : s)}
+						>
+							{s}
+						</Button>
+					))}
+				</div>
+				<div className="flex flex-wrap items-center gap-2">
+					<span className="text-muted-foreground text-sm">Date range:</span>
+					<Input
+						type="date"
+						value={range.from}
+						onChange={(e) => setRange({ ...range, from: e.target.value })}
+						className="w-auto"
+					/>
+					<span className="text-muted-foreground text-sm">→</span>
+					<Input
+						type="date"
+						value={range.to}
+						onChange={(e) => setRange({ ...range, to: e.target.value })}
+						className="w-auto"
+					/>
 					<Button
-						key={s}
-						variant={status === s ? "default" : "outline"}
+						variant="outline"
 						size="sm"
-						onClick={() => setStatus(status === s ? null : s)}
+						onClick={() => setRange(defaultRange())}
 					>
-						{s}
+						Last 30 days
 					</Button>
-				))}
-				{status && (
-					<Button variant="ghost" size="sm" onClick={() => setStatus(null)}>
-						Clear
-					</Button>
-				)}
+					{filtersActive && (
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => {
+								setStatus(null);
+								setRange(defaultRange());
+							}}
+						>
+							Clear all
+						</Button>
+					)}
+				</div>
 			</div>
 			<DataTable
 				data={items}
@@ -129,7 +189,9 @@ function SchedulesPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage={
-					status ? `No ${status} schedules.` : "No schedules yet."
+					status || filtersActive
+						? "No schedules match the current filters."
+						: "No schedules yet."
 				}
 				searchPlaceholder="Search by date, time, tour, or status…"
 			/>
