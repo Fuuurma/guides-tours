@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -36,12 +37,14 @@ function TourDetailPage() {
 			subtitle={`${tour.tourType} · ${tour.durationHours}h`}
 			backTo="/dashboard/tours"
 			actions={
-				<a
-					href={`/dashboard/tours/${tour._id}/edit`}
-					className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-				>
-					Edit
-				</a>
+				<Button asChild>
+					<Link
+						to="/dashboard/tours/$tourId/edit"
+						params={{ tourId: tour._id }}
+					>
+						Edit
+					</Link>
+				</Button>
 			}
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

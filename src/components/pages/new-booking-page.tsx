@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
+import type { Id } from "../../../convex/_generated/dataModel";
 import {
 	Card,
 	CardContent,
@@ -45,6 +46,16 @@ export function NewBookingPage() {
 		setError(null);
 
 		const g = Number(guests);
+		if (!tourId) {
+			setError("Please select a tour");
+			setPending(false);
+			return;
+		}
+		if (!customerId) {
+			setError("Please select a customer");
+			setPending(false);
+			return;
+		}
 		if (g <= 0) {
 			setError("Guests must be a positive number");
 			setPending(false);
@@ -53,8 +64,8 @@ export function NewBookingPage() {
 
 		try {
 			const id = await create({
-				tourId: tourId as never,
-				customerId: customerId as never,
+				tourId: tourId as Id<"tours">,
+				customerId: customerId as Id<"customers">,
 				date,
 				startTime,
 				guests: g,

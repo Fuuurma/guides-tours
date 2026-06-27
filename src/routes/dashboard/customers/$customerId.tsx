@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
@@ -98,12 +99,14 @@ function CustomerDetailPage() {
 			}
 			backTo="/dashboard/customers"
 			actions={
-				<a
-					href={`/dashboard/customers/${c._id}/edit`}
-					className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-				>
-					Edit
-				</a>
+				<Button asChild>
+					<Link
+						to="/dashboard/customers/$customerId/edit"
+						params={{ customerId: c._id }}
+					>
+						Edit
+					</Link>
+				</Button>
 			}
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
