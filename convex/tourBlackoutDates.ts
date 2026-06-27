@@ -165,10 +165,32 @@ export const internalUpdate = internalMutation({
 			throw new ConvexError("endDate must be on or after startDate");
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
-		if (args.startDate !== undefined) patch.startDate = args.startDate;
-		if (args.endDate !== undefined) patch.endDate = args.endDate;
-		if (args.reason !== undefined) patch.reason = args.reason;
+		const changes: Record<string, { old: unknown; new: unknown }> = {};
+		if (args.startDate !== undefined && args.startDate !== existing.startDate) {
+			patch.startDate = args.startDate;
+			changes.startDate = { old: existing.startDate, new: args.startDate };
+		}
+		if (args.endDate !== undefined && args.endDate !== existing.endDate) {
+			patch.endDate = args.endDate;
+			changes.endDate = { old: existing.endDate, new: args.endDate };
+		}
+		if (args.reason !== undefined && args.reason !== existing.reason) {
+			patch.reason = args.reason;
+			changes.reason = { old: existing.reason, new: args.reason };
+		}
+		if (Object.keys(changes).length === 0) {
+			return args.blackoutId;
+		}
 		await ctx.db.patch(args.blackoutId, patch);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourBlackout.updated",
+			resourceType: "tourBlackout",
+			resourceId: args.blackoutId,
+			oldValues: {},
+			newValues: { changes },
+		});
 		return args.blackoutId;
 	},
 });
@@ -197,6 +219,18 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.blackoutId);
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourBlackout.deleted",
+			resourceType: "tourBlackout",
+			resourceId: args.blackoutId,
+			oldValues: {
+				startDate: existing.startDate,
+				endDate: existing.endDate,
+			},
+			newValues: {},
+		});
 		return args.blackoutId;
 	},
 });
