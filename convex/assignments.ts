@@ -5,8 +5,8 @@
 //         backend/tours/models.py::Assignment
 //         backend/tours/utils.py::parse_time + calculate_end_time
 //
-// Phase 7.4 scope: core CRUD + conflict detection. Phase 7.6 adds
-// assignment notification emails.
+// Core CRUD + conflict detection. Assignment notification emails
+// are handled via the scheduled notifications system.
 //
 // Time handling: we store HH:MM as strings (matching schema).
 // Conflict math converts to integer minutes and compares with

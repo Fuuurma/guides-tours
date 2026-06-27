@@ -2,8 +2,7 @@
 // multi-tenancy + authz wiring end-to-end.
 //
 // Source: reservations-automation backend/tours/routers/staff/tours.py
-// (33 endpoints total — this is a slim subset; the rest land as we
-// port each Phase 9 route).
+// (all 33 endpoints ported).
 
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
@@ -214,7 +213,7 @@ export const internalUpdate = internalMutation({
 			const cat = await ctx.db.get(args.categoryId);
 			if (!cat) throw new ConvexError("Category not found");
 			if ((cat as { organizationId: string }).organizationId !== args.organizationId) {
-				throw new ConvexError("Category belongs to a different organization");
+				throw new ConvexError("Forbidden: category belongs to a different organization");
 			}
 		}
 		const now = Date.now();

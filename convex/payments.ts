@@ -4,7 +4,7 @@
 //         backend/tours/services/payments/interface.py
 //         backend/tours/api_payments.py
 //
-// Phase 7.3 scope:
+// Payment mutations:
 //   - internal mutations: record (creates a row in PENDING),
 //     markSucceeded, markFailed, markRefunded, refund
 //   - settings mutations: getOrCreate for paymentSettings (Stripe

@@ -4,8 +4,8 @@
 //   backend/tours/services/booking_service.py
 //   backend/tours/routers/staff/bookings.py
 //
-// Phase 7.1 scope: staff-side booking lifecycle. PublicBooking flow
-// (anonymous customer-facing) lands in Phase 7.2.
+// Staff-side booking lifecycle. PublicBooking flow
+// (anonymous customer-facing) lives in public_booking.ts.
 //
 // Lifecycle states (per schema union):
 //   pending → confirmed → cancelled (terminal)
@@ -262,7 +262,7 @@ export const get = query({
 /**
  * Create a staff booking. Defaults to "pending". The caller picks the
  * existing customer; use customers.ts::create first if they don't yet
- * exist. (Phase 7.2 will add public booking flow which auto-creates
+ * exist. (The public booking flow in public_booking.ts auto-creates
  * customers.)
  */
 export const create = mutation({

@@ -6,9 +6,9 @@
 //   get_customer_history_optimized)
 //   backend/tours/routers/staff/customers.py (HTTP endpoints)
 //
-// Phase 7.1 scope: the core CRUD that the dashboard needs to render.
-// Phase 7.6 will land the heavier analytics queries (TruncMonth growth,
-// repeat-customer counts, etc.) — they use the same read path.
+// Core CRUD that the dashboard needs to render. Analytics queries
+// (TruncMonth growth, repeat-customer counts, etc.) use the same
+// read path.
 //
 // Audit logging: every mutation writes an `auditLogs` row carrying
 // the diff. Mirrors source's `AuditLogger.log_action`.
@@ -404,7 +404,7 @@ export const remove = mutation({
 
 /**
  * NOTE: An earlier `recordCompletion` mutation here was deleted after
- * audit (Phase 7.1 review). bookings.ts::complete inlines the
+ * audit. bookings.ts::complete inlines the
  * customer-stats bump — duplicating it in a separate mutation risked
  * drift. If a future caller needs a manual customer-stats correction
  * (admin tool), land it in convex/admin.ts with proper RBAC.

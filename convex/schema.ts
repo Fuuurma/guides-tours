@@ -10,7 +10,7 @@
 //   stored as ciphertext via convex/lib/crypto.ts. The application layer
 //   encrypts before insert, decrypts after read.
 // - Money fields are cents-only (v.int64()) — Django DecimalField dollars
-//   are dropped per Phase 3 decision.
+//   were dropped during migration.
 // - JSON-shaped fields use v.any() until we tighten with v.union/record.
 // - Soft deletes: source uses is_active flags and CASCADE ForeignKeys.
 //   In Convex we use a `deletedAt: v.optional(v.number())` pattern for
@@ -53,7 +53,7 @@ export default defineSchema({
 	//   - Core identity (email, name, password, MFA): Better Auth `user`.
 	//   - Role + per-org membership: Better Auth org `member.role`.
 	//   - Per-user profile (phone, bio, photo, vacationDays, isActive):
-	//     registered as Better Auth user `additionalFields` in Phase 4.
+	//     registered as Better Auth user `additionalFields`.
 	// Domain tables below reference Better Auth user IDs (v.string()).
 
 	availabilities: defineTable({
@@ -431,7 +431,7 @@ export default defineSchema({
 			v.literal("completed"),
 			v.literal("cancelled"),
 		),
-		// Cents-only (per Phase 3 decision — drop DecimalField dollars)
+		// Cents-only (drop DecimalField dollars from source)
 		depositAmountCents: v.int64(),
 		totalAmountCents: v.int64(),
 		balanceDueCents: v.int64(),
@@ -771,7 +771,7 @@ export default defineSchema({
 		whatsappEnabled: v.boolean(),
 		whatsappBusinessAccountId: v.optional(v.string()),
 		whatsappPhoneNumberId: v.optional(v.string()),
-		// Email (post-Phase 7: SES, currently Resend)
+		// Email (via SES)
 		emailEnabled: v.boolean(),
 		emailFromName: v.optional(v.string()),
 		emailFromEmail: v.optional(v.string()),

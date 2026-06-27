@@ -4,7 +4,7 @@
 //
 // See backend/tours/services/tour_analytics_service.py for the
 // reference math. Cache refresh is the caller's responsibility
-// (typically a nightly cron — wired in Phase 21+).
+// (typically a nightly cron — see convex/crons.ts).
 
 import { v, ConvexError } from "convex/values";
 import {

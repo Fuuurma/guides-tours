@@ -2,8 +2,7 @@
 //
 // Source: backend/notifications/service.py::NotificationService.
 //
-// Phase 9: swap console.log stub for real AWS SES email dispatch via
-// fetch + Signature V4 signing (see convex/lib/awsSigV4.ts). Works in
+// Email dispatch via fetch + Signature V4 signing (see convex/lib/awsSigV4.ts). Works in
 // the Convex default runtime + Cloudflare Workers without node-specific
 // imports. SMS is still a stub (would use @aws-sdk/client-sns in
 // production).
@@ -72,7 +71,7 @@ export const dispatchScheduled = internalAction({
 				bodyHtml,
 			});
 		} else if (channel === "sms") {
-			// SMS remains a stub for Phase 9 (would use SNS Publish).
+			// SMS remains a stub (would use SNS Publish).
 			console.warn(
 				`[dispatch-stub-sms] ${template.templateType} → ${to} subject="${subject}"`,
 			);

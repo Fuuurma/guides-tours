@@ -29,7 +29,7 @@ function DashboardLayout() {
 	if (userPending || orgPending) {
 		return (
 			<main className="mx-auto max-w-6xl px-4 py-12">
-				<p className="text-muted-foreground">Loading...</p>
+				<p className="text-muted-foreground">Loading…</p>
 			</main>
 		);
 	}

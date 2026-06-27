@@ -46,7 +46,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 				ac,
 				roles,
 				allowUserToCreateOrganization: true,
-				// Stub: logs to console. Phase 7 wires Amazon SES.
+				// Stub: logs to console. Would use Amazon SES in production.
 				sendInvitationEmail: async (data) => {
 					const inviteLink = `${siteUrl}/invite/${data.id}`;
 					console.log(

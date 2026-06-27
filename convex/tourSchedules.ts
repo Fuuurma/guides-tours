@@ -5,7 +5,7 @@
 //
 // A schedule is a concrete tour instance (date + startTime) that
 // customers can book against. Recurrence/seasonal schedules generate
-// these automatically — Phase 15+ handles the simple CRUD.
+// these automatically — the simple CRUD lives here.
 
 import { v, ConvexError } from "convex/values";
 import {

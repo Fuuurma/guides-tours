@@ -15,7 +15,7 @@
 //   - guide  -> read-only + can update own availability/vacations
 //   - driver -> read-only + can update own availability/notes
 //
-// Adding `tour`, `booking`, etc. as resources is Phase 3.5 work; for
+// Adding `tour`, `booking`, etc. as resources is future work; for
 // now we declare the org-level actions and a generic "document"
 // namespace that we'll fill out as we port each module.
 

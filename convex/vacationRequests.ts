@@ -223,7 +223,7 @@ export const internalCreate = internalMutation({
 	handler: async (ctx, args) => {
 		// Date validation (source: vacation_service.py:119-120).
 		if (args.endDate < args.startDate) {
-			throw new ConvexError("End date must be on or after start date");
+			throw new ConvexError("endDate must be on or after startDate");
 		}
 
 		// Overlap check: no existing pending/approved request may overlap (source: 123-130).

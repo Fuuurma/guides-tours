@@ -61,7 +61,7 @@ describe("vacation requests", () => {
 				startDate: "2026-07-14",
 				endDate: "2026-07-01",
 			}),
-		).rejects.toThrow(/End date must be on or after start date/);
+		).rejects.toThrow(/endDate must be on or after startDate/);
 	});
 
 	it("create: rejects overlapping pending request", async () => {
