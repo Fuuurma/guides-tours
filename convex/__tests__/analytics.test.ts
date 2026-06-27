@@ -245,6 +245,99 @@ describe("analytics", () => {
 		expect(sources[1]!.totalBookings).toBe(1);
 	});
 
+	it("getTopTours: ranks by revenue and respects limit", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_top_tours";
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourA = await t.run((ctx: any) =>
+			seedTour(ctx, orgId, "Premium Tour"),
+		);
+		const tourB = await t.run((ctx: any) =>
+			seedTour(ctx, orgId, "Budget Tour"),
+		);
+		await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, tourA, custId, {
+				totalAmountCents: 50000n,
+				date: "2026-07-10",
+			}),
+		);
+		await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, tourA, custId, {
+				totalAmountCents: 50000n,
+				date: "2026-07-11",
+			}),
+		);
+		await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, tourB, custId, {
+				totalAmountCents: 20000n,
+				date: "2026-07-12",
+			}),
+		);
+
+		const top = await t.query(internal.analytics.getTopToursInternal, {
+			organizationId: orgId,
+			startDate: "2026-07-01",
+			endDate: "2026-07-31",
+			limit: 10,
+		});
+		expect(top.length).toBe(2);
+		expect(top[0]!.tourName).toBe("Premium Tour");
+		expect(top[0]!.totalBookings).toBe(2);
+		expect(top[0]!.totalRevenueCents).toBe(100000);
+		expect(top[1]!.tourName).toBe("Budget Tour");
+		expect(top[1]!.totalBookings).toBe(1);
+
+		// limit=1 returns only the top tour
+		const limited = await t.query(internal.analytics.getTopToursInternal, {
+			organizationId: orgId,
+			startDate: "2026-07-01",
+			endDate: "2026-07-31",
+			limit: 1,
+		});
+		expect(limited.length).toBe(1);
+		expect(limited[0]!.tourName).toBe("Premium Tour");
+	});
+
+	it("getGuideStats: groups by guide and counts statuses", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_guide_stats";
+		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, { guideId: "guide_1" }),
+		);
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, {
+				guideId: "guide_1",
+				status: "completed",
+			}),
+		);
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, {
+				guideId: "guide_1",
+				status: "cancelled",
+			}),
+		);
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, { guideId: "guide_2" }),
+		);
+
+		const stats = await t.query(
+			internal.analytics.getGuideStatsInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-07-01",
+				endDate: "2026-07-31",
+			},
+		);
+		expect(stats.length).toBe(2);
+		const guide1 = stats.find((s: any) => s.guideId === "guide_1")!;
+		expect(guide1.totalAssignments).toBe(3);
+		expect(guide1.completed).toBe(1);
+		expect(guide1.cancelled).toBe(1);
+		const guide2 = stats.find((s: any) => s.guideId === "guide_2")!;
+		expect(guide2.totalAssignments).toBe(1);
+	});
+
 	// Tenant isolation: queries for one org must not see another org's data,
 	// even when given the wrong orgId via the internal path.
 	it("getOverviewInternal: scoped to organizationId (tenant isolation)", async () => {
