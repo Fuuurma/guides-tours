@@ -211,18 +211,23 @@ export const create = mutation({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		// Normalize email to lowercase so "Bob@Example.com" and
+		// "bob@example.com" don't create duplicate customers. The
+		// public booking flow already lowercases in http.ts before
+		// calling internalCreate; dashboard create did not.
+		const email = args.email.toLowerCase().trim();
 		// Email uniqueness per org (source: Customer.objects.filter(company=..., email=...).exists())
 		const dup = await ctx.db
 			.query("customers")
 			.withIndex("by_org_email", (q) =>
 				q
 					.eq("organizationId", member.organizationId)
-					.eq("email", args.email),
+					.eq("email", email),
 			)
 			.unique();
 		if (dup) {
 			throw new ConvexError(
-				`Customer with email "${args.email}" already exists`,
+				`Customer with email "${email}" already exists`,
 			);
 		}
 
@@ -230,7 +235,7 @@ export const create = mutation({
 		const customerId = await ctx.db.insert("customers", {
 			organizationId: member.organizationId,
 			name: args.name,
-			email: args.email,
+			email,
 			phone: args.phone ?? "",
 			notes: args.notes ?? "",
 			smsConsent: args.smsConsent ?? false,
