@@ -36,3 +36,36 @@ test.describe("public booking smoke", () => {
 		expect(response?.status()).toBeLessThan(500);
 	});
 });
+
+test.describe("dashboard route smoke (unauthenticated)", () => {
+	// These routes require auth; hitting them while signed out
+	// should render a graceful "Not signed in" or redirect to
+	// /sign-in — never a 500 from a missing query handler.
+	// We don't try to authenticate in the smoke (that's covered by
+	// the auth flow tests); we just verify the routes are wired.
+
+	const dashboardRoutes = [
+		"/dashboard",
+		"/dashboard/tours",
+		"/dashboard/templates",
+		"/dashboard/categories",
+		"/dashboard/schedules",
+		"/dashboard/bookings",
+		"/dashboard/customers",
+		"/dashboard/analytics",
+		"/dashboard/assignments",
+		"/dashboard/vacations",
+		"/dashboard/vehicles",
+		"/dashboard/drivers",
+		"/dashboard/ota",
+		"/dashboard/notifications",
+		"/dashboard/settings/payments",
+	];
+
+	for (const route of dashboardRoutes) {
+		test(`${route} returns <500 (auth-gated render)`, async ({ page }) => {
+			const response = await page.goto(route);
+			expect(response?.status()).toBeLessThan(500);
+		});
+	}
+});
