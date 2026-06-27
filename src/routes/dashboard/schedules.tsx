@@ -1,10 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/schedules")({
 	component: SchedulesPage,
@@ -18,60 +21,117 @@ interface Schedule {
 	capacityBooked: number;
 	capacityTotal: number;
 	status: "available" | "full" | "cancelled";
+	tourId: string;
 }
 
-const columns: DataTableColumn<Schedule>[] = [
-	{
-		key: "date",
-		header: "Date",
-		render: (s) => (
-			<Link
-				to="/dashboard/schedules/$scheduleId"
-				params={{ scheduleId: s._id }}
-				className="font-medium text-blue-600 hover:underline"
-			>
-				{s.date}
-			</Link>
-		),
-		searchValue: (s) => s.date,
-	},
-	{
-		key: "time",
-		header: "Time",
-		render: (s) => <span className="font-mono text-xs">{s.startTime}–{s.endTime}</span>,
-		searchValue: (s) => `${s.startTime} ${s.endTime}`,
-	},
-	{ key: "booked", header: "Booked", render: (s) => s.capacityBooked },
-	{ key: "capacity", header: "Capacity", render: (s) => s.capacityTotal },
-	{
-		key: "status",
-		header: "Status",
-		render: (s) => <StatusBadge status={s.status} />,
-		searchValue: (s) => s.status,
-	},
-];
+function TourCell({ tourId, tourNameById }: { tourId: string; tourNameById: Map<string, string> }) {
+	const name = tourNameById.get(tourId);
+	return (
+		<Link
+			to="/dashboard/tours/$tourId"
+			params={{ tourId: tourId as Id<"tours"> }}
+			className="text-blue-600 hover:underline truncate"
+		>
+			{name ?? (
+				<span className="text-muted-foreground italic text-xs">Unknown tour</span>
+			)}
+		</Link>
+	);
+}
 
 function SchedulesPage() {
+	const [status, setStatus] = useState<"available" | "full" | "cancelled" | null>(null);
+	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 	const { data: schedules, isPending, error } = useQuery(
-		convexQuery(api.tourSchedules.list, {}),
+		convexQuery(api.tourSchedules.list, status ? { status } : {}),
 	);
-	const itemCount = schedules?.length ?? 0;
+
+	const tourNameById = new Map<string, string>(
+		(tours ?? []).map((t) => [String(t._id), t.name]),
+	);
+	const items = (schedules ?? []) as Schedule[];
+	const itemCount = items.length;
+
+	const columns: DataTableColumn<Schedule>[] = [
+		{
+			key: "date",
+			header: "Date",
+			render: (s) => (
+				<Link
+					to="/dashboard/schedules/$scheduleId"
+					params={{ scheduleId: s._id }}
+					className="font-medium text-blue-600 hover:underline"
+				>
+					{s.date}
+				</Link>
+			),
+			searchValue: (s) => s.date,
+		},
+		{
+			key: "time",
+			header: "Time",
+			render: (s) => (
+				<span className="font-mono text-xs">
+					{s.startTime}–{s.endTime}
+				</span>
+			),
+			searchValue: (s) => `${s.startTime} ${s.endTime}`,
+		},
+		{
+			key: "tour",
+			header: "Tour",
+			render: (s) => (
+				<TourCell tourId={s.tourId} tourNameById={tourNameById} />
+			),
+			searchValue: (s) => tourNameById.get(s.tourId) ?? s.tourId,
+		},
+		{ key: "booked", header: "Booked", render: (s) => s.capacityBooked },
+		{ key: "capacity", header: "Capacity", render: (s) => s.capacityTotal },
+		{
+			key: "status",
+			header: "Status",
+			render: (s) => <StatusBadge status={s.status} />,
+			searchValue: (s) => s.status,
+		},
+	];
 
 	return (
 		<ListPage
 			title="Tour schedules"
-			description={`${itemCount} schedule${itemCount === 1 ? "" : "s"} — concrete tour instances that customers can book against.`}
+			description={`${itemCount} schedule${itemCount === 1 ? "" : "s"} — concrete tour instances that customers can book against.${
+				status ? ` Filtered by ${status}.` : ""
+			}`}
 			newTo="/dashboard/schedules/new"
 			newLabel="+ New schedule"
 		>
+			<div className="mb-4 flex flex-wrap items-center gap-2">
+				<span className="text-muted-foreground text-sm">Status:</span>
+				{(["available", "full", "cancelled"] as const).map((s) => (
+					<Button
+						key={s}
+						variant={status === s ? "default" : "outline"}
+						size="sm"
+						onClick={() => setStatus(status === s ? null : s)}
+					>
+						{s}
+					</Button>
+				))}
+				{status && (
+					<Button variant="ghost" size="sm" onClick={() => setStatus(null)}>
+						Clear
+					</Button>
+				)}
+			</div>
 			<DataTable
-				data={schedules as Schedule[] | undefined}
+				data={items}
 				columns={columns}
 				rowKey={(s) => s._id}
 				isPending={isPending}
 				error={error}
-				emptyMessage="No schedules yet."
-				searchPlaceholder="Search by date, time, or status…"
+				emptyMessage={
+					status ? `No ${status} schedules.` : "No schedules yet."
+				}
+				searchPlaceholder="Search by date, time, tour, or status…"
 			/>
 		</ListPage>
 	);
