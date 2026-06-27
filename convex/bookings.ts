@@ -802,53 +802,85 @@ export const complete = mutation({
 		if (booking.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
-		if (!booking.checkedInAt) {
-			throw new ConvexError(
-				"Only checked-in bookings can be completed",
-			);
-		}
-
-		const now = Date.now();
-		await ctx.db.patch(args.bookingId, {
-			status: "completed",
-			completedAt: now,
-			updatedAt: now,
-		});
-
-		// Mirror source's customer-stats bump.
-		const customer = await ctx.db.get(booking.customerId);
-		if (customer) {
-			const newVisits = customer.totalVisits + 1;
-			const newRevenue =
-				customer.totalRevenueCents + booking.totalAmountCents;
-			const newLoyalty =
-				customer.loyaltyPoints + LOYALTY_POINTS_PER_BOOKING;
-			const shouldBeVip =
-				customer.vipStatus ||
-				(VIP_THRESHOLD_VISITS > 0 &&
-					newVisits >= VIP_THRESHOLD_VISITS);
-			await ctx.db.patch(booking.customerId, {
-				totalVisits: newVisits,
-				totalRevenueCents: newRevenue,
-				loyaltyPoints: newLoyalty,
-				vipStatus: shouldBeVip,
-				updatedAt: now,
-			});
-		}
-
-		await logAudit(ctx, {
-			organizationId: booking.organizationId,
-			userId: member.userId,
-			action: "booking.completed",
-			resourceType: "booking",
-			resourceId: args.bookingId,
-			oldValues: { status: "checked_in" },
-			newValues: { status: "completed", completedAt: now },
-		});
-
+		await performComplete(ctx, booking, member.userId);
 		return args.bookingId;
 	},
 });
+
+/** Internal mirror — no auth, used by tests. Same logic as
+ *  the public complete. */
+export const internalComplete = internalMutation({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) throw new ConvexError("Booking not found");
+		await performComplete(ctx, booking, "system");
+		return args.bookingId;
+	},
+});
+
+async function performComplete(
+	ctx: MutationCtx,
+	booking: {
+		_id: Id<"bookings">;
+		organizationId: string;
+		customerId: Id<"customers">;
+		status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
+		checkedInAt?: number;
+		totalAmountCents: bigint;
+	},
+	userIdForAudit: string,
+): Promise<void> {
+	// Idempotency: a booking already past "checked_in" must not
+	// re-bump customer stats. Source model has no formal state
+	// machine — but with multiple completions, a single visit
+	// would inflate totalVisits / loyaltyPoints / totalRevenue
+	// each time.
+	if (booking.status === "completed") {
+		throw new ConvexError("Booking is already completed");
+	}
+	if (!booking.checkedInAt) {
+		throw new ConvexError("Only checked-in bookings can be completed");
+	}
+
+	const now = Date.now();
+	await ctx.db.patch(booking._id, {
+		status: "completed",
+		completedAt: now,
+		updatedAt: now,
+	});
+
+	// Mirror source's customer-stats bump.
+	const customer = await ctx.db.get(booking.customerId);
+	if (customer) {
+		const newVisits = customer.totalVisits + 1;
+		const newRevenue =
+			customer.totalRevenueCents + booking.totalAmountCents;
+		const newLoyalty =
+			customer.loyaltyPoints + LOYALTY_POINTS_PER_BOOKING;
+		const shouldBeVip =
+			customer.vipStatus ||
+			(VIP_THRESHOLD_VISITS > 0 &&
+				newVisits >= VIP_THRESHOLD_VISITS);
+		await ctx.db.patch(booking.customerId, {
+			totalVisits: newVisits,
+			totalRevenueCents: newRevenue,
+			loyaltyPoints: newLoyalty,
+			vipStatus: shouldBeVip,
+			updatedAt: now,
+		});
+	}
+
+	await logAudit(ctx, {
+		organizationId: booking.organizationId,
+		userId: userIdForAudit,
+		action: "booking.completed",
+		resourceType: "booking",
+		resourceId: booking._id,
+		oldValues: { status: "checked_in" },
+		newValues: { status: "completed", completedAt: now },
+	});
+}
 
 /** Record a post-tour review on a completed booking. */
 export const recordReview = mutation({

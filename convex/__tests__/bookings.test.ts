@@ -850,3 +850,272 @@ describe("convex/bookings — internalUpdate (edit-booking flow)", () => {
 		expect(changes?.guestNames).toBeUndefined();
 	});
 });
+
+describe("convex/bookings — internalComplete (checkIn→complete flow)", () => {
+	it("bumps customer totalVisits + loyaltyPoints on first complete", async () => {
+		const t = convexTest(schema, modules);
+		const { bookingId, customerId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_complete_a");
+			// Seed customer with prior visits/points via direct insert
+			// (seedCustomer signature doesn't accept overrides).
+			const custId = await c.db.insert("customers", {
+				organizationId: "org_complete_a",
+				name: "Test Customer",
+				email: "complete-a@example.com",
+				phone: "+1555000000",
+				notes: "",
+				smsConsent: false,
+				emailConsent: false,
+				preferredLanguage: "en",
+				tags: [],
+				source: "direct",
+				sourceDetails: "",
+				specialRequirements: "",
+				vipStatus: false,
+				loyaltyPoints: 50,
+				totalVisits: 2,
+				totalRevenueCents: 0n,
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			const bid = await c.db.insert("bookings", {
+				organizationId: "org_complete_a",
+				tourId,
+				customerId: custId,
+				date: "2026-07-15",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "",
+				languageRequired: "en",
+				notes: "",
+				status: "checked_in",
+				depositAmountCents: 0n,
+				totalAmountCents: 30000n,
+				balanceDueCents: 30000n,
+				paymentMethod: "",
+				checkedInAt: Date.now(),
+				checkedInBy: "test",
+				completedAt: undefined,
+				netRevenueCents: 30000n,
+				source: "direct",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId: bid, customerId: custId };
+		});
+
+		await t.mutation(internal.bookings.internalComplete, {
+			bookingId,
+		});
+
+		const customer = (await t.run(async (ctx) =>
+			ctx.db.get(customerId),
+		)) as {
+			totalVisits: number;
+			loyaltyPoints: number;
+			totalRevenueCents: bigint;
+			vipStatus: boolean;
+		};
+		expect(customer.totalVisits).toBe(3); // was 2
+		expect(customer.loyaltyPoints).toBe(60); // was 50 + 10
+		expect(customer.totalRevenueCents).toBe(30000n);
+	});
+
+	it("rejects complete on a booking that was never checked in", async () => {
+		const t = convexTest(schema, modules);
+		const { bookingId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_complete_b");
+			const custId = await seedCustomer(c, "org_complete_b");
+			const bid = await c.db.insert("bookings", {
+				organizationId: "org_complete_b",
+				tourId,
+				customerId: custId,
+				date: "2026-07-15",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "",
+				languageRequired: "en",
+				notes: "",
+				status: "confirmed",
+				depositAmountCents: 0n,
+				totalAmountCents: 10000n,
+				balanceDueCents: 10000n,
+				paymentMethod: "",
+				checkedInAt: undefined,
+				checkedInBy: "",
+				completedAt: undefined,
+				netRevenueCents: 10000n,
+				source: "direct",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId: bid };
+		});
+
+		await expect(
+			t.mutation(internal.bookings.internalComplete, { bookingId }),
+		).rejects.toThrow(/Only checked-in bookings can be completed/);
+	});
+
+	it("rejects complete on a cancelled booking", async () => {
+		const t = convexTest(schema, modules);
+		const { bookingId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_complete_c");
+			const custId = await seedCustomer(c, "org_complete_c");
+			const bid = await c.db.insert("bookings", {
+				organizationId: "org_complete_c",
+				tourId,
+				customerId: custId,
+				date: "2026-07-15",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "",
+				languageRequired: "en",
+				notes: "",
+				status: "cancelled",
+				depositAmountCents: 0n,
+				totalAmountCents: 10000n,
+				balanceDueCents: 10000n,
+				paymentMethod: "",
+				checkedInAt: undefined,
+				checkedInBy: "",
+				completedAt: undefined,
+				netRevenueCents: 10000n,
+				source: "direct",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId: bid };
+		});
+
+		await expect(
+			t.mutation(internal.bookings.internalComplete, { bookingId }),
+		).rejects.toThrow(/Only checked-in bookings can be completed/);
+	});
+
+	it("rejects double-complete (idempotency guard against stat re-bump)", async () => {
+		const t = convexTest(schema, modules);
+		const { bookingId, customerId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_complete_d");
+			const custId = await seedCustomer(c, "org_complete_d");
+			const bid = await c.db.insert("bookings", {
+				organizationId: "org_complete_d",
+				tourId,
+				customerId: custId,
+				date: "2026-07-15",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "",
+				languageRequired: "en",
+				notes: "",
+				status: "checked_in",
+				depositAmountCents: 0n,
+				totalAmountCents: 10000n,
+				balanceDueCents: 10000n,
+				paymentMethod: "",
+				checkedInAt: Date.now(),
+				checkedInBy: "test",
+				completedAt: undefined,
+				netRevenueCents: 10000n,
+				source: "direct",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId: bid, customerId: custId };
+		});
+
+		// First complete — bumps stats
+		await t.mutation(internal.bookings.internalComplete, { bookingId });
+		const afterFirst = (await t.run(async (ctx) =>
+			ctx.db.get(customerId),
+		)) as { totalVisits: number; loyaltyPoints: number };
+		expect(afterFirst.totalVisits).toBe(1);
+		expect(afterFirst.loyaltyPoints).toBe(10);
+
+		// Second complete — must throw and NOT re-bump stats
+		await expect(
+			t.mutation(internal.bookings.internalComplete, { bookingId }),
+		).rejects.toThrow(/already completed/);
+
+		const afterSecond = (await t.run(async (ctx) =>
+			ctx.db.get(customerId),
+		)) as { totalVisits: number; loyaltyPoints: number };
+		expect(afterSecond.totalVisits).toBe(1); // not 2
+		expect(afterSecond.loyaltyPoints).toBe(10); // not 20
+	});
+
+	it("promotes customer to VIP when reaching threshold", async () => {
+		const t = convexTest(schema, modules);
+		const { bookingId, customerId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_complete_e");
+			// 4 visits → next complete (5th) should hit VIP_THRESHOLD_VISITS=5
+			const custId = await c.db.insert("customers", {
+				organizationId: "org_complete_e",
+				name: "Test Customer",
+				email: "complete-e@example.com",
+				phone: "+1555000000",
+				notes: "",
+				smsConsent: false,
+				emailConsent: false,
+				preferredLanguage: "en",
+				tags: [],
+				source: "direct",
+				sourceDetails: "",
+				specialRequirements: "",
+				vipStatus: false,
+				loyaltyPoints: 40,
+				totalVisits: 4,
+				totalRevenueCents: 0n,
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			const bid = await c.db.insert("bookings", {
+				organizationId: "org_complete_e",
+				tourId,
+				customerId: custId,
+				date: "2026-07-15",
+				startTime: "09:00",
+				guests: 2,
+				guestNames: "",
+				languageRequired: "en",
+				notes: "",
+				status: "checked_in",
+				depositAmountCents: 0n,
+				totalAmountCents: 50000n,
+				balanceDueCents: 50000n,
+				paymentMethod: "",
+				checkedInAt: Date.now(),
+				checkedInBy: "test",
+				completedAt: undefined,
+				netRevenueCents: 50000n,
+				source: "direct",
+				reviewRating: undefined,
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId: bid, customerId: custId };
+		});
+
+		await t.mutation(internal.bookings.internalComplete, { bookingId });
+
+		const customer = (await t.run(async (ctx) =>
+			ctx.db.get(customerId),
+		)) as { totalVisits: number; vipStatus: boolean };
+		expect(customer.totalVisits).toBe(5);
+		expect(customer.vipStatus).toBe(true);
+	});
+});
