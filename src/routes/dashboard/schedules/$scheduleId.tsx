@@ -1,14 +1,26 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/schedules/$scheduleId")({
 	component: ScheduleDetailPage,
 });
+
+interface ScheduleBooking {
+	_id: Id<"bookings">;
+	date: string;
+	startTime: string;
+	guests: number;
+	customerName: string;
+	customerEmail: string;
+	status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
+}
 
 function ScheduleDetailPage() {
 	const { scheduleId } = Route.useParams();
@@ -18,6 +30,9 @@ function ScheduleDetailPage() {
 	const { data: tour } = useQuery(
 		convexQuery(api.tours.get, { tourId: schedule?.tourId as never }),
 	);
+	const { data: bookings } = useQuery(
+		convexQuery(api.bookings.listBySchedule, { scheduleId: scheduleId as never }),
+	);
 
 	if (isPending) return <p className="text-muted-foreground">Loading...</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
@@ -26,6 +41,30 @@ function ScheduleDetailPage() {
 	const utilization = schedule.capacityTotal
 		? Math.round((schedule.capacityBooked / schedule.capacityTotal) * 100)
 		: 0;
+
+	const bookingRows = (bookings ?? []) as ScheduleBooking[];
+
+	const columns: DataTableColumn<ScheduleBooking>[] = [
+		{
+			key: "customer",
+			header: "Customer",
+			render: (b) => (
+				<div>
+					<p className="font-medium">{b.customerName || "(unknown)"}</p>
+					<p className="text-muted-foreground text-xs">{b.customerEmail}</p>
+				</div>
+			),
+			searchValue: (b) => `${b.customerName} ${b.customerEmail}`,
+		},
+		{ key: "time", header: "Time", render: (b) => b.startTime },
+		{ key: "guests", header: "Guests", render: (b) => b.guests },
+		{
+			key: "status",
+			header: "Status",
+			render: (b) => <StatusBadge status={b.status} />,
+			searchValue: (b) => b.status,
+		},
+	];
 
 	return (
 		<DetailPage
@@ -54,6 +93,24 @@ function ScheduleDetailPage() {
 				<p className="text-muted-foreground text-sm">
 					{schedule.capacityBooked} of {schedule.capacityTotal} spots booked
 				</p>
+			</DetailSection>
+
+			<DetailSection
+				title={`Bookings (${bookingRows.length})`}
+				description="Active bookings assigned to this schedule"
+			>
+				{bookingRows.length === 0 ? (
+					<p className="text-muted-foreground text-sm">
+						No bookings yet for this schedule.
+					</p>
+				) : (
+					<DataTable
+						data={bookingRows}
+						columns={columns}
+						rowKey={(b) => b._id}
+						emptyMessage="No bookings yet for this schedule."
+					/>
+				)}
 			</DetailSection>
 
 			{schedule.notes && (

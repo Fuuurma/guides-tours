@@ -22,8 +22,8 @@
 //   - recordReview (post-tour review rating/comment)
 
 import { v, ConvexError } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
@@ -150,6 +150,85 @@ export const list = query({
 			hasNext,
 			hasPrevious: page > 1,
 		};
+	},
+});
+
+/** List bookings assigned to a specific tourSchedule.
+ *
+ *  Used by the schedule detail page to show "who's booked on this
+ *  schedule" without requiring operators to filter the global
+ *  bookings list. Uses the `by_schedule` index.
+ */
+/**
+ * Internal helper — fetches + enriches bookings for a schedule.
+ * Caller is responsible for org-scoping (the public query does this
+ * via requireMembership).
+ */
+async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">) {
+	const all = await ctx.db
+		.query("bookings")
+		.withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId))
+		.collect();
+	const active = all
+		.filter((b) => b.status !== "cancelled")
+		.sort((a, b) => a.startTime.localeCompare(b.startTime));
+	const customerDocs = await Promise.all(
+		active.map((b) => ctx.db.get(b.customerId)),
+	);
+	return active.map((b, i) => {
+		const c = customerDocs[i];
+		return {
+			_id: b._id,
+			date: b.date,
+			startTime: b.startTime,
+			guests: b.guests,
+			status: b.status,
+			customerName: c?.name ?? "",
+			customerEmail: c?.email ?? "",
+		};
+	});
+}
+
+export const listBySchedule = query({
+	args: {
+		scheduleId: v.id("tourSchedules"),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		// SECURITY: scope to org even though the index lookup is keyed
+		// on scheduleId (defense in depth — a malicious caller can't
+		// read another org's bookings by guessing a scheduleId).
+		const schedule = await ctx.db.get(args.scheduleId);
+		if (!schedule) return [];
+		if (schedule.organizationId !== member.organizationId) {
+			throw new ConvexError(
+				"Forbidden: schedule belongs to a different organization",
+			);
+		}
+		return await _listByScheduleRaw(ctx, args.scheduleId);
+	},
+});
+
+/**
+ * Internal mirror of listBySchedule. Takes organizationId directly so
+ * tests + cron jobs can call it without going through Better Auth.
+ * The caller must pass the schedule's owning orgId; the helper
+ * verifies before returning rows.
+ */
+export const internalListBySchedule = internalQuery({
+	args: {
+		scheduleId: v.id("tourSchedules"),
+		organizationId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const schedule = await ctx.db.get(args.scheduleId);
+		if (!schedule) return [];
+		if (schedule.organizationId !== args.organizationId) {
+			throw new ConvexError(
+				"Forbidden: schedule belongs to a different organization",
+			);
+		}
+		return await _listByScheduleRaw(ctx, args.scheduleId);
 	},
 });
 
