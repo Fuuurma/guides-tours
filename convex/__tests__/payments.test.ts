@@ -9,12 +9,14 @@
 //   - verifyStripeSignature: round-trip (sign with Web Crypto,
 //     verify with our helper) — proves our HMAC math matches Stripe's
 
+process.env.ENCRYPTION_KEY ??= "a".repeat(64);
+
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import {
 	parseStripeSignature,
 	verifyStripeSignature,
@@ -416,6 +418,66 @@ describe("payments_stripe — parseStripeSignature + verifyStripeSignature", () 
 			timestamp * 1000,
 		);
 		expect(ok).toBe(false);
+	});
+
+	it("upsertSettings preserves existing secrets when placeholder sent", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_placeholder_test";
+		const { encrypt, decrypt } = await import("../lib/crypto");
+
+		// Seed existing paymentSettings with real encrypted secrets.
+		await t.run(async (ctx) => {
+			await ctx.db.insert("paymentSettings", {
+				organizationId: orgId,
+				stripeEnabled: true,
+				stripePublishableKey: "pk_real",
+				stripeSecretKey: await encrypt("sk_real_secret_value"),
+				stripeWebhookSecret: await encrypt(
+					"whsec_real_secret_value",
+				),
+				stripeIsSandbox: false,
+				acceptDeposits: false,
+				depositPercentage: 20,
+				defaultCurrency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		// Call upsertSettings via internal mutation with placeholders.
+		await t.mutation(internal.payments.upsertSettingsInternal, {
+			stripeEnabled: false,
+			stripePublishableKey: "pk_changed",
+			stripeSecretKey: "placeholder-no-change",
+			stripeWebhookSecret: "placeholder-no-change",
+			stripeIsSandbox: true,
+			acceptDeposits: true,
+			depositPercentage: 30,
+			defaultCurrency: "EUR",
+			_organizationId: orgId,
+		});
+
+		// Secrets must still decrypt to the original values, not the
+		// encrypted form of "placeholder-no-change".
+		await t.run(async (ctx) => {
+			const s = await ctx.db
+				.query("paymentSettings")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.unique();
+			expect(s).toBeDefined();
+			expect(s!.stripeEnabled).toBe(false);
+			expect(s!.stripePublishableKey).toBe("pk_changed");
+			expect(s!.stripeIsSandbox).toBe(true);
+			expect(s!.acceptDeposits).toBe(true);
+			expect(s!.depositPercentage).toBe(30);
+			expect(s!.defaultCurrency).toBe("EUR");
+			expect(await decrypt(s!.stripeSecretKey)).toBe(
+				"sk_real_secret_value",
+			);
+			expect(await decrypt(s!.stripeWebhookSecret)).toBe(
+				"whsec_real_secret_value",
+			);
+		});
 	});
 
 	it("verifyStripeSignature rejects a stale timestamp", async () => {

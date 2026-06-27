@@ -293,10 +293,7 @@ export const upsertSettings = mutation({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
-		// Encryption via convex/lib/crypto.
 		const { encrypt } = await import("./lib/crypto");
-		const secretEnc = await encrypt(args.stripeSecretKey);
-		const webhookEnc = await encrypt(args.stripeWebhookSecret);
 
 		const now = Date.now();
 		const existing = await ctx.db
@@ -305,6 +302,21 @@ export const upsertSettings = mutation({
 				q.eq("organizationId", member.organizationId),
 			)
 			.unique();
+
+		// When the FE can't read back secrets it sends the literal
+		// "placeholder-no-change".  Keep the existing ciphertext so we
+		// don't overwrite a real secret with junk.
+		const SECRET_PLACEHOLDER = "placeholder-no-change";
+		const secretEnc =
+			existing &&
+			args.stripeSecretKey === SECRET_PLACEHOLDER
+				? existing.stripeSecretKey
+				: await encrypt(args.stripeSecretKey);
+		const webhookEnc =
+			existing &&
+			args.stripeWebhookSecret === SECRET_PLACEHOLDER
+				? existing.stripeWebhookSecret
+				: await encrypt(args.stripeWebhookSecret);
 
 		if (existing) {
 			await ctx.db.patch(existing._id, {
@@ -322,6 +334,69 @@ export const upsertSettings = mutation({
 		}
 		return await ctx.db.insert("paymentSettings", {
 			organizationId: member.organizationId,
+			stripeEnabled: args.stripeEnabled,
+			stripePublishableKey: args.stripePublishableKey,
+			stripeSecretKey: secretEnc,
+			stripeWebhookSecret: webhookEnc,
+			stripeIsSandbox: args.stripeIsSandbox,
+			acceptDeposits: args.acceptDeposits,
+			depositPercentage: args.depositPercentage,
+			defaultCurrency: args.defaultCurrency,
+			createdAt: now,
+			updatedAt: now,
+		});
+	},
+});
+
+/** Internal mirror of upsertSettings for tests. Takes orgId directly. */
+export const upsertSettingsInternal = internalMutation({
+	args: {
+		stripeEnabled: v.boolean(),
+		stripePublishableKey: v.string(),
+		stripeSecretKey: v.string(),
+		stripeWebhookSecret: v.string(),
+		stripeIsSandbox: v.boolean(),
+		acceptDeposits: v.boolean(),
+		depositPercentage: v.number(),
+		defaultCurrency: v.string(),
+		_organizationId: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const orgId = args._organizationId!;
+		const { encrypt } = await import("./lib/crypto");
+
+		const now = Date.now();
+		const existing = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+			.unique();
+
+		const SECRET_PLACEHOLDER = "placeholder-no-change";
+		const secretEnc =
+			existing && args.stripeSecretKey === SECRET_PLACEHOLDER
+				? existing.stripeSecretKey
+				: await encrypt(args.stripeSecretKey);
+		const webhookEnc =
+			existing && args.stripeWebhookSecret === SECRET_PLACEHOLDER
+				? existing.stripeWebhookSecret
+				: await encrypt(args.stripeWebhookSecret);
+
+		if (existing) {
+			await ctx.db.patch(existing._id, {
+				stripeEnabled: args.stripeEnabled,
+				stripePublishableKey: args.stripePublishableKey,
+				stripeSecretKey: secretEnc,
+				stripeWebhookSecret: webhookEnc,
+				stripeIsSandbox: args.stripeIsSandbox,
+				acceptDeposits: args.acceptDeposits,
+				depositPercentage: args.depositPercentage,
+				defaultCurrency: args.defaultCurrency,
+				updatedAt: now,
+			});
+			return existing._id;
+		}
+		return await ctx.db.insert("paymentSettings", {
+			organizationId: orgId,
 			stripeEnabled: args.stripeEnabled,
 			stripePublishableKey: args.stripePublishableKey,
 			stripeSecretKey: secretEnc,
