@@ -32,9 +32,15 @@ export const list = query({
 			.query("tourAnalytics")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
 		if (args.tourId) {
+			// SECURITY: scope to org even when filtering by tourId.
+			// tourId is globally unique in Convex so cross-org rows
+			// can't actually share an ID, but the explicit filter
+			// documents the tenant isolation and keeps the pattern
+			// consistent with other modules.
 			q = ctx.db
 				.query("tourAnalytics")
-				.withIndex("by_tour_period", (q) => q.eq("tourId", args.tourId!));
+				.withIndex("by_tour_period", (q) => q.eq("tourId", args.tourId!))
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		const all = await q.collect();
 		return all
