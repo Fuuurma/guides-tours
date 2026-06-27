@@ -158,7 +158,9 @@ export const record = mutation({
 
 /**
  * Mark a payment succeeded (called by Stripe webhook + by manual
- * admin action). Idempotent — re-applying doesn't double-update.
+ * admin action). Idempotent for already-succeeded rows. Refuses
+ * to overwrite failed/refunded rows — Stripe webhooks can re-deliver
+ * events, but we must not silently resurrect a failed payment.
  */
 export const markSucceeded = internalMutation({
 	args: {
@@ -168,6 +170,11 @@ export const markSucceeded = internalMutation({
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) throw new ConvexError("Payment not found");
 		if (p.status === "succeeded") return args.paymentId;
+		if (p.status !== "pending") {
+			throw new ConvexError(
+				`Cannot mark non-pending payment as succeeded (was ${p.status})`,
+			);
+		}
 		const now = Date.now();
 		await ctx.db.patch(args.paymentId, {
 			status: "succeeded",
@@ -187,6 +194,11 @@ export const markSucceeded = internalMutation({
 	},
 });
 
+/**
+ * Mark a payment failed (called by Stripe webhook). Idempotent for
+ * already-failed rows. Refuses to overwrite succeeded/refunded rows
+ * — a late "payment_failed" event must not void a real charge.
+ */
 export const markFailed = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
@@ -196,6 +208,11 @@ export const markFailed = internalMutation({
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) throw new ConvexError("Payment not found");
 		if (p.status === "failed") return args.paymentId;
+		if (p.status !== "pending") {
+			throw new ConvexError(
+				`Cannot mark non-pending payment as failed (was ${p.status})`,
+			);
+		}
 		const now = Date.now();
 		await ctx.db.patch(args.paymentId, {
 			status: "failed",
@@ -412,13 +429,22 @@ export const recordFromAction = internalMutation({
 	},
 });
 
-/** Internal: mark refunded (called by webhook on charge.refunded). */
+/** Internal: mark refunded (called by webhook on charge.refunded).
+ *  Idempotent for already-refunded rows. Refuses to mark non-succeeded
+ *  rows as refunded — Stripe can re-deliver charge.refunded for a
+ *  cancelled/failed PaymentIntent, but we must not claim a refund
+ *  for a charge that never landed. */
 export const markRefunded = internalMutation({
 	args: { paymentId: v.id("payments") },
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) throw new ConvexError("Payment not found");
 		if (p.status === "refunded") return args.paymentId;
+		if (p.status !== "succeeded") {
+			throw new ConvexError(
+				`Cannot mark non-succeeded payment as refunded (was ${p.status})`,
+			);
+		}
 		const now = Date.now();
 		await ctx.db.patch(args.paymentId, {
 			status: "refunded",

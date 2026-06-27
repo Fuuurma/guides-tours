@@ -211,6 +211,99 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(row?.status).toBe("failed");
 	});
+
+	// State-machine guards: webhooks can re-deliver events, but a
+	// late event must not flip a terminal row.
+
+	it("markSucceeded refuses to overwrite a failed payment", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_f";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 5000n,
+			currency: "usd",
+			stripePaymentIntentId: "pi_test_guard_1",
+		});
+		await t.mutation(internal.payments.markFailed, {
+			paymentId,
+			reason: "declined",
+		});
+		await expect(
+			t.mutation(internal.payments.markSucceeded, { paymentId }),
+		).rejects.toThrow(/Cannot mark non-pending payment as succeeded/);
+		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
+		expect(row?.status).toBe("failed");
+	});
+
+	it("markFailed refuses to overwrite a succeeded payment", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_g";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 5000n,
+			currency: "usd",
+			stripePaymentIntentId: "pi_test_guard_2",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		await expect(
+			t.mutation(internal.payments.markFailed, {
+				paymentId,
+				reason: "late event",
+			}),
+		).rejects.toThrow(/Cannot mark non-pending payment as failed/);
+		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
+		expect(row?.status).toBe("succeeded");
+	});
+
+	it("markRefunded refuses to mark a non-succeeded payment", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_h";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 5000n,
+			currency: "usd",
+			stripePaymentIntentId: "pi_test_guard_3",
+		});
+		// status is "pending" — markRefunded must reject
+		await expect(
+			t.mutation(internal.payments.markRefunded, { paymentId }),
+		).rejects.toThrow(/Cannot mark non-succeeded payment as refunded/);
+		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
+		expect(row?.status).toBe("pending");
+	});
+
+	it("markRefunded is idempotent on already-refunded payment", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_i";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 5000n,
+			currency: "usd",
+			stripePaymentIntentId: "pi_test_guard_4",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		await t.mutation(internal.payments.markRefunded, { paymentId });
+		// Re-applying should not throw (idempotent)
+		await t.mutation(internal.payments.markRefunded, { paymentId });
+		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
+		expect(row?.status).toBe("refunded");
+	});
 });
 
 describe("convex/payments — getStripeSecrets (returns ciphertext)", () => {
