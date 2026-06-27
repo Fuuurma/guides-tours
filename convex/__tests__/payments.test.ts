@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
-import { api, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import {
 	parseStripeSignature,
 	verifyStripeSignature,
