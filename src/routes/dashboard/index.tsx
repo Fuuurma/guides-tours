@@ -168,7 +168,15 @@ function DashboardIndex() {
 									>
 										<div className="min-w-0 flex-1">
 											<p className="font-medium truncate">
-												{tourName ?? (
+												{tourName ? (
+													<Link
+														to="/dashboard/tours/$tourId"
+														params={{ tourId: a.tourId }}
+														className="hover:underline"
+													>
+														{tourName}
+													</Link>
+												) : (
 													<span className="text-muted-foreground italic">
 														Unknown tour
 													</span>

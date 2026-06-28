@@ -5,7 +5,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -118,9 +118,15 @@ function BookingDetailPage() {
 			}
 		>
 			{showCancelForm && (
-				<div className="rounded-md border p-4 space-y-4">
+				<div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-4">
 					<p className="text-sm font-medium">Cancel booking — this will be recorded in the audit log.</p>
-					<Input value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Reason for cancellation" />
+					<Textarea
+						value={cancelReason}
+						onChange={(e) => setCancelReason(e.target.value)}
+						placeholder="Reason for cancellation (e.g. customer request, weather, etc.)"
+						rows={2}
+						maxLength={500}
+					/>
 					<div className="flex gap-2">
 						<Button variant="destructive" onClick={onCancel} disabled={pending}>
 							{pending ? "Cancelling…" : "Confirm cancellation"}
