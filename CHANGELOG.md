@@ -4,6 +4,26 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Accessibility + inline errors (2026-06-28 session 5)
+
+**Public booking page accessibility:**
+
+- Field-level inline errors (`fieldErr` state) instead of just toast-only. Each field shows its own error message via `<p role="alert">` next to the input.
+- `aria-invalid={true}` on inputs that have an error.
+- Date validation added (was only checking date exists, not that it was picked).
+- Submit-level error state (`submitErr`) shown in destructive alert box at bottom of form (rate limit exceeded, capacity full, etc).
+
+**FormField accessibility:**
+
+- Error message now has `role="alert"` + `id` for `aria-describedby` linking.
+- Hint text gets `id` too. Screen readers announce errors when they appear.
+
+**Security review:**
+
+- Audited `bookings.create`, `customers.create/update/list`, `tourCategories`, `tourTemplates`, `tourBlackoutDates`, `otaProducts.create/update`, `assignments.create`, `vacationRequests`, `payments.upsertSettings`, `notifications`, `analytics` — all have proper org-scoping via `by_org` indexes + cross-org guards. No data leaks found.
+
+**Tests: 539 passing** (unchanged — FE-only refactor). **tsc clean**, **`pnpm build` clean**.
+
 ### Last form validation pass (2026-06-28 session 4)
 
 **Form validation completed for money/booking fields:**
