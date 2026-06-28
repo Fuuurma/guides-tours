@@ -38,6 +38,7 @@ function AssignmentDetailPage() {
 		}),
 	);
 	const complete = useMutation(api.assignments.complete);
+	const cancel = useMutation(api.assignments.cancel);
 	const remove = useMutation(api.assignments.remove);
 	const [pending, setPending] = useState(false);
 
@@ -46,6 +47,21 @@ function AssignmentDetailPage() {
 		try {
 			await complete({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment marked complete");
+		} catch (err) {
+			toast.error((err as Error).message);
+		} finally {
+			setPending(false);
+		}
+	};
+	const onCancel = async () => {
+		const reason = window.prompt("Reason for cancellation? (optional)") ?? "";
+		setPending(true);
+		try {
+			await cancel({
+				assignmentId: assignmentId as Id<"assignments">,
+				reason: reason.trim() || undefined,
+			});
+			toast.success("Assignment cancelled");
 		} catch (err) {
 			toast.error((err as Error).message);
 		} finally {
@@ -73,6 +89,7 @@ function AssignmentDetailPage() {
 
 	const endTimeDisplay = assignment.endTime ?? "—";
 	const canComplete = assignment.status === "scheduled";
+	const canCancel = assignment.status === "scheduled";
 	const canDelete = assignment.status !== "completed";
 
 	return (
@@ -85,6 +102,11 @@ function AssignmentDetailPage() {
 					{canComplete && (
 						<Button onClick={onComplete} disabled={pending}>
 							Mark complete
+						</Button>
+					)}
+					{canCancel && (
+						<Button variant="outline" onClick={onCancel} disabled={pending}>
+							Cancel
 						</Button>
 					)}
 					{canDelete && (
