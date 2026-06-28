@@ -4,6 +4,21 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Last form validation pass (2026-06-28 session 4)
+
+**Form validation completed for money/booking fields:**
+
+- **new-booking-page**: per-field error display (guests, notes, deposit), guest count cap from selected tour's maxGuests, deposit cannot exceed total amount, `parseUsdToCents` helper for cents conversion (replaced inline BigInt math).
+- **edit-booking-page**: per-field error display (guests, notes, deposit), deposit cannot exceed total, `maxLength` on all text fields, trim before submit.
+- **edit-tour-page**: per-field error display (duration, capacity, min/max guests, description), `minGuests<=maxGuests` shows error on both fields, `parseUsdToCents` for price.
+
+**Security review:**
+
+- Audited `tourCategories`, `tourTemplates`, `tourBlackoutDates` — all have proper org-scoping via `by_org` indexes + `existing.organizationId !== orgId` guards on update/remove. No cross-org leak found.
+- Audited `payments.upsertSettings` placeholder handling — verified working correctly.
+
+**Tests: 539 passing** (unchanged — validation is FE-only refactor, no new tests). **tsc clean**, **`pnpm build` clean**.
+
 ### Form validation + index + tests (2026-06-28 session 3)
 
 **Form validation expanded:**
