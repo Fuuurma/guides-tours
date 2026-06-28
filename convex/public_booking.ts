@@ -22,6 +22,7 @@ import { v, ConvexError } from "convex/values";
 import { internalAction, internalMutation, query } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { FunctionReference } from "convex/server";
+import type { Id } from "./_generated/dataModel";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
 
@@ -107,11 +108,17 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 						organizationId: string | undefined;
 						outcome: string;
 					},
-					{ allowed: boolean; attempts: number }
+					{ allowed: boolean; attempts: number; attemptId: Id<"publicBookingAttempts"> }
+				>;
+				updateAttemptOutcome: FunctionReference<
+					"mutation",
+					"internal",
+					{ attemptId: Id<"publicBookingAttempts">; outcome: string },
+					{ updated: boolean }
 				>;
 			};
-		})["lib/rate_limit"].recordAttempt;
-		const rateCheck = await ctx.runMutation(recordAttemptRef, {
+		})["lib/rate_limit"];
+		const rateCheck = await ctx.runMutation(recordAttemptRef.recordAttempt, {
 			email: args.customerEmail,
 			slug: args.slug,
 			organizationId: undefined,
@@ -136,24 +143,48 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 			},
 		)) as { id?: string } | null;
 		if (!org) {
+			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+				attemptId: rateCheck.attemptId,
+				outcome: "failure_org_not_found",
+			});
 			throw new ConvexError("organization not found");
 		}
 		const organizationId = org.id;
 		if (!organizationId) {
+			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+				attemptId: rateCheck.attemptId,
+				outcome: "failure_org_no_id",
+			});
 			throw new ConvexError("organization has no id");
 		}
 
-		return await ctx.runMutation(internal.public_booking.internalCreate, {
-			organizationId,
-			tourId: args.tourId as never,
-			customerName: args.customerName,
-			customerEmail: args.customerEmail,
-			customerPhone: args.customerPhone,
-			date: args.date,
-			startTime: args.startTime,
-			guests: args.guests,
-			notes: args.notes,
-		});
+		try {
+			const bookingId = await ctx.runMutation(
+				internal.public_booking.internalCreate,
+				{
+					organizationId,
+					tourId: args.tourId as never,
+					customerName: args.customerName,
+					customerEmail: args.customerEmail,
+					customerPhone: args.customerPhone,
+					date: args.date,
+					startTime: args.startTime,
+					guests: args.guests,
+					notes: args.notes,
+				},
+			);
+			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+				attemptId: rateCheck.attemptId,
+				outcome: "success",
+			});
+			return bookingId;
+		} catch (err) {
+			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+				attemptId: rateCheck.attemptId,
+				outcome: `failure_${err instanceof ConvexError ? err.data : "unknown"}`,
+			});
+			throw err;
+		}
 	},
 });
 

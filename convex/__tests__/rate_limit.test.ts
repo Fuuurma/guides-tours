@@ -34,7 +34,11 @@ const recordAttempt = (internal as unknown as {
 				organizationId: string | undefined;
 				outcome: string;
 			},
-			{ allowed: boolean; attempts: number }
+			{
+				allowed: boolean;
+				attempts: number;
+				attemptId: import("../_generated/dataModel").Id<"publicBookingAttempts">;
+			}
 		>;
 		countAttempts: FunctionReference<
 			"query",
@@ -47,6 +51,15 @@ const recordAttempt = (internal as unknown as {
 			"internal",
 			Record<string, never>,
 			{ deleted: number }
+		>;
+		updateAttemptOutcome: FunctionReference<
+			"mutation",
+			"internal",
+			{
+				attemptId: import("../_generated/dataModel").Id<"publicBookingAttempts">;
+				outcome: string;
+			},
+			{ updated: boolean }
 		>;
 	};
 })["lib/rate_limit"];
@@ -186,5 +199,68 @@ describe("public booking rate limit", () => {
 			ctx.db.query("publicBookingAttempts").collect(),
 		);
 		expect(rows.length).toBe(1);
+	});
+
+	test("recordAttempt returns attemptId for later outcome update", async () => {
+		const t = convexTest(schema, modules);
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "henry@example.com",
+			slug: "test-org",
+			organizationId: undefined,
+			outcome: "pending",
+		});
+		expect(r.attemptId).toBeDefined();
+		// The attempt row should exist with the initial outcome
+		const rows = await t.run(async (ctx) =>
+			ctx.db
+				.query("publicBookingAttempts")
+				.filter((q) => q.eq(q.field("_id"), r.attemptId))
+				.collect(),
+		);
+		expect(rows.length).toBe(1);
+		expect(rows[0]!.outcome).toBe("pending");
+	});
+
+	test("updateAttemptOutcome changes the outcome in place", async () => {
+		const t = convexTest(schema, modules);
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "iris@example.com",
+			slug: "test-org",
+			organizationId: undefined,
+			outcome: "pending",
+		});
+		const upd = await t.mutation(recordAttempt.updateAttemptOutcome, {
+			attemptId: r.attemptId,
+			outcome: "success",
+		});
+		expect(upd.updated).toBe(true);
+		const rows = await t.run(async (ctx) =>
+			ctx.db
+				.query("publicBookingAttempts")
+				.filter((q) => q.eq(q.field("_id"), r.attemptId))
+				.collect(),
+		);
+		expect(rows[0]!.outcome).toBe("success");
+	});
+
+	test("updateAttemptOutcome can record failure outcomes", async () => {
+		const t = convexTest(schema, modules);
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "jack@example.com",
+			slug: "test-org",
+			organizationId: undefined,
+			outcome: "pending",
+		});
+		await t.mutation(recordAttempt.updateAttemptOutcome, {
+			attemptId: r.attemptId,
+			outcome: "failure_org_not_found",
+		});
+		const rows = await t.run(async (ctx) =>
+			ctx.db
+				.query("publicBookingAttempts")
+				.filter((q) => q.eq(q.field("_id"), r.attemptId))
+				.collect(),
+		);
+		expect(rows[0]!.outcome).toBe("failure_org_not_found");
 	});
 });

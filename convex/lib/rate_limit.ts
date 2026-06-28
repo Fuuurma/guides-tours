@@ -42,8 +42,9 @@ async function collectRecentAttempts(
 		.collect();
 }
 
-/** Records an attempt. Returns true if it's allowed (under cap),
- *  false if the email is rate-limited. */
+/** Records an attempt. Returns the attempt ID + whether it was
+ *  allowed. Callers should update the outcome via updateAttemptOutcome
+ *  once they know if the booking succeeded or failed. */
 export const recordAttempt = internalMutation({
 	args: {
 		email: v.string(),
@@ -59,7 +60,7 @@ export const recordAttempt = internalMutation({
 
 		// Always record — both successes and rejections — so we can
 		// audit attempts even when the rate limit is bypassed.
-		await ctx.db.insert("publicBookingAttempts", {
+		const attemptId = await ctx.db.insert("publicBookingAttempts", {
 			organizationId: args.organizationId as never,
 			email: args.email,
 			slug: args.slug,
@@ -67,7 +68,7 @@ export const recordAttempt = internalMutation({
 			createdAt: now,
 		});
 
-		return { allowed, attempts: recent.length + 1 };
+		return { allowed, attempts: recent.length + 1, attemptId };
 	},
 });
 
@@ -98,5 +99,21 @@ export const purgeOld = internalMutation({
 			await ctx.db.delete(row._id);
 		}
 		return { deleted: old.length };
+	},
+});
+
+/** Update the outcome of the most recent attempt for an email.
+ *  Called after a booking succeeds/fails to record the final result
+ *  for audit. The most-recent row is matched by email+slug+createdAt
+ *  desc. We update by ID (collected via collectRecentAttempts)
+ *  to avoid races where two concurrent attempts exist. */
+export const updateAttemptOutcome = internalMutation({
+	args: {
+		attemptId: v.id("publicBookingAttempts"),
+		outcome: v.string(),
+	},
+	handler: async (ctx, args) => {
+		await ctx.db.patch(args.attemptId, { outcome: args.outcome });
+		return { updated: true };
 	},
 });
