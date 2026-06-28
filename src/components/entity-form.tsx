@@ -174,7 +174,11 @@ export function EntityFormPage<TValues extends Record<string, unknown>, TResult>
 					>
 						{children}
 						{form.error && (
-							<p className="text-destructive text-sm">{form.error}</p>
+							<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3" role="alert">
+								<p className="text-destructive text-sm font-medium">
+									{form.error}
+								</p>
+							</div>
 						)}
 						<div className="flex justify-end gap-2">
 							<Button type="button" variant="outline" asChild>
