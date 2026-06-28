@@ -1,7 +1,6 @@
 import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { Id } from "../../../convex/_generated/dataModel";
 import {
 	Card,
@@ -21,6 +20,15 @@ import {
 } from "@/components/ui/select";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../form";
+import {
+	MAX_NOTES_LEN,
+	parseUsdToCents,
+	validateNotesOptional,
+	validatePositiveInteger,
+} from "@/lib/validation";
+
+interface TourLite { _id: string; name: string; maxGuests?: number }
+interface CustomerLite { _id: string; name: string; email: string }
 
 export function NewBookingPage() {
 	const navigate = useNavigate();
@@ -39,55 +47,79 @@ export function NewBookingPage() {
 	const [depositUsd, setDepositUsd] = useState("");
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [guestsErr, setGuestsErr] = useState<string | null>(null);
+	const [notesErr, setNotesErr] = useState<string | null>(null);
+	const [depositErr, setDepositErr] = useState<string | null>(null);
+
+	const selectedTour = ((tours ?? []) as TourLite[]).find(
+		(t) => t._id === tourId,
+	);
+	const maxGuests = selectedTour?.maxGuests;
 
 	const onSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
-		setPending(true);
 		setError(null);
 
-		const g = Number(guests);
 		if (!tourId) {
 			setError("Please select a tour");
-			setPending(false);
 			return;
 		}
 		if (!customerId) {
 			setError("Please select a customer");
-			setPending(false);
 			return;
 		}
-		if (g <= 0) {
-			setError("Guests must be a positive number");
-			setPending(false);
+		const guestsError = validatePositiveInteger(guests, "Guests");
+		let capError: string | null = null;
+		if (maxGuests && Number(guests) > maxGuests) {
+			capError = `Tour maximum is ${maxGuests} guests`;
+		}
+		setGuestsErr(guestsError ?? capError);
+		const notesError = validateNotesOptional(notes);
+		setNotesErr(notesError);
+
+		const totalCents = totalUsd.trim() ? parseUsdToCents(totalUsd) : null;
+		if (totalUsd.trim() && totalCents === null) {
+			setError("Total amount must be a non-negative number");
+			return;
+		}
+		const depositCents = depositUsd.trim() ? parseUsdToCents(depositUsd) : null;
+		if (depositUsd.trim() && depositCents === null) {
+			setDepositErr("Deposit must be a non-negative number");
+			return;
+		}
+		if (
+			depositCents !== null &&
+			totalCents !== null &&
+			depositCents > totalCents
+		) {
+			setDepositErr("Deposit cannot exceed the total amount");
 			return;
 		}
 
+		if (guestsError || capError || notesError) {
+			setError(guestsError ?? capError ?? notesError ?? "Invalid input");
+			return;
+		}
+
+		setPending(true);
 		try {
 			const id = await create({
 				tourId: tourId as Id<"tours">,
 				customerId: customerId as Id<"customers">,
 				date,
 				startTime,
-				guests: g,
-				guestNames: guestNames || undefined,
-				notes: notes || undefined,
-				totalAmountCents:
-					totalUsd && Number(totalUsd) > 0
-						? BigInt(Math.round(Number(totalUsd) * 100))
-						: undefined,
-				depositAmountCents:
-					depositUsd && Number(depositUsd) > 0
-						? BigInt(Math.round(Number(depositUsd) * 100))
-						: undefined,
+				guests: Number(guests),
+				guestNames: guestNames.trim() || undefined,
+				notes: notes.trim() || undefined,
+				totalAmountCents: totalCents ?? undefined,
+				depositAmountCents: depositCents ?? undefined,
 			});
-			toast.success("Booking created");
 			void navigate({
 				to: "/dashboard/bookings/$bookingId",
 				params: { bookingId: id },
 			});
 		} catch (err) {
 			setError((err as Error).message);
-			toast.error((err as Error).message);
 		} finally {
 			setPending(false);
 		}
@@ -108,7 +140,7 @@ export function NewBookingPage() {
 							<Select value={tourId} onValueChange={setTourId}>
 								<SelectTrigger id="tour"><SelectValue placeholder="Select a tour…" /></SelectTrigger>
 								<SelectContent>
-									{(tours ?? []).map((t) => (
+									{((tours ?? []) as TourLite[]).map((t) => (
 										<SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
 									))}
 								</SelectContent>
@@ -119,7 +151,7 @@ export function NewBookingPage() {
 							<Select value={customerId} onValueChange={setCustomerId}>
 								<SelectTrigger id="customer"><SelectValue placeholder="Select a customer…" /></SelectTrigger>
 								<SelectContent>
-									{(customers?.items ?? []).map((c) => (
+									{((customers?.items ?? []) as CustomerLite[]).map((c) => (
 										<SelectItem key={c._id} value={c._id}>{c.name} ({c.email})</SelectItem>
 									))}
 								</SelectContent>
@@ -146,21 +178,26 @@ export function NewBookingPage() {
 									onChange={(e) => setStartTime(e.target.value)}
 								/>
 							</FormField>
-							<FormField label="Guests *" htmlFor="guests">
+							<FormField label="Guests *" htmlFor="guests" error={guestsErr ?? undefined} hint={maxGuests ? `Max ${maxGuests} guests` : undefined}>
 								<Input
 									id="guests"
 									type="number"
 									min="1"
+									max={maxGuests ?? undefined}
 									required
 									value={guests}
-									onChange={(e) => setGuests(e.target.value)}
+									onChange={(e) => {
+										setGuests(e.target.value);
+										if (guestsErr) setGuestsErr(null);
+									}}
 								/>
 							</FormField>
 						</div>
 
-						<FormField label="Guest names" htmlFor="gNames">
+						<FormField label="Guest names" htmlFor="gNames" hint="Comma-separated, one per guest">
 							<Input
 								id="gNames"
+								maxLength={500}
 								value={guestNames}
 								onChange={(e) => setGuestNames(e.target.value)}
 								placeholder="Jane, John, …"
@@ -180,31 +217,49 @@ export function NewBookingPage() {
 									min="0"
 									value={totalUsd}
 									onChange={(e) => setTotalUsd(e.target.value)}
+									placeholder="0.00"
 								/>
 							</FormField>
-							<FormField label="Deposit (USD)" htmlFor="deposit">
+							<FormField label="Deposit (USD)" htmlFor="deposit" error={depositErr ?? undefined}>
 								<Input
 									id="deposit"
 									type="number"
 									step="0.01"
 									min="0"
 									value={depositUsd}
-									onChange={(e) => setDepositUsd(e.target.value)}
+									onChange={(e) => {
+										setDepositUsd(e.target.value);
+										if (depositErr) setDepositErr(null);
+									}}
+									placeholder="0.00"
 								/>
 							</FormField>
 						</div>
 
-						<FormField label="Notes" htmlFor="notes">
+						<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
 							<Textarea
 								id="notes"
 								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
+								onChange={(e) => {
+									setNotes(e.target.value);
+									if (notesErr) setNotesErr(null);
+								}}
 								rows={3}
+								maxLength={MAX_NOTES_LEN}
 								placeholder="Optional"
 							/>
+							<p className="text-muted-foreground text-xs text-right">
+								{notes.length} / {MAX_NOTES_LEN}
+							</p>
 						</FormField>
 
-						{error && <p className="text-destructive text-sm">{error}</p>}
+						{error && (
+							<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3" role="alert">
+								<p className="text-destructive text-sm font-medium">
+									{error}
+								</p>
+							</div>
+						)}
 
 						<FormActions
 							onCancel={() => navigate({ to: "/dashboard/bookings" })}

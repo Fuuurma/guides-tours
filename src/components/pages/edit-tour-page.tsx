@@ -17,6 +17,14 @@ import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { FormField } from "../form";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+	MAX_DESCRIPTION_LEN,
+	MAX_NAME_LEN,
+	parseUsdToCents,
+	validateDescriptionOptional,
+	validatePositiveInteger,
+	validatePositiveNumber,
+} from "@/lib/validation";
 
 const TOUR_TYPES = ["walking", "car", "minivan", "bus", "boat", "other"] as const;
 
@@ -46,36 +54,55 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 		convexQuery(api.tourCategories.list, {}),
 	);
 	const [loaded, setLoaded] = useState(false);
+	const [durErr, setDurErr] = useState<string | null>(null);
+	const [capErr, setCapErr] = useState<string | null>(null);
+	const [minErr, setMinErr] = useState<string | null>(null);
+	const [maxErr, setMaxErr] = useState<string | null>(null);
+	const [descErr, setDescErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const dur = Number(v.durationHours);
-			const cap = Number(v.capacity);
+			const durError = validatePositiveNumber(v.durationHours, "Duration");
+			const capError = validatePositiveInteger(v.capacity, "Capacity");
+			const minError = validatePositiveInteger(v.minGuests, "Min guests");
+			const maxError = validatePositiveInteger(v.maxGuests, "Max guests");
+			setDurErr(durError);
+			setCapErr(capError);
+			setMinErr(minError);
+			setMaxErr(maxError);
 			const minG = Number(v.minGuests);
 			const maxG = Number(v.maxGuests);
-			if (dur <= 0 || cap <= 0 || minG <= 0 || maxG <= 0) {
-				throw new Error("Numeric fields must be positive");
+			if (!minError && !maxError && minG > maxG) {
+				const msg = "minGuests cannot exceed maxGuests";
+				setMinErr(msg);
+				setMaxErr(msg);
+			}
+			const descError = validateDescriptionOptional(v.description);
+			setDescErr(descError);
+			if (durError || capError || minError || maxError || descError) {
+				throw new Error(durError ?? capError ?? minError ?? maxError ?? descError ?? "Invalid input");
 			}
 			if (minG > maxG) {
 				throw new Error("minGuests cannot exceed maxGuests");
 			}
+			const priceCents = v.priceUsd.trim() ? parseUsdToCents(v.priceUsd) : null;
+			if (v.priceUsd.trim() && priceCents === null) {
+				throw new Error("Price must be a non-negative number");
+			}
 			await update({
 				tourId: tourId as Id<"tours">,
-				name: v.name,
-				description: v.description || undefined,
+				name: v.name.trim(),
+				description: v.description.trim() || undefined,
 				tourType: v.tourType,
 				categoryId: v.categoryId
 					? (v.categoryId as Id<"tourCategories">)
 					: undefined,
-				durationHours: dur,
-				capacity: cap,
+				durationHours: Number(v.durationHours),
+				capacity: Number(v.capacity),
 				minGuests: minG,
 				maxGuests: maxG,
 				isActive: v.isActive,
-				basePriceCents:
-					v.priceUsd && Number(v.priceUsd) > 0
-						? BigInt(Math.round(Number(v.priceUsd) * 100))
-						: undefined,
+				basePriceCents: priceCents ?? undefined,
 				languages: v.languages
 					.split(",")
 					.map((s) => s.trim())
@@ -170,17 +197,22 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				<Input
 					id="edit-name"
 					required
+					maxLength={MAX_NAME_LEN}
 					value={form.values.name}
 					onChange={(e) => form.set("name", e.target.value)}
 				/>
 			</FormField>
 
-			<FormField label="Description" htmlFor="edit-desc">
+			<FormField label="Description" htmlFor="edit-desc" error={descErr ?? undefined}>
 				<Textarea
 					id="edit-desc"
 					value={form.values.description}
-					onChange={(e) => form.set("description", e.target.value)}
+					onChange={(e) => {
+						form.set("description", e.target.value);
+						if (descErr) setDescErr(null);
+					}}
 					rows={3}
+					maxLength={MAX_DESCRIPTION_LEN}
 					placeholder="Optional"
 				/>
 			</FormField>
@@ -227,7 +259,7 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Duration (hours) *" htmlFor="edit-dur">
+				<FormField label="Duration (hours) *" htmlFor="edit-dur" error={durErr ?? undefined}>
 					<Input
 						id="edit-dur"
 						type="number"
@@ -235,38 +267,50 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 						min="0.5"
 						required
 						value={form.values.durationHours}
-						onChange={(e) => form.set("durationHours", e.target.value)}
+						onChange={(e) => {
+							form.set("durationHours", e.target.value);
+							if (durErr) setDurErr(null);
+						}}
 					/>
 				</FormField>
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-3">
-				<FormField label="Capacity *" htmlFor="edit-cap">
+				<FormField label="Capacity *" htmlFor="edit-cap" error={capErr ?? undefined}>
 					<Input
 						id="edit-cap"
 						type="number"
 						min="1"
 						required
 						value={form.values.capacity}
-						onChange={(e) => form.set("capacity", e.target.value)}
+						onChange={(e) => {
+							form.set("capacity", e.target.value);
+							if (capErr) setCapErr(null);
+						}}
 					/>
 				</FormField>
-				<FormField label="Min guests" htmlFor="edit-min">
+				<FormField label="Min guests" htmlFor="edit-min" error={minErr ?? undefined}>
 					<Input
 						id="edit-min"
 						type="number"
 						min="1"
 						value={form.values.minGuests}
-						onChange={(e) => form.set("minGuests", e.target.value)}
+						onChange={(e) => {
+							form.set("minGuests", e.target.value);
+							if (minErr) setMinErr(null);
+						}}
 					/>
 				</FormField>
-				<FormField label="Max guests" htmlFor="edit-max">
+				<FormField label="Max guests" htmlFor="edit-max" error={maxErr ?? undefined}>
 					<Input
 						id="edit-max"
 						type="number"
 						min="1"
 						value={form.values.maxGuests}
-						onChange={(e) => form.set("maxGuests", e.target.value)}
+						onChange={(e) => {
+							form.set("maxGuests", e.target.value);
+							if (maxErr) setMaxErr(null);
+						}}
 					/>
 				</FormField>
 			</div>

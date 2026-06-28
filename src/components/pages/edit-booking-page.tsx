@@ -6,6 +6,12 @@ import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { FormField } from "../form";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+	MAX_NOTES_LEN,
+	parseUsdToCents,
+	validateNotesOptional,
+	validatePositiveInteger,
+} from "@/lib/validation";
 
 interface FormValues extends Record<string, unknown> {
 	date: string;
@@ -27,30 +33,50 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 	const booking = useQuery(api.bookings.get, { bookingId: bookingId as Id<"bookings"> });
 	const update = useMutation(api.bookings.update);
 	const [loaded, setLoaded] = useState(false);
+	const [guestsErr, setGuestsErr] = useState<string | null>(null);
+	const [notesErr, setNotesErr] = useState<string | null>(null);
+	const [depositErr, setDepositErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const guests = Number(v.guests);
-			if (guests <= 0) throw new Error("Guests must be > 0");
-			const depositCents =
-				v.depositUsd && Number(v.depositUsd) > 0
-					? BigInt(Math.round(Number(v.depositUsd) * 100))
-					: undefined;
-			const totalCents =
-				v.totalUsd && Number(v.totalUsd) > 0
-					? BigInt(Math.round(Number(v.totalUsd) * 100))
-					: undefined;
+			const guestsError = validatePositiveInteger(v.guests, "Guests");
+			setGuestsErr(guestsError);
+			const notesError = validateNotesOptional(v.notes);
+			setNotesErr(notesError);
+
+			const totalCents = v.totalUsd.trim() ? parseUsdToCents(v.totalUsd) : null;
+			if (v.totalUsd.trim() && totalCents === null) {
+				throw new Error("Total amount must be a non-negative number");
+			}
+			const depositCents = v.depositUsd.trim() ? parseUsdToCents(v.depositUsd) : null;
+			if (v.depositUsd.trim() && depositCents === null) {
+				setDepositErr("Deposit must be a non-negative number");
+				throw new Error("Deposit must be a non-negative number");
+			}
+			if (
+				depositCents !== null &&
+				totalCents !== null &&
+				depositCents > totalCents
+			) {
+				setDepositErr("Deposit cannot exceed the total amount");
+				throw new Error("Deposit cannot exceed the total amount");
+			}
+
+			if (guestsError || notesError) {
+				throw new Error(guestsError ?? notesError ?? "Invalid input");
+			}
+
 			await update({
 				bookingId: bookingId as Id<"bookings">,
 				date: v.date,
 				startTime: v.startTime,
-				guests,
-				guestNames: v.guestNames || undefined,
-				languageRequired: v.languageRequired || undefined,
-				notes: v.notes || undefined,
-				depositAmountCents: depositCents,
-				totalAmountCents: totalCents,
-				paymentMethod: v.paymentMethod || undefined,
+				guests: Number(v.guests),
+				guestNames: v.guestNames.trim() || undefined,
+				languageRequired: v.languageRequired.trim() || undefined,
+				notes: v.notes.trim() || undefined,
+				depositAmountCents: depositCents ?? undefined,
+				totalAmountCents: totalCents ?? undefined,
+				paymentMethod: v.paymentMethod.trim() || undefined,
 			});
 			return bookingId;
 		},
@@ -159,14 +185,17 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 						onChange={(e) => form.set("startTime", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Guests" htmlFor="edit-guests">
+				<FormField label="Guests" htmlFor="edit-guests" error={guestsErr ?? undefined}>
 					<Input
 						id="edit-guests"
 						type="number"
 						min="1"
 						required
 						value={form.values.guests}
-						onChange={(e) => form.set("guests", e.target.value)}
+						onChange={(e) => {
+							form.set("guests", e.target.value);
+							if (guestsErr) setGuestsErr(null);
+						}}
 					/>
 				</FormField>
 			</div>
@@ -174,6 +203,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			<FormField label="Guest names" htmlFor="edit-guest-names" hint="Comma-separated">
 				<Input
 					id="edit-guest-names"
+					maxLength={500}
 					value={form.values.guestNames}
 					onChange={(e) => form.set("guestNames", e.target.value)}
 					placeholder="Jane, John"
@@ -183,20 +213,28 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			<FormField label="Language required" htmlFor="edit-lang">
 				<Input
 					id="edit-lang"
+					maxLength={100}
 					value={form.values.languageRequired}
 					onChange={(e) => form.set("languageRequired", e.target.value)}
 					placeholder="en, es, fr"
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="edit-notes">
+			<FormField label="Notes" htmlFor="edit-notes" error={notesErr ?? undefined}>
 				<Textarea
 					id="edit-notes"
 					value={form.values.notes}
-					onChange={(e) => form.set("notes", e.target.value)}
+					onChange={(e) => {
+						form.set("notes", e.target.value);
+						if (notesErr) setNotesErr(null);
+					}}
 					rows={3}
+					maxLength={MAX_NOTES_LEN}
 					placeholder="Allergies, special requests…"
 				/>
+				<p className="text-muted-foreground text-xs text-right">
+					{form.values.notes.length} / {MAX_NOTES_LEN}
+				</p>
 			</FormField>
 
 			<div className="grid gap-4 md:grid-cols-3">
@@ -210,19 +248,23 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 						onChange={(e) => form.set("totalUsd", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Deposit (USD)" htmlFor="edit-deposit">
+				<FormField label="Deposit (USD)" htmlFor="edit-deposit" error={depositErr ?? undefined}>
 					<Input
 						id="edit-deposit"
 						type="number"
 						step="0.01"
 						min="0"
 						value={form.values.depositUsd}
-						onChange={(e) => form.set("depositUsd", e.target.value)}
+						onChange={(e) => {
+							form.set("depositUsd", e.target.value);
+							if (depositErr) setDepositErr(null);
+						}}
 					/>
 				</FormField>
 				<FormField label="Payment method" htmlFor="edit-payment">
 					<Input
 						id="edit-payment"
+						maxLength={50}
 						value={form.values.paymentMethod}
 						onChange={(e) => form.set("paymentMethod", e.target.value)}
 						placeholder="card, cash, invoice…"
