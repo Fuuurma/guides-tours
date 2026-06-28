@@ -19,10 +19,10 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardLayout() {
 	const navigate = useNavigate();
-	const { data: user, isPending: userPending } = useQuery(
+	const { data: user, isPending: userPending, error: userError } = useQuery(
 		convexQuery(api.auth.getCurrentUser, {}),
 	);
-	const { data: org, isPending: orgPending } = useQuery(
+	const { data: org, isPending: orgPending, error: orgError } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
 
@@ -30,6 +30,27 @@ function DashboardLayout() {
 		return (
 			<main className="mx-auto max-w-6xl px-4 py-12">
 				<p className="text-muted-foreground">Loading…</p>
+			</main>
+		);
+	}
+
+	if (userError || orgError) {
+		return (
+			<main className="mx-auto max-w-6xl px-4 py-12">
+				<Toaster />
+				<Card>
+					<CardHeader>
+						<CardTitle>Something went wrong</CardTitle>
+						<CardDescription>
+							{userError?.message ?? orgError?.message ?? "Unknown error"}
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<Button onClick={() => window.location.reload()}>
+							Reload
+						</Button>
+					</CardContent>
+				</Card>
 			</main>
 		);
 	}
