@@ -46,7 +46,7 @@ function VehiclesPage() {
 		try {
 			await setStatus({
 				vehicleId: id as Id<"vehicles">,
-				status: newStatus,
+				status: newStatus as "available" | "in_use" | "maintenance" | "retired",
 			});
 			toast.success("Status updated");
 		} catch (err) {

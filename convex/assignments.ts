@@ -402,7 +402,7 @@ export const internalCreate = internalMutation({
 				"Forbidden: vehicle belongs to a different organization",
 			);
 		}
-		if (vehicle.status !== "available" && vehicle.status !== "active") {
+		if (vehicle.status !== "available") {
 			throw new ConvexError(
 				`Vehicle is not available (status: ${vehicle.status})`,
 			);

@@ -32,7 +32,14 @@ const ALLOWED_UPDATE_FIELDS = [
 
 export const list = query({
 	args: {
-		status: v.optional(v.string()),
+		status: v.optional(
+			v.union(
+				v.literal("available"),
+				v.literal("in_use"),
+				v.literal("maintenance"),
+				v.literal("retired"),
+			),
+		),
 		vehicleType: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -229,7 +236,12 @@ export const internalUpdate = internalMutation({
 export const setStatus = mutation({
 	args: {
 		vehicleId: v.id("vehicles"),
-		status: v.string(),
+		status: v.union(
+			v.literal("available"),
+			v.literal("in_use"),
+			v.literal("maintenance"),
+			v.literal("retired"),
+		),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
@@ -250,7 +262,12 @@ export const internalSetStatus = internalMutation({
 		organizationId: v.string(),
 		userId: v.string(),
 		vehicleId: v.id("vehicles"),
-		status: v.string(),
+		status: v.union(
+			v.literal("available"),
+			v.literal("in_use"),
+			v.literal("maintenance"),
+			v.literal("retired"),
+		),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db.get(args.vehicleId);

@@ -315,8 +315,13 @@ export default defineSchema({
 		color: v.string(),
 		// OWNED | LEASED | RENTAL ("" when unknown)
 		ownershipType: v.string(),
-		// AVAILABLE | IN_USE | MAINTENANCE | RETIRED | ACTIVE
-		status: v.string(),
+		// AVAILABLE | IN_USE | MAINTENANCE | RETIRED
+		status: v.union(
+			v.literal("available"),
+			v.literal("in_use"),
+			v.literal("maintenance"),
+			v.literal("retired"),
+		),
 		notes: v.string(),
 		createdAt: v.number(),
 		updatedAt: v.number(),
