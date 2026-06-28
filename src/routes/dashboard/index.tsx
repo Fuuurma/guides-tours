@@ -26,18 +26,36 @@ function DashboardIndex() {
 	const { data: org } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
-	const { data: bookings } = useQuery(convexQuery(api.bookings.list, {}));
-	const { data: assignments } = useQuery(convexQuery(api.assignments.list, {}));
-	const { data: vacations } = useQuery(convexQuery(api.vacationRequests.list, {}));
-	const { data: customers } = useQuery(convexQuery(api.customers.list, {}));
-	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
+	const { data: bookings, error: bookingsError } = useQuery(
+		convexQuery(api.bookings.list, {}),
+	);
+	const { data: assignments, error: assignmentsError } = useQuery(
+		convexQuery(api.assignments.list, {}),
+	);
+	const { data: vacations, error: vacationsError } = useQuery(
+		convexQuery(api.vacationRequests.list, {}),
+	);
+	const { data: customers, error: customersError } = useQuery(
+		convexQuery(api.customers.list, {}),
+	);
+	const { data: tours, error: toursError } = useQuery(
+		convexQuery(api.tours.list, {}),
+	);
 
-	const { data: overview } = useQuery(
+	const { data: overview, error: overviewError } = useQuery(
 		convexQuery(api.analytics.getOverview, {
 			startDate: today,
 			endDate: today,
 		}),
 	);
+
+	const firstError =
+		bookingsError ??
+		assignmentsError ??
+		vacationsError ??
+		customersError ??
+		toursError ??
+		overviewError;
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
@@ -58,6 +76,16 @@ function DashboardIndex() {
 
 	return (
 		<div className="space-y-6">
+			{firstError && (
+				<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
+					<p className="text-destructive text-sm">
+						Some data failed to load: {firstError.message}
+					</p>
+					<p className="text-muted-foreground text-xs mt-1">
+						Cards below may show stale or empty data. Refresh to retry.
+					</p>
+				</div>
+			)}
 			<header className="flex items-center justify-between">
 				<div>
 					<h1 className="text-2xl font-semibold">Today</h1>

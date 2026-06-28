@@ -29,7 +29,7 @@ function defaultRange(): { startDate: string; endDate: string } {
 }
 
 function AnalyticsPage() {
-	const { data: org, isPending: orgPending } = useQuery(
+	const { data: org, isPending: orgPending, error: orgError } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
 	const [range, setRange] = useState(defaultRange);
@@ -38,18 +38,49 @@ function AnalyticsPage() {
 		startDate: range.startDate,
 		endDate: range.endDate,
 	} as const;
-	const { data: overview, isPending: overviewPending } = useQuery(
-		convexQuery(api.analytics.getOverview, rangeArgs),
-	);
-	const { data: revenue } = useQuery(
-		convexQuery(api.analytics.getRevenueSummary, rangeArgs),
-	);
+	const {
+		data: overview,
+		isPending: overviewPending,
+		error: overviewError,
+	} = useQuery(convexQuery(api.analytics.getOverview, rangeArgs));
+	const {
+		data: revenue,
+		isPending: revenuePending,
+		error: revenueError,
+	} = useQuery(convexQuery(api.analytics.getRevenueSummary, rangeArgs));
 	const { data: topTours } = useQuery(
 		convexQuery(api.analytics.getTopTours, { ...rangeArgs, limit: 5 }),
 	);
 	const { data: sources } = useQuery(
 		convexQuery(api.analytics.getBookingSources, rangeArgs),
 	);
+
+	if (orgError || overviewError || revenueError) {
+		return (
+			<div className="space-y-4">
+				<h1 className="text-2xl font-semibold">Analytics</h1>
+				<div className="rounded-md border border-destructive/50 bg-destructive/10 p-4">
+					<p className="text-destructive text-sm font-medium">
+						Failed to load analytics
+					</p>
+					<p className="text-muted-foreground text-xs mt-1">
+						{orgError?.message ??
+							overviewError?.message ??
+							revenueError?.message ??
+							"Unknown error"}
+					</p>
+					<Button
+						variant="outline"
+						size="sm"
+						className="mt-2"
+						onClick={() => window.location.reload()}
+					>
+						Reload
+					</Button>
+				</div>
+			</div>
+		);
+	}
 
 	if (orgPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (!org) {
@@ -164,7 +195,7 @@ function AnalyticsPage() {
 									? `$${(Number(revenue.totalRevenueCents) / 100).toFixed(2)}`
 									: undefined
 							}
-							isPending={!revenue}
+							isPending={revenuePending}
 						/>
 						<MetricCard
 							label="Avg booking"
@@ -173,7 +204,7 @@ function AnalyticsPage() {
 									? `$${((revenue.avgBookingValueCents as unknown as number) / 100).toFixed(2)}`
 									: undefined
 							}
-							isPending={!revenue}
+							isPending={revenuePending}
 						/>
 						<MetricCard
 							label="Cancellation rate"
@@ -182,7 +213,7 @@ function AnalyticsPage() {
 									? `${revenue.cancellationRate}%`
 									: undefined
 							}
-							isPending={!revenue}
+							isPending={revenuePending}
 						/>
 					</div>
 				</CardContent>
