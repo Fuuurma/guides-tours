@@ -4,6 +4,19 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Analytics presets + dashboard home widget (2026-06-28 session 11)
+
+**Analytics page (`/dashboard/analytics`):**
+
+- Added 4 quick-range preset buttons: 7d, 30d, 90d, YTD. Each sets the date range and highlights itself with `aria-pressed`. Operators commonly switch between week/month/quarter/year views.
+- Replaces the single "Reset" button (which only went back to 30d) with a clearer preset-based UX.
+
+**Dashboard home (`/dashboard/`):**
+
+- Added "Today's bookings" widget showing the first 5 bookings scheduled for today (tour name + time + guest count + amount). Hidden when there are no bookings today. Surfaces a "view all" link if more than 5.
+
+**Tests: 551 passing** (no new tests — FE-only changes). **tsc clean**, **`pnpm build` clean**.
+
 ### Drivers + notifications + customers action buttons (2026-06-28 session 10)
 
 **Drivers (`/dashboard/drivers`):**
