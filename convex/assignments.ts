@@ -129,6 +129,11 @@ export const get = query({
 /**
  * Conflict check for a proposed assignment slot.
  * Returns a list of conflicts (empty = safe to assign).
+ *
+ * Tour names are looked up in a single batched pass: we collect
+ * every overlapping assignment first, dedupe their tourIds, fetch
+ * each unique tour once, then map back. For N conflicts this is
+ * O(unique tours) lookups instead of O(N).
  */
 export const checkConflicts = query({
 	args: {
@@ -143,133 +148,122 @@ export const checkConflicts = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
-		const conflicts: Array<{
+		type Conflict = {
 			conflictType: "guide" | "vehicle" | "driver";
-			assignmentId: string;
-			tourName: string;
-			date: string;
-			startTime: string;
-			endTime: string;
-			message: string;
-		}> = [];
-
+			assignment: typeof assignmentsList[number];
+		};
 		const candidateStart = args.startTime;
 		const candidateEnd = args.endTime;
 
-		// Guide conflicts.
-		if (args.guideId) {
-			const guideRows = await ctx.db
+		// Collect every overlapping assignment per conflict type.
+		// We keep the assignment + its conflict type so we can build
+		// the final conflict array after the tour lookup pass.
+		const assignmentsList: Array<{
+			_id: Id<"assignments">;
+			organizationId: string;
+			tourId: Id<"tours">;
+			guideId: string;
+			vehicleId?: Id<"vehicles">;
+			driverId?: Id<"drivers">;
+			date: string;
+			startTime: string;
+			endTime?: string;
+			status: "scheduled" | "completed" | "cancelled";
+			deletedAt?: number;
+		}> = [];
+		const overlapping: Conflict[] = [];
+
+		async function collect(
+			indexName:
+				| "by_guide_date"
+				| "by_vehicle_date"
+				| "by_driver_date",
+			indexField: string,
+			value: string,
+			conflictType: Conflict["conflictType"],
+		) {
+			const rows = await ctx.db
 				.query("assignments")
-				.withIndex("by_guide_date", (q) =>
-					q.eq("guideId", args.guideId!).eq("date", args.date),
+				.withIndex(indexName, (q: any) =>
+					q.eq(indexField, value).eq("date", args.date),
 				)
 				// SECURITY: scope by org. A guide belonging to multiple
 				// orgs shouldn't surface other-org assignments as
 				// conflicts in this org's conflict-check UI.
 				.filter((q) => q.eq(q.field("organizationId"), orgId))
 				.collect();
-			for (const a of guideRows) {
+			for (const a of rows) {
 				if (a.deletedAt) continue;
 				if (a.status !== "scheduled") continue;
-				if (args.excludeAssignmentId && a._id === args.excludeAssignmentId) continue;
+				if (args.excludeAssignmentId && a._id === args.excludeAssignmentId)
+					continue;
 				if (
-					rangesOverlap(
+					!rangesOverlap(
 						candidateStart,
 						candidateEnd,
 						a.startTime,
 						a.endTime ?? a.startTime,
 					)
 				) {
-					const tour = await ctx.db.get(a.tourId);
-					conflicts.push({
-						conflictType: "guide",
-						assignmentId: a._id,
-						tourName: tour?.name ?? "(deleted tour)",
-						date: a.date,
-						startTime: a.startTime,
-						endTime: a.endTime ?? a.startTime,
-						message: `Guide already assigned to '${tour?.name ?? "(deleted tour)"}' from ${a.startTime} to ${a.endTime ?? a.startTime}`,
-					});
+					continue;
 				}
+				assignmentsList.push(a);
+				overlapping.push({ conflictType, assignment: a });
 			}
 		}
 
-		// Vehicle conflicts.
+		if (args.guideId) {
+			await collect("by_guide_date", "guideId", args.guideId, "guide");
+		}
 		if (args.vehicleId) {
-			const rows = await ctx.db
-				.query("assignments")
-				.withIndex("by_vehicle_date", (q) =>
-					q.eq("vehicleId", args.vehicleId!).eq("date", args.date),
-				)
-				// SECURITY: scope by org (see guide conflicts above).
-				.filter((q) => q.eq(q.field("organizationId"), orgId))
-				.collect();
-			for (const a of rows) {
-				if (a.deletedAt) continue;
-				if (a.status !== "scheduled") continue;
-				if (args.excludeAssignmentId && a._id === args.excludeAssignmentId) continue;
-				if (
-					rangesOverlap(
-						candidateStart,
-						candidateEnd,
-						a.startTime,
-						a.endTime ?? a.startTime,
-					)
-				) {
-					const tour = await ctx.db.get(a.tourId);
-					conflicts.push({
-						conflictType: "vehicle",
-						assignmentId: a._id,
-						tourName: tour?.name ?? "(deleted tour)",
-						date: a.date,
-						startTime: a.startTime,
-						endTime: a.endTime ?? a.startTime,
-						message: `Vehicle already assigned to '${tour?.name ?? "(deleted tour)"}' from ${a.startTime} to ${a.endTime ?? a.startTime}`,
-					});
-				}
-			}
+			await collect(
+				"by_vehicle_date",
+				"vehicleId",
+				args.vehicleId,
+				"vehicle",
+			);
 		}
-
-		// Driver conflicts.
 		if (args.driverId) {
-			const rows = await ctx.db
-				.query("assignments")
-				.withIndex("by_driver_date", (q) =>
-					q.eq("driverId", args.driverId!).eq("date", args.date),
-				)
-				// SECURITY: scope by org (see guide conflicts above).
-				.filter((q) => q.eq(q.field("organizationId"), orgId))
-				.collect();
-			for (const a of rows) {
-				if (a.deletedAt) continue;
-				if (a.status !== "scheduled") continue;
-				if (args.excludeAssignmentId && a._id === args.excludeAssignmentId) continue;
-				if (
-					rangesOverlap(
-						candidateStart,
-						candidateEnd,
-						a.startTime,
-						a.endTime ?? a.startTime,
-					)
-				) {
-					const tour = await ctx.db.get(a.tourId);
-					conflicts.push({
-						conflictType: "driver",
-						assignmentId: a._id,
-						tourName: tour?.name ?? "(deleted tour)",
-						date: a.date,
-						startTime: a.startTime,
-						endTime: a.endTime ?? a.startTime,
-						message: `Driver already assigned to '${tour?.name ?? "(deleted tour)"}' from ${a.startTime} to ${a.endTime ?? a.startTime}`,
-					});
-				}
-			}
+			await collect(
+				"by_driver_date",
+				"driverId",
+				args.driverId,
+				"driver",
+			);
 		}
 
-		void orgId; // referenced for tenant isolation (queries already scope by org)
+		// Batched tour lookup: dedupe + fetch once + Map.
+		const uniqueTourIds = [...new Set(assignmentsList.map((a) => a.tourId))];
+		const tourDocs = await Promise.all(
+			uniqueTourIds.map((id) => ctx.db.get(id)),
+		);
+		const tourNameById = new Map<string, string>();
+		for (let i = 0; i < uniqueTourIds.length; i++) {
+			const t = tourDocs[i];
+			if (t) tourNameById.set(String(uniqueTourIds[i]), t.name);
+		}
+
+		const conflicts = overlapping.map(({ conflictType, assignment: a }) => {
+			const tourName = tourNameById.get(String(a.tourId)) ?? "(deleted tour)";
+			const endTime = a.endTime ?? a.startTime;
+			return {
+				conflictType,
+				assignmentId: a._id,
+				tourName,
+				date: a.date,
+				startTime: a.startTime,
+				endTime,
+				message: `${
+					conflictType.charAt(0).toUpperCase() + conflictType.slice(1)
+				} already assigned to '${tourName}' from ${a.startTime} to ${endTime}`,
+			};
+		});
+
 		return conflicts;
 	},
 });
+
+// ----- Mutations -----
 
 // ----- Mutations -----
 //

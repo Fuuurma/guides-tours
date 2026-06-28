@@ -164,6 +164,12 @@ export const list = query({
  * Internal helper — fetches + enriches bookings for a schedule.
  * Caller is responsible for org-scoping (the public query does this
  * via requireMembership).
+ *
+ * Customer lookup is batched: dedupe the customerIds first, fetch
+ * each unique customer once, then map back. For 50 bookings on a
+ * schedule this is 1 booking query + N (unique customers) customer
+ * queries instead of 1 + N (one per booking). Most schedules have
+ * a small number of distinct customers so the savings are real.
  */
 async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">) {
 	const all = await ctx.db
@@ -173,11 +179,19 @@ async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">
 	const active = all
 		.filter((b) => b.status !== "cancelled")
 		.sort((a, b) => a.startTime.localeCompare(b.startTime));
+	const uniqueCustomerIds = [
+		...new Set(active.map((b) => b.customerId)),
+	];
 	const customerDocs = await Promise.all(
-		active.map((b) => ctx.db.get(b.customerId)),
+		uniqueCustomerIds.map((id) => ctx.db.get(id)),
 	);
-	return active.map((b, i) => {
+	const customerById = new Map<Id<"customers">, NonNullable<typeof customerDocs[number]>>();
+	for (let i = 0; i < uniqueCustomerIds.length; i++) {
 		const c = customerDocs[i];
+		if (c) customerById.set(uniqueCustomerIds[i]!, c);
+	}
+	return active.map((b) => {
+		const c = customerById.get(b.customerId);
 		return {
 			_id: b._id,
 			date: b.date,
