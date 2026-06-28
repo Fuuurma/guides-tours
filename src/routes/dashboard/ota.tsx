@@ -23,6 +23,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { FormActions, FormField } from "../../components/form";
 
 export const Route = createFileRoute("/dashboard/ota")({
@@ -43,6 +44,35 @@ function OtaIntegrationsPage() {
 	const { data: integrations, isPending, error } = useQuery(
 		convexQuery(api.ota.integrations.list, {}),
 	);
+	const updateIntegration = useMutation(api.ota.integrations_mutations.update);
+	const removeIntegration = useMutation(api.ota.integrations_mutations.remove);
+	const [pendingId, setPendingId] = useState<string | null>(null);
+
+	const toggleActive = async (id: string, currentActive: boolean) => {
+		setPendingId(id);
+		try {
+			await updateIntegration({ integrationId: id as Id<"otaIntegrations">, isActive: !currentActive });
+			toast.success(currentActive ? "Integration disabled" : "Integration enabled");
+		} catch (err) {
+			toast.error((err as Error).message);
+		} finally {
+			setPendingId(null);
+		}
+	};
+	const onRemove = async (id: string, label: string) => {
+		if (!window.confirm(`Delete the ${label} integration? Webhooks will stop being accepted.`)) {
+			return;
+		}
+		setPendingId(id);
+		try {
+			await removeIntegration({ integrationId: id as Id<"otaIntegrations"> });
+			toast.success("Integration deleted");
+		} catch (err) {
+			toast.error((err as Error).message);
+		} finally {
+			setPendingId(null);
+		}
+	};
 
 	const items = (integrations ?? []) as Array<{
 		_id: string;
@@ -90,35 +120,54 @@ function OtaIntegrationsPage() {
 						</p>
 					) : (
 						<ul className="space-y-3">
-							{items.map((i) => (
-								<li
-									key={i._id}
-									className="flex items-center justify-between border rounded-lg p-3"
-								>
-									<div>
-										<p className="font-medium">
-											{ALL_PROVIDERS.find((p) => p.id === i.provider)
-												?.label ?? i.provider}
-										</p>
-										<p className="text-muted-foreground text-xs">
-											Sync every {i.syncIntervalMinutes}m
-											{i.lastSyncAt
-												? ` · last sync ${new Date(i.lastSyncAt).toLocaleString()}`
-												: ""}
-										</p>
-									</div>
-									<div className="flex items-center gap-2">
-										{i.isSandbox && (
-											<Badge variant="secondary">Sandbox</Badge>
-										)}
-										{i.isActive ? (
-											<Badge>Active</Badge>
-										) : (
-											<Badge variant="secondary">Disabled</Badge>
-										)}
-									</div>
-								</li>
-							))}
+							{items.map((i) => {
+								const label =
+									ALL_PROVIDERS.find((p) => p.id === i.provider)?.label ??
+									i.provider;
+								const isBusy = pendingId === i._id;
+								return (
+									<li
+										key={i._id}
+										className="flex items-center justify-between gap-3 border rounded-lg p-3"
+									>
+										<div className="min-w-0 flex-1">
+											<p className="font-medium">{label}</p>
+											<p className="text-muted-foreground text-xs">
+												Sync every {i.syncIntervalMinutes}m
+												{i.lastSyncAt
+													? ` · last sync ${new Date(i.lastSyncAt).toLocaleString()}`
+													: ""}
+											</p>
+										</div>
+										<div className="flex items-center gap-2 flex-shrink-0">
+											{i.isSandbox && (
+												<Badge variant="secondary">Sandbox</Badge>
+											)}
+											{i.isActive ? (
+												<Badge>Active</Badge>
+											) : (
+												<Badge variant="secondary">Disabled</Badge>
+											)}
+											<Button
+												size="sm"
+												variant="outline"
+												onClick={() => toggleActive(i._id, i.isActive)}
+												disabled={isBusy}
+											>
+												{i.isActive ? "Disable" : "Enable"}
+											</Button>
+											<Button
+												size="sm"
+												variant="destructive"
+												onClick={() => onRemove(i._id, label)}
+												disabled={isBusy}
+											>
+												Delete
+											</Button>
+										</div>
+									</li>
+								);
+							})}
 						</ul>
 					)}
 				</CardContent>
