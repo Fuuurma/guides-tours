@@ -4,6 +4,19 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Perf cap + FE action buttons (2026-06-28 session 7)
+
+**Performance:**
+
+- `customers.history` now has an optional `limit` arg (default 100, max 500). Uses `.take(limit)` on the indexed query so the scan is bounded at the storage layer. Previously a customer with thousands of bookings would return an unbounded result set to the FE.
+
+**FE action buttons (continued from session 6):**
+
+- `assignments.cancel` UI: 'Cancel' button on assignment detail page. Prompts for an optional reason via `window.prompt`, calls `api.assignments.cancel` with the trimmed reason. Visible only when status === 'scheduled' (matches BE check).
+- `bookings.recordReview` UI: 'Record review' section on booking detail page. Star-picker (1-5) with `role="radiogroup"` + `aria-pressed` for screen readers, optional comment textarea (maxLength=1000). Visible only when status === 'completed' AND no existing review.
+
+**Tests: 551 passing** (no new tests — FE-only changes). **tsc clean**, **`pnpm build` clean**.
+
 ### OTA factory tests + blackout fix + assignment actions (2026-06-28 session 6)
 
 **OTA webhook factory tests (10 new tests):**
