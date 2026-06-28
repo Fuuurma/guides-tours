@@ -12,11 +12,13 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../../components/form";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/categories")({
 	component: CategoriesPage,
@@ -33,36 +35,118 @@ interface Category {
 	isActive: boolean;
 }
 
-const columns: DataTableColumn<Category>[] = [
-	{
-		key: "name",
-		header: "Name",
-		render: (c) => (
-			<div className="flex items-center gap-2">
-				<span className="text-lg">{c.icon || "📁"}</span>
-				<div>
-					<p className="font-medium">{c.name}</p>
-					<p className="text-muted-foreground text-xs font-mono">
-						{c.slug}
-					</p>
-				</div>
-			</div>
-		),
-		searchValue: (c) => `${c.name} ${c.slug}`,
-	},
-	{ key: "order", header: "Order", render: (c) => c.displayOrder },
-	{
-		key: "status",
-		header: "Status",
-		render: (c) => <StatusBadge status={c.isActive ? "active" : "inactive"} />,
-		searchValue: (c) => (c.isActive ? "active" : "inactive"),
-	},
-];
+function ActionsCell({
+	category,
+	onToggle,
+	onDelete,
+	isBusy,
+}: {
+	category: Category;
+	onToggle: (id: string, current: boolean) => void;
+	onDelete: (id: string, label: string) => void;
+	isBusy: boolean;
+}) {
+	return (
+		<div className="flex items-center gap-1 justify-end">
+			<Button
+				size="sm"
+				variant="outline"
+				onClick={() => onToggle(category._id, category.isActive)}
+				disabled={isBusy}
+			>
+				{category.isActive ? "Disable" : "Enable"}
+			</Button>
+			<Button
+				size="sm"
+				variant="destructive"
+				onClick={() => onDelete(category._id, category.name)}
+				disabled={isBusy}
+			>
+				Delete
+			</Button>
+		</div>
+	);
+}
 
 function CategoriesPage() {
 	const { data: categories, isPending, error } = useQuery(
 		convexQuery(api.tourCategories.list, {}),
 	);
+	const updateCategory = useMutation(api.tourCategories.update);
+	const removeCategory = useMutation(api.tourCategories.remove);
+	const [pendingId, setPendingId] = useState<string | null>(null);
+
+	const toggleActive = async (id: string, currentActive: boolean) => {
+		setPendingId(id);
+		try {
+			await updateCategory({
+				categoryId: id as Id<"tourCategories">,
+				isActive: !currentActive,
+			});
+			toast.success(currentActive ? "Category disabled" : "Category enabled");
+		} catch (err) {
+			toast.error((err as Error).message);
+		} finally {
+			setPendingId(null);
+		}
+	};
+	const onDelete = async (id: string, label: string) => {
+		if (
+			!window.confirm(
+				`Delete the "${label}" category? Tours in this category will be uncategorized.`,
+			)
+		) {
+			return;
+		}
+		setPendingId(id);
+		try {
+			await removeCategory({ categoryId: id as Id<"tourCategories"> });
+			toast.success("Category deleted");
+		} catch (err) {
+			toast.error((err as Error).message);
+		} finally {
+			setPendingId(null);
+		}
+	};
+
+	const columns: DataTableColumn<Category>[] = [
+		{
+			key: "name",
+			header: "Name",
+			render: (c) => (
+				<div className="flex items-center gap-2">
+					<span className="text-lg">{c.icon || "📁"}</span>
+					<div>
+						<p className="font-medium">{c.name}</p>
+						<p className="text-muted-foreground text-xs font-mono">
+							{c.slug}
+						</p>
+					</div>
+				</div>
+			),
+			searchValue: (c) => `${c.name} ${c.slug}`,
+		},
+		{ key: "order", header: "Order", render: (c) => c.displayOrder },
+		{
+			key: "status",
+			header: "Status",
+			render: (c) => <StatusBadge status={c.isActive ? "active" : "inactive"} />,
+			searchValue: (c) => (c.isActive ? "active" : "inactive"),
+		},
+		{
+			key: "actions",
+			header: "",
+			render: (c) => (
+				<ActionsCell
+					category={c}
+					onToggle={toggleActive}
+					onDelete={onDelete}
+					isBusy={pendingId === c._id}
+				/>
+			),
+		},
+	];
+
 	const itemCount = (categories ?? []).length;
 
 	return (
