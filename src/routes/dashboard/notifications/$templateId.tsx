@@ -6,6 +6,7 @@ import { api } from "../../../../convex/_generated/api";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/notifications/$templateId")({
 	component: NotificationTemplateDetailPage,
@@ -15,7 +16,7 @@ function NotificationTemplateDetailPage() {
 	const { templateId } = Route.useParams();
 	const { data: template, isPending, error } = useQuery(
 		convexQuery(api.notificationTemplates.get, {
-			templateId: templateId as never,
+			templateId: templateId as Id<"notificationTemplates">,
 		}),
 	);
 

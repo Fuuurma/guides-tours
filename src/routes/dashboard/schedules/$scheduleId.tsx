@@ -25,13 +25,19 @@ interface ScheduleBooking {
 function ScheduleDetailPage() {
 	const { scheduleId } = Route.useParams();
 	const { data: schedule, isPending, error } = useQuery(
-		convexQuery(api.tourSchedules.get, { scheduleId: scheduleId as never }),
+		convexQuery(api.tourSchedules.get, {
+			scheduleId: scheduleId as Id<"tourSchedules">,
+		}),
 	);
 	const { data: tour } = useQuery(
-		convexQuery(api.tours.get, { tourId: schedule?.tourId as never }),
+		convexQuery(api.tours.get, {
+			tourId: schedule?.tourId as Id<"tours">,
+		}),
 	);
 	const { data: bookings } = useQuery(
-		convexQuery(api.bookings.listBySchedule, { scheduleId: scheduleId as never }),
+		convexQuery(api.bookings.listBySchedule, {
+			scheduleId: scheduleId as Id<"tourSchedules">,
+		}),
 	);
 
 	if (isPending) return <p className="text-muted-foreground">Loading…</p>;

@@ -5,6 +5,7 @@ import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/assignments/$assignmentId")({
 	component: AssignmentDetailPage,
@@ -13,16 +14,24 @@ export const Route = createFileRoute("/dashboard/assignments/$assignmentId")({
 function AssignmentDetailPage() {
 	const { assignmentId } = Route.useParams();
 	const { data: assignment, isPending, error } = useQuery(
-		convexQuery(api.assignments.get, { assignmentId: assignmentId as never }),
+		convexQuery(api.assignments.get, {
+			assignmentId: assignmentId as Id<"assignments">,
+		}),
 	);
 	const { data: tour } = useQuery(
-		convexQuery(api.tours.get, { tourId: assignment?.tourId as never }),
+		convexQuery(api.tours.get, {
+			tourId: assignment?.tourId as Id<"tours">,
+		}),
 	);
 	const { data: vehicle } = useQuery(
-		convexQuery(api.vehicles.get, { vehicleId: assignment?.vehicleId as never }),
+		convexQuery(api.vehicles.get, {
+			vehicleId: assignment?.vehicleId as Id<"vehicles">,
+		}),
 	);
 	const { data: driver } = useQuery(
-		convexQuery(api.drivers.get, { driverId: assignment?.driverId as never }),
+		convexQuery(api.drivers.get, {
+			driverId: assignment?.driverId as Id<"drivers">,
+		}),
 	);
 
 	if (isPending) return <p className="text-muted-foreground">Loading…</p>;

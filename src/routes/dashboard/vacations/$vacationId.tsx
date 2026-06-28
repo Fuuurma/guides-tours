@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/vacations/$vacationId")({
 	component: VacationDetailPage,
@@ -17,7 +18,9 @@ export const Route = createFileRoute("/dashboard/vacations/$vacationId")({
 function VacationDetailPage() {
 	const { vacationId } = Route.useParams();
 	const { data: vacation, isPending, error } = useQuery(
-		convexQuery(api.vacationRequests.get, { requestId: vacationId as never }),
+		convexQuery(api.vacationRequests.get, {
+			requestId: vacationId as Id<"vacationRequests">,
+		}),
 	);
 	const approve = useMutation(api.vacationRequests.approve);
 	const reject = useMutation(api.vacationRequests.reject);

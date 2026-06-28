@@ -19,7 +19,7 @@ export const Route = createFileRoute("/dashboard/bookings/$bookingId")({
 function BookingDetailPage() {
 	const { bookingId } = Route.useParams();
 	const { data: booking, isPending, error } = useQuery(
-		convexQuery(api.bookings.get, { bookingId: bookingId as never }),
+		convexQuery(api.bookings.get, { bookingId: bookingId as Id<"bookings"> }),
 	);
 	const checkIn = useMutation(api.bookings.checkIn);
 	const complete = useMutation(api.bookings.complete);
@@ -41,16 +41,16 @@ function BookingDetailPage() {
 	};
 
 	const onCheckIn = () =>
-		runAction(() => checkIn({ bookingId: bookingId as never }), "Customer checked in");
+		runAction(() => checkIn({ bookingId: bookingId as Id<"bookings"> }), "Customer checked in");
 	const onComplete = () =>
-		runAction(() => complete({ bookingId: bookingId as never }), "Booking completed");
+		runAction(() => complete({ bookingId: bookingId as Id<"bookings"> }), "Booking completed");
 	const onCancel = () => {
 		if (!cancelReason.trim()) {
 			toast.error("Please provide a reason");
 			return;
 		}
 		runAction(
-			() => cancelBooking({ bookingId: bookingId as never, reason: cancelReason }),
+			() => cancelBooking({ bookingId: bookingId as Id<"bookings">, reason: cancelReason }),
 			"Booking cancelled",
 		).then(() => {
 			setShowCancelForm(false);

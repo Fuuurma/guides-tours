@@ -40,7 +40,7 @@ interface EditTourPageProps {
 
 export function EditTourPage({ tourId }: EditTourPageProps) {
 	const navigate = useNavigate();
-	const tour = useConvexQuery(api.tours.get, { tourId: tourId as never });
+	const tour = useConvexQuery(api.tours.get, { tourId: tourId as Id<"tours"> });
 	const update = useMutation(api.tours.update);
 	const { data: categories } = useTanstackQuery(
 		convexQuery(api.tourCategories.list, {}),
@@ -60,7 +60,7 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				throw new Error("minGuests cannot exceed maxGuests");
 			}
 			await update({
-				tourId: tourId as never,
+				tourId: tourId as Id<"tours">,
 				name: v.name,
 				description: v.description || undefined,
 				tourType: v.tourType,

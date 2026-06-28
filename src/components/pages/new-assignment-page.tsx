@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -47,12 +48,12 @@ export function NewAssignmentPage() {
 			if (!v.guideId) throw new Error("Guide user ID is required");
 			if (!v.date || !v.startTime) throw new Error("Date and start time are required");
 			const id = await create({
-				tourId: v.tourId as never,
+				tourId: v.tourId as Id<"tours">,
 				guideId: v.guideId,
 				date: v.date,
 				startTime: v.startTime,
-				vehicleId: v.vehicleId ? (v.vehicleId as never) : undefined,
-				driverId: v.driverId ? (v.driverId as never) : undefined,
+				vehicleId: v.vehicleId ? (v.vehicleId as Id<"vehicles">) : undefined,
+				driverId: v.driverId ? (v.driverId as Id<"drivers">) : undefined,
 			});
 			return id;
 		},

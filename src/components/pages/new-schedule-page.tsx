@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -45,7 +46,7 @@ export function NewSchedulePage() {
 			if (!v.date || !v.startTime || !v.endTime) throw new Error("Date and times are required");
 			if (cap <= 0) throw new Error("Capacity must be positive");
 			const id = await create({
-				tourId: v.tourId as never,
+				tourId: v.tourId as Id<"tours">,
 				date: v.date,
 				startTime: v.startTime,
 				endTime: v.endTime,

@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/drivers/$driverId")({
 	component: DriverDetailPage,
@@ -13,7 +14,7 @@ export const Route = createFileRoute("/dashboard/drivers/$driverId")({
 function DriverDetailPage() {
 	const { driverId } = Route.useParams();
 	const { data: driver, isPending, error } = useQuery(
-		convexQuery(api.drivers.get, { driverId: driverId as never }),
+		convexQuery(api.drivers.get, { driverId: driverId as Id<"drivers"> }),
 	);
 
 	if (isPending) return <p className="text-muted-foreground">Loading…</p>;

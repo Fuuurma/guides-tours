@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { FormField } from "../form";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -21,14 +22,14 @@ interface EditCustomerPageProps {
 }
 
 export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
-	const customer = useQuery(api.customers.get, { customerId: customerId as never });
+	const customer = useQuery(api.customers.get, { customerId: customerId as Id<"customers"> });
 	const update = useMutation(api.customers.update);
 	const [loaded, setLoaded] = useState(false);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
 			await update({
-				customerId: customerId as never,
+				customerId: customerId as Id<"customers">,
 				name: v.name,
 				email: v.email,
 				phone: v.phone || undefined,

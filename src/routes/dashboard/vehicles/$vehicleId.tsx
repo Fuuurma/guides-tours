@@ -6,6 +6,7 @@ import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/vehicles/$vehicleId")({
 	component: VehicleDetailPage,
@@ -14,7 +15,9 @@ export const Route = createFileRoute("/dashboard/vehicles/$vehicleId")({
 function VehicleDetailPage() {
 	const { vehicleId } = Route.useParams();
 	const { data: vehicle, isPending, error } = useQuery(
-		convexQuery(api.vehicles.get, { vehicleId: vehicleId as never }),
+		convexQuery(api.vehicles.get, {
+			vehicleId: vehicleId as Id<"vehicles">,
+		}),
 	);
 
 	if (isPending) {

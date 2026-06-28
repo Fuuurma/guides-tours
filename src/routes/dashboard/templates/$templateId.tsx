@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/templates/$templateId")({
 	component: TemplateDetailPage,
@@ -13,7 +14,9 @@ export const Route = createFileRoute("/dashboard/templates/$templateId")({
 function TemplateDetailPage() {
 	const { templateId } = Route.useParams();
 	const { data: template, isPending, error } = useQuery(
-		convexQuery(api.tourTemplates.get, { templateId: templateId as never }),
+		convexQuery(api.tourTemplates.get, {
+			templateId: templateId as Id<"tourTemplates">,
+		}),
 	);
 
 	if (isPending) return <p className="text-muted-foreground">Loading…</p>;

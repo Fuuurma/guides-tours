@@ -6,6 +6,7 @@ import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/tours/$tourId")({
 	component: TourDetailPage,
@@ -14,7 +15,7 @@ export const Route = createFileRoute("/dashboard/tours/$tourId")({
 function TourDetailPage() {
 	const { tourId } = Route.useParams();
 	const { data: tour, isPending, error } = useQuery(
-		convexQuery(api.tours.get, { tourId: tourId as never }),
+		convexQuery(api.tours.get, { tourId: tourId as Id<"tours"> }),
 	);
 
 	if (isPending) {

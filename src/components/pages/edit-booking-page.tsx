@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { FormField } from "../form";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 interface FormValues extends Record<string, unknown> {
 	date: string;
@@ -23,7 +24,7 @@ interface EditBookingPageProps {
 }
 
 export function EditBookingPage({ bookingId }: EditBookingPageProps) {
-	const booking = useQuery(api.bookings.get, { bookingId: bookingId as never });
+	const booking = useQuery(api.bookings.get, { bookingId: bookingId as Id<"bookings"> });
 	const update = useMutation(api.bookings.update);
 	const [loaded, setLoaded] = useState(false);
 
@@ -40,7 +41,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 					? BigInt(Math.round(Number(v.totalUsd) * 100))
 					: undefined;
 			await update({
-				bookingId: bookingId as never,
+				bookingId: bookingId as Id<"bookings">,
 				date: v.date,
 				startTime: v.startTime,
 				guests,

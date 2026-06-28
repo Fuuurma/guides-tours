@@ -8,6 +8,7 @@ import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/customers/$customerId")({
 	component: CustomerDetailPage,
@@ -58,11 +59,11 @@ const bookingColumns: DataTableColumn<Record<string, unknown>>[] = [
 function CustomerDetailPage() {
 	const { customerId } = Route.useParams();
 	const { data: customer, isPending, error } = useQuery(
-		convexQuery(api.customers.get, { customerId: customerId as never }),
+		convexQuery(api.customers.get, { customerId: customerId as Id<"customers"> }),
 	);
 	const { data: history } = useQuery(
 		convexQuery(api.customers.history, {
-			customerId: customerId as never,
+			customerId: customerId as Id<"customers">,
 		}),
 	);
 
