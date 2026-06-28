@@ -150,6 +150,9 @@ export const update = mutation({
 		minGuests: v.optional(v.number()),
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
+		// isActive: operator can archive a template (hidden from
+		// new-tour flow) without deleting it.
+		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -180,6 +183,7 @@ export const internalUpdate = internalMutation({
 		minGuests: v.optional(v.number()),
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
+		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db.get(args.templateId);
@@ -203,6 +207,7 @@ export const internalUpdate = internalMutation({
 			"minGuests",
 			"maxGuests",
 			"bookingCutoffHours",
+			"isActive",
 		]) {
 			const value = (args as Record<string, unknown>)[field];
 			if (value !== undefined) patch[field] = value;
