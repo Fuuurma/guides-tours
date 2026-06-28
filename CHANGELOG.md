@@ -4,6 +4,20 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Templates + vehicles action buttons (2026-06-28 session 9)
+
+**Tour templates (`/dashboard/templates`):**
+
+- **BE**: Added `isActive` to `tourTemplates.update` + `internalUpdate` args + `ALLOWED_UPDATE_FIELDS` so operators can archive templates (hide from new-tour flow) without deleting them.
+- **FE**: Added per-row Disable/Enable + Delete buttons. Toggle uses `update({ isActive })`. Delete warns that this won't affect tours already created from the template.
+
+**Vehicles (`/dashboard/vehicles`):**
+
+- **FE**: Added per-row status Select (available/in_use/maintenance/retired) + Delete button. Status change is a single-click operation via `api.vehicles.setStatus`. Delete has a `window.confirm()` guard.
+- The page no longer requires visiting the detail page for the common "vehicle came back from service" workflow.
+
+**Tests: 551 passing** (no new tests — FE-only changes). **tsc clean**, **`pnpm build` clean**.
+
 ### OTA + categories action buttons (2026-06-28 session 8)
 
 **FE action buttons (continued):**
