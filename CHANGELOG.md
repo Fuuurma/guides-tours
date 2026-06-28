@@ -4,6 +4,28 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Form validation + index + tests (2026-06-28 session 3)
+
+**Form validation expanded:**
+
+- Applied `src/lib/validation.ts` helpers to **6 more dashboard forms**: `new-vehicle-page` (capacity + year range + maxLength on all fields), `new-vacation-page` (date range + maxLength notes), `new-assignment-page` (guide ID required + maxLength), `new-schedule-page` (end-after-start + capacity + maxLength), `new-template-page` (numeric fields + min<=max + maxLength + capped at 100 items), `new-notification-template-page` (retries >= 0 + maxLength), `edit-customer-page` (name/email/phone/notes validation + trim before submit).
+- Pattern: `useState` per field for inline error display, passed to `<FormField error={...}>`. Errors clear on next keystroke. Throw from `mutation()` to block submit; `entity-form` already shows toast + sets inline error.
+
+**Schema indexes:**
+
+- Added `bookings.by_org_source_date` index on `(organizationId, source, date)`. The dashboard bookings list has an OTA source filter chip ("show only Viator bookings") — without this compound index, the BE would scan every org booking on each filter request. Verified via `npx convex codegen`.
+
+**Entity form UX:**
+
+- `entity-form` inline error now renders in a destructive-styled alert box (border + bg + `role="alert"`) instead of plain text. More visible + screen-reader friendly.
+
+**New tests:**
+
+- `src/__tests__/status-styles.test.ts` (7 tests): pin the status → badge variant/color mapping (no drift between `STATUS_CLASSES` and `STATUS_VARIANTS`, fallback behavior for unknown statuses).
+- `convex/__tests__/audit.test.ts` (3 tests): pin the `logAudit` contract (row shape, timestamp auto-set, complex values preserved including bigints).
+
+**Tests: 539 passing** (up from 529, +10). **tsc clean**, **`pnpm build` clean**, **Convex codegen clean**.
+
 ### Hardening + UX polish (2026-06-28 session 2)
 
 **Performance fixes (N+1 query patterns):**
