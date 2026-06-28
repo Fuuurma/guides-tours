@@ -4,6 +4,29 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### OTA factory tests + blackout fix + assignment actions (2026-06-28 session 6)
+
+**OTA webhook factory tests (10 new tests):**
+
+- New `ota_webhook_factory.test.ts` pins the shared `createWebhookHandler` contract for all 7 OTA providers. Uses `t.fetch()` against the real router to exercise the full HTTP → factory → dispatch path end-to-end with real encrypted webhook secrets.
+- Tests reject paths: missing signature (400), missing integrationId (400), wrong provider (400), inactive integration (410), invalid signature (401), stale timestamp (401), invalid JSON (400).
+- Tests happy paths: unknown event type → 200 'ignored', valid booking.created → 200 'ok' + dispatches to upsert, valid booking.cancelled → 200 'ok' + dispatches to cancel.
+- The 405 (non-POST) and 404 (unknown route) branches are enforced at the router layer (convex/ota/router.ts only registers POST handlers), so the factory's defense-in-depth checks for those are unreachable in production and not tested here.
+
+**Public booking blackout fix (bug):**
+
+- `public_booking.internalCreate` now calls `isBlackoutHelper(tourId, date)` before creating the booking. Throws "This date is not available for booking" on a blacked-out date.
+- Previously, an operator could mark a date as "Closed for Christmas" but customers could still book it via the public page.
+- 2 new tests cover single-day and multi-day blackout rejection.
+
+**Assignment detail action buttons:**
+
+- "Mark complete" button (visible when status === 'scheduled', uses `api.assignments.complete`, toast on success). This makes the guide role functional — previously guides had no way to mark their assignments complete from the UI.
+- "Delete" button (visible when status !== 'completed', uses `api.assignments.remove` soft delete, `window.confirm()` safety check).
+- "View tour" button now uses shadcn `Button asChild` + `Link` pattern (consistent with other detail pages).
+
+**Tests: 551 passing** (up from 539, +12 net). **tsc clean**, **`pnpm build` clean**.
+
 ### Accessibility + inline errors (2026-06-28 session 5)
 
 **Public booking page accessibility:**
