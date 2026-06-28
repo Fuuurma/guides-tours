@@ -24,9 +24,13 @@ function BookingDetailPage() {
 	const checkIn = useMutation(api.bookings.checkIn);
 	const complete = useMutation(api.bookings.complete);
 	const cancelBooking = useMutation(api.bookings.cancel);
+	const recordReview = useMutation(api.bookings.recordReview);
 	const [pending, setPending] = useState(false);
 	const [showCancelForm, setShowCancelForm] = useState(false);
 	const [cancelReason, setCancelReason] = useState("");
+	const [showReviewForm, setShowReviewForm] = useState(false);
+	const [reviewRating, setReviewRating] = useState("5");
+	const [reviewComment, setReviewComment] = useState("");
 
 	const runAction = async (fn: () => Promise<unknown>, msg: string) => {
 		setPending(true);
@@ -202,6 +206,98 @@ function BookingDetailPage() {
 						</p>
 					)}
 					{b.reviewComment && <p>{b.reviewComment}</p>}
+				</DetailSection>
+			)}
+
+			{/* Record-review form: only available for completed bookings
+			    that don't already have a review. */}
+			{b.status === "completed" && !b.reviewRating && (
+				<DetailSection title="Record review">
+					{!showReviewForm ? (
+						<Button
+							variant="outline"
+							onClick={() => setShowReviewForm(true)}
+						>
+							Record review
+						</Button>
+					) : (
+						<div className="space-y-3">
+							<label className="text-sm font-medium block">
+								Rating (1-5)
+							</label>
+							<div className="flex gap-1" role="radiogroup" aria-label="Rating">
+								{[1, 2, 3, 4, 5].map((n) => (
+									<button
+										key={n}
+										type="button"
+										aria-label={`${n} star${n === 1 ? "" : "s"}`}
+										aria-pressed={reviewRating === String(n)}
+										onClick={() => setReviewRating(String(n))}
+										className={`text-3xl leading-none p-1 rounded hover:bg-accent ${
+											reviewRating === String(n)
+												? "text-yellow-500"
+												: "text-muted-foreground"
+										}`}
+									>
+										{n <= Number(reviewRating) ? "★" : "☆"}
+									</button>
+								))}
+							</div>
+							<label
+								htmlFor="review-comment"
+								className="text-sm font-medium block"
+							>
+								Comment (optional)
+							</label>
+							<Textarea
+								id="review-comment"
+								value={reviewComment}
+								onChange={(e) => setReviewComment(e.target.value)}
+								rows={3}
+								maxLength={1000}
+								placeholder="What did the customer think?"
+							/>
+							<div className="flex gap-2">
+								<Button
+									onClick={async () => {
+										const r = Number(reviewRating);
+										if (r < 1 || r > 5) {
+											toast.error("Rating must be 1-5");
+											return;
+										}
+										setPending(true);
+										try {
+											await recordReview({
+												bookingId: b._id as Id<"bookings">,
+												rating: r,
+												comment: reviewComment.trim() || undefined,
+											});
+											toast.success("Review recorded");
+											setShowReviewForm(false);
+											setReviewComment("");
+										} catch (err) {
+											toast.error((err as Error).message);
+										} finally {
+											setPending(false);
+										}
+									}}
+									disabled={pending}
+								>
+									{pending ? "Saving…" : "Save review"}
+								</Button>
+								<Button
+									variant="outline"
+									onClick={() => {
+										setShowReviewForm(false);
+										setReviewComment("");
+									}}
+									disabled={pending}
+								>
+									Cancel
+								</Button>
+							</div>
+						</div>
+					)}
 				</DetailSection>
 			)}
 		</DetailPage>
