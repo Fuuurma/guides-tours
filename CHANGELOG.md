@@ -4,6 +4,26 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Hardening + UX polish (2026-06-28 session 2)
+
+**Performance fixes (N+1 query patterns):**
+
+- **`_listByScheduleRaw` customer lookup** (`369dd77`): The schedule detail page was doing `Promise.all(active.map((b) => ctx.db.get(b.customerId)))` — N+1 query pattern. Fixed by deduping customerIds first and using a `Map<Id, Customer>` lookup. For a schedule with N bookings and U unique customers, the old code was 1+N lookups, now 1+U.
+- **`assignments.checkConflicts` tour lookup** (`369dd77`): 3 nested loops (guide/vehicle/driver) each did `ctx.db.get(a.tourId)` per overlapping assignment. Refactored to collect all overlapping assignments into one array with conflict-type tags, dedupe tourIds, then one batched `Promise.all` + `Map` for tour names. For N conflicts the old code was O(N) tour lookups, now O(unique tours).
+
+**Shared form validation:**
+
+- **`src/lib/validation.ts`** (`b49f93d`): New shared validation helpers module — `EMAIL_REGEX`, `validateName`, `validateEmail`, `validatePhoneOptional`, `validateNotesOptional`, `validateDescriptionOptional`, `validatePositiveInteger`, `validatePositiveNumber`, `validateNonNegativeNumber`, `parseUsdToCents`. Centralizes the same patterns the public booking page uses so dashboard forms share validation logic.
+- Applied to `new-customer-page` (name, email, phone, notes), `new-driver-page` (notes), OTA integrations form (maxLength=500 on secrets + JS-side empty-API-key guard).
+- 32 new tests in `src/__tests__/validation.test.ts` (covering accept/reject/edge cases).
+
+**Verified:**
+
+- **`npx convex codegen`** runs successfully — schema is valid for deployment.
+- **`pnpm build`** produces 615.78 kB server bundle (129.93 kB gzipped).
+
+**Tests: 529 passing** (up from 497, +32 new). **tsc clean**, **`pnpm build` clean**.
+
 ### Hardening + UX polish (2026-06-28)
 
 **Bugs fixed:**
