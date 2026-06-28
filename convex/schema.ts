@@ -451,7 +451,10 @@ export default defineSchema({
 		.index("by_org_status", ["organizationId", "status"])
 		.index("by_customer_date", ["customerId", "date"])
 		.index("by_tour_date", ["tourId", "date"])
-		.index("by_schedule", ["scheduleId"]),
+		.index("by_schedule", ["scheduleId"])
+		// Source filter ("show only Viator bookings") — without this,
+		// the dashboard's OTA source chip scans every org booking.
+		.index("by_org_source_date", ["organizationId", "source", "date"]),
 
 	// ----- OTA -----
 
