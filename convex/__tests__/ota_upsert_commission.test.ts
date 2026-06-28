@@ -219,4 +219,80 @@ describe("convex/ota/upsert — commission math", () => {
 		expect(row?.commissionAmountCents).toBeUndefined();
 		expect(row?.netRevenueCents).toBe(5000n);
 	});
+
+	it("clamps rate above 1.0 to 1.0 (no negative net revenue)", async () => {
+		// A bad provider response or misconfigured product could send a
+		// rate > 1. Without clamping, commissionCents would exceed
+		// paidCents and netRevenueCents would go negative. Clamp to 1.0
+		// so the worst case is zero net revenue (not negative).
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cm_e";
+		await t.run(async (ctx) => {
+			await seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-5", 0);
+		});
+		const integrationId = (await t.run(async (ctx) =>
+			(await ctx.db.query("otaIntegrations").first())!._id,
+		)) as Id<"otaIntegrations">;
+		const { id } = (await t.mutation(
+			internal.ota.upsert.upsertOtaBooking,
+			{
+				integrationId,
+				organizationId,
+				provider: "viator",
+				event: {
+					kind: "booking.created" as const,
+					reservationId: "RES-5",
+					customerName: "Eve",
+					customerEmail: "eve@example.com",
+					tourDate: "2026-08-19",
+					guests: 1,
+					totalPaidCents: 10000n,
+					currency: "USD",
+					commissionRate: 1.5, // 150% — bogus, should clamp to 1.0
+					rawPayload: {},
+				},
+				rawData: {},
+			},
+		)) as { id: Id<"otaBookings">; created: boolean };
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.commissionAmountCents).toBe(10000n);
+		expect(row?.netRevenueCents).toBe(0n);
+	});
+
+	it("clamps negative rate to 0 (no negative commission)", async () => {
+		// A bad response with negative rate should not produce a
+		// negative commissionCents (which would inflate netRevenue).
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cm_f";
+		await t.run(async (ctx) => {
+			await seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-6", 0);
+		});
+		const integrationId = (await t.run(async (ctx) =>
+			(await ctx.db.query("otaIntegrations").first())!._id,
+		)) as Id<"otaIntegrations">;
+		const { id } = (await t.mutation(
+			internal.ota.upsert.upsertOtaBooking,
+			{
+				integrationId,
+				organizationId,
+				provider: "viator",
+				event: {
+					kind: "booking.created" as const,
+					reservationId: "RES-6",
+					customerName: "Frank",
+					customerEmail: "frank@example.com",
+					tourDate: "2026-08-20",
+					guests: 1,
+					totalPaidCents: 10000n,
+					currency: "USD",
+					commissionRate: -0.2,
+					rawPayload: {},
+				},
+				rawData: {},
+			},
+		)) as { id: Id<"otaBookings">; created: boolean };
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.commissionAmountCents).toBeUndefined();
+		expect(row?.netRevenueCents).toBe(10000n);
+	});
 });

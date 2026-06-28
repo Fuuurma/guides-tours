@@ -68,7 +68,12 @@ export const upsertOtaBooking = internalMutation({
 		// Some OTAs send only commissionRate, others send only
 		// commissionCents, some both, some neither. Derive a single
 		// source of truth per row.
-		const rate = event.commissionRate ?? product?.commissionRate ?? 0;
+		// Clamp rate to [0, 1] — a rate above 100% would produce
+		// negative net revenue (paid − commission). Bad config or a
+		// buggy provider response shouldn't silently flip net revenue
+		// below zero.
+		const rawRate = event.commissionRate ?? product?.commissionRate ?? 0;
+		const rate = Math.max(0, Math.min(rawRate, 1));
 		const paidCents = event.totalPaidCents;
 		let commissionCents = event.commissionCents;
 		if (commissionCents === undefined && paidCents !== undefined && rate > 0) {
