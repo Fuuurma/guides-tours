@@ -1,6 +1,10 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -33,12 +37,43 @@ function AssignmentDetailPage() {
 			driverId: assignment?.driverId as Id<"drivers">,
 		}),
 	);
+	const complete = useMutation(api.assignments.complete);
+	const remove = useMutation(api.assignments.remove);
+	const [pending, setPending] = useState(false);
+
+	const onComplete = async () => {
+		setPending(true);
+		try {
+			await complete({ assignmentId: assignmentId as Id<"assignments"> });
+			toast.success("Assignment marked complete");
+		} catch (err) {
+			toast.error((err as Error).message);
+		} finally {
+			setPending(false);
+		}
+	};
+	const onRemove = async () => {
+		if (!window.confirm("Delete this assignment? This will soft-delete it.")) {
+			return;
+		}
+		setPending(true);
+		try {
+			await remove({ assignmentId: assignmentId as Id<"assignments"> });
+			toast.success("Assignment deleted");
+		} catch (err) {
+			toast.error((err as Error).message);
+		} finally {
+			setPending(false);
+		}
+	};
 
 	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
 	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!assignment) return <DetailPage title="Assignment not found" backTo="/dashboard/assignments" />;
 
 	const endTimeDisplay = assignment.endTime ?? "—";
+	const canComplete = assignment.status === "scheduled";
+	const canDelete = assignment.status !== "completed";
 
 	return (
 		<DetailPage
@@ -46,11 +81,25 @@ function AssignmentDetailPage() {
 			subtitle={`${assignment.date} · ${assignment.startTime}–${endTimeDisplay}`}
 			backTo="/dashboard/assignments"
 			actions={
-				tour ? (
-					<Link to="/dashboard/tours/$tourId" params={{ tourId: tour._id }} className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
-						View tour
-					</Link>
-				) : undefined
+				<>
+					{canComplete && (
+						<Button onClick={onComplete} disabled={pending}>
+							Mark complete
+						</Button>
+					)}
+					{canDelete && (
+						<Button variant="destructive" onClick={onRemove} disabled={pending}>
+							Delete
+						</Button>
+					)}
+					{tour && (
+						<Button asChild variant="outline">
+							<Link to="/dashboard/tours/$tourId" params={{ tourId: tour._id }}>
+								View tour
+							</Link>
+						</Button>
+					)}
+				</>
 			}
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
