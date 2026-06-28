@@ -200,6 +200,64 @@ function DashboardIndex() {
 					)}
 				</CardContent>
 			</Card>
+
+			{todaysBookings.length > 0 && (
+				<Card>
+					<CardHeader>
+						<CardTitle>Today's bookings</CardTitle>
+						<CardDescription>
+							{todaysBookings.length} booking
+							{todaysBookings.length === 1 ? "" : "s"} scheduled for today
+						</CardDescription>
+					</CardHeader>
+					<CardContent>
+						<ul className="space-y-2">
+							{todaysBookings.slice(0, 5).map((b) => {
+								const tourName = tourNameById.get(String(b.tourId));
+								return (
+									<li
+										key={b._id}
+										className="flex items-center justify-between border-b pb-2 last:border-0"
+									>
+										<div className="min-w-0 flex-1">
+											<p className="font-medium truncate">
+												{tourName ?? (
+													<span className="text-muted-foreground italic">
+														Unknown tour
+													</span>
+												)}
+											</p>
+											<p className="text-muted-foreground text-xs">
+												{b.startTime} · {b.guests} guest
+												{b.guests === 1 ? "" : "s"} ·{" "}
+												{`$${(Number(b.totalAmountCents) / 100).toFixed(0)}`}
+											</p>
+										</div>
+										<Link
+											to="/dashboard/bookings/$bookingId"
+											params={{ bookingId: b._id as Id<"bookings"> }}
+											className="text-blue-600 hover:underline text-xs ml-2"
+										>
+											View →
+										</Link>
+									</li>
+								);
+							})}
+							{todaysBookings.length > 5 && (
+								<li className="text-xs text-muted-foreground pt-1">
+									+ {todaysBookings.length - 5} more —{" "}
+									<Link
+										to="/dashboard/bookings"
+										className="text-blue-600 hover:underline"
+									>
+										view all bookings
+									</Link>
+								</li>
+							)}
+						</ul>
+					</CardContent>
+				</Card>
+			)}
 		</div>
 	);
 }

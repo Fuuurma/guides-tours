@@ -28,6 +28,45 @@ function defaultRange(): { startDate: string; endDate: string } {
 	};
 }
 
+function lastNDays(n: number): { startDate: string; endDate: string } {
+	const end = new Date();
+	const start = new Date(end.getTime() - n * 86_400_000);
+	return {
+		startDate: start.toISOString().slice(0, 10),
+		endDate: end.toISOString().slice(0, 10),
+	};
+}
+
+function yearToDate(): { startDate: string; endDate: string } {
+	const end = new Date();
+	const start = new Date(end.getFullYear(), 0, 1);
+	return {
+		startDate: start.toISOString().slice(0, 10),
+		endDate: end.toISOString().slice(0, 10),
+	};
+}
+
+type Preset = {
+	label: string;
+	range: { startDate: string; endDate: string };
+};
+
+const PRESETS: Preset[] = [
+	{ label: "7d", range: lastNDays(7) },
+	{ label: "30d", range: defaultRange() },
+	{ label: "90d", range: lastNDays(90) },
+	{ label: "YTD", range: yearToDate() },
+];
+
+function isPresetActive(range: { startDate: string; endDate: string }): string | null {
+	for (const p of PRESETS) {
+		if (p.range.startDate === range.startDate && p.range.endDate === range.endDate) {
+			return p.label;
+		}
+	}
+	return null;
+}
+
 function AnalyticsPage() {
 	const { data: org, isPending: orgPending, error: orgError } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
@@ -117,13 +156,31 @@ function AnalyticsPage() {
 							}
 						/>
 					</label>
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={() => setRange(defaultRange())}
-					>
-						Reset
-					</Button>
+					<div className="flex items-end gap-1">
+						{PRESETS.map((p) => {
+							const active = isPresetActive(range) === p.label;
+							return (
+								<Button
+									key={p.label}
+									variant={active ? "default" : "outline"}
+									size="sm"
+									onClick={() => setRange(p.range)}
+									aria-pressed={active}
+								>
+									{p.label}
+								</Button>
+							);
+						})}
+					</div>
+					{isPresetActive(range) === null && (
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => setRange(defaultRange())}
+						>
+							Reset
+						</Button>
+					)}
 				</div>
 			</header>
 
