@@ -4,6 +4,30 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Drivers + notifications + customers action buttons (2026-06-28 session 10)
+
+**Drivers (`/dashboard/drivers`):**
+
+- Added per-row Activate/Deactivate + Delete buttons.
+- Activate/Deactivate toggles `isActive` via `api.drivers.setActive`.
+- Delete uses `window.confirm()` guard (destructive).
+
+**Notification templates (`/dashboard/notifications`):**
+
+- Added per-row Disable/Enable + Delete buttons.
+- Disable/Enable toggles `isActive` via `api.notificationTemplates.update`.
+- Delete warns that booking reminders stop sending (important UX note).
+
+**Customers (`/dashboard/customers`):**
+
+- Added per-row Mark VIP/Un-VIP + Delete buttons.
+- VIP toggle uses `api.customers.update({ vipStatus })` — quicker than opening the edit form for a single customer.
+- Delete uses `window.confirm()` guard.
+
+All list pages now have action buttons consistent with the established pattern: action column at end of table, per-row pending state via `pendingId`, `window.confirm()` for destructive ops.
+
+**Tests: 551 passing** (no new tests — FE-only changes). **tsc clean**, **`pnpm build` clean**.
+
 ### Templates + vehicles action buttons (2026-06-28 session 9)
 
 **Tour templates (`/dashboard/templates`):**
