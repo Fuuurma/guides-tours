@@ -306,23 +306,28 @@ export const update = mutation({
 		const changes: Record<string, { old: unknown; new: unknown }> = {};
 
 		// Email change requires uniqueness check.
-		if (
-			args.email !== undefined &&
-			args.email !== customer.email
-		) {
-			const dup = await ctx.db
-				.query("customers")
-				.withIndex("by_org_email", (q) =>
-					q
-						.eq("organizationId", member.organizationId)
-						.eq("email", args.email as string),
-				)
-				.unique();
-			if (dup && dup._id !== args.customerId) {
-				throw new ConvexError("Email already in use");
+		if (args.email !== undefined) {
+			// Normalize like customers.create does so "Bob@Example.com"
+			// doesn't sneak past the case-sensitive index lookup.
+			const normalizedEmail = args.email.toLowerCase().trim();
+			if (normalizedEmail !== customer.email) {
+				const dup = await ctx.db
+					.query("customers")
+					.withIndex("by_org_email", (q) =>
+						q
+							.eq("organizationId", member.organizationId)
+							.eq("email", normalizedEmail),
+					)
+					.unique();
+				if (dup && dup._id !== args.customerId) {
+					throw new ConvexError("Email already in use");
+				}
+				changes.email = {
+					old: customer.email,
+					new: normalizedEmail,
+				};
+				patch.email = normalizedEmail;
 			}
-			changes.email = { old: customer.email, new: args.email };
-			patch.email = args.email;
 		}
 
 		for (const field of ALLOWED_UPDATE_FIELDS) {
