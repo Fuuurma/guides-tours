@@ -30,6 +30,17 @@ interface PublicTour {
 	basePriceCents: bigint | number | undefined;
 }
 
+// RFC 5322-lite — rejects "a@b" but accepts the common formats the
+// dashboard allows. More permissive than a strict parser to avoid
+// rejecting valid edge-case emails (subdomain.tlds, plus tags).
+const EMAIL_REGEX =
+	/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+const MAX_NAME_LEN = 100;
+const MAX_EMAIL_LEN = 254;
+const MAX_PHONE_LEN = 30;
+const MAX_NOTES_LEN = 1000;
+
 function PublicBookingPage() {
 	const { slug } = Route.useParams();
 	const { data, isPending, error } = useQuery(
@@ -101,6 +112,43 @@ function PublicBookingPage() {
 			setSubmitting(false);
 			return;
 		}
+		const nameTrimmed = name.trim();
+		if (nameTrimmed.length < 2) {
+			toast.error("Please enter your full name");
+			setSubmitting(false);
+			return;
+		}
+		if (nameTrimmed.length > 100) {
+			toast.error("Name is too long (max 100 characters)");
+			setSubmitting(false);
+			return;
+		}
+		const emailTrimmed = email.trim();
+		if (!EMAIL_REGEX.test(emailTrimmed)) {
+			toast.error("Please enter a valid email address");
+			setSubmitting(false);
+			return;
+		}
+		if (emailTrimmed.length > 254) {
+			toast.error("Email is too long");
+			setSubmitting(false);
+			return;
+		}
+		if (phone && phone.length > 0) {
+			const phoneDigits = phone.replace(/\D/g, "");
+			if (phoneDigits.length < 6 || phoneDigits.length > 20) {
+				toast.error(
+					"Please enter a valid phone number (6-20 digits) or leave it empty",
+				);
+				setSubmitting(false);
+				return;
+			}
+		}
+		if (notes.length > 1000) {
+			toast.error("Notes are too long (max 1000 characters)");
+			setSubmitting(false);
+			return;
+		}
 
 		try {
 			const res = await fetch(`/api/public/book/${slug}`, {
@@ -108,13 +156,13 @@ function PublicBookingPage() {
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({
 					tourId: selectedTourId,
-					customerName: name,
-					customerEmail: email,
-					customerPhone: phone || undefined,
+					customerName: nameTrimmed,
+					customerEmail: emailTrimmed,
+					customerPhone: phone.trim() || undefined,
 					date,
 					startTime,
 					guests: guestCount,
-					notes: notes || undefined,
+					notes: notes.trim() || undefined,
 				}),
 			});
 			const body = (await res.json()) as
@@ -299,12 +347,13 @@ function PublicBookingPage() {
 								>
 									Full name *
 								</label>
-								<Input
-									id="name"
-									required
-									value={name}
-									onChange={(e) => setName(e.target.value)}
-								/>
+<Input
+								id="name"
+								required
+								maxLength={MAX_NAME_LEN}
+								value={name}
+								onChange={(e) => setName(e.target.value)}
+							/>
 							</div>
 							<div className="space-y-1">
 								<label
@@ -313,13 +362,14 @@ function PublicBookingPage() {
 								>
 									Email *
 								</label>
-								<Input
-									id="email"
-									type="email"
-									required
-									value={email}
-									onChange={(e) => setEmail(e.target.value)}
-								/>
+<Input
+								id="email"
+								type="email"
+								required
+								maxLength={MAX_EMAIL_LEN}
+								value={email}
+								onChange={(e) => setEmail(e.target.value)}
+							/>
 							</div>
 							<div className="space-y-1">
 								<label
@@ -328,12 +378,13 @@ function PublicBookingPage() {
 								>
 									Phone (optional)
 								</label>
-								<Input
-									id="phone"
-									type="tel"
-									value={phone}
-									onChange={(e) => setPhone(e.target.value)}
-								/>
+<Input
+								id="phone"
+								type="tel"
+								maxLength={MAX_PHONE_LEN}
+								value={phone}
+								onChange={(e) => setPhone(e.target.value)}
+							/>
 							</div>
 							<div className="space-y-1">
 								<label
@@ -342,13 +393,17 @@ function PublicBookingPage() {
 								>
 									Special requests (optional)
 								</label>
-								<Textarea
-									id="notes"
-									value={notes}
-									onChange={(e) => setNotes(e.target.value)}
-									rows={3}
-									placeholder="Allergies, accessibility needs, etc."
-								/>
+<Textarea
+								id="notes"
+								value={notes}
+								onChange={(e) => setNotes(e.target.value)}
+								rows={3}
+								maxLength={MAX_NOTES_LEN}
+								placeholder="Allergies, accessibility needs, etc."
+							/>
+							<p className="text-muted-foreground text-xs text-right">
+								{notes.length} / {MAX_NOTES_LEN}
+							</p>
 							</div>
 						</CardContent>
 						<CardFooter className="flex flex-col gap-3">
