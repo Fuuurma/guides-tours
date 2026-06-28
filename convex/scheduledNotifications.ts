@@ -8,6 +8,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { internalMutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { parseBookingTime } from "./lib/time";
 
@@ -54,6 +55,7 @@ export const scheduleForBooking = internalMutation({
 			if (!template) continue; // source: skip if template missing
 			const sendAt = tourTs - offsetHours * 3_600_000;
 			if (sendAt <= now) continue; // source: skip if in past
+			const maxRetries = await getTemplateMaxRetries(ctx, template);
 			const id = await ctx.db.insert("scheduledNotifications", {
 				organizationId: args.organizationId,
 				bookingId: args.bookingId,
@@ -61,9 +63,7 @@ export const scheduleForBooking = internalMutation({
 				scheduledFor: sendAt,
 				sent: false,
 				retryCount: 0,
-				maxRetries: template !== undefined
-					? (await getTemplateMaxRetries(ctx, template))
-					: 3,
+				maxRetries,
 				createdAt: now,
 			});
 			created.push(id);
@@ -74,30 +74,27 @@ export const scheduleForBooking = internalMutation({
 });
 
 async function findTemplate(
-	ctx: { db: { query: Function } },
+	ctx: MutationCtx,
 	organizationId: string,
 	templateType: string,
 ): Promise<Id<"notificationTemplates"> | null> {
 	const row = await ctx.db
 		.query("notificationTemplates")
-		.withIndex("by_org_type", (q: any) =>
+		.withIndex("by_org_type", (q) =>
 			q.eq("organizationId", organizationId).eq("templateType", templateType),
 		)
-		.filter((q: any) => q.eq(q.field("isActive"), true))
+		.filter((q) => q.eq(q.field("isActive"), true))
 		.first();
 	return row?._id ?? null;
 }
 
 async function getTemplateMaxRetries(
-	ctx: { db: { get: Function } },
+	ctx: MutationCtx,
 	id: Id<"notificationTemplates">,
 ): Promise<number> {
 	const t = await ctx.db.get(id);
 	return t?.retryCount ?? 3;
 }
-
-// Lightweight Function type alias so we don't pull the full DataModel.
-type Function = (...args: any[]) => any;
 
 // parseBookingTime moved to convex/lib/time.ts (shared with
 // public_booking.ts so date validation uses the same parser).
