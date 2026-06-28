@@ -4,6 +4,33 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Hardening + UX polish (2026-06-28)
+
+**Bugs fixed:**
+
+- **Rate-limit outcome stuck as "pending"** (`960e009`): `recordAttempt` was always called with `outcome: "pending"` and never updated. Audit data showed pending forever, useless for distinguishing successful vs failed bookings. Added `attemptId` return value + `updateAttemptOutcome` internal mutation + try/catch wrapping the booking creation. 3 new tests.
+- **`parseBookingTime` silently accepted rolled-over dates** (`62b09f2`): `Date.UTC(2026, 1, 31)` returns March 3 (Feb rollover), so `2026-02-31` was accepted and bookings could land on the wrong day. Added range checks + round-trip verification. 14 new tests in `convex/__tests__/time.test.ts`.
+- **`customers.update` didn't normalize email** (`d941afe`): Inconsistent with `customers.create` which lowercases+trims before lookup. A user typing "Bob@Example.com" could create a duplicate of an existing "bob@example.com" customer.
+- **`payments.upsertSettings` overwrote secrets with placeholder** (`13ade36`, from earlier session): The FE sends `"placeholder-no-change"` when secrets aren't changed (can't read them back for security). The BE was always encrypting and storing this literal value as the actual secret. Added placeholder detection + existing-ciphertext reuse. 1 new test.
+- **OTA commission could go negative** (`a36849d`): Rate > 1 from a bad provider response or misconfigured product would produce commission > paid, flipping `netRevenueCents` below zero — silently corrupting revenue analytics. Clamp rate to `[0, 1]`. 2 new tests.
+
+**Frontend improvements:**
+
+- **Public booking form validation** (`62b09f2`): Email regex (RFC 5322-lite), name length (2-100), email max 254, phone digits (6-20) or empty, notes max 1000 + live char count, `maxLength` HTML attrs on every input.
+- **Dashboard layout error state** (`af2d284`): Previously hung in "Loading…" forever on query failure. Added error card with Reload button.
+- **Analytics + dashboard index error states** (`8b1e9e4`): Both pages now show user-visible error indicators when any query fails (was silent before).
+- **Cancel booking form** (`c49ff88`): Uses `<Textarea>` instead of single-line `<Input>` for longer cancellation reasons. Destructive border tint to make the destructive nature obvious.
+- **Dashboard upcoming assignments** (`c49ff88`): Tour name is now clickable to the tour detail page (was plain text).
+- **Type safety** (`8aad4b5`): Narrowed 29 of 30 `as never` casts to `as Id<"table">` casts. The remaining 1 (entity-form navigate) is legitimately `as never` (dynamic typed route path).
+- **Cents type consistency** (`4efca0f`, from earlier session): `v.int64()` returns `bigint` at runtime; FE interfaces now declare `bigint | number`.
+
+**Code quality:**
+
+- **`scheduledNotifications` cleanup** (`60d9320`): Replaced loose `{ db: { query: Function } }` type with proper `MutationCtx`, removed redundant null check.
+- **`FE cents types`** (`4efca0f`, from earlier session): All cents fields in FE interfaces use `bigint | number` to match Convex `v.int64()` runtime type.
+
+**Tests: 497 passing** (up from 461, +36 net new across 43 test files). **tsc clean**, **`pnpm build` clean**.
+
 ### Security hardening (sessions of 2026-06-24 through 2026-06-27)
 
 Captured retrospectively as a single release entry.
