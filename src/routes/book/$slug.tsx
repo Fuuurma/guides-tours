@@ -57,6 +57,18 @@ function PublicBookingPage() {
 	const [notes, setNotes] = useState("");
 	const [submitting, setSubmitting] = useState(false);
 	const [confirmation, setConfirmation] = useState<string | null>(null);
+	// Inline field-level errors so users see what to fix next to the
+	// input, not buried in a toast that vanishes after a few seconds.
+	const [fieldErr, setFieldErr] = useState<{
+		tour?: string;
+		guests?: string;
+		name?: string;
+		email?: string;
+		phone?: string;
+		notes?: string;
+		date?: string;
+	}>({});
+	const [submitErr, setSubmitErr] = useState<string | null>(null);
 
 	if (isPending) {
 		return (
@@ -100,52 +112,36 @@ function PublicBookingPage() {
 	const onSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
 		setSubmitting(true);
+		setFieldErr({});
+		setSubmitErr(null);
 
 		const guestCount = Number(guests);
-		if (!selectedTourId) {
-			toast.error("Please select a tour");
-			setSubmitting(false);
-			return;
-		}
-		if (guestCount <= 0) {
-			toast.error("Guests must be at least 1");
-			setSubmitting(false);
-			return;
-		}
+		const errs: typeof fieldErr = {};
+		if (!selectedTourId) errs.tour = "Please select a tour";
+		if (!guestCount || guestCount <= 0) errs.guests = "Guests must be at least 1";
+		if (!date) errs.date = "Please pick a date";
 		const nameTrimmed = name.trim();
-		if (nameTrimmed.length < 2) {
-			toast.error("Please enter your full name");
-			setSubmitting(false);
-			return;
-		}
-		if (nameTrimmed.length > 100) {
-			toast.error("Name is too long (max 100 characters)");
-			setSubmitting(false);
-			return;
-		}
+		if (nameTrimmed.length < 2) errs.name = "Please enter your full name";
+		else if (nameTrimmed.length > MAX_NAME_LEN)
+			errs.name = `Name is too long (max ${MAX_NAME_LEN} characters)`;
 		const emailTrimmed = email.trim();
-		if (!EMAIL_REGEX.test(emailTrimmed)) {
-			toast.error("Please enter a valid email address");
-			setSubmitting(false);
-			return;
-		}
-		if (emailTrimmed.length > 254) {
-			toast.error("Email is too long");
-			setSubmitting(false);
-			return;
-		}
+		if (!EMAIL_REGEX.test(emailTrimmed))
+			errs.email = "Please enter a valid email address";
+		else if (emailTrimmed.length > MAX_EMAIL_LEN)
+			errs.email = "Email is too long";
 		if (phone && phone.length > 0) {
 			const phoneDigits = phone.replace(/\D/g, "");
 			if (phoneDigits.length < 6 || phoneDigits.length > 20) {
-				toast.error(
-					"Please enter a valid phone number (6-20 digits) or leave it empty",
-				);
-				setSubmitting(false);
-				return;
+				errs.phone = "Please enter a valid phone number (6-20 digits) or leave it empty";
 			}
 		}
-		if (notes.length > 1000) {
-			toast.error("Notes are too long (max 1000 characters)");
+		if (notes.length > MAX_NOTES_LEN) {
+			errs.notes = `Notes are too long (max ${MAX_NOTES_LEN} characters)`;
+		}
+
+		if (Object.keys(errs).length > 0) {
+			setFieldErr(errs);
+			toast.error("Please fix the highlighted fields");
 			setSubmitting(false);
 			return;
 		}
@@ -169,7 +165,9 @@ function PublicBookingPage() {
 				| { bookingId: string; status: string }
 				| { error: string };
 			if (!res.ok) {
-				toast.error(("error" in body && body.error) || "Booking failed");
+				const msg = ("error" in body && body.error) || "Booking failed";
+				setSubmitErr(msg);
+				toast.error(msg);
 				return;
 			}
 			if ("bookingId" in body) {
@@ -177,7 +175,9 @@ function PublicBookingPage() {
 				toast.success("Booking confirmed!");
 			}
 		} catch (err) {
-			toast.error((err as Error).message);
+			const msg = (err as Error).message;
+			setSubmitErr(msg);
+			toast.error(msg);
 		} finally {
 			setSubmitting(false);
 		}
@@ -233,6 +233,11 @@ function PublicBookingPage() {
 							<CardTitle>1. Choose a tour</CardTitle>
 						</CardHeader>
 						<CardContent className="space-y-3">
+							{fieldErr.tour && (
+								<p role="alert" className="text-destructive text-sm">
+									{fieldErr.tour}
+								</p>
+							)}
 							{data.tours.map((t: PublicTour) => (
 								<label
 									key={t._id}
@@ -292,7 +297,13 @@ function PublicBookingPage() {
 									min={new Date().toISOString().slice(0, 10)}
 									value={date}
 									onChange={(e) => setDate(e.target.value)}
+									aria-invalid={Boolean(fieldErr.date)}
 								/>
+									{fieldErr.date && (
+										<p role="alert" className="text-destructive text-xs">
+											{fieldErr.date}
+										</p>
+									)}
 								</div>
 								<div className="space-y-1">
 									<label
@@ -325,10 +336,16 @@ function PublicBookingPage() {
 									required
 									value={guests}
 									onChange={(e) => setGuests(e.target.value)}
+									aria-invalid={Boolean(fieldErr.guests)}
 								/>
-								{selectedTour && (
+								{selectedTour && !fieldErr.guests && (
 									<p className="text-muted-foreground text-xs">
 										Max {selectedTour.maxGuests} guests
+									</p>
+								)}
+								{fieldErr.guests && (
+									<p role="alert" className="text-destructive text-xs">
+										{fieldErr.guests}
 									</p>
 								)}
 							</div>
@@ -353,7 +370,13 @@ function PublicBookingPage() {
 								maxLength={MAX_NAME_LEN}
 								value={name}
 								onChange={(e) => setName(e.target.value)}
+								aria-invalid={Boolean(fieldErr.name)}
 							/>
+								{fieldErr.name && (
+									<p role="alert" className="text-destructive text-xs">
+										{fieldErr.name}
+									</p>
+								)}
 							</div>
 							<div className="space-y-1">
 								<label
@@ -369,7 +392,13 @@ function PublicBookingPage() {
 								maxLength={MAX_EMAIL_LEN}
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
+								aria-invalid={Boolean(fieldErr.email)}
 							/>
+								{fieldErr.email && (
+									<p role="alert" className="text-destructive text-xs">
+										{fieldErr.email}
+									</p>
+								)}
 							</div>
 							<div className="space-y-1">
 								<label
@@ -384,7 +413,13 @@ function PublicBookingPage() {
 								maxLength={MAX_PHONE_LEN}
 								value={phone}
 								onChange={(e) => setPhone(e.target.value)}
+								aria-invalid={Boolean(fieldErr.phone)}
 							/>
+								{fieldErr.phone && (
+									<p role="alert" className="text-destructive text-xs">
+										{fieldErr.phone}
+									</p>
+								)}
 							</div>
 							<div className="space-y-1">
 								<label
@@ -400,13 +435,29 @@ function PublicBookingPage() {
 								rows={3}
 								maxLength={MAX_NOTES_LEN}
 								placeholder="Allergies, accessibility needs, etc."
+								aria-invalid={Boolean(fieldErr.notes)}
 							/>
-							<p className="text-muted-foreground text-xs text-right">
-								{notes.length} / {MAX_NOTES_LEN}
-							</p>
+								<p className="text-muted-foreground text-xs text-right">
+									{notes.length} / {MAX_NOTES_LEN}
+								</p>
+								{fieldErr.notes && (
+									<p role="alert" className="text-destructive text-xs">
+										{fieldErr.notes}
+									</p>
+								)}
 							</div>
 						</CardContent>
 						<CardFooter className="flex flex-col gap-3">
+							{submitErr && (
+								<div
+									className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
+									role="alert"
+								>
+									<p className="text-destructive text-sm font-medium">
+										{submitErr}
+									</p>
+								</div>
+							)}
 							<Button
 								type="submit"
 								disabled={submitting}

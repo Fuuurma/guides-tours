@@ -40,6 +40,8 @@ interface FormFieldProps {
 }
 
 export function FormField({ label, hint, error, htmlFor, children }: FormFieldProps) {
+	const hintId = htmlFor ? `${htmlFor}-hint` : undefined;
+	const errorId = htmlFor ? `${htmlFor}-error` : undefined;
 	return (
 		<div className="space-y-1">
 			<label htmlFor={htmlFor} className="text-sm font-medium">
@@ -47,9 +49,19 @@ export function FormField({ label, hint, error, htmlFor, children }: FormFieldPr
 			</label>
 			{children}
 			{hint && !error && (
-				<p className="text-muted-foreground text-xs">{hint}</p>
+				<p id={hintId} className="text-muted-foreground text-xs">
+					{hint}
+				</p>
 			)}
-			{error && <p className="text-destructive text-xs">{error}</p>}
+			{error && (
+				<p
+					id={errorId}
+					role="alert"
+					className="text-destructive text-xs"
+				>
+					{error}
+				</p>
+			)}
 		</div>
 	);
 }
