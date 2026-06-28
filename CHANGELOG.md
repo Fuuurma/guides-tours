@@ -4,6 +4,15 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### OTA + categories action buttons (2026-06-28 session 8)
+
+**FE action buttons (continued):**
+
+- **OTA integrations** (`/dashboard/ota`): Added per-row Disable/Enable + Delete buttons. The BE had `update` + `remove` mutations but no FE — operators could only create integrations, never modify or remove them. Disable/Enable uses `api.ota.integrations_mutations.update({ isActive })`. Delete has a `window.confirm()` guard since it's destructive (stops webhook ingestion).
+- **Tour categories** (`/dashboard/categories`): Same pattern — added Disable/Enable + Delete buttons per row. The BE had `update` + `remove` mutations. Disable hides the category from public booking filter chips. Delete warns that tours will be uncategorized.
+
+**Tests: 551 passing** (no new tests — FE-only changes against existing tested BE mutations). **tsc clean**, **`pnpm build` clean**.
+
 ### Perf cap + FE action buttons (2026-06-28 session 7)
 
 **Performance:**
