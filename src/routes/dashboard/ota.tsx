@@ -179,12 +179,21 @@ function NewIntegrationForm({
 		e.preventDefault();
 		setPending(true);
 		setError(null);
+
+		// Trim API key — browsers don't always trim required fields.
+		const apiKeyTrimmed = apiKey.trim();
+		if (!apiKeyTrimmed) {
+			setError("API key is required");
+			setPending(false);
+			return;
+		}
+
 		try {
 			await create({
 				provider,
-				apiKey,
-				apiSecret: apiSecret || undefined,
-				webhookSecret: webhookSecret || undefined,
+				apiKey: apiKeyTrimmed,
+				apiSecret: apiSecret.trim() || undefined,
+				webhookSecret: webhookSecret.trim() || undefined,
 				isSandbox,
 			});
 			toast.success("Integration created");
@@ -231,6 +240,7 @@ function NewIntegrationForm({
 						<Input
 							id="apiKey"
 							required
+							maxLength={500}
 							value={apiKey}
 							onChange={(e) => setApiKey(e.target.value)}
 							placeholder="abc123…"
@@ -241,6 +251,7 @@ function NewIntegrationForm({
 						<Input
 							id="apiSecret"
 							type="password"
+							maxLength={500}
 							value={apiSecret}
 							onChange={(e) => setApiSecret(e.target.value)}
 							placeholder="(optional)"
@@ -255,6 +266,7 @@ function NewIntegrationForm({
 						<Input
 							id="webhookSecret"
 							type="password"
+							maxLength={500}
 							value={webhookSecret}
 							onChange={(e) => setWebhookSecret(e.target.value)}
 							placeholder="(optional)"
