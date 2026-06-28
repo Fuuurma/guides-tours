@@ -154,20 +154,29 @@ export const get = query({
 
 /** Customer's booking history (sorted desc). */
 export const history = query({
-	args: { customerId: v.id("customers") },
+	args: {
+		customerId: v.id("customers"),
+		// Default cap: customers with 100+ bookings would cause the
+		// customer detail page to render a very long table. The
+		// client can pass a higher limit if it paginates.
+		limit: v.optional(v.number()),
+	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const customer = await ctx.db.get(args.customerId);
 		if (!customer || customer.organizationId !== member.organizationId) {
 			return [];
 		}
+		const limit = Math.min(args.limit ?? 100, 500);
+		// by_customer_date has date as the second key; .order("desc")
+		// returns newest first. take(limit) caps the scan.
 		const bookings = await ctx.db
 			.query("bookings")
 			.withIndex("by_customer_date", (q) =>
 				q.eq("customerId", args.customerId),
 			)
 			.order("desc")
-			.collect();
+			.take(limit);
 		const tourIds = [...new Set(bookings.map((b) => b.tourId))];
 		const tours = await Promise.all(tourIds.map((id) => ctx.db.get(id)));
 		const tourMap = new Map(
