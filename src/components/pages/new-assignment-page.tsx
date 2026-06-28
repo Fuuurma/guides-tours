@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Input } from "@/components/ui/input";
@@ -41,15 +42,25 @@ export function NewAssignmentPage() {
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 	const { data: vehicles } = useQuery(convexQuery(api.vehicles.list, {}));
 	const { data: drivers } = useQuery(convexQuery(api.drivers.list, {}));
+	const [guideErr, setGuideErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			if (!v.tourId) throw new Error("Please select a tour");
-			if (!v.guideId) throw new Error("Guide user ID is required");
-			if (!v.date || !v.startTime) throw new Error("Date and start time are required");
+			let guideError: string | null = null;
+			if (!v.tourId) {
+				throw new Error("Please select a tour");
+			}
+			if (!v.guideId.trim()) {
+				guideError = "Guide user ID is required";
+			}
+			setGuideErr(guideError);
+			if (!v.date || !v.startTime) {
+				throw new Error(guideError ?? "Date and start time are required");
+			}
+			if (guideError) throw new Error(guideError);
 			const id = await create({
 				tourId: v.tourId as Id<"tours">,
-				guideId: v.guideId,
+				guideId: v.guideId.trim(),
 				date: v.date,
 				startTime: v.startTime,
 				vehicleId: v.vehicleId ? (v.vehicleId as Id<"vehicles">) : undefined,
@@ -81,8 +92,18 @@ export function NewAssignmentPage() {
 				</Select>
 			</FormField>
 
-			<FormField label="Guide user ID *" hint="Better Auth user ID of the guide (must have 'guide' role)" htmlFor="guide">
-				<Input id="guide" required value={form.values.guideId} onChange={(e) => form.set("guideId", e.target.value)} placeholder="user_abc123" />
+			<FormField label="Guide user ID *" hint="Better Auth user ID of the guide (must have 'guide' role)" htmlFor="guide" error={guideErr ?? undefined}>
+				<Input
+					id="guide"
+					required
+					maxLength={200}
+					value={form.values.guideId}
+					onChange={(e) => {
+						form.set("guideId", e.target.value);
+						if (guideErr) setGuideErr(null);
+					}}
+					placeholder="user_abc123"
+				/>
 			</FormField>
 
 			<div className="grid gap-4 md:grid-cols-2">

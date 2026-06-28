@@ -1,4 +1,5 @@
 import { useMutation } from "convex/react";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "../form";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { MAX_NAME_LEN, validateNonNegativeNumber } from "@/lib/validation";
 
 const TEMPLATE_TYPES = [
 	"booking_confirmation", "reminder_24h", "reminder_2h", "reminder_1h",
@@ -44,19 +46,21 @@ const INITIAL: FormValues = {
 
 export function NewNotificationTemplatePage() {
 	const create = useMutation(api.notificationTemplates.create);
+	const [retriesErr, setRetriesErr] = useState<string | null>(null);
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const retries = Number(v.retryCount);
-			if (retries < 0) throw new Error("Retries cannot be negative");
+			const retriesError = validateNonNegativeNumber(v.retryCount, "Retries");
+			setRetriesErr(retriesError);
+			if (retriesError) throw new Error(retriesError);
 			const id = await create({
-				name: v.name,
+				name: v.name.trim(),
 				templateType: v.templateType,
 				channel: v.channel,
-				emailSubject: v.emailSubject,
-				emailBodyText: v.emailBodyText,
-				smsBody: v.smsBody || undefined,
+				emailSubject: v.emailSubject.trim(),
+				emailBodyText: v.emailBodyText.trim(),
+				smsBody: v.smsBody.trim() || undefined,
 				sendTiming: v.sendTiming,
-				retryCount: retries,
+				retryCount: Number(v.retryCount),
 			});
 			return id;
 		},
@@ -76,7 +80,7 @@ export function NewNotificationTemplatePage() {
 			submitLabel="Create template"
 		>
 			<FormField label="Name *" htmlFor="name">
-				<Input id="name" required value={form.values.name} onChange={(e) => form.set("name", e.target.value)} placeholder="Booking confirmation" />
+				<Input id="name" required maxLength={MAX_NAME_LEN} value={form.values.name} onChange={(e) => form.set("name", e.target.value)} placeholder="Booking confirmation" />
 			</FormField>
 
 			<div className="grid gap-4 md:grid-cols-2">
@@ -99,16 +103,16 @@ export function NewNotificationTemplatePage() {
 			</div>
 
 			<FormField label="Email subject *" htmlFor="subject">
-				<Input id="subject" required value={form.values.emailSubject} onChange={(e) => form.set("emailSubject", e.target.value)} placeholder="Your booking is confirmed" />
+				<Input id="subject" required maxLength={200} value={form.values.emailSubject} onChange={(e) => form.set("emailSubject", e.target.value)} placeholder="Your booking is confirmed" />
 			</FormField>
 
 			<FormField label="Email body (text) *" hint="Plain text — supports variables like {customerName}, {tourName}, {date}" htmlFor="body">
-				<Textarea id="body" required value={form.values.emailBodyText} onChange={(e) => form.set("emailBodyText", e.target.value)} rows={6} className="font-mono" />
+				<Textarea id="body" required maxLength={10000} value={form.values.emailBodyText} onChange={(e) => form.set("emailBodyText", e.target.value)} rows={6} className="font-mono" />
 			</FormField>
 
 			{(channel === "sms" || channel === "both") && (
 				<FormField label="SMS body" hint="Plain text — keep under 160 chars" htmlFor="sms">
-					<Textarea id="sms" value={form.values.smsBody} onChange={(e) => form.set("smsBody", e.target.value)} rows={3} />
+					<Textarea id="sms" maxLength={1600} value={form.values.smsBody} onChange={(e) => form.set("smsBody", e.target.value)} rows={3} />
 				</FormField>
 			)}
 
@@ -121,8 +125,17 @@ export function NewNotificationTemplatePage() {
 						</SelectContent>
 					</Select>
 				</FormField>
-				<FormField label="Retries" htmlFor="retries">
-					<Input id="retries" type="number" min="0" value={form.values.retryCount} onChange={(e) => form.set("retryCount", e.target.value)} />
+				<FormField label="Retries" htmlFor="retries" error={retriesErr ?? undefined}>
+					<Input
+						id="retries"
+						type="number"
+						min="0"
+						value={form.values.retryCount}
+						onChange={(e) => {
+							form.set("retryCount", e.target.value);
+							if (retriesErr) setRetriesErr(null);
+						}}
+					/>
 				</FormField>
 			</div>
 		</EntityFormPage>

@@ -1,4 +1,5 @@
 import { useMutation } from "convex/react";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +12,12 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "../form";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import {
+	MAX_NAME_LEN,
+	MAX_NOTES_LEN,
+	validateNotesOptional,
+	validatePositiveInteger,
+} from "@/lib/validation";
 
 const VEHICLE_TYPES = ["minivan", "van", "bus", "car", "boat", "other"] as const;
 const OWNERSHIP_TYPES = ["owned", "rented", "leased"] as const;
@@ -43,24 +50,36 @@ const INITIAL: FormValues = {
 
 export function NewVehiclePage() {
 	const create = useMutation(api.vehicles.create);
+	const [capErr, setCapErr] = useState<string | null>(null);
+	const [yearErr, setYearErr] = useState<string | null>(null);
+	const [notesErr, setNotesErr] = useState<string | null>(null);
+
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const cap = Number(v.capacity);
-			const yr = v.year ? Number(v.year) : undefined;
-			if (cap <= 0) throw new Error("Capacity must be positive");
-			if (yr !== undefined && (yr < 1900 || yr > 2100))
-				throw new Error("Year must be between 1900 and 2100");
+			const capError = validatePositiveInteger(v.capacity, "Capacity");
+			setCapErr(capError);
+			const yr = v.year.trim() ? Number(v.year) : undefined;
+			let yearError: string | null = null;
+			if (yr !== undefined && (!Number.isFinite(yr) || yr < 1900 || yr > 2100)) {
+				yearError = "Year must be between 1900 and 2100";
+			}
+			setYearErr(yearError);
+			const notesError = validateNotesOptional(v.notes);
+			setNotesErr(notesError);
+			if (capError || yearError || notesError) {
+				throw new Error(capError ?? yearError ?? notesError ?? "Invalid input");
+			}
 			const id = await create({
-				name: v.name,
+				name: v.name.trim(),
 				vehicleType: v.vehicleType,
-				capacity: cap,
-				licensePlate: v.licensePlate || undefined,
-				make: v.make || undefined,
-				model: v.model || undefined,
+				capacity: Number(v.capacity),
+				licensePlate: v.licensePlate.trim() || undefined,
+				make: v.make.trim() || undefined,
+				model: v.model.trim() || undefined,
 				year: yr,
-				color: v.color || undefined,
+				color: v.color.trim() || undefined,
 				ownershipType: v.ownershipType,
-				notes: v.notes || undefined,
+				notes: v.notes.trim() || undefined,
 			});
 			return id;
 		},
@@ -81,6 +100,7 @@ export function NewVehiclePage() {
 				<Input
 					id="name"
 					required
+					maxLength={MAX_NAME_LEN}
 					value={form.values.name}
 					onChange={(e) => form.set("name", e.target.value)}
 					placeholder="Minivan #1"
@@ -96,14 +116,30 @@ export function NewVehiclePage() {
 						</SelectContent>
 					</Select>
 				</FormField>
-				<FormField label="Capacity *" htmlFor="cap">
-					<Input id="cap" type="number" min="1" required value={form.values.capacity} onChange={(e) => form.set("capacity", e.target.value)} />
+				<FormField label="Capacity *" htmlFor="cap" error={capErr ?? undefined}>
+					<Input
+						id="cap"
+						type="number"
+						min="1"
+						required
+						value={form.values.capacity}
+						onChange={(e) => {
+							form.set("capacity", e.target.value);
+							if (capErr) setCapErr(null);
+						}}
+					/>
 				</FormField>
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="License plate" htmlFor="plate">
-					<Input id="plate" value={form.values.licensePlate} onChange={(e) => form.set("licensePlate", e.target.value)} placeholder="ABC-1234" />
+					<Input
+						id="plate"
+						maxLength={20}
+						value={form.values.licensePlate}
+						onChange={(e) => form.set("licensePlate", e.target.value)}
+						placeholder="ABC-1234"
+					/>
 				</FormField>
 				<FormField label="Ownership" htmlFor="own">
 					<Select value={form.values.ownershipType} onValueChange={(v) => form.set("ownershipType", v)}>
@@ -117,22 +153,61 @@ export function NewVehiclePage() {
 
 			<div className="grid gap-4 md:grid-cols-3">
 				<FormField label="Make" htmlFor="make">
-					<Input id="make" value={form.values.make} onChange={(e) => form.set("make", e.target.value)} placeholder="Mercedes" />
+					<Input
+						id="make"
+						maxLength={50}
+						value={form.values.make}
+						onChange={(e) => form.set("make", e.target.value)}
+						placeholder="Mercedes"
+					/>
 				</FormField>
 				<FormField label="Model" htmlFor="model">
-					<Input id="model" value={form.values.model} onChange={(e) => form.set("model", e.target.value)} placeholder="Sprinter" />
+					<Input
+						id="model"
+						maxLength={50}
+						value={form.values.model}
+						onChange={(e) => form.set("model", e.target.value)}
+						placeholder="Sprinter"
+					/>
 				</FormField>
-				<FormField label="Year" htmlFor="year">
-					<Input id="year" type="number" min="1900" max="2100" value={form.values.year} onChange={(e) => form.set("year", e.target.value)} placeholder="2022" />
+				<FormField label="Year" htmlFor="year" error={yearErr ?? undefined}>
+					<Input
+						id="year"
+						type="number"
+						min="1900"
+						max="2100"
+						value={form.values.year}
+						onChange={(e) => {
+							form.set("year", e.target.value);
+							if (yearErr) setYearErr(null);
+						}}
+						placeholder="2022"
+					/>
 				</FormField>
 			</div>
 
 			<FormField label="Color" htmlFor="color">
-				<Input id="color" value={form.values.color} onChange={(e) => form.set("color", e.target.value)} placeholder="White" />
+				<Input
+					id="color"
+					maxLength={30}
+					value={form.values.color}
+					onChange={(e) => form.set("color", e.target.value)}
+					placeholder="White"
+				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="notes">
-				<Textarea id="notes" value={form.values.notes} onChange={(e) => form.set("notes", e.target.value)} rows={3} placeholder="Optional" />
+			<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
+				<Textarea
+					id="notes"
+					value={form.values.notes}
+					onChange={(e) => {
+						form.set("notes", e.target.value);
+						if (notesErr) setNotesErr(null);
+					}}
+					rows={3}
+					maxLength={MAX_NOTES_LEN}
+					placeholder="Optional"
+				/>
 			</FormField>
 		</EntityFormPage>
 	);

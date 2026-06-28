@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,11 @@ import {
 } from "@/components/ui/select";
 import { FormField } from "../form";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import {
+	MAX_NOTES_LEN,
+	validateNotesOptional,
+	validatePositiveInteger,
+} from "@/lib/validation";
 
 interface Tour { _id: string; name: string }
 
@@ -38,20 +44,32 @@ const INITIAL: FormValues = {
 export function NewSchedulePage() {
 	const create = useMutation(api.tourSchedules.create);
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
+	const [capErr, setCapErr] = useState<string | null>(null);
+	const [notesErr, setNotesErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const cap = Number(v.capacityTotal);
 			if (!v.tourId) throw new Error("Please select a tour");
-			if (!v.date || !v.startTime || !v.endTime) throw new Error("Date and times are required");
-			if (cap <= 0) throw new Error("Capacity must be positive");
+			if (!v.date || !v.startTime || !v.endTime) {
+				throw new Error("Date and times are required");
+			}
+			if (v.startTime >= v.endTime) {
+				throw new Error("End time must be after start time");
+			}
+			const capError = validatePositiveInteger(v.capacityTotal, "Capacity");
+			setCapErr(capError);
+			const notesError = validateNotesOptional(v.notes);
+			setNotesErr(notesError);
+			if (capError || notesError) {
+				throw new Error(capError ?? notesError ?? "Invalid input");
+			}
 			const id = await create({
 				tourId: v.tourId as Id<"tours">,
 				date: v.date,
 				startTime: v.startTime,
 				endTime: v.endTime,
-				capacityTotal: cap,
-				notes: v.notes || undefined,
+				capacityTotal: Number(v.capacityTotal),
+				notes: v.notes.trim() || undefined,
 			});
 			return id;
 		},
@@ -92,12 +110,32 @@ export function NewSchedulePage() {
 				</FormField>
 			</div>
 
-			<FormField label="Capacity *" htmlFor="cap">
-				<Input id="cap" type="number" min="1" required value={form.values.capacityTotal} onChange={(e) => form.set("capacityTotal", e.target.value)} />
+			<FormField label="Capacity *" htmlFor="cap" error={capErr ?? undefined}>
+				<Input
+					id="cap"
+					type="number"
+					min="1"
+					required
+					value={form.values.capacityTotal}
+					onChange={(e) => {
+						form.set("capacityTotal", e.target.value);
+						if (capErr) setCapErr(null);
+					}}
+				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="notes">
-				<Textarea id="notes" value={form.values.notes} onChange={(e) => form.set("notes", e.target.value)} rows={3} placeholder="Optional" />
+			<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
+				<Textarea
+					id="notes"
+					value={form.values.notes}
+					onChange={(e) => {
+						form.set("notes", e.target.value);
+						if (notesErr) setNotesErr(null);
+					}}
+					rows={3}
+					maxLength={MAX_NOTES_LEN}
+					placeholder="Optional"
+				/>
 			</FormField>
 		</EntityFormPage>
 	);

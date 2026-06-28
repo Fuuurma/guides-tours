@@ -7,6 +7,14 @@ import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { FormField } from "../form";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+	MAX_NAME_LEN,
+	MAX_NOTES_LEN,
+	validateEmail,
+	validateName,
+	validateNotesOptional,
+	validatePhoneOptional,
+} from "@/lib/validation";
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -25,16 +33,31 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 	const customer = useQuery(api.customers.get, { customerId: customerId as Id<"customers"> });
 	const update = useMutation(api.customers.update);
 	const [loaded, setLoaded] = useState(false);
+	const [nameErr, setNameErr] = useState<string | null>(null);
+	const [emailErr, setEmailErr] = useState<string | null>(null);
+	const [phoneErr, setPhoneErr] = useState<string | null>(null);
+	const [notesErr, setNotesErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
+			const nameError = validateName(v.name);
+			const emailError = validateEmail(v.email);
+			const phoneError = validatePhoneOptional(v.phone);
+			const notesError = validateNotesOptional(v.notes);
+			setNameErr(nameError);
+			setEmailErr(emailError);
+			setPhoneErr(phoneError);
+			setNotesErr(notesError);
+			if (nameError || emailError || phoneError || notesError) {
+				throw new Error(nameError ?? emailError ?? phoneError ?? notesError ?? "Invalid input");
+			}
 			await update({
 				customerId: customerId as Id<"customers">,
-				name: v.name,
-				email: v.email,
-				phone: v.phone || undefined,
-				preferredLanguage: v.preferredLanguage || "en",
-				notes: v.notes || undefined,
+				name: v.name.trim(),
+				email: v.email.trim(),
+				phone: v.phone.trim() || undefined,
+				preferredLanguage: v.preferredLanguage.trim() || "en",
+				notes: v.notes.trim() || undefined,
 				vipStatus: v.vipStatus,
 			});
 			return customerId;
@@ -90,48 +113,65 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 			backTo={`/dashboard/customers/${customerId}`}
 			submitLabel="Save changes"
 		>
-			<FormField label="Name *" htmlFor="edit-customer-name">
+			<FormField label="Name *" htmlFor="edit-customer-name" error={nameErr ?? undefined}>
 				<Input
 					id="edit-customer-name"
 					required
+					maxLength={MAX_NAME_LEN}
 					value={form.values.name}
-					onChange={(e) => form.set("name", e.target.value)}
+					onChange={(e) => {
+						form.set("name", e.target.value);
+						if (nameErr) setNameErr(null);
+					}}
 				/>
 			</FormField>
 
-			<FormField label="Email *" htmlFor="edit-customer-email">
+			<FormField label="Email *" htmlFor="edit-customer-email" error={emailErr ?? undefined}>
 				<Input
 					id="edit-customer-email"
 					type="email"
 					required
+					maxLength={254}
 					value={form.values.email}
-					onChange={(e) => form.set("email", e.target.value)}
+					onChange={(e) => {
+						form.set("email", e.target.value);
+						if (emailErr) setEmailErr(null);
+					}}
 				/>
 			</FormField>
 
-			<FormField label="Phone" htmlFor="edit-customer-phone">
+			<FormField label="Phone" htmlFor="edit-customer-phone" error={phoneErr ?? undefined}>
 				<Input
 					id="edit-customer-phone"
 					type="tel"
+					maxLength={30}
 					value={form.values.phone}
-					onChange={(e) => form.set("phone", e.target.value)}
+					onChange={(e) => {
+						form.set("phone", e.target.value);
+						if (phoneErr) setPhoneErr(null);
+					}}
 				/>
 			</FormField>
 
 			<FormField label="Preferred language" htmlFor="edit-customer-lang">
 				<Input
 					id="edit-customer-lang"
+					maxLength={10}
 					value={form.values.preferredLanguage}
 					onChange={(e) => form.set("preferredLanguage", e.target.value)}
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="edit-customer-notes">
+			<FormField label="Notes" htmlFor="edit-customer-notes" error={notesErr ?? undefined}>
 				<Textarea
 					id="edit-customer-notes"
 					value={form.values.notes}
-					onChange={(e) => form.set("notes", e.target.value)}
+					onChange={(e) => {
+						form.set("notes", e.target.value);
+						if (notesErr) setNotesErr(null);
+					}}
 					rows={3}
+					maxLength={MAX_NOTES_LEN}
 					placeholder="Optional"
 				/>
 			</FormField>
