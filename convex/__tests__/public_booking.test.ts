@@ -10,6 +10,7 @@ import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import { seedBlackout } from "./helpers";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -529,5 +530,92 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		expect(log.newValues.customerEmail).toBe("maya@example.com");
 		expect(log.newValues.guests).toBe(4);
 		expect(log.newValues.source).toBe("public_booking");
+	});
+
+	it("rejects booking when the date is blacked out by the operator", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_blackout";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		// Mark 2026-12-25 as blacked out (single-day range).
+		await t.run(async (ctx) =>
+			seedBlackout(ctx as unknown as TestCtx, {
+				orgId,
+				tourId,
+				startDate: "2026-12-25",
+				endDate: "2026-12-25",
+				reason: "Closed for Christmas",
+			}),
+		);
+		// A different date should still book OK.
+		await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: orgId,
+			tourId,
+			customerName: "Bob",
+			customerEmail: "bob@example.com",
+			date: "2026-12-26",
+			startTime: "10:00",
+			guests: 2,
+		});
+		// The blacked-out date must reject.
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Alice",
+				customerEmail: "alice@example.com",
+				date: "2026-12-25",
+				startTime: "10:00",
+				guests: 2,
+			}),
+		).rejects.toThrow(/not available/i);
+		// Only the non-blacked-out booking should be on record.
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("bookings").collect(),
+		);
+		expect(rows.length).toBe(1);
+	});
+
+	it("rejects booking when the date falls inside a multi-day blackout range", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_blackout_range";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		// Blackout 2026-12-24 through 2026-12-26 (3 days).
+		await t.run(async (ctx) =>
+			seedBlackout(ctx as unknown as TestCtx, {
+				orgId,
+				tourId,
+				startDate: "2026-12-24",
+				endDate: "2026-12-26",
+				reason: "Holiday closure",
+			}),
+		);
+		// First day of the range — reject.
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Eve",
+				customerEmail: "eve@example.com",
+				date: "2026-12-24",
+				startTime: "10:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/not available/i);
+		// Last day of the range — also reject.
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Frank",
+				customerEmail: "frank@example.com",
+				date: "2026-12-26",
+				startTime: "10:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/not available/i);
 	});
 });

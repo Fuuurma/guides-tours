@@ -23,20 +23,10 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
-import { createWebhookHandler, type WebhookConfig } from "../ota/webhook_handler";
-import { ViatorClient } from "../ota/viator";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
 process.env.ENCRYPTION_KEY ??= "a".repeat(64);
-
-const VIATOR_CONFIG: WebhookConfig = {
-	provider: "viator",
-	signatureHeader: "x-viator-signature",
-	timestampHeader: "x-viator-timestamp",
-	logPrefix: "[viator-webhook-test]",
-	normalize: ViatorClient.normalize,
-};
 
 const VIATOR_BOOKING_PAYLOAD = {
 	eventType: "BOOKING_CREATED",

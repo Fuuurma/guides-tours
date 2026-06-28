@@ -25,6 +25,7 @@ import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
+import { isBlackoutHelper } from "./tourBlackoutDates";
 
 // ----- Public query: org + active tours by slug -----
 //
@@ -248,6 +249,16 @@ export const internalCreate = internalMutation({
 		if (max && args.guests > max) {
 			throw new ConvexError(
 				`Guest count exceeds tour maximum of ${max}`,
+			);
+		}
+
+		// Reject if the operator has marked this tour/date as blacked out.
+		// isBlackoutHelper is exported from tourBlackoutDates and is
+		// safe to call from internal mutations (no auth required).
+		const blackedOut = await isBlackoutHelper(ctx, args.tourId, args.date);
+		if (blackedOut) {
+			throw new ConvexError(
+				"This date is not available for booking. Please pick another date.",
 			);
 		}
 
