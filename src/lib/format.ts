@@ -37,3 +37,36 @@ export function formatCentsCompact(
 	const n = typeof cents === "bigint" ? Number(cents) : cents;
 	return `$${(n / 100).toFixed(2)}`;
 }
+
+/**
+ * Format a cents value as "$X" with no decimals or grouping.
+ * Use in compact dashboard cards where cents are distracting.
+ *
+ * @example
+ *   formatCentsWhole(375000)  // "$3750"
+ *   formatCentsWhole(0)       // "$0"
+ */
+export function formatCentsWhole(
+	cents: number | bigint | null | undefined,
+): string {
+	if (cents == null) return "$0";
+	const n = typeof cents === "bigint" ? Number(cents) : cents;
+	return `$${Math.round(n / 100)}`;
+}
+
+/**
+ * Convert a cents value to a plain decimal string for form inputs.
+ * Strips the "$" prefix so it can go directly into a text input.
+ *
+ * @example
+ *   centsToInputValue(4999)   // "49.99"
+ *   centsToInputValue(0)      // "0.00"
+ *   centsToInputValue(null)   // ""
+ */
+export function centsToInputValue(
+	cents: number | bigint | null | undefined,
+): string {
+	if (cents == null) return "";
+	const n = typeof cents === "bigint" ? Number(cents) : cents;
+	return (n / 100).toFixed(2);
+}

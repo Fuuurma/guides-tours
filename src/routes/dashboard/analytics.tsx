@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatCents, formatCentsWhole } from "@/lib/format";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -282,7 +283,7 @@ function AnalyticsPage() {
 							label="Gross revenue"
 							value={
 								revenue
-									? `$${(Number(revenue.totalRevenueCents) / 100).toFixed(2)}`
+									? formatCents(revenue.totalRevenueCents)
 									: undefined
 							}
 							isPending={revenuePending}
@@ -291,7 +292,7 @@ function AnalyticsPage() {
 							label="Avg booking"
 							value={
 								revenue
-									? `$${((revenue.avgBookingValueCents as unknown as number) / 100).toFixed(2)}`
+									? formatCents(revenue.avgBookingValueCents as unknown as number)
 									: undefined
 							}
 							isPending={revenuePending}
@@ -333,8 +334,7 @@ function AnalyticsPage() {
 											{String(t.tourName ?? "Unknown")}
 										</Link>
 										<div className="text-right text-xs whitespace-nowrap text-muted-foreground">
-											{t.totalBookings} bookings · {t.totalGuests} guests · $
-											{(Number(t.totalRevenueCents) / 100).toFixed(0)}
+									{t.totalBookings} bookings · {t.totalGuests} guests · {formatCentsWhole(t.totalRevenueCents)}
 										</div>
 									</li>
 								))}

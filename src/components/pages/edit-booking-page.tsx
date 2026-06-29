@@ -4,6 +4,7 @@ import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { centsToInputValue } from "@/lib/format";
 import {
 	MAX_NOTES_LEN,
 	parseUsdToCents,
@@ -122,13 +123,11 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			form.set("notes", b.notes ?? "");
 			form.set(
 				"depositUsd",
-				b.depositAmountCents
-					? (Number(b.depositAmountCents) / 100).toFixed(2)
-					: "",
+				centsToInputValue(b.depositAmountCents),
 			);
 			form.set(
 				"totalUsd",
-				b.totalAmountCents ? (Number(b.totalAmountCents) / 100).toFixed(2) : "",
+				centsToInputValue(b.totalAmountCents),
 			);
 			form.set("paymentMethod", b.paymentMethod ?? "");
 			setLoaded(true);

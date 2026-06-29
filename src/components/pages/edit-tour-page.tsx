@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { centsToInputValue } from "@/lib/format";
 import {
 	Select,
 	SelectContent,
@@ -169,9 +170,7 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			form.set("isActive", t.isActive);
 			form.set(
 				"priceUsd",
-				t.basePriceCents !== undefined
-					? (Number(t.basePriceCents) / 100).toFixed(2)
-					: "",
+				centsToInputValue(t.basePriceCents),
 			);
 			form.set("languages", (t.languages ?? ["en"]).join(", "));
 			setLoaded(true);
