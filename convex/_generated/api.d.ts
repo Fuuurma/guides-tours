@@ -70,6 +70,7 @@ import type * as tourTemplates from "../tourTemplates.js";
 import type * as tours from "../tours.js";
 import type * as vacationRequests from "../vacationRequests.js";
 import type * as vehicles from "../vehicles.js";
+import type * as webhookDeliveries from "../webhookDeliveries.js";
 
 import type {
   ApiFromModules,
@@ -140,6 +141,7 @@ declare const fullApi: ApiFromModules<{
   tours: typeof tours;
   vacationRequests: typeof vacationRequests;
   vehicles: typeof vehicles;
+  webhookDeliveries: typeof webhookDeliveries;
 }>;
 
 /**

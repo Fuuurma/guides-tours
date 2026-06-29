@@ -122,16 +122,89 @@ export function createWebhookHandler(config: WebhookConfig) {
 			return new Response("ignored", { status: 200 });
 		}
 
-		await dispatchEvent(
-			ctx,
-			integrationId,
-			integration.organizationId,
-			event,
-			config.provider,
-		);
+		// Record the delivery (idempotent on source+eventId). We use
+		// the OTA's reservationId as the unique eventId — each
+		// provider guarantees uniqueness within their namespace.
+		const eventId = extractEventId(event);
+		if (eventId) {
+			const recorded = await ctx.runMutation(
+				internal.webhookDeliveries.recordDelivery,
+				{
+					organizationId: integration.organizationId,
+					source: config.provider,
+					eventId,
+					eventType: event.kind,
+					integrationId: integrationId as Id<"otaIntegrations">,
+					ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
+					userAgent: request.headers.get("user-agent") ?? undefined,
+					payload: parsed,
+				},
+			);
+			if (recorded.isDuplicate) {
+				// Re-delivery of an already-processed event. Skip
+				// silently — the original call already handled it.
+				// Log at info so audit can see retries.
+				console.log(
+					`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,
+				);
+				return new Response("ok (duplicate)", { status: 200 });
+			}
+		}
+
+		try {
+			await dispatchEvent(
+				ctx,
+				integrationId,
+				integration.organizationId,
+				event,
+				config.provider,
+			);
+			if (eventId) {
+				await ctx.runMutation(
+					internal.webhookDeliveries.updateDeliveryStatus,
+					{
+						source: config.provider,
+						eventId,
+						status: "processed",
+					},
+				);
+			}
+		} catch (err) {
+			if (eventId) {
+				await ctx.runMutation(
+					internal.webhookDeliveries.updateDeliveryStatus,
+					{
+						source: config.provider,
+						eventId,
+						status: "failed",
+						errorMessage:
+							err instanceof Error ? err.message : String(err),
+					},
+				);
+			}
+			throw err;
+		}
 
 		return new Response("ok", { status: 200 });
 	});
+}
+
+/**
+ * Extract a stable eventId from a normalized event. The OTA's
+ * reservationId is the natural key — each provider guarantees
+ * uniqueness for the lifetime of a booking.
+ */
+function extractEventId(event: NormalizedProviderEvent): string | null {
+	if (event.kind === "booking.created" || event.kind === "booking.cancelled") {
+		return event.reservationId;
+	}
+	if (event.kind === "availability.update") {
+		// availability.update has no reservationId. Build a
+		// deterministic id from productId + date so the (source,
+		// eventId) unique index still works.
+		return `availability:${event.productId}:${event.date}`;
+	}
+	return null;
 }
 
 async function dispatchEvent(

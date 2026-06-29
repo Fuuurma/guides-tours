@@ -540,9 +540,9 @@ export const update = mutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		// Source: backend/tours/services/booking_service.py:206-207.
-// Modify refuses: completed | cancelled | no_show. We carry
-// `completed` + `cancelled` (no `no_show` in our schema union).
-if (booking.status === "cancelled" || booking.status === "completed") {
+		// Modify refuses: completed | cancelled | no_show. We carry
+		// `completed` + `cancelled` (no `no_show` in our schema union).
+		if (booking.status === "cancelled" || booking.status === "completed") {
 			throw new ConvexError(
 				`Cannot modify a ${booking.status} booking`,
 			);
