@@ -317,14 +317,13 @@ export const create = mutation({
 		guestNames: v.optional(v.string()),
 		languageRequired: v.optional(v.string()),
 		notes: v.optional(v.string()),
+		// SECURITY: only pending/confirmed are valid for a new booking.
+		// checked_in/completed/cancelled would bypass the state machine
+		// (no checkIn, no customer-stats bump, no schedule capacity math).
+		// Source: backend/tours/services/booking_service.py:create —
+		// always starts as pending/confirmed, never terminal states.
 		status: v.optional(
-			v.union(
-				v.literal("pending"),
-				v.literal("confirmed"),
-				v.literal("checked_in"),
-				v.literal("completed"),
-				v.literal("cancelled"),
-			),
+			v.union(v.literal("pending"), v.literal("confirmed")),
 		),
 		depositAmountCents: v.optional(v.int64()),
 		totalAmountCents: v.optional(v.int64()),
@@ -481,7 +480,9 @@ export const create = mutation({
 		// Schedule reminder notifications (24h + 2h before tour).
 		// Source had this defined but never called — we wire it here.
 		// See backend/notifications/service.py::schedule_booking_reminders.
-		if (args.status !== "cancelled") {
+		// Note: status is constrained to pending|confirmed at the args
+		// level, so no need to check for "cancelled" here.
+		{
 			// Send an immediate booking-confirmation email/SMS using
 			// the org's active `booking_confirmation` template.
 			// Runs after the booking is inserted so the dispatcher
@@ -700,6 +701,7 @@ async function performCancel(
 	booking: {
 		_id: Id<"bookings">;
 		organizationId: string;
+		customerId: Id<"customers">;
 		tourId: Id<"tours">;
 		scheduleId?: Id<"tourSchedules">;
 		status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
@@ -773,6 +775,35 @@ async function performCancel(
 			// is the source of truth and the schedule can be
 			// reconciled manually if needed.
 		}
+	}
+
+	// Clear the customer's nextBookingDate if it pointed at this
+	// booking's date. Without this, a cancelled booking still
+	// appears in the "next booking" sort.
+	const customer = await ctx.db.get(booking.customerId);
+	if (customer?.nextBookingDate === booking.date) {
+		await ctx.db.patch(booking.customerId, {
+			nextBookingDate: undefined,
+			updatedAt: now,
+		});
+	}
+
+	// Cancel any pending scheduledNotifications for this booking so
+	// the cron doesn't fire 24h/2h reminders about a booking that
+	// no longer exists. Mark sent=true (preserves the audit row) +
+	// record a skip reason.
+	const pending = await ctx.db
+		.query("scheduledNotifications")
+		.withIndex("by_booking_sent", (q) =>
+			q.eq("bookingId", booking._id).eq("sent", false),
+		)
+		.collect();
+	for (const s of pending) {
+		await ctx.db.patch(s._id, {
+			sent: true,
+			processedAt: now,
+			notificationLogId: undefined,
+		});
 	}
 
 	await logAudit(ctx, {
