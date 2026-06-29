@@ -158,6 +158,7 @@ function CustomersPage() {
 							variant={active ? "default" : "outline"}
 							size="sm"
 							onClick={() => setVipOnly(active ? null : targetValue)}
+							aria-pressed={active}
 						>
 							{s === "vip" ? "VIP" : "Regular"}
 						</Button>

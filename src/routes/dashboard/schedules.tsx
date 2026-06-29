@@ -151,6 +151,7 @@ function SchedulesPage() {
 							variant={status === s ? "default" : "outline"}
 							size="sm"
 							onClick={() => setStatus(status === s ? null : s)}
+							aria-pressed={status === s}
 						>
 							{s}
 						</Button>

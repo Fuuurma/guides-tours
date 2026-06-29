@@ -121,6 +121,7 @@ function BookingsPage() {
 							variant={source === s ? "default" : "outline"}
 							size="sm"
 							onClick={() => setSource(source === s ? null : s)}
+							aria-pressed={source === s}
 						>
 							{s === "direct" ? "Direct" : providerLabel(s)}
 						</Button>
