@@ -7,6 +7,7 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -48,20 +49,11 @@ function TourCell({
 	);
 }
 
-function defaultRange(): { from: string; to: string } {
-	const to = new Date();
-	const from = new Date(to.getTime() - 30 * 86_400_000);
-	return {
-		from: from.toISOString().slice(0, 10),
-		to: to.toISOString().slice(0, 10),
-	};
-}
-
 function SchedulesPage() {
 	const [status, setStatus] = useState<
 		"available" | "full" | "cancelled" | null
 	>(null);
-	const [range, setRange] = useState(defaultRange);
+	const [range, setRange] = useState(defaultDateRange);
 
 	const args: {
 		status?: string;
@@ -84,7 +76,7 @@ function SchedulesPage() {
 	);
 	const items = (schedules ?? []) as Schedule[];
 	const itemCount = items.length;
-	const filtersActive = status !== null || range.from !== defaultRange().from;
+	const filtersActive = status !== null || range.from !== defaultDateRange().from;
 
 	const columns: DataTableColumn<Schedule>[] = [
 		{
@@ -175,7 +167,7 @@ function SchedulesPage() {
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={() => setRange(defaultRange())}
+						onClick={() => setRange(defaultDateRange())}
 					>
 						Last 30 days
 					</Button>
@@ -185,7 +177,7 @@ function SchedulesPage() {
 							size="sm"
 							onClick={() => {
 								setStatus(null);
-								setRange(defaultRange());
+								setRange(defaultDateRange());
 							}}
 						>
 							Clear all

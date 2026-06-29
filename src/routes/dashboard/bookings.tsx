@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCentsCompact } from "@/lib/format";
+import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/bookings")({
@@ -67,18 +68,9 @@ const columns: DataTableColumn<Booking>[] = [
 	},
 ];
 
-function defaultRange(): { from: string; to: string } {
-	const to = new Date();
-	const from = new Date(to.getTime() - 30 * 86_400_000);
-	return {
-		from: from.toISOString().slice(0, 10),
-		to: to.toISOString().slice(0, 10),
-	};
-}
-
 function BookingsPage() {
 	const [source, setSource] = useState<string | null>(null);
-	const [range, setRange] = useState(defaultRange);
+	const [range, setRange] = useState(defaultDateRange);
 
 	const args: {
 		source?: string;
@@ -95,7 +87,7 @@ function BookingsPage() {
 		error,
 	} = useQuery(convexQuery(api.bookings.list, args));
 	const itemCount = bookings?.items?.length ?? 0;
-	const filtersActive = source !== null || range.from !== defaultRange().from;
+	const filtersActive = source !== null || range.from !== defaultDateRange().from;
 
 	return (
 		<ListPage
@@ -145,7 +137,7 @@ function BookingsPage() {
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={() => setRange(defaultRange())}
+						onClick={() => setRange(defaultDateRange())}
 					>
 						Last 30 days
 					</Button>
@@ -155,7 +147,7 @@ function BookingsPage() {
 							size="sm"
 							onClick={() => {
 								setSource(null);
-								setRange(defaultRange());
+								setRange(defaultDateRange());
 							}}
 						>
 							Clear all

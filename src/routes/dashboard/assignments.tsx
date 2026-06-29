@@ -7,6 +7,7 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -47,20 +48,11 @@ function TourCell({
 	);
 }
 
-function defaultRange(): { from: string; to: string } {
-	const to = new Date();
-	const from = new Date(to.getTime() - 30 * 86_400_000);
-	return {
-		from: from.toISOString().slice(0, 10),
-		to: to.toISOString().slice(0, 10),
-	};
-}
-
 function AssignmentsPage() {
 	const [status, setStatus] = useState<
 		"scheduled" | "completed" | "cancelled" | null
 	>(null);
-	const [range, setRange] = useState(defaultRange);
+	const [range, setRange] = useState(defaultDateRange);
 
 	const args: {
 		status?: "scheduled" | "completed" | "cancelled";
@@ -83,7 +75,7 @@ function AssignmentsPage() {
 	);
 	const items = (assignments ?? []) as Assignment[];
 	const itemCount = items.length;
-	const filtersActive = status !== null || range.from !== defaultRange().from;
+	const filtersActive = status !== null || range.from !== defaultDateRange().from;
 
 	const columns: DataTableColumn<Assignment>[] = [
 		{
@@ -177,7 +169,7 @@ function AssignmentsPage() {
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={() => setRange(defaultRange())}
+						onClick={() => setRange(defaultDateRange())}
 					>
 						Last 30 days
 					</Button>
@@ -187,7 +179,7 @@ function AssignmentsPage() {
 							size="sm"
 							onClick={() => {
 								setStatus(null);
-								setRange(defaultRange());
+								setRange(defaultDateRange());
 							}}
 						>
 							Clear all

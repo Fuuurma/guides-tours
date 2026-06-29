@@ -14,32 +14,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { formatCents, formatCentsWhole } from "@/lib/format";
+import { lastNDays, type DateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
 	component: AnalyticsPage,
 });
 
-// Last 30 days as default window
-function defaultRange(): { startDate: string; endDate: string } {
-	const end = new Date();
-	const start = new Date(end.getTime() - 30 * 86_400_000);
-	return {
-		startDate: start.toISOString().slice(0, 10),
-		endDate: end.toISOString().slice(0, 10),
-	};
-}
-
-function lastNDays(n: number): { startDate: string; endDate: string } {
-	const end = new Date();
-	const start = new Date(end.getTime() - n * 86_400_000);
-	return {
-		startDate: start.toISOString().slice(0, 10),
-		endDate: end.toISOString().slice(0, 10),
-	};
-}
-
-function yearToDate(): { startDate: string; endDate: string } {
+function yearToDate(): DateRange {
 	// Use UTC throughout so the "Jan 1" boundary is in the same
 	// timezone as the rest of the date math. Otherwise, a user in a
 	// timezone west of UTC would see "2025-12-31" as their YTD start
@@ -55,7 +37,7 @@ function yearToDate(): { startDate: string; endDate: string } {
 
 type Preset = {
 	label: string;
-	range: { startDate: string; endDate: string };
+	range: DateRange;
 };
 
 // Presets are computed on every render so the date math always
@@ -65,7 +47,7 @@ type Preset = {
 function buildPresets(): Preset[] {
 	return [
 		{ label: "7d", range: lastNDays(7) },
-		{ label: "30d", range: defaultRange() },
+		{ label: "30d", range: lastNDays() },
 		{ label: "90d", range: lastNDays(90) },
 		{ label: "YTD", range: yearToDate() },
 	];
@@ -92,7 +74,7 @@ function AnalyticsPage() {
 		isPending: orgPending,
 		error: orgError,
 	} = useQuery(convexQuery(api.organizations.activeOrganization, {}));
-	const [range, setRange] = useState(defaultRange);
+	const [range, setRange] = useState(lastNDays);
 	// Recompute on every render so the "7d" preset is always
 	// "7 days ago from now", not "7 days ago from when the JS
 	// bundle first loaded". With a 4-element array this is cheap.
@@ -204,7 +186,7 @@ function AnalyticsPage() {
 						<Button
 							variant="ghost"
 							size="sm"
-							onClick={() => setRange(defaultRange())}
+							onClick={() => setRange(lastNDays())}
 						>
 							Reset
 						</Button>
