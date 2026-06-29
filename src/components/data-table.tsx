@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Table,
 	TableBody,
@@ -68,7 +69,13 @@ export function DataTable<T>({
 	})();
 
 	if (isPending) {
-		return <p className="text-muted-foreground text-sm">Loading…</p>;
+		return (
+			<div className="space-y-2">
+				<Skeleton className="h-8 w-full" />
+				<Skeleton className="h-8 w-full" />
+				<Skeleton className="h-8 w-3/4" />
+			</div>
+		);
 	}
 	if (error) {
 		return <p className="text-destructive text-sm">Error: {error.message}</p>;
@@ -85,6 +92,7 @@ export function DataTable<T>({
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
 					placeholder={searchPlaceholder}
+					aria-label={searchPlaceholder}
 				/>
 			)}
 			<Table>
