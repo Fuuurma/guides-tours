@@ -1,9 +1,8 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -12,12 +11,22 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 
-interface Tour { _id: string; name: string }
-interface Vehicle { _id: string; name: string }
-interface Driver { _id: string; userId: string }
+interface Tour {
+	_id: string;
+	name: string;
+}
+interface Vehicle {
+	_id: string;
+	name: string;
+}
+interface Driver {
+	_id: string;
+	userId: string;
+}
 
 interface FormValues extends Record<string, unknown> {
 	tourId: string;
@@ -82,17 +91,29 @@ export function NewAssignmentPage() {
 			submitLabel="Create assignment"
 		>
 			<FormField label="Tour *" htmlFor="tour">
-				<Select value={form.values.tourId} onValueChange={(v) => form.set("tourId", v)}>
-					<SelectTrigger id="tour"><SelectValue placeholder="Select a tour…" /></SelectTrigger>
+				<Select
+					value={form.values.tourId}
+					onValueChange={(v) => form.set("tourId", v)}
+				>
+					<SelectTrigger id="tour">
+						<SelectValue placeholder="Select a tour…" />
+					</SelectTrigger>
 					<SelectContent>
 						{(tours as Tour[] | undefined)?.map((t) => (
-							<SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
+							<SelectItem key={t._id} value={t._id}>
+								{t.name}
+							</SelectItem>
 						))}
 					</SelectContent>
 				</Select>
 			</FormField>
 
-			<FormField label="Guide user ID *" hint="Better Auth user ID of the guide (must have 'guide' role)" htmlFor="guide" error={guideErr ?? undefined}>
+			<FormField
+				label="Guide user ID *"
+				hint="Better Auth user ID of the guide (must have 'guide' role)"
+				htmlFor="guide"
+				error={guideErr ?? undefined}
+			>
 				<Input
 					id="guide"
 					required
@@ -108,32 +129,58 @@ export function NewAssignmentPage() {
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="Date *" htmlFor="date">
-					<Input id="date" type="date" required value={form.values.date} onChange={(e) => form.set("date", e.target.value)} />
+					<Input
+						id="date"
+						type="date"
+						required
+						value={form.values.date}
+						onChange={(e) => form.set("date", e.target.value)}
+					/>
 				</FormField>
 				<FormField label="Start time *" htmlFor="start">
-					<Input id="start" type="time" required value={form.values.startTime} onChange={(e) => form.set("startTime", e.target.value)} />
+					<Input
+						id="start"
+						type="time"
+						required
+						value={form.values.startTime}
+						onChange={(e) => form.set("startTime", e.target.value)}
+					/>
 				</FormField>
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="Vehicle (optional)" htmlFor="vehicle">
-					<Select value={form.values.vehicleId} onValueChange={(v) => form.set("vehicleId", v)}>
-						<SelectTrigger id="vehicle"><SelectValue placeholder="None" /></SelectTrigger>
+					<Select
+						value={form.values.vehicleId}
+						onValueChange={(v) => form.set("vehicleId", v)}
+					>
+						<SelectTrigger id="vehicle">
+							<SelectValue placeholder="None" />
+						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">None</SelectItem>
 							{(vehicles as Vehicle[] | undefined)?.map((v) => (
-								<SelectItem key={v._id} value={v._id}>{v.name}</SelectItem>
+								<SelectItem key={v._id} value={v._id}>
+									{v.name}
+								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>
 				</FormField>
 				<FormField label="Driver (optional)" htmlFor="driver">
-					<Select value={form.values.driverId} onValueChange={(v) => form.set("driverId", v)}>
-						<SelectTrigger id="driver"><SelectValue placeholder="None" /></SelectTrigger>
+					<Select
+						value={form.values.driverId}
+						onValueChange={(v) => form.set("driverId", v)}
+					>
+						<SelectTrigger id="driver">
+							<SelectValue placeholder="None" />
+						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="">None</SelectItem>
 							{(drivers as Driver[] | undefined)?.map((d) => (
-								<SelectItem key={d._id} value={d._id}>{d.userId}</SelectItem>
+								<SelectItem key={d._id} value={d._id}>
+									{d.userId}
+								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>

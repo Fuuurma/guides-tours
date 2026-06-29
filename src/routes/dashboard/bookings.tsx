@@ -2,12 +2,12 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/bookings")({
@@ -25,7 +25,12 @@ interface Booking {
 }
 
 const columns: DataTableColumn<Booking>[] = [
-	{ key: "date", header: "Date", render: (b) => b.date, searchValue: (b) => b.date },
+	{
+		key: "date",
+		header: "Date",
+		render: (b) => b.date,
+		searchValue: (b) => b.date,
+	},
 	{
 		key: "tour",
 		header: "Tour",
@@ -82,12 +87,13 @@ function BookingsPage() {
 	if (range.from) args.dateFrom = range.from;
 	if (range.to) args.dateTo = range.to;
 
-	const { data: bookings, isPending, error } = useQuery(
-		convexQuery(api.bookings.list, args),
-	);
+	const {
+		data: bookings,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.bookings.list, args));
 	const itemCount = bookings?.items?.length ?? 0;
-	const filtersActive =
-		source !== null || range.from !== defaultRange().from;
+	const filtersActive = source !== null || range.from !== defaultRange().from;
 
 	return (
 		<ListPage
@@ -107,18 +113,25 @@ function BookingsPage() {
 			<div className="mb-4 space-y-3">
 				<div className="flex flex-wrap items-center gap-2">
 					<span className="text-muted-foreground text-sm">Source:</span>
-					{["direct", "viator", "getyourguide", "airbnb", "klook", "booking", "expedia", "tripadvisor"].map(
-						(s) => (
-							<Button
-								key={s}
-								variant={source === s ? "default" : "outline"}
-								size="sm"
-								onClick={() => setSource(source === s ? null : s)}
-							>
-								{s}
-							</Button>
-						),
-					)}
+					{[
+						"direct",
+						"viator",
+						"getyourguide",
+						"airbnb",
+						"klook",
+						"booking",
+						"expedia",
+						"tripadvisor",
+					].map((s) => (
+						<Button
+							key={s}
+							variant={source === s ? "default" : "outline"}
+							size="sm"
+							onClick={() => setSource(source === s ? null : s)}
+						>
+							{s}
+						</Button>
+					))}
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
 					<span className="text-muted-foreground text-sm">Date range:</span>

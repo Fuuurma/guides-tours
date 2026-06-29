@@ -1,5 +1,5 @@
-import { Badge } from "@/components/ui/badge";
 import { statusVariant } from "@/components/status-styles";
+import { Badge } from "@/components/ui/badge";
 
 export interface StatusBadgeProps {
 	status: string;
@@ -31,7 +31,5 @@ export function StatusBadge({ status, label, className }: StatusBadgeProps) {
 
 /** Convert snake_case / kebab-case to Title Case. */
 function humanize(s: string): string {
-	return s
-		.replace(/[_-]+/g, " ")
-		.replace(/\b\w/g, (c) => c.toUpperCase());
+	return s.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

@@ -2,6 +2,8 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
+import { MetricCard } from "@/components/metric-card";
+import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -10,9 +12,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MetricCard } from "@/components/metric-card";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -59,9 +59,15 @@ const PRESETS: Preset[] = [
 	{ label: "YTD", range: yearToDate() },
 ];
 
-function isPresetActive(range: { startDate: string; endDate: string }): string | null {
+function isPresetActive(range: {
+	startDate: string;
+	endDate: string;
+}): string | null {
 	for (const p of PRESETS) {
-		if (p.range.startDate === range.startDate && p.range.endDate === range.endDate) {
+		if (
+			p.range.startDate === range.startDate &&
+			p.range.endDate === range.endDate
+		) {
 			return p.label;
 		}
 	}
@@ -69,9 +75,11 @@ function isPresetActive(range: { startDate: string; endDate: string }): string |
 }
 
 function AnalyticsPage() {
-	const { data: org, isPending: orgPending, error: orgError } = useQuery(
-		convexQuery(api.organizations.activeOrganization, {}),
-	);
+	const {
+		data: org,
+		isPending: orgPending,
+		error: orgError,
+	} = useQuery(convexQuery(api.organizations.activeOrganization, {}));
 	const [range, setRange] = useState(defaultRange);
 
 	const rangeArgs = {
@@ -145,9 +153,10 @@ function AnalyticsPage() {
 					</p>
 				</div>
 				<div className="flex flex-wrap items-end gap-2">
-					<label className="text-sm">
+					<label htmlFor="analytics-from" className="text-sm">
 						<span className="block text-muted-foreground text-xs">From</span>
 						<Input
+							id="analytics-from"
 							type="date"
 							value={range.startDate}
 							onChange={(e) =>
@@ -155,14 +164,13 @@ function AnalyticsPage() {
 							}
 						/>
 					</label>
-					<label className="text-sm">
+					<label htmlFor="analytics-to" className="text-sm">
 						<span className="block text-muted-foreground text-xs">To</span>
 						<Input
+							id="analytics-to"
 							type="date"
 							value={range.endDate}
-							onChange={(e) =>
-								setRange({ ...range, endDate: e.target.value })
-							}
+							onChange={(e) => setRange({ ...range, endDate: e.target.value })}
 						/>
 					</label>
 					<div className="flex items-end gap-1">
@@ -274,11 +282,7 @@ function AnalyticsPage() {
 						/>
 						<MetricCard
 							label="Cancellation rate"
-							value={
-								revenue
-									? `${revenue.cancellationRate}%`
-									: undefined
-							}
+							value={revenue ? `${revenue.cancellationRate}%` : undefined}
 							isPending={revenuePending}
 						/>
 					</div>
@@ -326,9 +330,7 @@ function AnalyticsPage() {
 				<Card>
 					<CardHeader>
 						<CardTitle>Bookings by source</CardTitle>
-						<CardDescription>
-							Where your bookings come from
-						</CardDescription>
+						<CardDescription>Where your bookings come from</CardDescription>
 					</CardHeader>
 					<CardContent>
 						{!sources || sources.length === 0 ? (

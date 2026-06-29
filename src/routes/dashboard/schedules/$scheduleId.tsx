@@ -2,10 +2,10 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
-import { Skeleton } from "@/components/ui/skeleton";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -25,7 +25,11 @@ interface ScheduleBooking {
 
 function ScheduleDetailPage() {
 	const { scheduleId } = Route.useParams();
-	const { data: schedule, isPending, error } = useQuery(
+	const {
+		data: schedule,
+		isPending,
+		error,
+	} = useQuery(
 		convexQuery(api.tourSchedules.get, {
 			scheduleId: scheduleId as Id<"tourSchedules">,
 		}),
@@ -52,8 +56,12 @@ function ScheduleDetailPage() {
 			</div>
 		);
 	}
-	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
-	if (!schedule) return <DetailPage title="Schedule not found" backTo="/dashboard/schedules" />;
+	if (error)
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+	if (!schedule)
+		return (
+			<DetailPage title="Schedule not found" backTo="/dashboard/schedules" />
+		);
 
 	const utilization = schedule.capacityTotal
 		? Math.round((schedule.capacityBooked / schedule.capacityTotal) * 100)
@@ -90,7 +98,11 @@ function ScheduleDetailPage() {
 			backTo="/dashboard/schedules"
 			actions={
 				tour ? (
-					<Link to="/dashboard/tours/$tourId" params={{ tourId: tour._id }} className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+					<Link
+						to="/dashboard/tours/$tourId"
+						params={{ tourId: tour._id }}
+						className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+					>
 						View tour
 					</Link>
 				) : undefined
@@ -98,14 +110,23 @@ function ScheduleDetailPage() {
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard label="Date" value={schedule.date} />
-				<MetricCard label="Time" value={`${schedule.startTime}–${schedule.endTime}`} />
-				<MetricCard label="Booked / Total" value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`} />
+				<MetricCard
+					label="Time"
+					value={`${schedule.startTime}–${schedule.endTime}`}
+				/>
+				<MetricCard
+					label="Booked / Total"
+					value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`}
+				/>
 				<MetricCard label="Status" value={schedule.status}>
 					<StatusBadge status={schedule.status} />
 				</MetricCard>
 			</div>
 
-			<DetailSection title="Capacity utilization" description="How much of the schedule is booked">
+			<DetailSection
+				title="Capacity utilization"
+				description="How much of the schedule is booked"
+			>
 				<p className="text-3xl font-semibold">{utilization}%</p>
 				<p className="text-muted-foreground text-sm">
 					{schedule.capacityBooked} of {schedule.capacityTotal} spots booked

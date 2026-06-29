@@ -1,14 +1,14 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { StatusBadge } from "@/components/status-badge";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -18,7 +18,11 @@ export const Route = createFileRoute("/dashboard/vacations/$vacationId")({
 
 function VacationDetailPage() {
 	const { vacationId } = Route.useParams();
-	const { data: vacation, isPending, error } = useQuery(
+	const {
+		data: vacation,
+		isPending,
+		error,
+	} = useQuery(
 		convexQuery(api.vacationRequests.get, {
 			requestId: vacationId as Id<"vacationRequests">,
 		}),
@@ -39,11 +43,20 @@ function VacationDetailPage() {
 			</div>
 		);
 	}
-	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
-	if (!vacation) return <DetailPage title="Vacation request not found" backTo="/dashboard/vacations" />;
+	if (error)
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+	if (!vacation)
+		return (
+			<DetailPage
+				title="Vacation request not found"
+				backTo="/dashboard/vacations"
+			/>
+		);
 
 	const dayCount = Math.floor(
-		(Date.parse(vacation.endDate) - Date.parse(vacation.startDate)) / 86_400_000 + 1,
+		(Date.parse(vacation.endDate) - Date.parse(vacation.startDate)) /
+			86_400_000 +
+			1,
 	);
 
 	const onApprove = async () => {
@@ -75,7 +88,11 @@ function VacationDetailPage() {
 	};
 
 	return (
-		<DetailPage title="Vacation request" subtitle={vacation.userId} backTo="/dashboard/vacations">
+		<DetailPage
+			title="Vacation request"
+			subtitle={vacation.userId}
+			backTo="/dashboard/vacations"
+		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard label="Start" value={vacation.startDate} />
 				<MetricCard label="End" value={vacation.endDate} />
@@ -92,7 +109,10 @@ function VacationDetailPage() {
 			)}
 
 			{vacation.status === "pending" && (
-				<DetailSection title="Review" description="Approve or reject this request">
+				<DetailSection
+					title="Review"
+					description="Approve or reject this request"
+				>
 					{errorMsg && <p className="text-destructive text-sm">{errorMsg}</p>}
 					<div className="flex gap-2">
 						<Button onClick={onApprove} disabled={pending}>
@@ -107,8 +127,15 @@ function VacationDetailPage() {
 
 			{vacation.status !== "pending" && (
 				<DetailSection title="Review">
-					{vacation.reviewedBy && <DetailRow label="Reviewed by" value={vacation.reviewedBy} mono />}
-					{vacation.reviewedAt && <DetailRow label="Reviewed at" value={new Date(vacation.reviewedAt).toLocaleString()} />}
+					{vacation.reviewedBy && (
+						<DetailRow label="Reviewed by" value={vacation.reviewedBy} mono />
+					)}
+					{vacation.reviewedAt && (
+						<DetailRow
+							label="Reviewed at"
+							value={new Date(vacation.reviewedAt).toLocaleString()}
+						/>
+					)}
 				</DetailSection>
 			)}
 		</DetailPage>

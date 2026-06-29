@@ -1,10 +1,8 @@
-import { useMutation } from "convex/react";
-import { useQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
 	Select,
 	SelectContent,
@@ -12,10 +10,19 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 
-const TOUR_TYPES = ["walking", "car", "minivan", "bus", "boat", "other"] as const;
+const TOUR_TYPES = [
+	"walking",
+	"car",
+	"minivan",
+	"bus",
+	"boat",
+	"other",
+] as const;
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -45,7 +52,9 @@ const INITIAL: FormValues = {
 
 export function NewTourPage() {
 	const create = useMutation(api.tours.create);
-	const { data: categories } = useQuery(convexQuery(api.tourCategories.list, {}));
+	const { data: categories } = useQuery(
+		convexQuery(api.tourCategories.list, {}),
+	);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
@@ -137,7 +146,11 @@ export function NewTourPage() {
 					</Select>
 				</FormField>
 
-				<FormField label="Category" htmlFor="category" hint="Group tours on the public booking page">
+				<FormField
+					label="Category"
+					htmlFor="category"
+					hint="Group tours on the public booking page"
+				>
 					<Select
 						value={form.values.categoryId}
 						onValueChange={(v) => form.set("categoryId", v)}
@@ -203,7 +216,11 @@ export function NewTourPage() {
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Base price (USD)" hint="Per person, in dollars" htmlFor="price">
+				<FormField
+					label="Base price (USD)"
+					hint="Per person, in dollars"
+					htmlFor="price"
+				>
 					<Input
 						id="price"
 						type="number"
@@ -215,7 +232,11 @@ export function NewTourPage() {
 					/>
 				</FormField>
 
-				<FormField label="Languages" hint="Comma-separated codes (en, es, fr)" htmlFor="langs">
+				<FormField
+					label="Languages"
+					hint="Comma-separated codes (en, es, fr)"
+					htmlFor="langs"
+				>
 					<Input
 						id="langs"
 						value={form.values.languages}

@@ -1,8 +1,7 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
 	Select,
 	SelectContent,
@@ -10,16 +9,24 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
 	validateNotesOptional,
 	validatePositiveInteger,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import { FormField } from "../form";
 
-const VEHICLE_TYPES = ["minivan", "van", "bus", "car", "boat", "other"] as const;
+const VEHICLE_TYPES = [
+	"minivan",
+	"van",
+	"bus",
+	"car",
+	"boat",
+	"other",
+] as const;
 const OWNERSHIP_TYPES = ["owned", "rented", "leased"] as const;
 
 interface FormValues extends Record<string, unknown> {
@@ -60,7 +67,10 @@ export function NewVehiclePage() {
 			setCapErr(capError);
 			const yr = v.year.trim() ? Number(v.year) : undefined;
 			let yearError: string | null = null;
-			if (yr !== undefined && (!Number.isFinite(yr) || yr < 1900 || yr > 2100)) {
+			if (
+				yr !== undefined &&
+				(!Number.isFinite(yr) || yr < 1900 || yr > 2100)
+			) {
 				yearError = "Year must be between 1900 and 2100";
 			}
 			setYearErr(yearError);
@@ -109,10 +119,19 @@ export function NewVehiclePage() {
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="Type" htmlFor="type">
-					<Select value={form.values.vehicleType} onValueChange={(v) => form.set("vehicleType", v)}>
-						<SelectTrigger id="type"><SelectValue /></SelectTrigger>
+					<Select
+						value={form.values.vehicleType}
+						onValueChange={(v) => form.set("vehicleType", v)}
+					>
+						<SelectTrigger id="type">
+							<SelectValue />
+						</SelectTrigger>
 						<SelectContent>
-							{VEHICLE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+							{VEHICLE_TYPES.map((t) => (
+								<SelectItem key={t} value={t}>
+									{t}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 				</FormField>
@@ -142,10 +161,19 @@ export function NewVehiclePage() {
 					/>
 				</FormField>
 				<FormField label="Ownership" htmlFor="own">
-					<Select value={form.values.ownershipType} onValueChange={(v) => form.set("ownershipType", v)}>
-						<SelectTrigger id="own"><SelectValue /></SelectTrigger>
+					<Select
+						value={form.values.ownershipType}
+						onValueChange={(v) => form.set("ownershipType", v)}
+					>
+						<SelectTrigger id="own">
+							<SelectValue />
+						</SelectTrigger>
 						<SelectContent>
-							{OWNERSHIP_TYPES.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+							{OWNERSHIP_TYPES.map((o) => (
+								<SelectItem key={o} value={o}>
+									{o}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 				</FormField>

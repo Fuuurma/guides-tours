@@ -1,13 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -31,9 +31,11 @@ function CustomersPage() {
 	const args: { vipOnly?: boolean } = {};
 	if (vipOnly !== null) args.vipOnly = vipOnly;
 
-	const { data: customers, isPending, error } = useQuery(
-		convexQuery(api.customers.list, args),
-	);
+	const {
+		data: customers,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.customers.list, args));
 	const updateCustomer = useMutation(api.customers.update);
 	const removeCustomer = useMutation(api.customers.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);

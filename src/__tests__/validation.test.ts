@@ -99,7 +99,9 @@ describe("validateNotesOptional", () => {
 		expect(validateNotesOptional("No allergies")).toBeNull();
 	});
 	test("rejects notes longer than MAX_NOTES_LEN", () => {
-		expect(validateNotesOptional("a".repeat(MAX_NOTES_LEN + 1))).toMatch(/too long/);
+		expect(validateNotesOptional("a".repeat(MAX_NOTES_LEN + 1))).toMatch(
+			/too long/,
+		);
 	});
 });
 
@@ -119,11 +121,15 @@ describe("validatePositiveInteger", () => {
 		expect(validatePositiveInteger("", "Capacity")).toMatch(/required/);
 	});
 	test("rejects non-numeric", () => {
-		expect(validatePositiveInteger("abc", "Capacity")).toMatch(/positive number/);
+		expect(validatePositiveInteger("abc", "Capacity")).toMatch(
+			/positive number/,
+		);
 	});
 	test("rejects zero / negative", () => {
 		expect(validatePositiveInteger("0", "Capacity")).toMatch(/positive number/);
-		expect(validatePositiveInteger("-5", "Capacity")).toMatch(/positive number/);
+		expect(validatePositiveInteger("-5", "Capacity")).toMatch(
+			/positive number/,
+		);
 	});
 	test("rejects decimals", () => {
 		expect(validatePositiveInteger("3.5", "Capacity")).toMatch(/whole number/);

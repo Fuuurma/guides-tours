@@ -2,11 +2,11 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -25,7 +25,13 @@ interface Schedule {
 	tourId: string;
 }
 
-function TourCell({ tourId, tourNameById }: { tourId: string; tourNameById: Map<string, string> }) {
+function TourCell({
+	tourId,
+	tourNameById,
+}: {
+	tourId: string;
+	tourNameById: Map<string, string>;
+}) {
 	const name = tourNameById.get(tourId);
 	return (
 		<Link
@@ -34,7 +40,9 @@ function TourCell({ tourId, tourNameById }: { tourId: string; tourNameById: Map<
 			className="text-blue-600 hover:underline truncate"
 		>
 			{name ?? (
-				<span className="text-muted-foreground italic text-xs">Unknown tour</span>
+				<span className="text-muted-foreground italic text-xs">
+					Unknown tour
+				</span>
 			)}
 		</Link>
 	);
@@ -50,7 +58,9 @@ function defaultRange(): { from: string; to: string } {
 }
 
 function SchedulesPage() {
-	const [status, setStatus] = useState<"available" | "full" | "cancelled" | null>(null);
+	const [status, setStatus] = useState<
+		"available" | "full" | "cancelled" | null
+	>(null);
 	const [range, setRange] = useState(defaultRange);
 
 	const args: {
@@ -63,9 +73,11 @@ function SchedulesPage() {
 	if (range.to) args.dateTo = range.to;
 
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
-	const { data: schedules, isPending, error } = useQuery(
-		convexQuery(api.tourSchedules.list, args),
-	);
+	const {
+		data: schedules,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.tourSchedules.list, args));
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
@@ -102,9 +114,7 @@ function SchedulesPage() {
 		{
 			key: "tour",
 			header: "Tour",
-			render: (s) => (
-				<TourCell tourId={s.tourId} tourNameById={tourNameById} />
-			),
+			render: (s) => <TourCell tourId={s.tourId} tourNameById={tourNameById} />,
 			searchValue: (s) => tourNameById.get(s.tourId) ?? s.tourId,
 		},
 		{ key: "booked", header: "Booked", render: (s) => s.capacityBooked },

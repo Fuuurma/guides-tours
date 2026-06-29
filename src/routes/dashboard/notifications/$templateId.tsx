@@ -1,12 +1,12 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "../../../../convex/_generated/api";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/notifications/$templateId")({
@@ -15,7 +15,11 @@ export const Route = createFileRoute("/dashboard/notifications/$templateId")({
 
 function NotificationTemplateDetailPage() {
 	const { templateId } = Route.useParams();
-	const { data: template, isPending, error } = useQuery(
+	const {
+		data: template,
+		isPending,
+		error,
+	} = useQuery(
 		convexQuery(api.notificationTemplates.get, {
 			templateId: templateId as Id<"notificationTemplates">,
 		}),
@@ -33,9 +37,7 @@ function NotificationTemplateDetailPage() {
 		);
 	}
 	if (error)
-		return (
-			<p className="text-destructive text-sm">Error: {error.message}</p>
-		);
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!template) {
 		return (
 			<DetailPage
@@ -61,9 +63,7 @@ function NotificationTemplateDetailPage() {
 					label="Status"
 					value={template.isActive ? "Active" : "Inactive"}
 				>
-					<StatusBadge
-						status={template.isActive ? "active" : "inactive"}
-					/>
+					<StatusBadge status={template.isActive ? "active" : "inactive"} />
 				</MetricCard>
 			</div>
 

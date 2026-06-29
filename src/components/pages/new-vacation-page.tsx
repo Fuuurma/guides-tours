@@ -1,11 +1,11 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import { FormField } from "../form";
 
 interface FormValues extends Record<string, unknown> {
 	startDate: string;
@@ -60,10 +60,32 @@ export function NewVacationPage() {
 		>
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="Start date *" htmlFor="start">
-					<Input id="start" type="date" required value={form.values.startDate} onChange={(e) => { form.set("startDate", e.target.value); if (dateErr) setDateErr(null); }} />
+					<Input
+						id="start"
+						type="date"
+						required
+						value={form.values.startDate}
+						onChange={(e) => {
+							form.set("startDate", e.target.value);
+							if (dateErr) setDateErr(null);
+						}}
+					/>
 				</FormField>
-				<FormField label="End date *" htmlFor="end" error={dateErr ?? undefined}>
-					<Input id="end" type="date" required value={form.values.endDate} onChange={(e) => { form.set("endDate", e.target.value); if (dateErr) setDateErr(null); }} />
+				<FormField
+					label="End date *"
+					htmlFor="end"
+					error={dateErr ?? undefined}
+				>
+					<Input
+						id="end"
+						type="date"
+						required
+						value={form.values.endDate}
+						onChange={(e) => {
+							form.set("endDate", e.target.value);
+							if (dateErr) setDateErr(null);
+						}}
+					/>
 				</FormField>
 			</div>
 

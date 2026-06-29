@@ -1,13 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -23,9 +23,11 @@ interface Driver {
 }
 
 function DriversPage() {
-	const { data: drivers, isPending, error } = useQuery(
-		convexQuery(api.drivers.list, {}),
-	);
+	const {
+		data: drivers,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.drivers.list, {}));
 	const setActive = useMutation(api.drivers.setActive);
 	const removeDriver = useMutation(api.drivers.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);
@@ -87,7 +89,9 @@ function DriversPage() {
 		{
 			key: "status",
 			header: "Status",
-			render: (d) => <StatusBadge status={d.isActive ? "active" : "inactive"} />,
+			render: (d) => (
+				<StatusBadge status={d.isActive ? "active" : "inactive"} />
+			),
 			searchValue: (d) => (d.isActive ? "active" : "inactive"),
 		},
 		{

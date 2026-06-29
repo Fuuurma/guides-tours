@@ -1,15 +1,15 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { toast } from "sonner";
+import { useMutation } from "convex/react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -19,7 +19,11 @@ export const Route = createFileRoute("/dashboard/bookings/$bookingId")({
 
 function BookingDetailPage() {
 	const { bookingId } = Route.useParams();
-	const { data: booking, isPending, error } = useQuery(
+	const {
+		data: booking,
+		isPending,
+		error,
+	} = useQuery(
 		convexQuery(api.bookings.get, { bookingId: bookingId as Id<"bookings"> }),
 	);
 	const checkIn = useMutation(api.bookings.checkIn);
@@ -46,16 +50,26 @@ function BookingDetailPage() {
 	};
 
 	const onCheckIn = () =>
-		runAction(() => checkIn({ bookingId: bookingId as Id<"bookings"> }), "Customer checked in");
+		runAction(
+			() => checkIn({ bookingId: bookingId as Id<"bookings"> }),
+			"Customer checked in",
+		);
 	const onComplete = () =>
-		runAction(() => complete({ bookingId: bookingId as Id<"bookings"> }), "Booking completed");
+		runAction(
+			() => complete({ bookingId: bookingId as Id<"bookings"> }),
+			"Booking completed",
+		);
 	const onCancel = () => {
 		if (!cancelReason.trim()) {
 			toast.error("Please provide a reason");
 			return;
 		}
 		runAction(
-			() => cancelBooking({ bookingId: bookingId as Id<"bookings">, reason: cancelReason }),
+			() =>
+				cancelBooking({
+					bookingId: bookingId as Id<"bookings">,
+					reason: cancelReason,
+				}),
 			"Booking cancelled",
 		).then(() => {
 			setShowCancelForm(false);
@@ -74,9 +88,12 @@ function BookingDetailPage() {
 			</div>
 		);
 	}
-	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
+	if (error)
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	if (!booking) {
-		return <DetailPage title="Booking not found" backTo="/dashboard/bookings" />;
+		return (
+			<DetailPage title="Booking not found" backTo="/dashboard/bookings" />
+		);
 	}
 
 	const b = booking as unknown as {
@@ -121,20 +138,32 @@ function BookingDetailPage() {
 						</Button>
 					)}
 					{b.status === "confirmed" && (
-						<Button onClick={onCheckIn} disabled={pending}>Check in</Button>
+						<Button onClick={onCheckIn} disabled={pending}>
+							Check in
+						</Button>
 					)}
 					{b.status === "checked_in" && (
-						<Button onClick={onComplete} disabled={pending}>Mark complete</Button>
+						<Button onClick={onComplete} disabled={pending}>
+							Mark complete
+						</Button>
 					)}
 					{["pending", "confirmed", "checked_in"].includes(b.status) && (
-						<Button variant="destructive" onClick={() => setShowCancelForm(true)} disabled={pending}>Cancel</Button>
+						<Button
+							variant="destructive"
+							onClick={() => setShowCancelForm(true)}
+							disabled={pending}
+						>
+							Cancel
+						</Button>
 					)}
 				</>
 			}
 		>
 			{showCancelForm && (
 				<div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-4">
-					<p className="text-sm font-medium">Cancel booking — this will be recorded in the audit log.</p>
+					<p className="text-sm font-medium">
+						Cancel booking — this will be recorded in the audit log.
+					</p>
 					<Textarea
 						value={cancelReason}
 						onChange={(e) => setCancelReason(e.target.value)}
@@ -146,7 +175,13 @@ function BookingDetailPage() {
 						<Button variant="destructive" onClick={onCancel} disabled={pending}>
 							{pending ? "Cancelling…" : "Confirm cancellation"}
 						</Button>
-						<Button variant="outline" onClick={() => { setShowCancelForm(false); setCancelReason(""); }}>
+						<Button
+							variant="outline"
+							onClick={() => {
+								setShowCancelForm(false);
+								setCancelReason("");
+							}}
+						>
 							Keep booking
 						</Button>
 					</div>
@@ -154,10 +189,22 @@ function BookingDetailPage() {
 			)}
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<MetricCard label="Total" value={`$${(Number(b.totalAmountCents) / 100).toFixed(2)}`} />
-				<MetricCard label="Deposit" value={`$${(Number(b.depositAmountCents) / 100).toFixed(2)}`} />
-				<MetricCard label="Balance due" value={`$${(Number(b.balanceDueCents) / 100).toFixed(2)}`} />
-				<MetricCard label="Net revenue" value={`$${(Number(b.netRevenueCents) / 100).toFixed(2)}`} />
+				<MetricCard
+					label="Total"
+					value={`$${(Number(b.totalAmountCents) / 100).toFixed(2)}`}
+				/>
+				<MetricCard
+					label="Deposit"
+					value={`$${(Number(b.depositAmountCents) / 100).toFixed(2)}`}
+				/>
+				<MetricCard
+					label="Balance due"
+					value={`$${(Number(b.balanceDueCents) / 100).toFixed(2)}`}
+				/>
+				<MetricCard
+					label="Net revenue"
+					value={`$${(Number(b.netRevenueCents) / 100).toFixed(2)}`}
+				/>
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2">
@@ -165,7 +212,11 @@ function BookingDetailPage() {
 					{b.tour ? (
 						<>
 							<p className="font-medium">{b.tour.name}</p>
-							<Link to="/dashboard/tours/$tourId" params={{ tourId: b.tour._id }} className="text-blue-600 hover:underline text-xs">
+							<Link
+								to="/dashboard/tours/$tourId"
+								params={{ tourId: b.tour._id }}
+								className="text-blue-600 hover:underline text-xs"
+							>
 								View tour →
 							</Link>
 						</>
@@ -179,7 +230,11 @@ function BookingDetailPage() {
 						<>
 							<p className="font-medium">{b.customer.name}</p>
 							<p className="text-muted-foreground">{b.customer.email}</p>
-							<Link to="/dashboard/customers/$customerId" params={{ customerId: b.customer._id }} className="text-blue-600 hover:underline text-xs">
+							<Link
+								to="/dashboard/customers/$customerId"
+								params={{ customerId: b.customer._id }}
+								className="text-blue-600 hover:underline text-xs"
+							>
 								View customer →
 							</Link>
 						</>
@@ -204,7 +259,11 @@ function BookingDetailPage() {
 				/>
 				<DetailRow
 					label="Completed at"
-					value={b.completedAt ? new Date(b.completedAt).toLocaleString() : "(not completed)"}
+					value={
+						b.completedAt
+							? new Date(b.completedAt).toLocaleString()
+							: "(not completed)"
+					}
 				/>
 			</DetailSection>
 
@@ -213,7 +272,9 @@ function BookingDetailPage() {
 					{b.reviewRating && (
 						<p className="text-2xl font-semibold">
 							{"★".repeat(b.reviewRating)}
-							<span className="text-muted-foreground">{"☆".repeat(5 - b.reviewRating)}</span>
+							<span className="text-muted-foreground">
+								{"☆".repeat(5 - b.reviewRating)}
+							</span>
 						</p>
 					)}
 					{b.reviewComment && <p>{b.reviewComment}</p>}
@@ -225,15 +286,15 @@ function BookingDetailPage() {
 			{b.status === "completed" && !b.reviewRating && (
 				<DetailSection title="Record review">
 					{!showReviewForm ? (
-						<Button
-							variant="outline"
-							onClick={() => setShowReviewForm(true)}
-						>
+						<Button variant="outline" onClick={() => setShowReviewForm(true)}>
 							Record review
 						</Button>
 					) : (
 						<div className="space-y-3">
-							<label className="text-sm font-medium block">
+							<label
+								htmlFor="booking-rating"
+								className="text-sm font-medium block"
+							>
 								Rating (1-5)
 							</label>
 							<div className="flex gap-1" role="radiogroup" aria-label="Rating">

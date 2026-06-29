@@ -13,8 +13,8 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/book/$slug")({
@@ -34,8 +34,7 @@ interface PublicTour {
 // RFC 5322-lite — rejects "a@b" but accepts the common formats the
 // dashboard allows. More permissive than a strict parser to avoid
 // rejecting valid edge-case emails (subdomain.tlds, plus tags).
-const EMAIL_REGEX =
-	/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 const MAX_NAME_LEN = 100;
 const MAX_EMAIL_LEN = 254;
@@ -104,8 +103,8 @@ function PublicBookingPage() {
 					<CardHeader>
 						<CardTitle>Booking page not found</CardTitle>
 						<CardDescription>
-							The link you followed is invalid. Please check the URL or
-							contact the tour operator.
+							The link you followed is invalid. Please check the URL or contact
+							the tour operator.
 						</CardDescription>
 					</CardHeader>
 				</Card>
@@ -124,7 +123,8 @@ function PublicBookingPage() {
 		const guestCount = Number(guests);
 		const errs: typeof fieldErr = {};
 		if (!selectedTourId) errs.tour = "Please select a tour";
-		if (!guestCount || guestCount <= 0) errs.guests = "Guests must be at least 1";
+		if (!guestCount || guestCount <= 0)
+			errs.guests = "Guests must be at least 1";
 		if (!date) errs.date = "Please pick a date";
 		const nameTrimmed = name.trim();
 		if (nameTrimmed.length < 2) errs.name = "Please enter your full name";
@@ -138,7 +138,8 @@ function PublicBookingPage() {
 		if (phone && phone.length > 0) {
 			const phoneDigits = phone.replace(/\D/g, "");
 			if (phoneDigits.length < 6 || phoneDigits.length > 20) {
-				errs.phone = "Please enter a valid phone number (6-20 digits) or leave it empty";
+				errs.phone =
+					"Please enter a valid phone number (6-20 digits) or leave it empty";
 			}
 		}
 		if (notes.length > MAX_NOTES_LEN) {
@@ -290,21 +291,18 @@ function PublicBookingPage() {
 						<CardContent className="space-y-4">
 							<div className="grid gap-4 sm:grid-cols-2">
 								<div className="space-y-1">
-									<label
-										htmlFor="date"
-										className="text-sm font-medium"
-									>
+									<label htmlFor="date" className="text-sm font-medium">
 										Date *
 									</label>
-								<Input
-									id="date"
-									type="date"
-									required
-									min={new Date().toISOString().slice(0, 10)}
-									value={date}
-									onChange={(e) => setDate(e.target.value)}
-									aria-invalid={Boolean(fieldErr.date)}
-								/>
+									<Input
+										id="date"
+										type="date"
+										required
+										min={new Date().toISOString().slice(0, 10)}
+										value={date}
+										onChange={(e) => setDate(e.target.value)}
+										aria-invalid={Boolean(fieldErr.date)}
+									/>
 									{fieldErr.date && (
 										<p role="alert" className="text-destructive text-xs">
 											{fieldErr.date}
@@ -312,10 +310,7 @@ function PublicBookingPage() {
 									)}
 								</div>
 								<div className="space-y-1">
-									<label
-										htmlFor="time"
-										className="text-sm font-medium"
-									>
+									<label htmlFor="time" className="text-sm font-medium">
 										Start time *
 									</label>
 									<Input
@@ -328,10 +323,7 @@ function PublicBookingPage() {
 								</div>
 							</div>
 							<div className="space-y-1">
-								<label
-									htmlFor="guests"
-									className="text-sm font-medium"
-								>
+								<label htmlFor="guests" className="text-sm font-medium">
 									Guests *
 								</label>
 								<Input
@@ -364,20 +356,17 @@ function PublicBookingPage() {
 						</CardHeader>
 						<CardContent className="space-y-4">
 							<div className="space-y-1">
-								<label
-									htmlFor="name"
-									className="text-sm font-medium"
-								>
+								<label htmlFor="name" className="text-sm font-medium">
 									Full name *
 								</label>
-<Input
-								id="name"
-								required
-								maxLength={MAX_NAME_LEN}
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								aria-invalid={Boolean(fieldErr.name)}
-							/>
+								<Input
+									id="name"
+									required
+									maxLength={MAX_NAME_LEN}
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+									aria-invalid={Boolean(fieldErr.name)}
+								/>
 								{fieldErr.name && (
 									<p role="alert" className="text-destructive text-xs">
 										{fieldErr.name}
@@ -385,21 +374,18 @@ function PublicBookingPage() {
 								)}
 							</div>
 							<div className="space-y-1">
-								<label
-									htmlFor="email"
-									className="text-sm font-medium"
-								>
+								<label htmlFor="email" className="text-sm font-medium">
 									Email *
 								</label>
-<Input
-								id="email"
-								type="email"
-								required
-								maxLength={MAX_EMAIL_LEN}
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								aria-invalid={Boolean(fieldErr.email)}
-							/>
+								<Input
+									id="email"
+									type="email"
+									required
+									maxLength={MAX_EMAIL_LEN}
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+									aria-invalid={Boolean(fieldErr.email)}
+								/>
 								{fieldErr.email && (
 									<p role="alert" className="text-destructive text-xs">
 										{fieldErr.email}
@@ -407,20 +393,17 @@ function PublicBookingPage() {
 								)}
 							</div>
 							<div className="space-y-1">
-								<label
-									htmlFor="phone"
-									className="text-sm font-medium"
-								>
+								<label htmlFor="phone" className="text-sm font-medium">
 									Phone (optional)
 								</label>
-<Input
-								id="phone"
-								type="tel"
-								maxLength={MAX_PHONE_LEN}
-								value={phone}
-								onChange={(e) => setPhone(e.target.value)}
-								aria-invalid={Boolean(fieldErr.phone)}
-							/>
+								<Input
+									id="phone"
+									type="tel"
+									maxLength={MAX_PHONE_LEN}
+									value={phone}
+									onChange={(e) => setPhone(e.target.value)}
+									aria-invalid={Boolean(fieldErr.phone)}
+								/>
 								{fieldErr.phone && (
 									<p role="alert" className="text-destructive text-xs">
 										{fieldErr.phone}
@@ -428,21 +411,18 @@ function PublicBookingPage() {
 								)}
 							</div>
 							<div className="space-y-1">
-								<label
-									htmlFor="notes"
-									className="text-sm font-medium"
-								>
+								<label htmlFor="notes" className="text-sm font-medium">
 									Special requests (optional)
 								</label>
-<Textarea
-								id="notes"
-								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
-								rows={3}
-								maxLength={MAX_NOTES_LEN}
-								placeholder="Allergies, accessibility needs, etc."
-								aria-invalid={Boolean(fieldErr.notes)}
-							/>
+								<Textarea
+									id="notes"
+									value={notes}
+									onChange={(e) => setNotes(e.target.value)}
+									rows={3}
+									maxLength={MAX_NOTES_LEN}
+									placeholder="Allergies, accessibility needs, etc."
+									aria-invalid={Boolean(fieldErr.notes)}
+								/>
 								<p className="text-muted-foreground text-xs text-right">
 									{notes.length} / {MAX_NOTES_LEN}
 								</p>
@@ -464,11 +444,7 @@ function PublicBookingPage() {
 									</p>
 								</div>
 							)}
-							<Button
-								type="submit"
-								disabled={submitting}
-								className="w-full"
-							>
+							<Button type="submit" disabled={submitting} className="w-full">
 								{submitting ? "Booking…" : "Confirm booking"}
 							</Button>
 							<p className="text-muted-foreground text-xs text-center">

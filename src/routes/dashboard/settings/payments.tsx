@@ -1,9 +1,11 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -11,10 +13,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import { FormActions, FormField } from "../../../components/form";
@@ -76,8 +76,7 @@ function PaymentSettingsPage() {
 				stripeEnabled,
 				stripePublishableKey,
 				stripeSecretKey: stripeSecretKey || "placeholder-no-change",
-				stripeWebhookSecret:
-					stripeWebhookSecret || "placeholder-no-change",
+				stripeWebhookSecret: stripeWebhookSecret || "placeholder-no-change",
 				stripeIsSandbox,
 				acceptDeposits,
 				depositPercentage: deposit,
@@ -124,13 +123,15 @@ function PaymentSettingsPage() {
 				<Card>
 					<CardHeader>
 						<CardTitle>Stripe</CardTitle>
-						<CardDescription>
-							Online card payments via Stripe
-						</CardDescription>
+						<CardDescription>Online card payments via Stripe</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
-						<label className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="stripe-enabled"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
+								id="stripe-enabled"
 								checked={stripeEnabled}
 								onCheckedChange={(c) => setStripeEnabled(c === true)}
 							/>
@@ -140,18 +141,19 @@ function PaymentSettingsPage() {
 							<Badge variant={stripeIsSandbox ? "secondary" : "default"}>
 								{stripeIsSandbox ? "Sandbox" : "Live"}
 							</Badge>
-							<label className="text-xs text-muted-foreground flex items-center gap-1">
+							<label
+								htmlFor="stripe-sandbox"
+								className="text-xs text-muted-foreground flex items-center gap-1"
+							>
 								<Checkbox
+									id="stripe-sandbox"
 									checked={stripeIsSandbox}
 									onCheckedChange={(c) => setStripeIsSandbox(c === true)}
 								/>
 								Use sandbox/test mode
 							</label>
 						</div>
-						<FormField
-							label="Publishable key"
-							htmlFor="pubKey"
-						>
+						<FormField label="Publishable key" htmlFor="pubKey">
 							<Input
 								id="pubKey"
 								value={stripePublishableKey}
@@ -162,9 +164,7 @@ function PaymentSettingsPage() {
 						<FormField
 							label="Secret key"
 							hint={
-								settings
-									? "Leave blank to keep existing"
-									: "Encrypted at rest"
+								settings ? "Leave blank to keep existing" : "Encrypted at rest"
 							}
 							htmlFor="secretKey"
 						>
@@ -200,8 +200,12 @@ function PaymentSettingsPage() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
-						<label className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="accept-deposits"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
+								id="accept-deposits"
 								checked={acceptDeposits}
 								onCheckedChange={(c) => setAcceptDeposits(c === true)}
 							/>
@@ -227,16 +231,16 @@ function PaymentSettingsPage() {
 				<Card>
 					<CardHeader>
 						<CardTitle>Default currency</CardTitle>
-						<CardDescription>
-							ISO 4217 code, e.g. USD, EUR, GBP
-						</CardDescription>
+						<CardDescription>ISO 4217 code, e.g. USD, EUR, GBP</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<FormField label="Currency" htmlFor="currency">
 							<Input
 								id="currency"
 								value={defaultCurrency}
-								onChange={(e) => setDefaultCurrency(e.target.value.toUpperCase())}
+								onChange={(e) =>
+									setDefaultCurrency(e.target.value.toUpperCase())
+								}
 								maxLength={3}
 								placeholder="USD"
 							/>

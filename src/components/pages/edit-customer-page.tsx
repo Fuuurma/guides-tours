@@ -1,13 +1,10 @@
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
-import { FormField } from "../form";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
 import {
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
@@ -16,6 +13,9 @@ import {
 	validateNotesOptional,
 	validatePhoneOptional,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import { FormField } from "../form";
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -31,7 +31,9 @@ interface EditCustomerPageProps {
 }
 
 export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
-	const customer = useQuery(api.customers.get, { customerId: customerId as Id<"customers"> });
+	const customer = useQuery(api.customers.get, {
+		customerId: customerId as Id<"customers">,
+	});
 	const update = useMutation(api.customers.update);
 	const [loaded, setLoaded] = useState(false);
 	const [nameErr, setNameErr] = useState<string | null>(null);
@@ -50,7 +52,13 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 			setPhoneErr(phoneError);
 			setNotesErr(notesError);
 			if (nameError || emailError || phoneError || notesError) {
-				throw new Error(nameError ?? emailError ?? phoneError ?? notesError ?? "Invalid input");
+				throw new Error(
+					nameError ??
+						emailError ??
+						phoneError ??
+						notesError ??
+						"Invalid input",
+				);
 			}
 			await update({
 				customerId: customerId as Id<"customers">,
@@ -122,7 +130,11 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 			backTo={`/dashboard/customers/${customerId}`}
 			submitLabel="Save changes"
 		>
-			<FormField label="Name *" htmlFor="edit-customer-name" error={nameErr ?? undefined}>
+			<FormField
+				label="Name *"
+				htmlFor="edit-customer-name"
+				error={nameErr ?? undefined}
+			>
 				<Input
 					id="edit-customer-name"
 					required
@@ -135,7 +147,11 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				/>
 			</FormField>
 
-			<FormField label="Email *" htmlFor="edit-customer-email" error={emailErr ?? undefined}>
+			<FormField
+				label="Email *"
+				htmlFor="edit-customer-email"
+				error={emailErr ?? undefined}
+			>
 				<Input
 					id="edit-customer-email"
 					type="email"
@@ -149,7 +165,11 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				/>
 			</FormField>
 
-			<FormField label="Phone" htmlFor="edit-customer-phone" error={phoneErr ?? undefined}>
+			<FormField
+				label="Phone"
+				htmlFor="edit-customer-phone"
+				error={phoneErr ?? undefined}
+			>
 				<Input
 					id="edit-customer-phone"
 					type="tel"
@@ -171,7 +191,11 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="edit-customer-notes" error={notesErr ?? undefined}>
+			<FormField
+				label="Notes"
+				htmlFor="edit-customer-notes"
+				error={notesErr ?? undefined}
+			>
 				<Textarea
 					id="edit-customer-notes"
 					value={form.values.notes}
@@ -185,13 +209,14 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				/>
 			</FormField>
 
-			<label className="flex items-center gap-2 text-sm">
+			<label
+				htmlFor="edit-customer-vip"
+				className="flex items-center gap-2 text-sm"
+			>
 				<Checkbox
 					id="edit-customer-vip"
 					checked={form.values.vipStatus}
-					onCheckedChange={(checked) =>
-						form.set("vipStatus", checked === true)
-					}
+					onCheckedChange={(checked) => form.set("vipStatus", checked === true)}
 				/>
 				VIP customer
 			</label>

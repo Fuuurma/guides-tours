@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { Input } from "@/components/ui/input";
 import {
 	Table,
 	TableBody,
@@ -7,7 +8,6 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
 
 export interface DataTableColumn<T> {
 	key: string;
@@ -71,11 +71,7 @@ export function DataTable<T>({
 		return <p className="text-muted-foreground text-sm">Loading…</p>;
 	}
 	if (error) {
-		return (
-			<p className="text-destructive text-sm">
-				Error: {error.message}
-			</p>
-		);
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	}
 	if (!data?.length) {
 		return <p className="text-muted-foreground text-sm">{emptyMessage}</p>;

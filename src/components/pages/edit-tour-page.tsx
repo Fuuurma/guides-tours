@@ -1,12 +1,11 @@
-import { useMutation, useQuery as useConvexQuery } from "convex/react";
-import { useQuery as useTanstackQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
+import { useQuery as useTanstackQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery as useConvexQuery, useMutation } from "convex/react";
 import { useEffect, useState } from "react";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Textarea } from "@/components/ui/textarea";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -14,10 +13,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
-import { FormField } from "../form";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
@@ -26,8 +23,18 @@ import {
 	validatePositiveInteger,
 	validatePositiveNumber,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import { FormField } from "../form";
 
-const TOUR_TYPES = ["walking", "car", "minivan", "bus", "boat", "other"] as const;
+const TOUR_TYPES = [
+	"walking",
+	"car",
+	"minivan",
+	"bus",
+	"boat",
+	"other",
+] as const;
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -81,7 +88,14 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			const descError = validateDescriptionOptional(v.description);
 			setDescErr(descError);
 			if (durError || capError || minError || maxError || descError) {
-				throw new Error(durError ?? capError ?? minError ?? maxError ?? descError ?? "Invalid input");
+				throw new Error(
+					durError ??
+						capError ??
+						minError ??
+						maxError ??
+						descError ??
+						"Invalid input",
+				);
 			}
 			if (minG > maxG) {
 				throw new Error("minGuests cannot exceed maxGuests");
@@ -212,7 +226,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				/>
 			</FormField>
 
-			<FormField label="Description" htmlFor="edit-desc" error={descErr ?? undefined}>
+			<FormField
+				label="Description"
+				htmlFor="edit-desc"
+				error={descErr ?? undefined}
+			>
 				<Textarea
 					id="edit-desc"
 					value={form.values.description}
@@ -245,7 +263,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 					</Select>
 				</FormField>
 
-				<FormField label="Category" htmlFor="edit-category" hint="Group tours on the public booking page">
+				<FormField
+					label="Category"
+					htmlFor="edit-category"
+					hint="Group tours on the public booking page"
+				>
 					<Select
 						value={form.values.categoryId}
 						onValueChange={(v) => form.set("categoryId", v)}
@@ -268,7 +290,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Duration (hours) *" htmlFor="edit-dur" error={durErr ?? undefined}>
+				<FormField
+					label="Duration (hours) *"
+					htmlFor="edit-dur"
+					error={durErr ?? undefined}
+				>
 					<Input
 						id="edit-dur"
 						type="number"
@@ -285,7 +311,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-3">
-				<FormField label="Capacity *" htmlFor="edit-cap" error={capErr ?? undefined}>
+				<FormField
+					label="Capacity *"
+					htmlFor="edit-cap"
+					error={capErr ?? undefined}
+				>
 					<Input
 						id="edit-cap"
 						type="number"
@@ -298,7 +328,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 						}}
 					/>
 				</FormField>
-				<FormField label="Min guests" htmlFor="edit-min" error={minErr ?? undefined}>
+				<FormField
+					label="Min guests"
+					htmlFor="edit-min"
+					error={minErr ?? undefined}
+				>
 					<Input
 						id="edit-min"
 						type="number"
@@ -310,7 +344,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 						}}
 					/>
 				</FormField>
-				<FormField label="Max guests" htmlFor="edit-max" error={maxErr ?? undefined}>
+				<FormField
+					label="Max guests"
+					htmlFor="edit-max"
+					error={maxErr ?? undefined}
+				>
 					<Input
 						id="edit-max"
 						type="number"
@@ -348,8 +386,12 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				/>
 			</FormField>
 
-			<label className="flex items-center gap-2 text-sm">
+			<label
+				htmlFor="edit-tour-active"
+				className="flex items-center gap-2 text-sm"
+			>
 				<Checkbox
+					id="edit-tour-active"
 					checked={form.values.isActive}
 					onCheckedChange={(c) => form.set("isActive", c === true)}
 				/>

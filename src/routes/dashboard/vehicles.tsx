@@ -1,9 +1,12 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { ListPage } from "@/components/list-page";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
 	Select,
@@ -12,9 +15,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { DataTable, type DataTableColumn } from "@/components/data-table";
-import { ListPage } from "@/components/list-page";
-import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -31,12 +31,19 @@ interface Vehicle {
 	status: string;
 }
 
-const STATUS_OPTIONS = ["available", "in_use", "maintenance", "retired"] as const;
+const STATUS_OPTIONS = [
+	"available",
+	"in_use",
+	"maintenance",
+	"retired",
+] as const;
 
 function VehiclesPage() {
-	const { data: vehicles, isPending, error } = useQuery(
-		convexQuery(api.vehicles.list, {}),
-	);
+	const {
+		data: vehicles,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.vehicles.list, {}));
 	const setStatus = useMutation(api.vehicles.setStatus);
 	const removeVehicle = useMutation(api.vehicles.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);

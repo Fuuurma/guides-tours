@@ -41,7 +41,8 @@ export function validateEmail(email: string): string | null {
 	const trimmed = email.trim();
 	if (!trimmed) return "Email is required";
 	if (!EMAIL_REGEX.test(trimmed)) return "Please enter a valid email address";
-	if (trimmed.length > MAX_EMAIL_LEN) return `Email is too long (max ${MAX_EMAIL_LEN} characters)`;
+	if (trimmed.length > MAX_EMAIL_LEN)
+		return `Email is too long (max ${MAX_EMAIL_LEN} characters)`;
 	return null;
 }
 
@@ -71,7 +72,9 @@ export function validateNotesOptional(notes: string): string | null {
 /**
  * Validate a description field (optional). Max 2000 chars.
  */
-export function validateDescriptionOptional(description: string): string | null {
+export function validateDescriptionOptional(
+	description: string,
+): string | null {
 	if (description.length > MAX_DESCRIPTION_LEN) {
 		return `Description is too long (max ${MAX_DESCRIPTION_LEN} characters)`;
 	}
@@ -82,7 +85,10 @@ export function validateDescriptionOptional(description: string): string | null 
  * Validate a positive integer string (used for capacity, guests).
  * Required. Must be > 0 and a whole number.
  */
-export function validatePositiveInteger(value: string, label = "Value"): string | null {
+export function validatePositiveInteger(
+	value: string,
+	label = "Value",
+): string | null {
 	if (!value) return `${label} is required`;
 	const n = Number(value);
 	if (!Number.isFinite(n) || n <= 0) {
@@ -98,7 +104,10 @@ export function validatePositiveInteger(value: string, label = "Value"): string 
  * Validate a positive number string (used for hours, prices).
  * Required. Must be > 0. Allows decimals.
  */
-export function validatePositiveNumber(value: string, label = "Value"): string | null {
+export function validatePositiveNumber(
+	value: string,
+	label = "Value",
+): string | null {
 	if (!value) return `${label} is required`;
 	const n = Number(value);
 	if (!Number.isFinite(n) || n <= 0) {
@@ -111,7 +120,10 @@ export function validatePositiveNumber(value: string, label = "Value"): string |
  * Validate a non-negative number string (used for prices that can be 0).
  * Required. Must be >= 0. Allows decimals.
  */
-export function validateNonNegativeNumber(value: string, label = "Value"): string | null {
+export function validateNonNegativeNumber(
+	value: string,
+	label = "Value",
+): string | null {
 	if (!value) return `${label} is required`;
 	const n = Number(value);
 	if (!Number.isFinite(n) || n < 0) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
-import * as React from "react";
+import type * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,8 @@ function Checkbox({
 					strokeLinecap="round"
 					strokeLinejoin="round"
 					className="size-3.5"
+					aria-label="Check"
+					role="img"
 				>
 					<path d="M20 6 9 17l-5-5" />
 				</svg>

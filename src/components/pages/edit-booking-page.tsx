@@ -1,18 +1,18 @@
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
-import { FormField } from "../form";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
 import {
 	MAX_NOTES_LEN,
 	parseUsdToCents,
 	validateNotesOptional,
 	validatePositiveInteger,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import { FormField } from "../form";
 
 interface FormValues extends Record<string, unknown> {
 	date: string;
@@ -31,7 +31,9 @@ interface EditBookingPageProps {
 }
 
 export function EditBookingPage({ bookingId }: EditBookingPageProps) {
-	const booking = useQuery(api.bookings.get, { bookingId: bookingId as Id<"bookings"> });
+	const booking = useQuery(api.bookings.get, {
+		bookingId: bookingId as Id<"bookings">,
+	});
 	const update = useMutation(api.bookings.update);
 	const [loaded, setLoaded] = useState(false);
 	const [guestsErr, setGuestsErr] = useState<string | null>(null);
@@ -49,7 +51,9 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			if (v.totalUsd.trim() && totalCents === null) {
 				throw new Error("Total amount must be a non-negative number");
 			}
-			const depositCents = v.depositUsd.trim() ? parseUsdToCents(v.depositUsd) : null;
+			const depositCents = v.depositUsd.trim()
+				? parseUsdToCents(v.depositUsd)
+				: null;
 			if (v.depositUsd.trim() && depositCents === null) {
 				setDepositErr("Deposit must be a non-negative number");
 				throw new Error("Deposit must be a non-negative number");
@@ -124,9 +128,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			);
 			form.set(
 				"totalUsd",
-				b.totalAmountCents
-					? (Number(b.totalAmountCents) / 100).toFixed(2)
-					: "",
+				b.totalAmountCents ? (Number(b.totalAmountCents) / 100).toFixed(2) : "",
 			);
 			form.set("paymentMethod", b.paymentMethod ?? "");
 			setLoaded(true);
@@ -158,9 +160,8 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				<header>
 					<h1 className="text-2xl font-semibold">Cannot edit booking</h1>
 					<p className="text-muted-foreground text-sm">
-						This booking is{" "}
-						<span className="font-medium">{status}</span> — only active
-						bookings (pending / confirmed / checked-in) can be edited.
+						This booking is <span className="font-medium">{status}</span> — only
+						active bookings (pending / confirmed / checked-in) can be edited.
 					</p>
 				</header>
 			</div>
@@ -194,7 +195,11 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 						onChange={(e) => form.set("startTime", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Guests" htmlFor="edit-guests" error={guestsErr ?? undefined}>
+				<FormField
+					label="Guests"
+					htmlFor="edit-guests"
+					error={guestsErr ?? undefined}
+				>
 					<Input
 						id="edit-guests"
 						type="number"
@@ -209,7 +214,11 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				</FormField>
 			</div>
 
-			<FormField label="Guest names" htmlFor="edit-guest-names" hint="Comma-separated">
+			<FormField
+				label="Guest names"
+				htmlFor="edit-guest-names"
+				hint="Comma-separated"
+			>
 				<Input
 					id="edit-guest-names"
 					maxLength={500}
@@ -229,7 +238,11 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="edit-notes" error={notesErr ?? undefined}>
+			<FormField
+				label="Notes"
+				htmlFor="edit-notes"
+				error={notesErr ?? undefined}
+			>
 				<Textarea
 					id="edit-notes"
 					value={form.values.notes}
@@ -257,7 +270,11 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 						onChange={(e) => form.set("totalUsd", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Deposit (USD)" htmlFor="edit-deposit" error={depositErr ?? undefined}>
+				<FormField
+					label="Deposit (USD)"
+					htmlFor="edit-deposit"
+					error={depositErr ?? undefined}
+				>
 					<Input
 						id="edit-deposit"
 						type="number"

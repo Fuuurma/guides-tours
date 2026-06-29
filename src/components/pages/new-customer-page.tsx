@@ -1,10 +1,8 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import {
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
@@ -13,6 +11,8 @@ import {
 	validateNotesOptional,
 	validatePhoneOptional,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import { FormField } from "../form";
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -48,7 +48,13 @@ export function NewCustomerPage() {
 			setPhoneErr(phoneError);
 			setNotesErr(notesError);
 			if (nameError || emailError || phoneError || notesError) {
-				throw new Error(nameError ?? emailError ?? phoneError ?? notesError ?? "Invalid input");
+				throw new Error(
+					nameError ??
+						emailError ??
+						phoneError ??
+						notesError ??
+						"Invalid input",
+				);
 			}
 			const id = await create({
 				name: values.name.trim(),

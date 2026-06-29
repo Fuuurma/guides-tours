@@ -1,9 +1,11 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -11,11 +13,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -23,6 +22,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormActions, FormField } from "../../components/form";
@@ -42,9 +42,11 @@ const ALL_PROVIDERS = [
 ] as const;
 
 function OtaIntegrationsPage() {
-	const { data: integrations, isPending, error } = useQuery(
-		convexQuery(api.ota.integrations.list, {}),
-	);
+	const {
+		data: integrations,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.ota.integrations.list, {}));
 	const updateIntegration = useMutation(api.ota.integrations_mutations.update);
 	const removeIntegration = useMutation(api.ota.integrations_mutations.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);
@@ -52,8 +54,13 @@ function OtaIntegrationsPage() {
 	const toggleActive = async (id: string, currentActive: boolean) => {
 		setPendingId(id);
 		try {
-			await updateIntegration({ integrationId: id as Id<"otaIntegrations">, isActive: !currentActive });
-			toast.success(currentActive ? "Integration disabled" : "Integration enabled");
+			await updateIntegration({
+				integrationId: id as Id<"otaIntegrations">,
+				isActive: !currentActive,
+			});
+			toast.success(
+				currentActive ? "Integration disabled" : "Integration enabled",
+			);
 		} catch (err) {
 			toast.error((err as Error).message);
 		} finally {
@@ -61,7 +68,11 @@ function OtaIntegrationsPage() {
 		}
 	};
 	const onRemove = async (id: string, label: string) => {
-		if (!window.confirm(`Delete the ${label} integration? Webhooks will stop being accepted.`)) {
+		if (
+			!window.confirm(
+				`Delete the ${label} integration? Webhooks will stop being accepted.`,
+			)
+		) {
 			return;
 		}
 		setPendingId(id);
@@ -109,16 +120,14 @@ function OtaIntegrationsPage() {
 				</CardHeader>
 				<CardContent>
 					{error && (
-						<p className="text-destructive text-sm">
-							Error: {error.message}
-						</p>
+						<p className="text-destructive text-sm">Error: {error.message}</p>
 					)}
-				{isPending ? (
-					<div className="space-y-2">
-						<Skeleton className="h-12 w-full" />
-						<Skeleton className="h-12 w-full" />
-					</div>
-				) : items.length === 0 ? (
+					{isPending ? (
+						<div className="space-y-2">
+							<Skeleton className="h-12 w-full" />
+							<Skeleton className="h-12 w-full" />
+						</div>
+					) : items.length === 0 ? (
 						<p className="text-muted-foreground text-sm">
 							No integrations yet. Add one below.
 						</p>
@@ -178,9 +187,7 @@ function OtaIntegrationsPage() {
 			</Card>
 
 			{available.length > 0 && (
-				<NewIntegrationForm
-					available={available.map((p) => p.id)}
-				/>
+				<NewIntegrationForm available={available.map((p) => p.id)} />
 			)}
 
 			<Card>
@@ -214,11 +221,7 @@ function OtaIntegrationsPage() {
 	);
 }
 
-function NewIntegrationForm({
-	available,
-}: {
-	available: readonly string[];
-}) {
+function NewIntegrationForm({ available }: { available: readonly string[] }) {
 	const create = useMutation(api.ota.integrations_mutations.create);
 	const [provider, setProvider] = useState<string>(available[0] ?? "");
 	const [apiKey, setApiKey] = useState("");
@@ -274,7 +277,9 @@ function NewIntegrationForm({
 				<form onSubmit={onSubmit} className="space-y-4">
 					<FormField label="Provider" htmlFor="provider">
 						<Select value={provider} onValueChange={setProvider}>
-							<SelectTrigger id="provider"><SelectValue /></SelectTrigger>
+							<SelectTrigger id="provider">
+								<SelectValue />
+							</SelectTrigger>
 							<SelectContent>
 								{available.map((p) => (
 									<SelectItem key={p} value={p}>
@@ -326,8 +331,12 @@ function NewIntegrationForm({
 						/>
 					</FormField>
 
-					<label className="flex items-center gap-2 text-sm">
+					<label
+						htmlFor="ota-sandbox"
+						className="flex items-center gap-2 text-sm"
+					>
 						<Checkbox
+							id="ota-sandbox"
 							checked={isSandbox}
 							onCheckedChange={(c) => setIsSandbox(c === true)}
 						/>

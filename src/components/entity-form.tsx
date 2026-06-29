@@ -1,5 +1,5 @@
-import * as React from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -149,7 +149,10 @@ export interface EntityFormPageProps<TValues extends object, TResult> {
 	children: React.ReactNode;
 }
 
-export function EntityFormPage<TValues extends Record<string, unknown>, TResult>({
+export function EntityFormPage<
+	TValues extends Record<string, unknown>,
+	TResult,
+>({
 	form,
 	title,
 	description,
@@ -174,7 +177,10 @@ export function EntityFormPage<TValues extends Record<string, unknown>, TResult>
 					>
 						{children}
 						{form.error && (
-							<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3" role="alert">
+							<div
+								className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
+								role="alert"
+							>
 								<p className="text-destructive text-sm font-medium">
 									{form.error}
 								</p>

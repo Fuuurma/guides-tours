@@ -1,14 +1,14 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -18,7 +18,11 @@ export const Route = createFileRoute("/dashboard/assignments/$assignmentId")({
 
 function AssignmentDetailPage() {
 	const { assignmentId } = Route.useParams();
-	const { data: assignment, isPending, error } = useQuery(
+	const {
+		data: assignment,
+		isPending,
+		error,
+	} = useQuery(
 		convexQuery(api.assignments.get, {
 			assignmentId: assignmentId as Id<"assignments">,
 		}),
@@ -95,8 +99,15 @@ function AssignmentDetailPage() {
 			</div>
 		);
 	}
-	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
-	if (!assignment) return <DetailPage title="Assignment not found" backTo="/dashboard/assignments" />;
+	if (error)
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+	if (!assignment)
+		return (
+			<DetailPage
+				title="Assignment not found"
+				backTo="/dashboard/assignments"
+			/>
+		);
 
 	const endTimeDisplay = assignment.endTime ?? "—";
 	const canComplete = assignment.status === "scheduled";
@@ -137,33 +148,51 @@ function AssignmentDetailPage() {
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard label="Date" value={assignment.date} />
-				<MetricCard label="Time" value={`${assignment.startTime}–${endTimeDisplay}`} />
+				<MetricCard
+					label="Time"
+					value={`${assignment.startTime}–${endTimeDisplay}`}
+				/>
 				<MetricCard label="Guide ID" value={assignment.guideId} />
 				<MetricCard label="Status" value={assignment.status}>
 					<StatusBadge status={assignment.status} />
 				</MetricCard>
 			</div>
 
-			<DetailSection title="Resources" description="Vehicle and driver (if assigned)">
+			<DetailSection
+				title="Resources"
+				description="Vehicle and driver (if assigned)"
+			>
 				<DetailRow
 					label="Vehicle"
-					value={vehicle ? (
-						<Link to="/dashboard/vehicles/$vehicleId" params={{ vehicleId: vehicle._id }} className="text-blue-600 hover:underline">
-							{vehicle.name}
-						</Link>
-					) : (
-						<span className="italic text-muted-foreground">Not assigned</span>
-					)}
+					value={
+						vehicle ? (
+							<Link
+								to="/dashboard/vehicles/$vehicleId"
+								params={{ vehicleId: vehicle._id }}
+								className="text-blue-600 hover:underline"
+							>
+								{vehicle.name}
+							</Link>
+						) : (
+							<span className="italic text-muted-foreground">Not assigned</span>
+						)
+					}
 				/>
 				<DetailRow
 					label="Driver"
-					value={driver ? (
-						<Link to="/dashboard/drivers/$driverId" params={{ driverId: driver._id }} className="font-mono text-xs text-blue-600 hover:underline">
-							{driver.userId}
-						</Link>
-					) : (
-						<span className="italic text-muted-foreground">Not assigned</span>
-					)}
+					value={
+						driver ? (
+							<Link
+								to="/dashboard/drivers/$driverId"
+								params={{ driverId: driver._id }}
+								className="font-mono text-xs text-blue-600 hover:underline"
+							>
+								{driver.userId}
+							</Link>
+						) : (
+							<span className="italic text-muted-foreground">Not assigned</span>
+						)
+					}
 				/>
 			</DetailSection>
 		</DetailPage>

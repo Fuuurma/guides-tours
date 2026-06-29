@@ -34,17 +34,32 @@ const columns: DataTableColumn<Vacation>[] = [
 		),
 		searchValue: (v) => v.userId,
 	},
-	{ key: "start", header: "Start", render: (v) => v.startDate, searchValue: (v) => v.startDate },
-	{ key: "end", header: "End", render: (v) => v.endDate, searchValue: (v) => v.endDate },
+	{
+		key: "start",
+		header: "Start",
+		render: (v) => v.startDate,
+		searchValue: (v) => v.startDate,
+	},
+	{
+		key: "end",
+		header: "End",
+		render: (v) => v.endDate,
+		searchValue: (v) => v.endDate,
+	},
 	{
 		key: "days",
 		header: "Days",
-		render: (v) => Math.floor((Date.parse(v.endDate) - Date.parse(v.startDate)) / 86_400_000 + 1),
+		render: (v) =>
+			Math.floor(
+				(Date.parse(v.endDate) - Date.parse(v.startDate)) / 86_400_000 + 1,
+			),
 	},
 	{
 		key: "reason",
 		header: "Reason",
-		render: (v) => <span className="max-w-[200px] truncate inline-block">{v.reason}</span>,
+		render: (v) => (
+			<span className="max-w-[200px] truncate inline-block">{v.reason}</span>
+		),
 		searchValue: (v) => v.reason,
 	},
 	{
@@ -56,9 +71,11 @@ const columns: DataTableColumn<Vacation>[] = [
 ];
 
 function VacationsPage() {
-	const { data: vacations, isPending, error } = useQuery(
-		convexQuery(api.vacationRequests.list, {}),
-	);
+	const {
+		data: vacations,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.vacationRequests.list, {}));
 	const itemCount = vacations?.length ?? 0;
 
 	return (

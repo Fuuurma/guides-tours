@@ -35,9 +35,18 @@ const columns: DataTableColumn<Tour>[] = [
 		),
 		searchValue: (t) => t.name,
 	},
-	{ key: "type", header: "Type", render: (t) => t.tourType, searchValue: (t) => t.tourType },
+	{
+		key: "type",
+		header: "Type",
+		render: (t) => t.tourType,
+		searchValue: (t) => t.tourType,
+	},
 	{ key: "duration", header: "Duration", render: (t) => `${t.durationHours}h` },
-	{ key: "capacity", header: "Capacity", render: (t) => `${t.minGuests}–${t.maxGuests}` },
+	{
+		key: "capacity",
+		header: "Capacity",
+		render: (t) => `${t.minGuests}–${t.maxGuests}`,
+	},
 	{
 		key: "status",
 		header: "Status",
@@ -47,9 +56,11 @@ const columns: DataTableColumn<Tour>[] = [
 ];
 
 function ToursPage() {
-	const { data: tours, isPending, error } = useQuery(
-		convexQuery(api.tours.list, {}),
-	);
+	const {
+		data: tours,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.tours.list, {}));
 	const itemCount = tours?.length ?? 0;
 
 	return (

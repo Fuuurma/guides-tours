@@ -1,9 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { useMutation } from "convex/react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { ListPage } from "@/components/list-page";
+import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -12,13 +16,9 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { DataTable, type DataTableColumn } from "@/components/data-table";
-import { ListPage } from "@/components/list-page";
-import { StatusBadge } from "@/components/status-badge";
 import { api } from "../../../convex/_generated/api";
-import { FormActions, FormField } from "../../components/form";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { FormActions, FormField } from "../../components/form";
 
 export const Route = createFileRoute("/dashboard/categories")({
 	component: CategoriesPage,
@@ -69,9 +69,11 @@ function ActionsCell({
 }
 
 function CategoriesPage() {
-	const { data: categories, isPending, error } = useQuery(
-		convexQuery(api.tourCategories.list, {}),
-	);
+	const {
+		data: categories,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.tourCategories.list, {}));
 	const updateCategory = useMutation(api.tourCategories.update);
 	const removeCategory = useMutation(api.tourCategories.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);
@@ -118,9 +120,7 @@ function CategoriesPage() {
 					<span className="text-lg">{c.icon || "📁"}</span>
 					<div>
 						<p className="font-medium">{c.name}</p>
-						<p className="text-muted-foreground text-xs font-mono">
-							{c.slug}
-						</p>
+						<p className="text-muted-foreground text-xs font-mono">{c.slug}</p>
 					</div>
 				</div>
 			),
@@ -130,7 +130,9 @@ function CategoriesPage() {
 		{
 			key: "status",
 			header: "Status",
-			render: (c) => <StatusBadge status={c.isActive ? "active" : "inactive"} />,
+			render: (c) => (
+				<StatusBadge status={c.isActive ? "active" : "inactive"} />
+			),
 			searchValue: (c) => (c.isActive ? "active" : "inactive"),
 		},
 		{
@@ -216,8 +218,8 @@ function NewCategoryForm() {
 			<CardHeader>
 				<CardTitle>Add category</CardTitle>
 				<CardDescription>
-					Categories appear as filter chips on the public booking
-					page. Slug must be unique within your organization.
+					Categories appear as filter chips on the public booking page. Slug
+					must be unique within your organization.
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
@@ -232,7 +234,11 @@ function NewCategoryForm() {
 								placeholder="Walking Tours"
 							/>
 						</FormField>
-						<FormField label="Slug *" htmlFor="cat-slug" hint="Auto-derived from name">
+						<FormField
+							label="Slug *"
+							htmlFor="cat-slug"
+							hint="Auto-derived from name"
+						>
 							<Input
 								id="cat-slug"
 								required
@@ -241,7 +247,11 @@ function NewCategoryForm() {
 								placeholder="walking-tours"
 							/>
 						</FormField>
-						<FormField label="Icon" htmlFor="cat-icon" hint="Emoji or short text">
+						<FormField
+							label="Icon"
+							htmlFor="cat-icon"
+							hint="Emoji or short text"
+						>
 							<Input
 								id="cat-icon"
 								value={icon}
@@ -251,9 +261,7 @@ function NewCategoryForm() {
 							/>
 						</FormField>
 					</div>
-					{error && (
-						<p className="text-destructive text-sm">{error}</p>
-					)}
+					{error && <p className="text-destructive text-sm">{error}</p>}
 					<FormActions pending={pending} submitLabel="Add category" />
 				</form>
 			</CardContent>

@@ -1,11 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
+import { useMutation } from "convex/react";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
 	Select,
 	SelectContent,
@@ -13,15 +11,20 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	MAX_NOTES_LEN,
 	validateNotesOptional,
 	validatePositiveInteger,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import { FormField } from "../form";
 
-interface Tour { _id: string; name: string }
+interface Tour {
+	_id: string;
+	name: string;
+}
 
 interface FormValues extends Record<string, unknown> {
 	tourId: string;
@@ -87,26 +90,51 @@ export function NewSchedulePage() {
 			submitLabel="Create schedule"
 		>
 			<FormField label="Tour *" htmlFor="tour">
-				<Select value={form.values.tourId} onValueChange={(v) => form.set("tourId", v)}>
-					<SelectTrigger id="tour"><SelectValue placeholder="Select a tour…" /></SelectTrigger>
+				<Select
+					value={form.values.tourId}
+					onValueChange={(v) => form.set("tourId", v)}
+				>
+					<SelectTrigger id="tour">
+						<SelectValue placeholder="Select a tour…" />
+					</SelectTrigger>
 					<SelectContent>
 						{(tours as Tour[] | undefined)?.map((t) => (
-							<SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
+							<SelectItem key={t._id} value={t._id}>
+								{t.name}
+							</SelectItem>
 						))}
 					</SelectContent>
 				</Select>
 			</FormField>
 
 			<FormField label="Date *" htmlFor="date">
-				<Input id="date" type="date" required value={form.values.date} onChange={(e) => form.set("date", e.target.value)} />
+				<Input
+					id="date"
+					type="date"
+					required
+					value={form.values.date}
+					onChange={(e) => form.set("date", e.target.value)}
+				/>
 			</FormField>
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="Start time *" htmlFor="start">
-					<Input id="start" type="time" required value={form.values.startTime} onChange={(e) => form.set("startTime", e.target.value)} />
+					<Input
+						id="start"
+						type="time"
+						required
+						value={form.values.startTime}
+						onChange={(e) => form.set("startTime", e.target.value)}
+					/>
 				</FormField>
 				<FormField label="End time *" htmlFor="end">
-					<Input id="end" type="time" required value={form.values.endTime} onChange={(e) => form.set("endTime", e.target.value)} />
+					<Input
+						id="end"
+						type="time"
+						required
+						value={form.values.endTime}
+						onChange={(e) => form.set("endTime", e.target.value)}
+					/>
 				</FormField>
 			</div>
 

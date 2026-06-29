@@ -1,7 +1,6 @@
-import { useMutation, useQuery } from "convex/react";
 import { useNavigate } from "@tanstack/react-router";
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
-import type { Id } from "../../../convex/_generated/dataModel";
 import {
 	Card,
 	CardContent,
@@ -10,7 +9,6 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
 	Select,
 	SelectContent,
@@ -18,17 +16,27 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { api } from "../../../convex/_generated/api";
-import { FormActions, FormField } from "../form";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	MAX_NOTES_LEN,
 	parseUsdToCents,
 	validateNotesOptional,
 	validatePositiveInteger,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
+import { FormActions, FormField } from "../form";
 
-interface TourLite { _id: string; name: string; maxGuests?: number }
-interface CustomerLite { _id: string; name: string; email: string }
+interface TourLite {
+	_id: string;
+	name: string;
+	maxGuests?: number;
+}
+interface CustomerLite {
+	_id: string;
+	name: string;
+	email: string;
+}
 
 export function NewBookingPage() {
 	const navigate = useNavigate();
@@ -138,10 +146,14 @@ export function NewBookingPage() {
 					<form onSubmit={onSubmit} className="space-y-4">
 						<FormField label="Tour *" htmlFor="tour">
 							<Select value={tourId} onValueChange={setTourId}>
-								<SelectTrigger id="tour"><SelectValue placeholder="Select a tour…" /></SelectTrigger>
+								<SelectTrigger id="tour">
+									<SelectValue placeholder="Select a tour…" />
+								</SelectTrigger>
 								<SelectContent>
 									{((tours ?? []) as TourLite[]).map((t) => (
-										<SelectItem key={t._id} value={t._id}>{t.name}</SelectItem>
+										<SelectItem key={t._id} value={t._id}>
+											{t.name}
+										</SelectItem>
 									))}
 								</SelectContent>
 							</Select>
@@ -149,10 +161,14 @@ export function NewBookingPage() {
 
 						<FormField label="Customer *" htmlFor="customer">
 							<Select value={customerId} onValueChange={setCustomerId}>
-								<SelectTrigger id="customer"><SelectValue placeholder="Select a customer…" /></SelectTrigger>
+								<SelectTrigger id="customer">
+									<SelectValue placeholder="Select a customer…" />
+								</SelectTrigger>
 								<SelectContent>
 									{((customers?.items ?? []) as CustomerLite[]).map((c) => (
-										<SelectItem key={c._id} value={c._id}>{c.name} ({c.email})</SelectItem>
+										<SelectItem key={c._id} value={c._id}>
+											{c.name} ({c.email})
+										</SelectItem>
 									))}
 								</SelectContent>
 							</Select>
@@ -178,7 +194,12 @@ export function NewBookingPage() {
 									onChange={(e) => setStartTime(e.target.value)}
 								/>
 							</FormField>
-							<FormField label="Guests *" htmlFor="guests" error={guestsErr ?? undefined} hint={maxGuests ? `Max ${maxGuests} guests` : undefined}>
+							<FormField
+								label="Guests *"
+								htmlFor="guests"
+								error={guestsErr ?? undefined}
+								hint={maxGuests ? `Max ${maxGuests} guests` : undefined}
+							>
 								<Input
 									id="guests"
 									type="number"
@@ -194,7 +215,11 @@ export function NewBookingPage() {
 							</FormField>
 						</div>
 
-						<FormField label="Guest names" htmlFor="gNames" hint="Comma-separated, one per guest">
+						<FormField
+							label="Guest names"
+							htmlFor="gNames"
+							hint="Comma-separated, one per guest"
+						>
 							<Input
 								id="gNames"
 								maxLength={500}
@@ -220,7 +245,11 @@ export function NewBookingPage() {
 									placeholder="0.00"
 								/>
 							</FormField>
-							<FormField label="Deposit (USD)" htmlFor="deposit" error={depositErr ?? undefined}>
+							<FormField
+								label="Deposit (USD)"
+								htmlFor="deposit"
+								error={depositErr ?? undefined}
+							>
 								<Input
 									id="deposit"
 									type="number"
@@ -236,7 +265,11 @@ export function NewBookingPage() {
 							</FormField>
 						</div>
 
-						<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
+						<FormField
+							label="Notes"
+							htmlFor="notes"
+							error={notesErr ?? undefined}
+						>
 							<Textarea
 								id="notes"
 								value={notes}
@@ -254,10 +287,11 @@ export function NewBookingPage() {
 						</FormField>
 
 						{error && (
-							<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3" role="alert">
-								<p className="text-destructive text-sm font-medium">
-									{error}
-								</p>
+							<div
+								className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
+								role="alert"
+							>
+								<p className="text-destructive text-sm font-medium">{error}</p>
 							</div>
 						)}
 

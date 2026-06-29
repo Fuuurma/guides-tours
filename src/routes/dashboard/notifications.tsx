@@ -1,13 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -27,9 +27,11 @@ interface NotificationTemplate {
 }
 
 function NotificationTemplatesPage() {
-	const { data: templates, isPending, error } = useQuery(
-		convexQuery(api.notificationTemplates.list, {}),
-	);
+	const {
+		data: templates,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.notificationTemplates.list, {}));
 	const updateTemplate = useMutation(api.notificationTemplates.update);
 	const removeTemplate = useMutation(api.notificationTemplates.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);
@@ -85,7 +87,9 @@ function NotificationTemplatesPage() {
 		{
 			key: "type",
 			header: "Type",
-			render: (t) => <span className="font-mono text-xs">{t.templateType}</span>,
+			render: (t) => (
+				<span className="font-mono text-xs">{t.templateType}</span>
+			),
 			searchValue: (t) => t.templateType,
 		},
 		{
@@ -97,7 +101,11 @@ function NotificationTemplatesPage() {
 		{
 			key: "subject",
 			header: "Subject",
-			render: (t) => <span className="max-w-[300px] truncate inline-block">{t.emailSubject}</span>,
+			render: (t) => (
+				<span className="max-w-[300px] truncate inline-block">
+					{t.emailSubject}
+				</span>
+			),
 			searchValue: (t) => t.emailSubject,
 		},
 		{
@@ -110,7 +118,9 @@ function NotificationTemplatesPage() {
 		{
 			key: "active",
 			header: "Status",
-			render: (t) => <StatusBadge status={t.isActive ? "active" : "inactive"} />,
+			render: (t) => (
+				<StatusBadge status={t.isActive ? "active" : "inactive"} />
+			),
 			searchValue: (t) => (t.isActive ? "active" : "inactive"),
 		},
 		{

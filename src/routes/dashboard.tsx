@@ -1,8 +1,8 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { NavBar } from "@/components/nav-bar";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Card,
 	CardContent,
@@ -10,8 +10,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
-import { NavBar } from "@/components/nav-bar";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard")({
@@ -20,12 +20,16 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardLayout() {
 	const navigate = useNavigate();
-	const { data: user, isPending: userPending, error: userError } = useQuery(
-		convexQuery(api.auth.getCurrentUser, {}),
-	);
-	const { data: org, isPending: orgPending, error: orgError } = useQuery(
-		convexQuery(api.organizations.activeOrganization, {}),
-	);
+	const {
+		data: user,
+		isPending: userPending,
+		error: userError,
+	} = useQuery(convexQuery(api.auth.getCurrentUser, {}));
+	const {
+		data: org,
+		isPending: orgPending,
+		error: orgError,
+	} = useQuery(convexQuery(api.organizations.activeOrganization, {}));
 
 	if (userPending || orgPending) {
 		return (
@@ -51,9 +55,7 @@ function DashboardLayout() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						<Button onClick={() => window.location.reload()}>
-							Reload
-						</Button>
+						<Button onClick={() => window.location.reload()}>Reload</Button>
 					</CardContent>
 				</Card>
 			</main>

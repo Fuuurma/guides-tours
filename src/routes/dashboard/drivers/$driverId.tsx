@@ -1,10 +1,10 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { StatusBadge } from "@/components/status-badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
+import { StatusBadge } from "@/components/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -14,7 +14,11 @@ export const Route = createFileRoute("/dashboard/drivers/$driverId")({
 
 function DriverDetailPage() {
 	const { driverId } = Route.useParams();
-	const { data: driver, isPending, error } = useQuery(
+	const {
+		data: driver,
+		isPending,
+		error,
+	} = useQuery(
 		convexQuery(api.drivers.get, { driverId: driverId as Id<"drivers"> }),
 	);
 
@@ -29,13 +33,22 @@ function DriverDetailPage() {
 			</div>
 		);
 	}
-	if (error) return <p className="text-destructive text-sm">Error: {error.message}</p>;
-	if (!driver) return <DetailPage title="Driver not found" backTo="/dashboard/drivers" />;
+	if (error)
+		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+	if (!driver)
+		return <DetailPage title="Driver not found" backTo="/dashboard/drivers" />;
 
 	return (
-		<DetailPage title="Driver" subtitle={driver.userId} backTo="/dashboard/drivers">
+		<DetailPage
+			title="Driver"
+			subtitle={driver.userId}
+			backTo="/dashboard/drivers"
+		>
 			<div className="grid gap-4 md:grid-cols-2">
-				<MetricCard label="Status" value={driver.isActive ? "Active" : "Inactive"}>
+				<MetricCard
+					label="Status"
+					value={driver.isActive ? "Active" : "Inactive"}
+				>
 					<StatusBadge status={driver.isActive ? "active" : "inactive"} />
 				</MetricCard>
 				<MetricCard label="License" value={driver.licenseInfo} />
@@ -49,8 +62,14 @@ function DriverDetailPage() {
 
 			<DetailSection title="Metadata" description="System fields">
 				<DetailRow label="Driver ID" value={driver._id} mono />
-				<DetailRow label="Created at" value={new Date(driver.createdAt).toLocaleString()} />
-				<DetailRow label="Updated at" value={new Date(driver.updatedAt).toLocaleString()} />
+				<DetailRow
+					label="Created at"
+					value={new Date(driver.createdAt).toLocaleString()}
+				/>
+				<DetailRow
+					label="Updated at"
+					value={new Date(driver.updatedAt).toLocaleString()}
+				/>
 			</DetailSection>
 		</DetailPage>
 	);

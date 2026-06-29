@@ -2,11 +2,11 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -24,7 +24,13 @@ interface Assignment {
 	status: "scheduled" | "completed" | "cancelled";
 }
 
-function TourCell({ tourId, tourNameById }: { tourId: string; tourNameById: Map<string, string> }) {
+function TourCell({
+	tourId,
+	tourNameById,
+}: {
+	tourId: string;
+	tourNameById: Map<string, string>;
+}) {
 	const name = tourNameById.get(tourId);
 	return (
 		<Link
@@ -33,7 +39,9 @@ function TourCell({ tourId, tourNameById }: { tourId: string; tourNameById: Map<
 			className="text-blue-600 hover:underline"
 		>
 			{name ?? (
-				<span className="text-muted-foreground italic text-xs">Unknown tour</span>
+				<span className="text-muted-foreground italic text-xs">
+					Unknown tour
+				</span>
 			)}
 		</Link>
 	);
@@ -49,7 +57,9 @@ function defaultRange(): { from: string; to: string } {
 }
 
 function AssignmentsPage() {
-	const [status, setStatus] = useState<"scheduled" | "completed" | "cancelled" | null>(null);
+	const [status, setStatus] = useState<
+		"scheduled" | "completed" | "cancelled" | null
+	>(null);
 	const [range, setRange] = useState(defaultRange);
 
 	const args: {
@@ -62,9 +72,11 @@ function AssignmentsPage() {
 	if (range.to) args.dateTo = range.to;
 
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
-	const { data: assignments, isPending, error } = useQuery(
-		convexQuery(api.assignments.list, args),
-	);
+	const {
+		data: assignments,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.assignments.list, args));
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
@@ -98,13 +110,16 @@ function AssignmentsPage() {
 			),
 			searchValue: (a) => `${a.startTime} ${a.endTime ?? ""}`,
 		},
-		{ key: "guide", header: "Guide", render: (a) => a.guideId, searchValue: (a) => a.guideId },
+		{
+			key: "guide",
+			header: "Guide",
+			render: (a) => a.guideId,
+			searchValue: (a) => a.guideId,
+		},
 		{
 			key: "tour",
 			header: "Tour",
-			render: (a) => (
-				<TourCell tourId={a.tourId} tourNameById={tourNameById} />
-			),
+			render: (a) => <TourCell tourId={a.tourId} tourNameById={tourNameById} />,
 			searchValue: (a) => tourNameById.get(a.tourId) ?? a.tourId,
 		},
 		{

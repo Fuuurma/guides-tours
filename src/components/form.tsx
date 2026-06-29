@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
 interface FormActionsProps {
@@ -39,7 +39,13 @@ interface FormFieldProps {
 	children: ReactNode;
 }
 
-export function FormField({ label, hint, error, htmlFor, children }: FormFieldProps) {
+export function FormField({
+	label,
+	hint,
+	error,
+	htmlFor,
+	children,
+}: FormFieldProps) {
 	const hintId = htmlFor ? `${htmlFor}-hint` : undefined;
 	const errorId = htmlFor ? `${htmlFor}-error` : undefined;
 	return (
@@ -54,11 +60,7 @@ export function FormField({ label, hint, error, htmlFor, children }: FormFieldPr
 				</p>
 			)}
 			{error && (
-				<p
-					id={errorId}
-					role="alert"
-					className="text-destructive text-xs"
-				>
+				<p id={errorId} role="alert" className="text-destructive text-xs">
 					{error}
 				</p>
 			)}

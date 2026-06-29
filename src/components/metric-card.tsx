@@ -1,13 +1,12 @@
-import * as React from "react";
 import { Link } from "@tanstack/react-router";
-
+import type * as React from "react";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
 import {
 	Card,
 	CardContent,
 	CardDescription,
 	CardHeader,
 } from "@/components/ui/card";
-import { Badge, type BadgeProps } from "@/components/ui/badge";
 
 /**
  * A metric card used on dashboard detail pages and the home
@@ -119,15 +118,16 @@ export interface DetailLinkRowProps {
 	children: React.ReactNode;
 }
 
-export function DetailLinkRow({ label, to, params, children }: DetailLinkRowProps) {
+export function DetailLinkRow({
+	label,
+	to,
+	params,
+	children,
+}: DetailLinkRowProps) {
 	return (
 		<div className="flex items-baseline justify-between gap-4">
 			<span className="text-muted-foreground">{label}</span>
-			<Link
-				to={to}
-				params={params}
-				className="text-blue-600 hover:underline"
-			>
+			<Link to={to} params={params} className="text-blue-600 hover:underline">
 				{children}
 			</Link>
 		</div>

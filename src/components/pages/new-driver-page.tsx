@@ -1,11 +1,11 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import { FormField } from "../form";
 
 interface FormValues extends Record<string, unknown> {
 	userId: string;
@@ -47,7 +47,11 @@ export function NewDriverPage() {
 			backTo="/dashboard/drivers"
 			submitLabel="Create driver"
 		>
-			<FormField label="User ID *" hint="Better Auth user ID of the driver" htmlFor="userId">
+			<FormField
+				label="User ID *"
+				hint="Better Auth user ID of the driver"
+				htmlFor="userId"
+			>
 				<Input
 					id="userId"
 					required
@@ -58,7 +62,11 @@ export function NewDriverPage() {
 				/>
 			</FormField>
 
-			<FormField label="License info *" hint="License number, class, expiration" htmlFor="license">
+			<FormField
+				label="License info *"
+				hint="License number, class, expiration"
+				htmlFor="license"
+			>
 				<Input
 					id="license"
 					required

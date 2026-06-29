@@ -1,13 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -25,9 +25,11 @@ interface Template {
 }
 
 function TemplatesPage() {
-	const { data: templates, isPending, error } = useQuery(
-		convexQuery(api.tourTemplates.list, {}),
-	);
+	const {
+		data: templates,
+		isPending,
+		error,
+	} = useQuery(convexQuery(api.tourTemplates.list, {}));
 	const updateTemplate = useMutation(api.tourTemplates.update);
 	const removeTemplate = useMutation(api.tourTemplates.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);
@@ -86,12 +88,18 @@ function TemplatesPage() {
 			render: (t) => t.tourType,
 			searchValue: (t) => t.tourType,
 		},
-		{ key: "duration", header: "Duration", render: (t) => `${t.durationHours}h` },
+		{
+			key: "duration",
+			header: "Duration",
+			render: (t) => `${t.durationHours}h`,
+		},
 		{ key: "capacity", header: "Capacity", render: (t) => t.capacity },
 		{
 			key: "active",
 			header: "Status",
-			render: (t) => <StatusBadge status={t.isActive ? "active" : "inactive"} />,
+			render: (t) => (
+				<StatusBadge status={t.isActive ? "active" : "inactive"} />
+			),
 			searchValue: (t) => (t.isActive ? "active" : "inactive"),
 		},
 		{

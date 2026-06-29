@@ -1,13 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -59,8 +59,14 @@ const bookingColumns: DataTableColumn<Record<string, unknown>>[] = [
 
 function CustomerDetailPage() {
 	const { customerId } = Route.useParams();
-	const { data: customer, isPending, error } = useQuery(
-		convexQuery(api.customers.get, { customerId: customerId as Id<"customers"> }),
+	const {
+		data: customer,
+		isPending,
+		error,
+	} = useQuery(
+		convexQuery(api.customers.get, {
+			customerId: customerId as Id<"customers">,
+		}),
 	);
 	const { data: history } = useQuery(
 		convexQuery(api.customers.history, {
@@ -125,7 +131,10 @@ function CustomerDetailPage() {
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard label="Total visits" value={c.totalVisits.toString()} />
-				<MetricCard label="Total revenue" value={`$${(Number(c.totalRevenueCents) / 100).toFixed(2)}`} />
+				<MetricCard
+					label="Total revenue"
+					value={`$${(Number(c.totalRevenueCents) / 100).toFixed(2)}`}
+				/>
 				<MetricCard label="Loyalty points" value={c.loyaltyPoints.toString()} />
 				<MetricCard label="Source" value={c.source} />
 			</div>
@@ -140,13 +149,18 @@ function CustomerDetailPage() {
 				<DetailSection title="Tags">
 					<div className="flex flex-wrap gap-2">
 						{c.tags.map((tag) => (
-							<Badge key={tag} variant="secondary">{tag}</Badge>
+							<Badge key={tag} variant="secondary">
+								{tag}
+							</Badge>
 						))}
 					</div>
 				</DetailSection>
 			)}
 
-			<DetailSection title="Booking history" description={`${bookings.length} booking${bookings.length === 1 ? "" : "s"} on file`}>
+			<DetailSection
+				title="Booking history"
+				description={`${bookings.length} booking${bookings.length === 1 ? "" : "s"} on file`}
+			>
 				<DataTable
 					data={bookings}
 					columns={bookingColumns}

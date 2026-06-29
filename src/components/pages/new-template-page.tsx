@@ -1,8 +1,7 @@
 import { useMutation } from "convex/react";
 import { useState } from "react";
-import { api } from "../../../convex/_generated/api";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
 	Select,
 	SelectContent,
@@ -10,8 +9,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { FormField } from "../form";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { Textarea } from "@/components/ui/textarea";
 import {
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
@@ -19,8 +17,17 @@ import {
 	validatePositiveInteger,
 	validatePositiveNumber,
 } from "@/lib/validation";
+import { api } from "../../../convex/_generated/api";
+import { FormField } from "../form";
 
-const TOUR_TYPES = ["walking", "car", "minivan", "bus", "boat", "other"] as const;
+const TOUR_TYPES = [
+	"walking",
+	"car",
+	"minivan",
+	"bus",
+	"boat",
+	"other",
+] as const;
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -69,7 +76,9 @@ export function NewTemplatePage() {
 			setMinErr(minError);
 			setMaxErr(maxError);
 			if (durError || capError || minError || maxError) {
-				throw new Error(durError ?? capError ?? minError ?? maxError ?? "Invalid input");
+				throw new Error(
+					durError ?? capError ?? minError ?? maxError ?? "Invalid input",
+				);
 			}
 			const minG = Number(v.minGuests);
 			const maxG = Number(v.maxGuests);
@@ -82,7 +91,11 @@ export function NewTemplatePage() {
 			setDescErr(descError);
 			if (descError) throw new Error(descError);
 			const split = (s: string) =>
-				s.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 100);
+				s
+					.split("\n")
+					.map((x) => x.trim())
+					.filter(Boolean)
+					.slice(0, 100);
 			const id = await create({
 				name: v.name.trim(),
 				description: v.description.trim() || undefined,
@@ -116,10 +129,21 @@ export function NewTemplatePage() {
 			submitLabel="Create template"
 		>
 			<FormField label="Name *" htmlFor="name">
-				<Input id="name" required maxLength={MAX_NAME_LEN} value={form.values.name} onChange={(e) => form.set("name", e.target.value)} placeholder="City Highlights" />
+				<Input
+					id="name"
+					required
+					maxLength={MAX_NAME_LEN}
+					value={form.values.name}
+					onChange={(e) => form.set("name", e.target.value)}
+					placeholder="City Highlights"
+				/>
 			</FormField>
 
-			<FormField label="Description" htmlFor="desc" error={descErr ?? undefined}>
+			<FormField
+				label="Description"
+				htmlFor="desc"
+				error={descErr ?? undefined}
+			>
 				<Textarea
 					id="desc"
 					value={form.values.description}
@@ -135,14 +159,27 @@ export function NewTemplatePage() {
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="Type" htmlFor="type">
-					<Select value={form.values.tourType} onValueChange={(v) => form.set("tourType", v)}>
-						<SelectTrigger id="type"><SelectValue /></SelectTrigger>
+					<Select
+						value={form.values.tourType}
+						onValueChange={(v) => form.set("tourType", v)}
+					>
+						<SelectTrigger id="type">
+							<SelectValue />
+						</SelectTrigger>
 						<SelectContent>
-							{TOUR_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+							{TOUR_TYPES.map((t) => (
+								<SelectItem key={t} value={t}>
+									{t}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 				</FormField>
-				<FormField label="Duration (hours) *" htmlFor="dur" error={durErr ?? undefined}>
+				<FormField
+					label="Duration (hours) *"
+					htmlFor="dur"
+					error={durErr ?? undefined}
+				>
 					<Input
 						id="dur"
 						type="number"
@@ -199,19 +236,58 @@ export function NewTemplatePage() {
 			</div>
 
 			<FormField label="Languages" hint="Comma-separated codes" htmlFor="langs">
-				<Input id="langs" maxLength={200} value={form.values.languages} onChange={(e) => form.set("languages", e.target.value)} placeholder="en, es, fr" />
+				<Input
+					id="langs"
+					maxLength={200}
+					value={form.values.languages}
+					onChange={(e) => form.set("languages", e.target.value)}
+					placeholder="en, es, fr"
+				/>
 			</FormField>
 
-			<FormField label="Inclusions" hint="One per line (max 100)" htmlFor="incl">
-				<Textarea id="incl" maxLength={5000} value={form.values.inclusions} onChange={(e) => form.set("inclusions", e.target.value)} rows={3} placeholder={"Lunch\nGuide"} />
+			<FormField
+				label="Inclusions"
+				hint="One per line (max 100)"
+				htmlFor="incl"
+			>
+				<Textarea
+					id="incl"
+					maxLength={5000}
+					value={form.values.inclusions}
+					onChange={(e) => form.set("inclusions", e.target.value)}
+					rows={3}
+					placeholder={"Lunch\nGuide"}
+				/>
 			</FormField>
 
-			<FormField label="Exclusions" hint="One per line (max 100)" htmlFor="excl">
-				<Textarea id="excl" maxLength={5000} value={form.values.exclusions} onChange={(e) => form.set("exclusions", e.target.value)} rows={3} placeholder={"Flights\nVisa"} />
+			<FormField
+				label="Exclusions"
+				hint="One per line (max 100)"
+				htmlFor="excl"
+			>
+				<Textarea
+					id="excl"
+					maxLength={5000}
+					value={form.values.exclusions}
+					onChange={(e) => form.set("exclusions", e.target.value)}
+					rows={3}
+					placeholder={"Flights\nVisa"}
+				/>
 			</FormField>
 
-			<FormField label="Highlights" hint="One per line (max 100)" htmlFor="high">
-				<Textarea id="high" maxLength={5000} value={form.values.highlights} onChange={(e) => form.set("highlights", e.target.value)} rows={3} placeholder={"Old Town\nRiver cruise"} />
+			<FormField
+				label="Highlights"
+				hint="One per line (max 100)"
+				htmlFor="high"
+			>
+				<Textarea
+					id="high"
+					maxLength={5000}
+					value={form.values.highlights}
+					onChange={(e) => form.set("highlights", e.target.value)}
+					rows={3}
+					placeholder={"Old Town\nRiver cruise"}
+				/>
 			</FormField>
 		</EntityFormPage>
 	);

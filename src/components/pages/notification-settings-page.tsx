@@ -1,9 +1,11 @@
 import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -11,11 +13,9 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../form";
 
@@ -146,13 +146,14 @@ export function NotificationSettingsPage() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
-						<label className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="email-enabled"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
 								id="email-enabled"
 								checked={emailEnabled}
-								onCheckedChange={(checked) =>
-									setEmailEnabled(checked === true)
-								}
+								onCheckedChange={(checked) => setEmailEnabled(checked === true)}
 							/>
 							Email channel enabled
 						</label>
@@ -181,12 +182,13 @@ export function NotificationSettingsPage() {
 				<Card>
 					<CardHeader>
 						<CardTitle>SMS (Twilio)</CardTitle>
-						<CardDescription>
-							Outbound SMS via Twilio
-						</CardDescription>
+						<CardDescription>Outbound SMS via Twilio</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
-						<label className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="twilio-enabled"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
 								id="twilio-enabled"
 								checked={twilioEnabled}
@@ -225,9 +227,7 @@ export function NotificationSettingsPage() {
 									onChange={(e) => setTwilioAuthToken(e.target.value)}
 									placeholder={settings ? "•••••••" : "Enter token"}
 								/>
-								{settings && (
-									<Badge variant="secondary">Token set</Badge>
-								)}
+								{settings && <Badge variant="secondary">Token set</Badge>}
 							</div>
 						</FormField>
 						<FormField
@@ -248,12 +248,13 @@ export function NotificationSettingsPage() {
 				<Card>
 					<CardHeader>
 						<CardTitle>WhatsApp</CardTitle>
-						<CardDescription>
-							WhatsApp Business API (optional)
-						</CardDescription>
+						<CardDescription>WhatsApp Business API (optional)</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
-						<label className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="whatsapp-enabled"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
 								id="whatsapp-enabled"
 								checked={whatsappEnabled}
