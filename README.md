@@ -12,6 +12,7 @@ Tour operator SaaS — TanStack Start + Convex + Better Auth + Stripe + SES.
 - **Migration plan:** [`newProjectsPlanner/migrations/2026-06-deployment-and-convergence.md`](../../newProjectsPlanner/migrations/2026-06-deployment-and-convergence.md)
 - **Deploy guide:** [DEPLOYMENT.md](./DEPLOYMENT.md)
 - **Edge-runtime notes:** [docs/EDGE-RUNTIME.md](./docs/EDGE-RUNTIME.md) (why we use custom SigV4 + raw fetch for AWS/Stripe)
+- **Data layer status:** [docs/DATA_LAYER_STATUS.md](./docs/DATA_LAYER_STATUS.md) (which backend modules are FE-wired vs. data-layer only)
 
 ## Stack (standard, per CONVENTIONS.md)
 
@@ -132,7 +133,12 @@ biome.json                       # Lint + format
 - **Notifications** — Templates (10 types), settings (Twilio/SES/WhatsApp), scheduled reminders (24h/2h), immediate booking confirmations
 - **OTA** — 7 providers with webhook normalization, HMAC + timestamp verification, idempotent upserts
 - **Payments** — Stripe PaymentIntent flow + webhook + settings UI
-- **Files** — Convex storage + metadata table for tour images
+- **Files** — Convex storage + metadata table for tour images (data layer ready, no UI yet — see [docs/DATA_LAYER_STATUS.md](./docs/DATA_LAYER_STATUS.md))
+- **Tour images** — Per-tour image gallery (data layer ready, no UI yet)
+- **Tour analytics** — Aggregated tour stats table for 90d+ trend reports
+- **Tour exception dates** — Per-tour date overrides (closure calendar)
+- **Tour seasonal schedules** — Recurring weekly schedule generator
+- **Blackout dates** — Per-tour closure windows (public query `isBlackout` available)
 
 ## Security
 
