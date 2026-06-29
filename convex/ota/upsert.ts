@@ -8,7 +8,7 @@
 //   - one place to enforce the unique constraint (integrationId +
 //     otaReservationId per source)
 
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { internalMutation } from "../_generated/server";
 
 /**
@@ -43,6 +43,21 @@ export const upsertOtaBooking = internalMutation({
 	handler: async (ctx, args) => {
 		const now = Date.now();
 		const { event, integrationId, organizationId, rawData } = args;
+
+		// SECURITY: the caller's organizationId is the canonical
+		// source of truth (it came from the resolved integration in
+		// the webhook handler). Verify the integration actually
+		// belongs to this org before writing a row — otherwise a
+		// forged orgId from any internal caller could cross-tenant.
+		const integration = await ctx.db.get(integrationId);
+		if (!integration) {
+			throw new ConvexError("OTA integration not found");
+		}
+		if (integration.organizationId !== organizationId) {
+			throw new ConvexError(
+				"organizationId does not match OTA integration",
+			);
+		}
 
 		// Find the matching OTA product. If we can't link the reservation
 		// to one of our products, we still store the booking as

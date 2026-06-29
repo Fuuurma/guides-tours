@@ -35,7 +35,16 @@ type DispatchContext = {
 		// Only required for the immediate dispatch audit log.
 		organizationId?: string;
 	};
-	customer: { name: string; email?: string; phone?: string };
+	customer: {
+		name: string;
+		email?: string;
+		phone?: string;
+		// Consent flags from customers.*Consent. Respected before
+		// choosing channel — a customer with emailConsent=false and
+		// smsConsent=false should never receive a notification.
+		emailConsent?: boolean;
+		smsConsent?: boolean;
+	};
 };
 
 /**
@@ -71,9 +80,17 @@ async function renderAndDispatch(
 	const subject = humanSubject(template.templateType);
 	const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
 
-	const channel: DispatchChannel = customer.email
+	// Channel selection respects the customer's consent flags:
+	//   - If we have an email AND the customer consented to email, use email.
+	//   - Else if we have a phone AND the customer consented to SMS, use SMS.
+	//   - Else skip (don't send to an un-consented channel).
+	// This avoids the GDPR/GDPR-like issue where a customer who opted
+	// out of email still gets email because their email field is set.
+	const canEmail = !!customer.email && customer.emailConsent !== false;
+	const canSms = !!customer.phone && customer.smsConsent === true;
+	const channel: DispatchChannel = canEmail
 		? "email"
-		: customer.phone
+		: canSms
 			? "sms"
 			: "none";
 	const to = customer.email || customer.phone || "";
@@ -91,13 +108,19 @@ async function renderAndDispatch(
 			rendered: { to, subject, bodyText, bodyHtml },
 		};
 	} else {
+		// Distinguish "no contact info" from "no consent" so admins can
+		// tell why a notification didn't go out.
+		const noContact = !customer.email && !customer.phone;
+		const reason = noContact
+			? "no email or phone on file"
+			: "customer has not consented to email or SMS";
 		console.warn(
-			`[dispatch] ${template.templateType} has no email or phone for customer ${customer.name}`,
+			`[dispatch] ${template.templateType} skipped for ${customer.name}: ${reason}`,
 		);
 		result = {
 			channel: "none",
 			status: "skipped",
-			error: "no email or phone on file",
+			error: reason,
 			rendered: { to, subject, bodyText, bodyHtml },
 		};
 	}

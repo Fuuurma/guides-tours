@@ -80,6 +80,8 @@ export const getScheduledForDispatch = internalQuery({
 				name: customer.name,
 				email: customer.email,
 				phone: customer.phone,
+				emailConsent: customer.emailConsent,
+				smsConsent: customer.smsConsent,
 			},
 		};
 	},
@@ -263,6 +265,8 @@ export const getBookingForImmediateDispatch = internalQuery({
 				name: customer.name,
 				email: customer.email,
 				phone: customer.phone,
+				emailConsent: customer.emailConsent,
+				smsConsent: customer.smsConsent,
 			},
 		};
 	},
