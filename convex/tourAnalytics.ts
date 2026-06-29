@@ -28,21 +28,38 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
-		let q = ctx.db
-			.query("tourAnalytics")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
+		let all;
 		if (args.tourId) {
 			// SECURITY: scope to org even when filtering by tourId.
 			// tourId is globally unique in Convex so cross-org rows
 			// can't actually share an ID, but the explicit filter
 			// documents the tenant isolation and keeps the pattern
 			// consistent with other modules.
-			q = ctx.db
+			all = await ctx.db
 				.query("tourAnalytics")
 				.withIndex("by_tour_period", (q) => q.eq("tourId", args.tourId!))
-				.filter((q) => q.eq(q.field("organizationId"), orgId));
+				.filter((q) => q.eq(q.field("organizationId"), orgId))
+				.collect();
+		} else if (args.periodType) {
+			// by_org_period leads with (org, periodDate, periodType).
+			// Apply the date range at the index level, then filter
+			// periodType in JS since it's the trailing field.
+			all = await ctx.db
+				.query("tourAnalytics")
+				.withIndex("by_org_period", (q) => {
+					const eq = q
+						.eq("organizationId", orgId)
+						.gte("periodDate", args.dateFrom ?? "")
+						.lte("periodDate", args.dateTo ?? "\uffff");
+					return eq;
+				})
+				.collect();
+		} else {
+			all = await ctx.db
+				.query("tourAnalytics")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.collect();
 		}
-		const all = await q.collect();
 		return all
 			.filter((r) => {
 				if (args.periodType && r.periodType !== args.periodType) return false;

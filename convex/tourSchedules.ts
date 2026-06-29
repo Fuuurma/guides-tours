@@ -29,19 +29,41 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
-		let q = ctx.db
-			.query("tourSchedules")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
+		let all;
 		if (args.tourId) {
 			// SECURITY: scope to org even when filtering by tourId.
-			q = ctx.db
+			all = await ctx.db
 				.query("tourSchedules")
 				.withIndex("by_tour_date", (q) =>
 					q.eq("tourId", args.tourId!),
 				)
-				.filter((q) => q.eq(q.field("organizationId"), orgId));
+				.filter((q) => q.eq(q.field("organizationId"), orgId))
+				.collect();
+		} else if (args.status) {
+			all = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_org_status_date", (q) =>
+					q
+						.eq("organizationId", orgId)
+						.eq("status", args.status as "available" | "full" | "cancelled"),
+				)
+				.collect();
+		} else {
+			// Apply optional date range at the index level so we don't
+			// fetch every org schedule.
+			all = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_org_date", (q) => {
+					const eq = q.eq("organizationId", orgId);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
+				.collect();
 		}
-		const all = await q.collect();
 		return all
 			.filter((s) => {
 				if (args.dateFrom && s.date < args.dateFrom) return false;
