@@ -89,12 +89,40 @@ export const list = query({
 		const sortOrder = args.sortOrder ?? "desc";
 		const order = sortOrder === "asc" ? "asc" : "desc";
 
-		const all = await ctx.db
-			.query("bookings")
-			.withIndex("by_org_date", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.collect();
+		// Pick the right index based on which filter is present.
+		// by_org_source_date leads with (org, source) — optimal for the
+		// OTA source chip ("show only Viator bookings") that scans every
+		// org booking when using by_org_date.
+		// by_org_date leads with (org, date) — optimal for date ranges.
+		// by_org leads with (org) — fallback when no specific filter.
+		const all = await (args.source
+			? ctx.db
+					.query("bookings")
+					.withIndex("by_org_source_date", (q) =>
+						q
+							.eq("organizationId", member.organizationId)
+							.eq("source", args.source!),
+					)
+					.collect()
+			: args.dateFrom || args.dateTo
+				? ctx.db
+						.query("bookings")
+						.withIndex("by_org_date", (q) => {
+							const eq = q.eq(
+								"organizationId",
+								member.organizationId,
+							);
+							if (args.dateFrom) return eq.gte("date", args.dateFrom);
+							if (args.dateTo) return eq.lte("date", args.dateTo);
+							return eq;
+						})
+						.collect()
+				: ctx.db
+						.query("bookings")
+						.withIndex("by_org", (q) =>
+							q.eq("organizationId", member.organizationId),
+						)
+						.collect());
 
 		let filtered = all;
 		if (args.status) {

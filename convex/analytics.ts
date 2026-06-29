@@ -57,14 +57,18 @@ async function buildOverview(
 		.collect();
 	const activeTours = tours.filter((t: any) => !t.deletedAt);
 
+	// Use by_org_date with gte/lte to range-scan within the org —
+	// avoids fetching every org assignment and filtering in JS.
 	const allAssignments = await ctx.db
 		.query("assignments")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+		.withIndex("by_org_date", (q: any) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
 		.collect();
-	const inRange = allAssignments.filter(
-		(a: any) =>
-			a.date >= startDate && a.date <= endDate && !a.deletedAt,
-	);
+	const inRange = allAssignments.filter((a: any) => !a.deletedAt);
 	const completed = inRange.filter(
 		(a: any) => a.status === "completed",
 	).length;
@@ -136,13 +140,15 @@ async function buildTourStats(
 
 	const assignments = await ctx.db
 		.query("assignments")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+		.withIndex("by_org_date", (q: any) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
 		.collect();
 
-	const inRange = assignments.filter(
-		(a: any) =>
-			a.date >= startDate && a.date <= endDate && !a.deletedAt,
-	);
+	const inRange = assignments.filter((a: any) => !a.deletedAt);
 
 	return tours
 		.filter((t: any) => !t.deletedAt)
@@ -174,13 +180,15 @@ async function buildGuideStats(
 ) {
 	const assignments = await ctx.db
 		.query("assignments")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+		.withIndex("by_org_date", (q: any) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
 		.collect();
 
-	const inRange = assignments.filter(
-		(a: any) =>
-			a.date >= startDate && a.date <= endDate && !a.deletedAt,
-	);
+	const inRange = assignments.filter((a: any) => !a.deletedAt);
 
 	const guideMap = new Map<
 		string,
@@ -215,13 +223,15 @@ async function buildDailyStats(
 ) {
 	const assignments = await ctx.db
 		.query("assignments")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+		.withIndex("by_org_date", (q: any) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
 		.collect();
 
-	const inRange = assignments.filter(
-		(a: any) =>
-			a.date >= startDate && a.date <= endDate && !a.deletedAt,
-	);
+	const inRange = assignments.filter((a: any) => !a.deletedAt);
 
 	const dayMap = new Map<
 		string,
@@ -253,14 +263,20 @@ async function buildRevenueSummary(
 	startDate: string,
 	endDate: string,
 ) {
-	const bookings = await ctx.db
+	// Range-scan within the org + date window to avoid a full-table
+	// collect. by_org_date is leading (orgId, date) so gte/lte work.
+	const allBookingsInRange = await ctx.db
 		.query("bookings")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+		.withIndex("by_org_date", (q: any) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
 		.collect();
 
-	const inRange = bookings.filter(
-		(b: any) =>
-			b.date >= startDate && b.date <= endDate && b.status !== "cancelled",
+	const inRange = allBookingsInRange.filter(
+		(b: any) => b.status !== "cancelled",
 	);
 
 	const totalBookings = inRange.length;
@@ -269,11 +285,10 @@ async function buildRevenueSummary(
 		(sum: number, b: any) => sum + Number(b.totalAmountCents),
 		0,
 	);
-	// Note: inRange already excludes cancelled, so `cancelled` is
-	// always 0. Query separately for accurate cancellationRate.
-	const cancelled = bookings.filter(
-		(b: any) =>
-			b.date >= startDate && b.date <= endDate && b.status === "cancelled",
+	// `cancelled` requires a second pass — the inRange filter above
+	// already dropped them.
+	const cancelled = allBookingsInRange.filter(
+		(b: any) => b.status === "cancelled",
 	).length;
 	const cancellationRate =
 		totalBookings + cancelled > 0
@@ -308,13 +323,15 @@ async function buildTopTours(
 
 	const bookings = await ctx.db
 		.query("bookings")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+		.withIndex("by_org_date", (q: any) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
 		.collect();
 
-	const inRange = bookings.filter(
-		(b: any) =>
-			b.date >= startDate && b.date <= endDate && b.status !== "cancelled",
-	);
+	const inRange = bookings.filter((b: any) => b.status !== "cancelled");
 
 	const tourRevenue = new Map<
 		string,
@@ -349,12 +366,15 @@ async function buildBookingSources(
 ) {
 	const bookings = await ctx.db
 		.query("bookings")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+		.withIndex("by_org_date", (q: any) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
 		.collect();
 
-	const inRange = bookings.filter(
-		(b: any) => b.date >= startDate && b.date <= endDate,
-	);
+	const inRange = bookings;
 
 	const sourceMap = new Map<string, { bookings: number; guests: number }>();
 	for (const b of inRange) {
