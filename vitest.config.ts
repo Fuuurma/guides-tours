@@ -1,6 +1,14 @@
 import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
 
 export default defineConfig({
+	resolve: {
+		// Match tsconfig path aliases so component tests can import via @/...
+		alias: {
+			"@/": `${resolve(__dirname, "src")}/`,
+			"#/": `${resolve(__dirname, "src")}/`,
+		},
+	},
 	test: {
 		// Node environment — needed for the crypto + fs-based tests.
 		// The full app vite.config.ts has the Cloudflare plugin which
@@ -19,5 +27,13 @@ export default defineConfig({
 		env: {
 			SITE_URL: "http://localhost:3000",
 		},
+		// jsdom is needed for any test that uses @testing-library/react.
+		// Component tests opt in via `// @vitest-environment jsdom` at
+		// the top of the file (so convex/ Node-crypto tests stay on the
+		// fast node environment).
+		//
+		// Auto-register the testing-library cleanup hook so component
+		// tests don't leak DOM between tests.
+		setupFiles: ["./src/__tests__/setup.ts"],
 	},
 });
