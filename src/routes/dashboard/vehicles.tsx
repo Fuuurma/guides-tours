@@ -15,6 +15,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import type { Vehicle } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -22,15 +23,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export const Route = createFileRoute("/dashboard/vehicles")({
 	component: VehiclesPage,
 });
-
-interface Vehicle {
-	_id: string;
-	name: string;
-	vehicleType: string;
-	licensePlate: string;
-	capacity: number;
-	status: string;
-}
 
 const STATUS_OPTIONS = [
 	"available",

@@ -10,21 +10,11 @@ import { Input } from "@/components/ui/input";
 import { TourCell } from "@/components/tour-cell";
 import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
+import type { Schedule } from "@/types/entities";
 
 export const Route = createFileRoute("/dashboard/schedules")({
 	component: SchedulesPage,
 });
-
-interface Schedule {
-	_id: string;
-	date: string;
-	startTime: string;
-	endTime: string;
-	capacityBooked: number;
-	capacityTotal: number;
-	status: "available" | "full" | "cancelled";
-	tourId: string;
-}
 
 function SchedulesPage() {
 	const [status, setStatus] = useState<

@@ -11,24 +11,11 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import type { CustomerDetail } from "@/types/entities";
 
 export const Route = createFileRoute("/dashboard/customers/$customerId")({
 	component: CustomerDetailPage,
 });
-
-interface Customer {
-	_id: string;
-	name: string;
-	email: string;
-	phone: string;
-	preferredLanguage: string;
-	source: string;
-	vipStatus: boolean;
-	totalVisits: number;
-	totalRevenueCents: bigint | number;
-	loyaltyPoints: number;
-	tags: string[];
-}
 
 const bookingColumns: DataTableColumn<Record<string, unknown>>[] = [
 	{
@@ -89,7 +76,7 @@ function CustomerDetailPage() {
 		);
 	}
 
-	const c = customer as unknown as Customer;
+	const c = customer as unknown as CustomerDetail;
 	const bookings = (history ?? []) as unknown as Array<{
 		_id: string;
 		tourId: string;

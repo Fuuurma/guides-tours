@@ -4,21 +4,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import type { Tour } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/tours")({
 	component: ToursPage,
 });
-
-interface Tour {
-	_id: string;
-	name: string;
-	tourType: string;
-	durationHours: number;
-	minGuests: number;
-	maxGuests: number;
-	isActive: boolean;
-}
 
 const columns: DataTableColumn<Tour>[] = [
 	{

@@ -10,20 +10,11 @@ import { Input } from "@/components/ui/input";
 import { TourCell } from "@/components/tour-cell";
 import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
+import type { Assignment } from "@/types/entities";
 
 export const Route = createFileRoute("/dashboard/assignments")({
 	component: AssignmentsPage,
 });
-
-interface Assignment {
-	_id: string;
-	date: string;
-	startTime: string;
-	endTime?: string;
-	guideId: string;
-	tourId: string;
-	status: "scheduled" | "completed" | "cancelled";
-}
 
 function AssignmentsPage() {
 	const [status, setStatus] = useState<

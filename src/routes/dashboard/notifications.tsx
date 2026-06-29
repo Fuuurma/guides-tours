@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import type { NotificationTemplate } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -15,17 +16,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export const Route = createFileRoute("/dashboard/notifications")({
 	component: NotificationTemplatesPage,
 });
-
-interface NotificationTemplate {
-	_id: string;
-	name: string;
-	templateType: string;
-	channel: string;
-	emailSubject: string;
-	isActive: boolean;
-	sendTiming: string;
-	retryCount: number;
-}
 
 function NotificationTemplatesPage() {
 	const {

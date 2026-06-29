@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import type { Driver } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -15,13 +16,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export const Route = createFileRoute("/dashboard/drivers")({
 	component: DriversPage,
 });
-
-interface Driver {
-	_id: string;
-	userId: string;
-	licenseInfo: string;
-	isActive: boolean;
-}
 
 function DriversPage() {
 	const {

@@ -14,6 +14,7 @@ import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../../convex/_generated/dataModel";
+import type { BookingDetail } from "@/types/entities";
 
 export const Route = createFileRoute("/dashboard/bookings/$bookingId")({
 	component: BookingDetailPage,
@@ -92,28 +93,7 @@ function BookingDetailPage() {
 		);
 	}
 
-	const b = booking as unknown as {
-		_id: string;
-		date: string;
-		startTime: string;
-		guests: number;
-		status: string;
-		source: string;
-		totalAmountCents: bigint | number;
-		depositAmountCents: bigint | number;
-		balanceDueCents: bigint | number;
-		netRevenueCents: bigint | number;
-		paymentMethod: string;
-		guestNames: string;
-		notes: string;
-		reviewRating: number | null;
-		reviewComment: string;
-		checkedInAt: number | null;
-		checkedInBy: string;
-		completedAt: number | null;
-		tour: { _id: string; name: string } | null;
-		customer: { _id: string; name: string; email: string } | null;
-	};
+	const b = booking as unknown as BookingDetail;
 
 	return (
 		<DetailPage

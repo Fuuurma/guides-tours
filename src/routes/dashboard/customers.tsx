@@ -11,20 +11,11 @@ import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
+import type { Customer } from "@/types/entities";
 
 export const Route = createFileRoute("/dashboard/customers")({
 	component: CustomersPage,
 });
-
-interface Customer {
-	_id: string;
-	name: string;
-	email: string;
-	phone: string;
-	totalVisits: number;
-	vipStatus: boolean;
-	source: string;
-}
 
 function CustomersPage() {
 	const [vipOnly, setVipOnly] = useState<boolean | null>(null);

@@ -12,20 +12,11 @@ import { Input } from "@/components/ui/input";
 import { formatCentsCompact } from "@/lib/format";
 import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
+import type { Booking } from "@/types/entities";
 
 export const Route = createFileRoute("/dashboard/bookings")({
 	component: BookingsPage,
 });
-
-interface Booking {
-	_id: string;
-	date: string;
-	tourId: string;
-	guests: number;
-	totalAmountCents: bigint | number;
-	source: string;
-	status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
-}
 
 const columns: DataTableColumn<Booking>[] = [
 	{

@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import type { TourTemplate as Template } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -15,15 +16,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export const Route = createFileRoute("/dashboard/templates")({
 	component: TemplatesPage,
 });
-
-interface Template {
-	_id: string;
-	name: string;
-	tourType: string;
-	durationHours: number;
-	capacity: number;
-	isActive: boolean;
-}
 
 function TemplatesPage() {
 	const {
