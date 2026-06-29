@@ -27,21 +27,27 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
-		let q = ctx.db
-			.query("availabilities")
-			.withIndex("by_org_user_date", (q) =>
-				q.eq("organizationId", orgId),
-			);
+		let all;
 		if (args.userId) {
 			// SECURITY: scope to org even when filtering by userId.
-			q = ctx.db
+			all = await ctx.db
 				.query("availabilities")
 				.withIndex("by_user_date", (q) =>
 					q.eq("userId", args.userId!),
 				)
-				.filter((q) => q.eq(q.field("organizationId"), orgId));
+				.filter((q) => q.eq(q.field("organizationId"), orgId))
+				.collect();
+		} else {
+			// No userId — fetch by org then filter date in JS.
+			// (by_org_user_date leads with userId so we can't range-scan
+			// by date at the index level without that field.)
+			all = await ctx.db
+				.query("availabilities")
+				.withIndex("by_org_user_date", (q) =>
+					q.eq("organizationId", orgId),
+				)
+				.collect();
 		}
-		const all = await q.collect();
 		return all
 			.filter((a) => {
 				if (args.date && a.date !== args.date) return false;
