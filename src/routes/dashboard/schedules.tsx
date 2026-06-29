@@ -63,7 +63,7 @@ function SchedulesPage() {
 				<Link
 					to="/dashboard/schedules/$scheduleId"
 					params={{ scheduleId: s._id }}
-					className="font-medium text-blue-600 hover:underline"
+					className="font-medium text-link hover:underline"
 				>
 					{s.date}
 				</Link>

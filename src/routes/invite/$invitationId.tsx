@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { getErrorMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/invite/$invitationId")({
 	component: AcceptInvitePage,
@@ -104,7 +105,7 @@ function AcceptInvitePage() {
 			}
 			window.location.assign("/dashboard");
 		} catch (e) {
-			setError(e instanceof Error ? e.message : "Failed to accept invite");
+			setError(getErrorMessage(e));
 			setSubmitting(false);
 		}
 	});

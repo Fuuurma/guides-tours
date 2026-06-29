@@ -17,7 +17,7 @@ export function TourCell({
 		<Link
 			to="/dashboard/tours/$tourId"
 			params={{ tourId: tourId as Id<"tours"> }}
-			className="text-blue-600 hover:underline truncate"
+			className="text-link hover:underline truncate"
 		>
 			{name ?? (
 				<span className="text-muted-foreground italic text-xs">

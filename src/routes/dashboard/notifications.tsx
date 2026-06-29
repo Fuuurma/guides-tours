@@ -78,7 +78,7 @@ function NotificationTemplatesPage() {
 				<Link
 					to="/dashboard/notifications/$templateId"
 					params={{ templateId: t._id }}
-					className="font-medium text-blue-600 hover:underline"
+					className="font-medium text-link hover:underline"
 				>
 					{t.name}
 				</Link>

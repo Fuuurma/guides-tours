@@ -38,7 +38,7 @@ const bookingColumns: DataTableColumn<Record<string, unknown>>[] = [
 			<Link
 				to="/dashboard/bookings/$bookingId"
 				params={{ bookingId: String(b._id) }}
-				className="font-medium text-blue-600 hover:underline"
+				className="font-medium text-link hover:underline"
 			>
 				{String(b.date)}
 			</Link>

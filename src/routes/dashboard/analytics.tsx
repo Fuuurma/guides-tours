@@ -305,7 +305,7 @@ function AnalyticsPage() {
 										<Link
 											to="/dashboard/tours/$tourId"
 											params={{ tourId: t.tourId }}
-											className="text-blue-600 hover:underline truncate"
+											className="text-link hover:underline truncate"
 										>
 											{String(t.tourName ?? "Unknown")}
 										</Link>

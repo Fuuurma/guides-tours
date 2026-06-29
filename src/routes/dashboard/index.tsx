@@ -190,7 +190,7 @@ function DashboardIndex() {
 										<Link
 											to="/dashboard/assignments/$assignmentId"
 											params={{ assignmentId: a._id as Id<"assignments"> }}
-											className="text-blue-600 hover:underline text-xs ml-2"
+											className="text-link hover:underline text-xs ml-2"
 										>
 											View →
 										</Link>
@@ -237,7 +237,7 @@ function DashboardIndex() {
 										<Link
 											to="/dashboard/bookings/$bookingId"
 											params={{ bookingId: b._id as Id<"bookings"> }}
-											className="text-blue-600 hover:underline text-xs ml-2"
+											className="text-link hover:underline text-xs ml-2"
 										>
 											View →
 										</Link>
@@ -249,7 +249,7 @@ function DashboardIndex() {
 									+ {todaysBookings.length - 5} more —{" "}
 									<Link
 										to="/dashboard/bookings"
-										className="text-blue-600 hover:underline"
+										className="text-link hover:underline"
 									>
 										view all bookings
 									</Link>

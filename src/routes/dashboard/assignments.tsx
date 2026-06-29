@@ -62,7 +62,7 @@ function AssignmentsPage() {
 				<Link
 					to="/dashboard/assignments/$assignmentId"
 					params={{ assignmentId: a._id }}
-					className="font-medium text-blue-600 hover:underline"
+					className="font-medium text-link hover:underline"
 				>
 					{a.date}
 				</Link>

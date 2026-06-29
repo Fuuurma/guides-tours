@@ -211,7 +211,7 @@ function BookingDetailPage() {
 							<Link
 								to="/dashboard/tours/$tourId"
 								params={{ tourId: b.tour._id }}
-								className="text-blue-600 hover:underline text-xs"
+								className="text-link hover:underline text-xs"
 							>
 								View tour →
 							</Link>
@@ -229,7 +229,7 @@ function BookingDetailPage() {
 							<Link
 								to="/dashboard/customers/$customerId"
 								params={{ customerId: b.customer._id }}
-								className="text-blue-600 hover:underline text-xs"
+								className="text-link hover:underline text-xs"
 							>
 								View customer →
 							</Link>

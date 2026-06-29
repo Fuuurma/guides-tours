@@ -41,7 +41,7 @@ const columns: DataTableColumn<Booking>[] = [
 			<Link
 				to="/dashboard/bookings/$bookingId"
 				params={{ bookingId: b._id }}
-				className="text-blue-600 hover:underline"
+				className="text-link hover:underline"
 			>
 				{b.date} · {b.guests} guests
 			</Link>

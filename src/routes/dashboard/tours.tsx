@@ -28,7 +28,7 @@ const columns: DataTableColumn<Tour>[] = [
 			<Link
 				to="/dashboard/tours/$tourId"
 				params={{ tourId: t._id }}
-				className="font-medium text-blue-600 hover:underline"
+				className="font-medium text-link hover:underline"
 			>
 				{t.name}
 			</Link>

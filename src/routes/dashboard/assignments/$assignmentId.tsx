@@ -162,7 +162,7 @@ function AssignmentDetailPage() {
 							<Link
 								to="/dashboard/vehicles/$vehicleId"
 								params={{ vehicleId: vehicle._id }}
-								className="text-blue-600 hover:underline"
+								className="text-link hover:underline"
 							>
 								{vehicle.name}
 							</Link>
@@ -178,7 +178,7 @@ function AssignmentDetailPage() {
 							<Link
 								to="/dashboard/drivers/$driverId"
 								params={{ driverId: driver._id }}
-								className="font-mono text-xs text-blue-600 hover:underline"
+								className="font-mono text-xs text-link hover:underline"
 							>
 								{driver.userId}
 							</Link>

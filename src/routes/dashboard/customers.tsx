@@ -82,7 +82,7 @@ function CustomersPage() {
 				<Link
 					to="/dashboard/customers/$customerId"
 					params={{ customerId: c._id }}
-					className="font-medium text-blue-600 hover:underline"
+					className="font-medium text-link hover:underline"
 				>
 					{c.name}
 				</Link>

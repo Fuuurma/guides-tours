@@ -90,7 +90,7 @@ function VehiclesPage() {
 				<Link
 					to="/dashboard/vehicles/$vehicleId"
 					params={{ vehicleId: v._id }}
-					className="font-medium text-blue-600 hover:underline"
+					className="font-medium text-link hover:underline"
 				>
 					{v.name}
 				</Link>

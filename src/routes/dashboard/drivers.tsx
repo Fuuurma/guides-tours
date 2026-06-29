@@ -74,7 +74,7 @@ function DriversPage() {
 				<Link
 					to="/dashboard/drivers/$driverId"
 					params={{ driverId: d._id }}
-					className="font-mono text-xs text-blue-600 hover:underline"
+					className="font-mono text-xs text-link hover:underline"
 				>
 					{d.userId}
 				</Link>

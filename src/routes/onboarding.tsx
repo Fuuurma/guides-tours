@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { getErrorMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({
 	component: OnboardingPage,
@@ -84,9 +85,7 @@ function OnboardingPage() {
 			// pick up the new active org from session.
 			window.location.assign("/dashboard");
 		} catch (e) {
-			setError(
-				e instanceof Error ? e.message : "Failed to create organization",
-			);
+			setError(getErrorMessage(e));
 		}
 	});
 
