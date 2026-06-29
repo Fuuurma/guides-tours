@@ -297,7 +297,15 @@ export const decrementBooked = internalMutation({
 		if (existing.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
-		const newBooked = Math.max(0, existing.capacityBooked - args.guests);
+		// Defense-in-depth: refuse underflow rather than silently
+		// clamping to 0. The "ghost" capacity would otherwise be
+		// lost forever, making the schedule perpetually under-booked.
+		if (args.guests > existing.capacityBooked) {
+			throw new ConvexError(
+				`Cannot decrement by ${args.guests}: only ${existing.capacityBooked} booked`,
+			);
+		}
+		const newBooked = existing.capacityBooked - args.guests;
 		// If the schedule was full, dropping below capacity flips it
 		// back to available.
 		const newStatus =

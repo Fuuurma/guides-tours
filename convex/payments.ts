@@ -269,6 +269,26 @@ export const refund = mutation({
 			status: "refunded",
 			updatedAt: now,
 		});
+		// Write a refunds row so the dashboard's refund history is
+		// consistent across manual + webhook-initiated refunds.
+		// Synthesize a stripeRefundId prefixed with "manual_" — this
+		// distinguishes manual refunds from real Stripe ones and
+		// keeps the (source, eventId) idempotency key unique.
+		await ctx.db.insert("refunds", {
+			organizationId: p.organizationId,
+			paymentId: p._id,
+			stripeRefundId: `manual_${now}_${args.paymentId}`,
+			amountCents: p.amountCents,
+			currency: p.currency,
+			status: "succeeded",
+			reason: args.reason,
+			refundedBy: member.userId,
+			refundedAt: now,
+			processedAt: now,
+			metadata: { source: "dashboard_manual_refund" },
+			createdAt: now,
+			updatedAt: now,
+		});
 		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: member.userId,

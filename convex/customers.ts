@@ -232,6 +232,12 @@ export const create = mutation({
 		// public booking flow already lowercases in http.ts before
 		// calling internalCreate; dashboard create did not.
 		const email = args.email.toLowerCase().trim();
+		// Shape check — same regex as public_booking and the FE
+		// validateEmail helper. Catches obvious typos before they
+		// hit the customers table.
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+			throw new ConvexError("Invalid email address");
+		}
 		// Email uniqueness per org (source: Customer.objects.filter(company=..., email=...).exists())
 		const dup = await ctx.db
 			.query("customers")

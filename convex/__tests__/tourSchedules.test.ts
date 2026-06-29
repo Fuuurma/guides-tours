@@ -172,14 +172,16 @@ describe("tour schedules", () => {
 		s = (await t.run((ctx) => ctx.db.get(id))) as any;
 		expect(s?.capacityBooked).toBe(6);
 		expect(s?.status).toBe("available");
-		// Clamp at 0 (no negative result).
-		await t.mutation(internal.tourSchedules.decrementBooked, {
-			organizationId: orgId,
-			scheduleId: id,
-			guests: 100,
-		});
-		s = (await t.run((ctx) => ctx.db.get(id))) as any;
-		expect(s?.capacityBooked).toBe(0);
+		// Refuse underflow rather than silently clamping to 0 (the
+		// old behavior lost "ghost" capacity forever, so we throw
+		// when guests > capacityBooked).
+		await expect(
+			t.mutation(internal.tourSchedules.decrementBooked, {
+				organizationId: orgId,
+				scheduleId: id,
+				guests: 100,
+			}),
+		).rejects.toThrow(/Cannot decrement by 100: only 6 booked/);
 	});
 
 	it("decrementBooked: rejects cross-org", async () => {
