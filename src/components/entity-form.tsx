@@ -176,23 +176,25 @@ export function EntityFormPage<
 						className="space-y-4"
 					>
 						{children}
-						{form.error && (
-							<div
-								className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
-								role="alert"
-							>
-								<p className="text-destructive text-sm font-medium">
-									{form.error}
-								</p>
+						<div className="flex flex-col gap-3">
+							{form.error && (
+								<div
+									className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
+									role="alert"
+								>
+									<p className="text-destructive text-sm font-medium">
+										{form.error}
+									</p>
+								</div>
+							)}
+							<div className="flex justify-end gap-2">
+								<Button type="button" variant="outline" asChild>
+									<Link to={backTo}>{backLabel}</Link>
+								</Button>
+								<Button type="submit" disabled={form.pending}>
+									{form.pending ? "Saving…" : submitLabel}
+								</Button>
 							</div>
-						)}
-						<div className="flex justify-end gap-2">
-							<Button type="button" variant="outline" asChild>
-								<Link to={backTo}>{backLabel}</Link>
-							</Button>
-							<Button type="submit" disabled={form.pending}>
-								{form.pending ? "Saving…" : submitLabel}
-							</Button>
 						</div>
 					</form>
 				</CardContent>
