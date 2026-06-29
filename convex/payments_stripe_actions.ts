@@ -148,6 +148,9 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	// The event payload includes our metadata so we can do the
 	// org lookup without a URL parameter.
 	let parsed: {
+		// Stripe event id (e.g. "evt_...") — top-level, globally unique
+		// per Stripe. Used for idempotency in webhookDeliveries.
+		id?: string;
 		type?: string;
 		data?: {
 			object?: {
@@ -190,13 +193,38 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		return new Response("invalid signature", { status: 401 });
 	}
 
+	// Idempotency: record the delivery (deduped on Stripe event id)
+	// before processing. Re-deliveries of the same event are skipped.
+	const stripeEventId = parsed.id;
+	if (stripeEventId) {
+		const recorded = await ctx.runMutation(
+			internal.webhookDeliveries.recordDelivery,
+			{
+				organizationId: orgId,
+				source: "stripe",
+				eventId: stripeEventId,
+				eventType: parsed.type ?? "unknown",
+				ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
+				userAgent: request.headers.get("user-agent") ?? undefined,
+				payload: parsed,
+			},
+		);
+		if (recorded.isDuplicate) {
+			console.log(
+				`[stripe-webhook] duplicate event ${stripeEventId} for org ${orgId}`,
+			);
+			return new Response("ok (duplicate)", { status: 200 });
+		}
+	}
+
 	// Dispatch on event type. Source: api_payments.py:279-310.
 	const eventType = parsed.type;
-	if (
-		eventType === "payment_intent.succeeded" ||
-		eventType === "payment_intent.payment_failed" ||
-		eventType === "charge.refunded"
-	) {
+	try {
+		if (
+			eventType === "payment_intent.succeeded" ||
+			eventType === "payment_intent.payment_failed" ||
+			eventType === "charge.refunded"
+		) {
 		const intentId = parsed.data?.object?.id;
 		if (!intentId) {
 			return new Response("missing intent id", { status: 400 });
@@ -258,6 +286,33 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 				refund,
 			});
 		}
+	}
+
+	// Mark the delivery as processed (or failed if a mutation threw).
+	if (stripeEventId) {
+		await ctx.runMutation(
+			internal.webhookDeliveries.updateDeliveryStatus,
+			{
+				source: "stripe",
+				eventId: stripeEventId,
+				status: "processed",
+			},
+		);
+	}
+	} catch (err) {
+		if (stripeEventId) {
+			await ctx.runMutation(
+				internal.webhookDeliveries.updateDeliveryStatus,
+				{
+					source: "stripe",
+					eventId: stripeEventId,
+					status: "failed",
+					errorMessage:
+						err instanceof Error ? err.message : String(err),
+				},
+			);
+		}
+		throw err;
 	}
 
 	return new Response("ok", { status: 200 });
