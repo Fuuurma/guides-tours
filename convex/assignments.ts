@@ -91,21 +91,81 @@ export const list = query({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const all = await ctx.db
-			.query("assignments")
-			.withIndex("by_org_date", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.collect();
+
+		// Pick the most selective index. If a non-status, non-date
+		// filter is set, use the leading-by-that-field index. Otherwise
+		// use by_org_date with optional range scan.
+		let all;
+		if (args.tourId) {
+			all = await ctx.db
+				.query("assignments")
+				.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId!))
+				.collect();
+			all = all.filter((a) => a.organizationId === member.organizationId);
+		} else if (args.guideId) {
+			all = await ctx.db
+				.query("assignments")
+				.withIndex("by_guide_date", (q) =>
+					q.eq("guideId", args.guideId!),
+				)
+				.collect();
+			all = all.filter((a) => a.organizationId === member.organizationId);
+		} else if (args.vehicleId) {
+			all = await ctx.db
+				.query("assignments")
+				.withIndex("by_vehicle_date", (q) =>
+					q.eq("vehicleId", args.vehicleId!),
+				)
+				.collect();
+			all = all.filter((a) => a.organizationId === member.organizationId);
+		} else if (args.driverId) {
+			all = await ctx.db
+				.query("assignments")
+				.withIndex("by_driver_date", (q) =>
+					q.eq("driverId", args.driverId!),
+				)
+				.collect();
+			all = all.filter((a) => a.organizationId === member.organizationId);
+		} else if (args.status) {
+			all = await ctx.db
+				.query("assignments")
+				.withIndex("by_org_status_date", (q) =>
+					q
+						.eq("organizationId", member.organizationId)
+						.eq("status", args.status!),
+				)
+				.collect();
+		} else {
+			// No secondary filter — apply optional date range at the
+			// index level so we don't fetch every org assignment.
+			all = await ctx.db
+				.query("assignments")
+				.withIndex("by_org_date", (q) => {
+					const eq = q.eq("organizationId", member.organizationId);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
+				.collect();
+		}
 		let filtered = all.filter((a) => !a.deletedAt);
-		if (args.dateFrom) filtered = filtered.filter((a) => a.date >= args.dateFrom!);
-		if (args.dateTo) filtered = filtered.filter((a) => a.date <= args.dateTo!);
+		if (args.dateFrom && (args.tourId || args.guideId || args.vehicleId || args.driverId || args.status)) {
+			filtered = filtered.filter((a) => a.date >= args.dateFrom!);
+		}
+		if (args.dateTo && (args.tourId || args.guideId || args.vehicleId || args.driverId || args.status)) {
+			filtered = filtered.filter((a) => a.date <= args.dateTo!);
+		}
+		if (args.status && (args.tourId || args.guideId || args.vehicleId || args.driverId)) {
+			filtered = filtered.filter((a) => a.status === args.status);
+		}
 		if (args.tourId) filtered = filtered.filter((a) => a.tourId === args.tourId);
 		if (args.guideId) filtered = filtered.filter((a) => a.guideId === args.guideId);
 		if (args.vehicleId)
 			filtered = filtered.filter((a) => a.vehicleId === args.vehicleId);
 		if (args.driverId) filtered = filtered.filter((a) => a.driverId === args.driverId);
-		if (args.status) filtered = filtered.filter((a) => a.status === args.status);
 		filtered.sort((a, b) => {
 			if (a.date !== b.date) return a.date < b.date ? -1 : 1;
 			return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
