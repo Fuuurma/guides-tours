@@ -604,6 +604,54 @@ export default defineSchema({
 		])
 		.index("by_integration_period", ["integrationId", "periodDate"]),
 
+	// Webhook delivery log — records every webhook received from any
+	// provider (OTA or Stripe). Used for:
+	//   - Idempotency: skip processing if the same eventId has been
+	//     seen (webhooks retry on failure)
+	//   - Audit: who/when/what for every webhook
+	//   - Replay: re-trigger processing of failed webhooks from
+	//     admin tooling
+	// Both stripeEventId and providerReservationId are unique per
+	// (org, source, event_id) so duplicate deliveries are detectable.
+	webhookDeliveries: defineTable({
+		organizationId: orgId,
+		// "stripe" | "viator" | "getyourguide" | ...
+		source: v.string(),
+		// Provider's unique event id (e.g. Stripe evt_*, OTA reservation id)
+		eventId: v.string(),
+		// Event type: payment_intent.succeeded | charge.refunded |
+		// booking.created | booking.cancelled | etc
+		eventType: v.string(),
+		// received | processing | processed | failed | skipped
+		status: v.union(
+			v.literal("received"),
+			v.literal("processing"),
+			v.literal("processed"),
+			v.literal("failed"),
+			v.literal("skipped"),
+		),
+		// FK to otaIntegrations or null for Stripe (which is org-level)
+		integrationId: v.optional(v.id("otaIntegrations")),
+		// HTTP request metadata for audit
+		ipAddress: v.optional(v.string()),
+		userAgent: v.optional(v.string()),
+		// Full payload (encrypted for sensitive providers)
+		payload: jsonField,
+		// Processing result
+		processedResourceId: v.optional(v.string()),
+		// "skipped: duplicate eventId" | "skipped: cross-org" | etc
+		skipReason: v.optional(v.string()),
+		errorMessage: v.optional(v.string()),
+		// Retry tracking
+		attemptCount: v.number(),
+		receivedAt: v.number(),
+		processedAt: v.optional(v.number()),
+	})
+		.index("by_org", ["organizationId"])
+		.index("by_source_event", ["source", "eventId"])
+		.index("by_org_status", ["organizationId", "status"])
+		.index("by_org_received", ["organizationId", "receivedAt"]),
+
 	// ----- Payments -----
 
 	// Stripe PaymentIntent tracking + raw payment records.
