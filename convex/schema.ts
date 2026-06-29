@@ -440,6 +440,11 @@ export default defineSchema({
 		depositAmountCents: v.int64(),
 		totalAmountCents: v.int64(),
 		balanceDueCents: v.int64(),
+		// Optional: OTA webhooks extract currency from the payload and
+		// store it; direct bookings default to the org's defaultCurrency.
+		// Existing rows from before this field was added are undefined —
+		// display code should fall back to "USD".
+		currency: v.optional(currency),
 		paymentMethod: v.string(),
 		checkedInAt: v.optional(v.number()),
 		checkedInBy: v.string(),
