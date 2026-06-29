@@ -275,7 +275,7 @@ function StatCard({
 	return (
 		<Link
 			to={link}
-			className="block transition-colors hover:bg-gray-50 rounded-md"
+			className="block transition-colors hover:bg-muted rounded-md"
 		>
 			<MetricCard label={label} value={value} />
 		</Link>

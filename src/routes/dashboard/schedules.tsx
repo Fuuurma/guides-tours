@@ -7,9 +7,9 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TourCell } from "@/components/tour-cell";
 import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/schedules")({
 	component: SchedulesPage,
@@ -24,29 +24,6 @@ interface Schedule {
 	capacityTotal: number;
 	status: "available" | "full" | "cancelled";
 	tourId: string;
-}
-
-function TourCell({
-	tourId,
-	tourNameById,
-}: {
-	tourId: string;
-	tourNameById: Map<string, string>;
-}) {
-	const name = tourNameById.get(tourId);
-	return (
-		<Link
-			to="/dashboard/tours/$tourId"
-			params={{ tourId: tourId as Id<"tours"> }}
-			className="text-blue-600 hover:underline truncate"
-		>
-			{name ?? (
-				<span className="text-muted-foreground italic text-xs">
-					Unknown tour
-				</span>
-			)}
-		</Link>
-	);
 }
 
 function SchedulesPage() {

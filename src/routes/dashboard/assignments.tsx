@@ -7,9 +7,9 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TourCell } from "@/components/tour-cell";
 import { defaultDateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/assignments")({
 	component: AssignmentsPage,
@@ -23,29 +23,6 @@ interface Assignment {
 	guideId: string;
 	tourId: string;
 	status: "scheduled" | "completed" | "cancelled";
-}
-
-function TourCell({
-	tourId,
-	tourNameById,
-}: {
-	tourId: string;
-	tourNameById: Map<string, string>;
-}) {
-	const name = tourNameById.get(tourId);
-	return (
-		<Link
-			to="/dashboard/tours/$tourId"
-			params={{ tourId: tourId as Id<"tours"> }}
-			className="text-blue-600 hover:underline"
-		>
-			{name ?? (
-				<span className="text-muted-foreground italic text-xs">
-					Unknown tour
-				</span>
-			)}
-		</Link>
-	);
 }
 
 function AssignmentsPage() {
@@ -146,6 +123,7 @@ function AssignmentsPage() {
 							variant={status === s ? "default" : "outline"}
 							size="sm"
 							onClick={() => setStatus(status === s ? null : s)}
+							aria-pressed={status === s}
 						>
 							{s}
 						</Button>

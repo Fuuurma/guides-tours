@@ -54,9 +54,9 @@ export function NavBar({ orgName, userName, role }: NavBarProps) {
 						<Link
 							key={item.to}
 							to={item.to}
-							className="rounded-md px-3 py-1.5 text-sm hover:bg-gray-100"
+							className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
 							activeOptions={item.exact ? { exact: true } : undefined}
-							activeProps={{ className: "bg-gray-100 font-medium" }}
+							activeProps={{ className: "bg-muted font-medium" }}
 						>
 							{item.label}
 						</Link>

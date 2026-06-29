@@ -12,7 +12,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { DetailSkeleton } from "@/components/ui/skeleton";
+import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { formatCents, formatCentsWhole } from "@/lib/format";
 import { lastNDays, type DateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
@@ -250,7 +250,7 @@ function AnalyticsPage() {
 					<CardDescription>
 						{revenue
 							? `${revenue.totalBookings} bookings · ${revenue.totalGuests} guests`
-							: "Loading…"}
+							: <Skeleton className="h-4 w-1/2 inline-block" />}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
