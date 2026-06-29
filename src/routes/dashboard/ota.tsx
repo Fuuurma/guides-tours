@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { ALL_PROVIDERS } from "@/components/ota-providers";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -30,16 +31,6 @@ import { FormActions, FormField } from "../../components/form";
 export const Route = createFileRoute("/dashboard/ota")({
 	component: OtaIntegrationsPage,
 });
-
-const ALL_PROVIDERS = [
-	{ id: "viator", label: "Viator" },
-	{ id: "getyourguide", label: "GetYourGuide" },
-	{ id: "airbnb", label: "Airbnb" },
-	{ id: "tripadvisor", label: "TripAdvisor" },
-	{ id: "klook", label: "Klook" },
-	{ id: "booking", label: "Booking.com" },
-	{ id: "expedia", label: "Expedia" },
-] as const;
 
 function OtaIntegrationsPage() {
 	const {

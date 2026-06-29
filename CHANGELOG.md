@@ -4,6 +4,18 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Shared OTA providers module + 6 tests (2026-06-29 session 14)
+
+**DRY refactor:**
+
+- The OTA provider list (Viator, GetYourGuide, Airbnb, TripAdvisor, Klook, Booking.com, Expedia) was duplicated in `src/routes/dashboard/ota.tsx` and `src/routes/dashboard/bookings.tsx`. Extracted to a new `src/components/ota-providers.ts` module with `ALL_PROVIDERS` (the list) and `providerLabel(id)` (id→label resolver). The bookings page source filter now uses `providerLabel` to show "Booking.com" instead of "booking" on the filter chip.
+
+**Tests:**
+
+- New `src/__tests__/ota-providers.test.ts` — 6 tests pinning the 7-provider list shape (length, non-empty fields, unique ids, all expected providers present) and the `providerLabel` fallback for unknown ids.
+
+**Stats:** 50 test files, **568 passing tests** (was 49/562, +6 net), tsc clean, lint clean, pnpm build clean.
+
 ### Analytics timezone fix + Skeleton tests + form error UX (2026-06-29 session 13)
 
 **Bug fix (analytics timezone):**

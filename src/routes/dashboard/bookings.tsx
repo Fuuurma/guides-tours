@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
+import { ALL_PROVIDERS, providerLabel } from "@/components/ota-providers";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -113,23 +114,14 @@ function BookingsPage() {
 			<div className="mb-4 space-y-3">
 				<div className="flex flex-wrap items-center gap-2">
 					<span className="text-muted-foreground text-sm">Source:</span>
-					{[
-						"direct",
-						"viator",
-						"getyourguide",
-						"airbnb",
-						"klook",
-						"booking",
-						"expedia",
-						"tripadvisor",
-					].map((s) => (
+					{["direct", ...ALL_PROVIDERS.map((p) => p.id)].map((s) => (
 						<Button
 							key={s}
 							variant={source === s ? "default" : "outline"}
 							size="sm"
 							onClick={() => setSource(source === s ? null : s)}
 						>
-							{s}
+							{s === "direct" ? "Direct" : providerLabel(s)}
 						</Button>
 					))}
 				</div>
