@@ -4,6 +4,34 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Schema audit + UI polish + lint cleanup (2026-06-29 session 12)
+
+**Backend hardening:**
+
+- `vehicles.status` narrowed from `v.string()` to a 4-member union (`"available" | "in_use" | "maintenance" | "retired"`). The narrower type caught a dead `"active"` status check in `convex/assignments.ts:405` that was comparing against a status that never existed — removed.
+- `convex/vehicles.list` query, `convex/vehicles.setStatus`, and `convex/vehicles.internalSetStatus` all updated to use the union.
+- Added `@internal` JSDoc to 12 dead public Convex exports: `payments.refund`, `tourImages.add`, `tourImages.generateUploadUrl`, `tourTemplates.instantiate`, `analytics.getBookingSources`, `files.getUrl`, `files.track`, `notificationSettings.getSecrets`, `assignments.checkConflicts`, `tourBlackoutDates.isBlackout`, `organizations.listMyOrganizations`, `organizations.setActiveOrganization`.
+
+**Docs:**
+
+- New `docs/DATA_LAYER_STATUS.md` — catalogue of FE-wired vs data-layer-only vs dead Convex modules. Updated README to link to it and list the data-layer-only modules (files, tour images, tour analytics, tour exception dates, tour seasonal schedules, blackout dates).
+- Fixed `.env.example` env var names: `AWS_SES_REGION` → `AWS_REGION`, `SES_FROM_EMAIL` → `SES_FROM_ADDRESS`, added missing `SITE_URL` and `PUBLIC_BOOKING_ALLOWED_ORIGINS`, added comment to `ENCRYPTION_KEY` documenting the 32-byte hex requirement.
+
+**UI:**
+
+- New shadcn-style `Skeleton` component (`src/components/ui/skeleton.tsx`).
+- Replaced 19 plain "Loading…" text states across detail pages, edit pages, settings, dashboard layout, and public booking page with animated Skeleton placeholders.
+
+**Lint:**
+
+- 10 `noLabelWithoutControl` a11y warnings fixed (added `htmlFor` + matching `id` on `<label>` + `<Checkbox>` pairs in customer VIP, tour active, notification channel toggles, OTA sandbox, payments toggles, analytics date inputs, booking rating).
+- 7 `useImportType` warnings auto-fixed (type-only React imports).
+- 2 `noArrayIndexKey` warnings fixed (use string content as key in tours/templates detail page list items).
+- 1 `noSvgWithoutTitle` warning fixed (added `aria-label` + `role="img"` to the checkbox checkmark SVG).
+- **0 lint warnings, 0 lint errors remaining.**
+
+**Stats:** 551 tests passing, tsc clean, pnpm build clean (615.78 kB server bundle, 129.92 kB gzipped).
+
 ### Analytics presets + dashboard home widget (2026-06-28 session 11)
 
 **Analytics page (`/dashboard/analytics`):**
