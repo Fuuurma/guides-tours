@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import { FormActions, FormField } from "../../../components/form";
 
 export const Route = createFileRoute("/dashboard/settings/payments")({
@@ -86,8 +87,8 @@ function PaymentSettingsPage() {
 			setStripeWebhookSecret("");
 			toast.success("Payment settings saved");
 		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
+			setError(getErrorMessage(err));
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}

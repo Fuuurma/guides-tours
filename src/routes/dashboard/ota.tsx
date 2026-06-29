@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormActions, FormField } from "../../components/form";
 
@@ -53,7 +54,7 @@ function OtaIntegrationsPage() {
 				currentActive ? "Integration disabled" : "Integration enabled",
 			);
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -71,7 +72,7 @@ function OtaIntegrationsPage() {
 			await removeIntegration({ integrationId: id as Id<"otaIntegrations"> });
 			toast.success("Integration deleted");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -248,8 +249,8 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 			setApiSecret("");
 			setWebhookSecret("");
 		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
+			setError(getErrorMessage(err));
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}

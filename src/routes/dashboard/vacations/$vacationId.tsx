@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/vacations/$vacationId")({
@@ -58,8 +59,8 @@ function VacationDetailPage() {
 			await approve({ requestId: vacation._id });
 			toast.success("Vacation approved");
 		} catch (err) {
-			setErrorMsg((err as Error).message);
-			toast.error((err as Error).message);
+			setErrorMsg(getErrorMessage(err));
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -72,8 +73,8 @@ function VacationDetailPage() {
 			await reject({ requestId: vacation._id });
 			toast.success("Vacation rejected");
 		} catch (err) {
-			setErrorMsg((err as Error).message);
-			toast.error((err as Error).message);
+			setErrorMsg(getErrorMessage(err));
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}

@@ -9,6 +9,7 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/customers")({
@@ -49,7 +50,7 @@ function CustomersPage() {
 			});
 			toast.success(currentVip ? "Removed from VIP" : "Marked as VIP");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -67,7 +68,7 @@ function CustomersPage() {
 			await removeCustomer({ customerId: id as Id<"customers"> });
 			toast.success("Customer deleted");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}

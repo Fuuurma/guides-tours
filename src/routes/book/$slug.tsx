@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { getErrorMessage } from "@/lib/utils";
 import {
 	Card,
 	CardContent,
@@ -15,6 +16,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import {
+	EMAIL_REGEX,
+	MAX_EMAIL_LEN,
+	MAX_NAME_LEN,
+	MAX_NOTES_LEN,
+	MAX_PHONE_LEN,
+} from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/book/$slug")({
@@ -30,16 +38,6 @@ interface PublicTour {
 	currency: string;
 	basePriceCents: bigint | number | undefined;
 }
-
-// RFC 5322-lite — rejects "a@b" but accepts the common formats the
-// dashboard allows. More permissive than a strict parser to avoid
-// rejecting valid edge-case emails (subdomain.tlds, plus tags).
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-const MAX_NAME_LEN = 100;
-const MAX_EMAIL_LEN = 254;
-const MAX_PHONE_LEN = 30;
-const MAX_NOTES_LEN = 1000;
 
 function PublicBookingPage() {
 	const { slug } = Route.useParams();
@@ -182,7 +180,7 @@ function PublicBookingPage() {
 				toast.success("Booking confirmed!");
 			}
 		} catch (err) {
-			const msg = (err as Error).message;
+			const msg = getErrorMessage(err);
 			setSubmitErr(msg);
 			toast.error(msg);
 		} finally {

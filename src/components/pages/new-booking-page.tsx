@@ -17,6 +17,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { getErrorMessage } from "@/lib/utils";
 import {
 	MAX_NOTES_LEN,
 	parseUsdToCents,
@@ -127,7 +128,7 @@ export function NewBookingPage() {
 				params: { bookingId: id },
 			});
 		} catch (err) {
-			setError((err as Error).message);
+			setError(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}

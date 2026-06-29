@@ -5,6 +5,7 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -92,13 +93,14 @@ function ScheduleDetailPage() {
 			backTo="/dashboard/schedules"
 			actions={
 				tour ? (
-					<Link
-						to="/dashboard/tours/$tourId"
-						params={{ tourId: tour._id }}
-						className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-					>
-						View tour
-					</Link>
+					<Button asChild variant="outline">
+						<Link
+							to="/dashboard/tours/$tourId"
+							params={{ tourId: tour._id }}
+						>
+							View tour
+						</Link>
+					</Button>
 				) : undefined
 			}
 		>

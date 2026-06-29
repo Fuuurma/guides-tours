@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormActions, FormField } from "../../components/form";
 
@@ -87,7 +88,7 @@ function CategoriesPage() {
 			});
 			toast.success(currentActive ? "Category disabled" : "Category enabled");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -105,7 +106,7 @@ function CategoriesPage() {
 			await removeCategory({ categoryId: id as Id<"tourCategories"> });
 			toast.success("Category deleted");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -206,8 +207,8 @@ function NewCategoryForm() {
 			setSlug("");
 			setIcon("");
 		} catch (err) {
-			setError((err as Error).message);
-			toast.error((err as Error).message);
+			setError(getErrorMessage(err));
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}

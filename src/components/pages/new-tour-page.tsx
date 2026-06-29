@@ -11,6 +11,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { parseUsdToCents, validatePositiveInteger } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
@@ -58,15 +59,20 @@ export function NewTourPage() {
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const dur = Number(v.durationHours);
-			const cap = Number(v.capacity);
-			const minG = Number(v.minGuests);
-			const maxG = Number(v.maxGuests);
-			if (dur <= 0 || cap <= 0 || minG <= 0 || maxG <= 0) {
-				throw new Error("Numeric fields must be positive");
+			const durError = validatePositiveInteger(v.durationHours, "Duration");
+			if (durError) throw new Error(durError);
+			const capError = validatePositiveInteger(v.capacity, "Capacity");
+			if (capError) throw new Error(capError);
+			const minGError = validatePositiveInteger(v.minGuests, "Min guests");
+			if (minGError) throw new Error(minGError);
+			const maxGError = validatePositiveInteger(v.maxGuests, "Max guests");
+			if (maxGError) throw new Error(maxGError);
+			if (Number(v.minGuests) > Number(v.maxGuests)) {
+				throw new Error("Min guests cannot exceed max guests");
 			}
-			if (minG > maxG) {
-				throw new Error("minGuests cannot exceed maxGuests");
+			const priceCents = parseUsdToCents(v.priceUsd);
+			if (v.priceUsd && priceCents === null) {
+				throw new Error("Invalid price amount");
 			}
 			const id = await create({
 				name: v.name,
@@ -75,14 +81,11 @@ export function NewTourPage() {
 				categoryId: v.categoryId
 					? (v.categoryId as Id<"tourCategories">)
 					: undefined,
-				durationHours: dur,
-				capacity: cap,
-				minGuests: minG,
-				maxGuests: maxG,
-				basePriceCents:
-					v.priceUsd && Number(v.priceUsd) > 0
-						? BigInt(Math.round(Number(v.priceUsd) * 100))
-						: undefined,
+				durationHours: Number(v.durationHours),
+				capacity: Number(v.capacity),
+				minGuests: Number(v.minGuests),
+				maxGuests: Number(v.maxGuests),
+				basePriceCents: priceCents ?? undefined,
 				languages: v.languages
 					.split(",")
 					.map((s) => s.trim())

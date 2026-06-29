@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import type * as React from "react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import {
@@ -106,30 +105,3 @@ export function DetailRow({
 	);
 }
 
-/**
- * A clickable detail row that links to a related entity. Use
- * sparingly — for primary navigations like "Go to tour" on a
- * detail page.
- */
-export interface DetailLinkRowProps {
-	label: string;
-	to: string;
-	params?: Record<string, string>;
-	children: React.ReactNode;
-}
-
-export function DetailLinkRow({
-	label,
-	to,
-	params,
-	children,
-}: DetailLinkRowProps) {
-	return (
-		<div className="flex items-baseline justify-between gap-4">
-			<span className="text-muted-foreground">{label}</span>
-			<Link to={to} params={params} className="text-blue-600 hover:underline">
-				{children}
-			</Link>
-		</div>
-	);
-}

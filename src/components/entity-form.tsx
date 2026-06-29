@@ -3,6 +3,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { getErrorMessage } from "@/lib/utils";
 import {
 	Card,
 	CardContent,
@@ -105,14 +106,14 @@ export function useEntityForm<TValues extends object, TResult>(opts: {
 
 			setPending(true);
 			try {
-				const r = await opts.mutation(values as TValues);
+				const r = await opts.mutation(values);
 				setResult(r);
 				toast.success(opts.successMessage ?? "Saved");
 				void navigate({ to: opts.redirectTo(r) as never });
-			} catch (err) {
-				const message = (err as Error).message;
-				setError(message);
-				toast.error(message);
+		} catch (err) {
+			const message = getErrorMessage(err);
+			setError(message);
+			toast.error(message);
 			} finally {
 				setPending(false);
 			}

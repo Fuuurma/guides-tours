@@ -21,46 +21,6 @@ import type { BadgeProps } from "@/components/ui/badge";
 
 export type StatusVariant = NonNullable<BadgeProps["variant"]>;
 
-// Direct class lookup for cases where a Badge isn't appropriate
-// (e.g. inline in a table cell where a full <Badge> is too heavy).
-export const STATUS_CLASSES: Record<string, string> = {
-	// Booking statuses
-	pending: "bg-yellow-100 text-yellow-800",
-	confirmed: "bg-green-100 text-green-800",
-	checked_in: "bg-blue-100 text-blue-800",
-	completed: "bg-green-100 text-green-800",
-	cancelled: "bg-gray-100 text-gray-800",
-
-	// Schedule statuses
-	available: "bg-green-100 text-green-800",
-	full: "bg-yellow-100 text-yellow-800",
-
-	// Vehicle statuses
-	in_use: "bg-blue-100 text-blue-800",
-	maintenance: "bg-yellow-100 text-yellow-800",
-	retired: "bg-gray-100 text-gray-800",
-
-	// Assignment statuses
-	scheduled: "bg-blue-100 text-blue-800",
-
-	// Vacation statuses
-	approved: "bg-green-100 text-green-800",
-	rejected: "bg-red-100 text-red-800",
-
-	// Notification channel
-	email: "bg-blue-100 text-blue-800",
-	sms: "bg-green-100 text-green-800",
-	both: "bg-purple-100 text-purple-800",
-
-	// Generic active/inactive (tours, drivers, templates)
-	active: "bg-green-100 text-green-800",
-	inactive: "bg-gray-100 text-gray-800",
-
-	// Customer VIP
-	vip: "bg-amber-100 text-amber-800",
-	regular: "bg-gray-100 text-gray-800",
-};
-
 // Variant lookup for StatusBadge (semantic shadcn variants).
 export const STATUS_VARIANTS: Record<string, StatusVariant> = {
 	// Positive / success
@@ -94,14 +54,6 @@ export const STATUS_VARIANTS: Record<string, StatusVariant> = {
 	vip: "outline",
 	regular: "secondary",
 };
-
-/**
- * Map an arbitrary status string to a Tailwind class pair.
- * Falls back to secondary coloring for unknown statuses.
- */
-export function statusClass(status: string): string {
-	return STATUS_CLASSES[status] ?? "bg-secondary text-secondary-foreground";
-}
 
 /**
  * Map an arbitrary status string to a shadcn Badge variant.

@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/assignments/$assignmentId")({
@@ -53,7 +54,7 @@ function AssignmentDetailPage() {
 			await complete({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment marked complete");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -68,7 +69,7 @@ function AssignmentDetailPage() {
 			});
 			toast.success("Assignment cancelled");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -82,7 +83,7 @@ function AssignmentDetailPage() {
 			await remove({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment deleted");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}

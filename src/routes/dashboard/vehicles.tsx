@@ -16,6 +16,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { api } from "../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/vehicles")({
@@ -57,7 +58,7 @@ function VehiclesPage() {
 			});
 			toast.success("Status updated");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -75,7 +76,7 @@ function VehiclesPage() {
 			await removeVehicle({ vehicleId: id as Id<"vehicles"> });
 			toast.success("Vehicle deleted");
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPendingId(null);
 		}

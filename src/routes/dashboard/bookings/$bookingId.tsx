@@ -12,6 +12,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../../convex/_generated/api";
+import { getErrorMessage } from "@/lib/utils";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/bookings/$bookingId")({
@@ -44,7 +45,7 @@ function BookingDetailPage() {
 			await fn();
 			toast.success(msg);
 		} catch (err) {
-			toast.error((err as Error).message);
+			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -343,7 +344,7 @@ function BookingDetailPage() {
 											setShowReviewForm(false);
 											setReviewComment("");
 										} catch (err) {
-											toast.error((err as Error).message);
+											toast.error(getErrorMessage(err));
 										} finally {
 											setPending(false);
 										}
