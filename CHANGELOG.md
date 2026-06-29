@@ -4,6 +4,30 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Analytics timezone fix + Skeleton tests + form error UX (2026-06-29 session 13)
+
+**Bug fix (analytics timezone):**
+
+- `yearToDate()` in `src/routes/dashboard/analytics.tsx` was using `new Date(end.getFullYear(), 0, 1)` (local-time Jan 1) but then converting to ISO date via `toISOString()` (UTC). Users in timezones west of UTC saw "2025-12-31" as their YTD start instead of "2026-01-01". Fixed by using `Date.UTC(end.getUTCFullYear(), 0, 1)` so the boundary is computed in the same timezone as the rest of the date math.
+
+**Analytics preset freshness:**
+
+- The 4 quick-range presets (7d/30d/90d/YTD) were module-level constants computed at JS bundle load time. After the first render, the "7d" preset was frozen at "7 days ago from when the bundle loaded", not "7 days ago from now". Moved to a `buildPresets()` function called on every render — cheap (4-element array) and fixes the staleness.
+
+**UI / UX:**
+
+- Moved form-level error message in `EntityFormPage` to sit just above the submit button (was below the fields). On long forms, the user no longer has to scroll up after clicking submit to see what failed.
+- 5 new `aria-describedby` connections on the public booking page (`date-error`, `guests-error`, `name-error`, `email-error`, `phone-error`, `notes-error`) so screen readers associate the error message with the input that triggered it.
+
+**Tests:**
+
+- New `src/__tests__/skeleton.test.tsx` — 4 tests for the new shadcn-style `Skeleton` component (renders div, default className, className pass-through, attribute forwarding).
+- New `src/__tests__/analytics-presets.test.ts` — 7 tests pinning the date math for `lastNDays` and `yearToDate` to prevent regressions of both bugs above.
+- New `src/__tests__/setup.ts` — vitest setup file that registers the `@testing-library/react` cleanup hook, so component tests don't leak DOM between runs.
+- `vitest.config.ts` — added `@/` and `#/` path aliases (matching tsconfig) so component tests can import via `@/components/...` instead of long relative paths.
+
+**Stats:** 49 test files, **562 passing tests** (was 48/555, +7 net), tsc clean, lint clean, pnpm build clean (615.78 kB).
+
 ### Schema audit + UI polish + lint cleanup (2026-06-29 session 12)
 
 **Backend hardening:**

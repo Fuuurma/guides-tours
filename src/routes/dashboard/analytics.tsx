@@ -39,8 +39,13 @@ function lastNDays(n: number): { startDate: string; endDate: string } {
 }
 
 function yearToDate(): { startDate: string; endDate: string } {
+	// Use UTC throughout so the "Jan 1" boundary is in the same
+	// timezone as the rest of the date math. Otherwise, a user in a
+	// timezone west of UTC would see "2025-12-31" as their YTD start
+	// (because `new Date(2026, 0, 1)` is local-time midnight, which
+	// is the previous day in UTC).
 	const end = new Date();
-	const start = new Date(end.getFullYear(), 0, 1);
+	const start = new Date(Date.UTC(end.getUTCFullYear(), 0, 1));
 	return {
 		startDate: start.toISOString().slice(0, 10),
 		endDate: end.toISOString().slice(0, 10),
@@ -52,18 +57,24 @@ type Preset = {
 	range: { startDate: string; endDate: string };
 };
 
-const PRESETS: Preset[] = [
-	{ label: "7d", range: lastNDays(7) },
-	{ label: "30d", range: defaultRange() },
-	{ label: "90d", range: lastNDays(90) },
-	{ label: "YTD", range: yearToDate() },
-];
+// Presets are computed on every render so the date math always
+// reflects "now" — not when the JS bundle first loaded. With
+// module-level constants, the "7d" preset would be "7 days ago
+// from the first time anyone opened the page today".
+function buildPresets(): Preset[] {
+	return [
+		{ label: "7d", range: lastNDays(7) },
+		{ label: "30d", range: defaultRange() },
+		{ label: "90d", range: lastNDays(90) },
+		{ label: "YTD", range: yearToDate() },
+	];
+}
 
-function isPresetActive(range: {
-	startDate: string;
-	endDate: string;
-}): string | null {
-	for (const p of PRESETS) {
+function isPresetActive(
+	range: { startDate: string; endDate: string },
+	presets: Preset[],
+): string | null {
+	for (const p of presets) {
 		if (
 			p.range.startDate === range.startDate &&
 			p.range.endDate === range.endDate
@@ -81,6 +92,11 @@ function AnalyticsPage() {
 		error: orgError,
 	} = useQuery(convexQuery(api.organizations.activeOrganization, {}));
 	const [range, setRange] = useState(defaultRange);
+	// Recompute on every render so the "7d" preset is always
+	// "7 days ago from now", not "7 days ago from when the JS
+	// bundle first loaded". With a 4-element array this is cheap.
+	const presets = buildPresets();
+	const activePreset = isPresetActive(range, presets);
 
 	const rangeArgs = {
 		startDate: range.startDate,
@@ -174,22 +190,22 @@ function AnalyticsPage() {
 						/>
 					</label>
 					<div className="flex items-end gap-1">
-						{PRESETS.map((p) => {
-							const active = isPresetActive(range) === p.label;
+						{presets.map((p) => {
+							const isActive = activePreset === p.label;
 							return (
 								<Button
 									key={p.label}
-									variant={active ? "default" : "outline"}
+									variant={isActive ? "default" : "outline"}
 									size="sm"
 									onClick={() => setRange(p.range)}
-									aria-pressed={active}
+									aria-pressed={isActive}
 								>
 									{p.label}
 								</Button>
 							);
 						})}
 					</div>
-					{isPresetActive(range) === null && (
+					{activePreset === null && (
 						<Button
 							variant="ghost"
 							size="sm"

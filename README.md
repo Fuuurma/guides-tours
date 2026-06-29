@@ -5,7 +5,7 @@ Tour operator SaaS — TanStack Start + Convex + Better Auth + Stripe + SES.
 ## Status
 
 - **Stage:** ready to deploy
-- **Backend:** 33 Convex tables, 100+ functions, 48 test files, **555 passing tests**
+- **Backend:** 33 Convex tables, 100+ functions, 49 test files, **562 passing tests**
 - **Frontend:** 47 routes, full dashboard + public booking + onboarding + invite flows
 - **Stack migrations:** all done (no remaining source codebases)
 - **Awaiting:** production env vars + `npx convex deploy --prod` + `pnpm wrangler deploy`
@@ -23,7 +23,7 @@ Tour operator SaaS — TanStack Start + Convex + Better Auth + Stripe + SES.
 - **Email:** AWS SES via Web Crypto Signature V4 (works in Cloudflare + Convex default runtime — no `"use node"` directive needed). See `convex/lib/awsSigV4.ts`.
 - **Payments:** Stripe via raw `fetch` (no SDK — same edge-runtime rationale)
 - **Package manager:** pnpm 10.30.2
-- **Testing:** Vitest (555 tests) + Playwright smoke (20+ routes)
+- **Testing:** Vitest (562 tests) + Playwright smoke (20+ routes)
 
 ## First-time setup
 
@@ -50,7 +50,7 @@ pnpm dev                    # frontend on :3000 (separate terminal for backend)
 - `pnpm dev` — Vite dev server (port 3000)
 - `pnpm build` — Production build (Cloudflare Workers target)
 - `pnpm deploy` — Build + `wrangler deploy`
-- `pnpm test` — Vitest run (555 tests)
+- `pnpm test` — Vitest run (562 tests)
 - `pnpm test:e2e` — Playwright smoke (requires `pnpm dev` running)
 - `pnpm lint` — Biome lint
 - `pnpm check` — Biome lint + format check
@@ -72,7 +72,7 @@ convex/                          # Backend (Convex)
 │   ├── rate_limit.ts            # Public booking rate limit (5/email/15min)
 │   ├── time.ts                  # parseBookingTime helper
 │   └── __tests__/helpers.ts     # Shared seed functions
-├── __tests__/                   # 48 test files, 555 tests
+├── __tests__/                   # 49 test files, 562 tests
 ├── notification_dispatch.ts     # Email/SMS dispatch (incl. immediate confirmation)
 ├── bookings.ts                  # CRUD + state machine (pending → confirmed → checked_in → completed/cancelled)
 ├── public_booking.ts            # POST /api/public/book/:slug + slug resolver
