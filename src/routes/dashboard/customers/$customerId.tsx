@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -48,7 +49,7 @@ const bookingColumns: DataTableColumn<Record<string, unknown>>[] = [
 	{
 		key: "amount",
 		header: "Amount",
-		render: (b) => `$${(Number(b.totalAmountCents) / 100).toFixed(2)}`,
+		render: (b) => formatCentsCompact(b.totalAmountCents as number),
 	},
 	{
 		key: "status",
@@ -133,7 +134,7 @@ function CustomerDetailPage() {
 				<MetricCard label="Total visits" value={c.totalVisits.toString()} />
 				<MetricCard
 					label="Total revenue"
-					value={`$${(Number(c.totalRevenueCents) / 100).toFixed(2)}`}
+					value={formatCentsCompact(c.totalRevenueCents)}
 				/>
 				<MetricCard label="Loyalty points" value={c.loyaltyPoints.toString()} />
 				<MetricCard label="Source" value={c.source} />

@@ -4,6 +4,22 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### Shared money formatters + 7 tests (2026-06-29 session 15)
+
+**DRY refactor:**
+
+- Money values are stored as cents (`v.int64()` in Convex → `bigint` in the FE). The pattern `$${(Number(x) / 100).toFixed(2)}` was repeated in 10+ places across the dashboard. Extracted to `src/lib/format.ts` with two helpers:
+  - `formatCents(cents)` — full `Intl.NumberFormat` with thousands grouping (e.g. `$1,234.56`).
+  - `formatCentsCompact(cents)` — plain `$X.XX` for high-volume table cells.
+- Both helpers accept `number | bigint | null | undefined` so the same code works for FE numbers and Convex bigints.
+- Migrated the bookings list, customer detail, and bookings detail to use `formatCentsCompact` (6 call sites).
+
+**Tests:**
+
+- New `src/__tests__/format.test.ts` — 7 tests covering int/bigint/null inputs, thousands grouping, and the `null` → `$0.00` fallback.
+
+**Stats:** 51 test files, **575 passing tests** (was 50/568, +7 net), tsc clean, lint clean, pnpm build clean.
+
 ### Shared OTA providers module + 6 tests (2026-06-29 session 14)
 
 **DRY refactor:**

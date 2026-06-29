@@ -116,5 +116,5 @@ the `e2e/smoke.spec.ts` Playwright suite. The data-layer-only modules
 are covered by their own unit tests — they're working code, they just
 lack a UI consumer.
 
-To run the full suite: `pnpm test` (568 tests) and
+To run the full suite: `pnpm test` (575 tests) and
 `pnpm test:e2e` (Playwright smoke).

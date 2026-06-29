@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -191,19 +192,19 @@ function BookingDetailPage() {
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard
 					label="Total"
-					value={`$${(Number(b.totalAmountCents) / 100).toFixed(2)}`}
+					value={formatCentsCompact(b.totalAmountCents)}
 				/>
 				<MetricCard
 					label="Deposit"
-					value={`$${(Number(b.depositAmountCents) / 100).toFixed(2)}`}
+					value={formatCentsCompact(b.depositAmountCents)}
 				/>
 				<MetricCard
 					label="Balance due"
-					value={`$${(Number(b.balanceDueCents) / 100).toFixed(2)}`}
+					value={formatCentsCompact(b.balanceDueCents)}
 				/>
 				<MetricCard
 					label="Net revenue"
-					value={`$${(Number(b.netRevenueCents) / 100).toFixed(2)}`}
+					value={formatCentsCompact(b.netRevenueCents)}
 				/>
 			</div>
 

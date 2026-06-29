@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/bookings")({
@@ -50,7 +51,7 @@ const columns: DataTableColumn<Booking>[] = [
 	{
 		key: "amount",
 		header: "Amount",
-		render: (b) => `$${(Number(b.totalAmountCents) / 100).toFixed(2)}`,
+		render: (b) => formatCentsCompact(b.totalAmountCents),
 	},
 	{
 		key: "source",
