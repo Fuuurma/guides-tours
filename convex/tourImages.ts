@@ -120,16 +120,18 @@ export const internalAdd = internalMutation({
 		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
 		}
-		// If isPrimary is set, demote any existing primary for this tour
+		// If isPrimary is set, demote any existing primary for this tour.
+		// Use by_tour_primary to fetch only primary images (small set)
+		// instead of all tour images.
 		if (args.isPrimary) {
-			const existing = await ctx.db
+			const existingPrimaries = await ctx.db
 				.query("tourImages")
-				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId))
+				.withIndex("by_tour_primary", (q) =>
+					q.eq("tourId", args.tourId).eq("isPrimary", true),
+				)
 				.collect();
-			for (const img of existing) {
-				if (img.isPrimary) {
-					await ctx.db.patch(img._id, { isPrimary: false, updatedAt: Date.now() });
-				}
+			for (const img of existingPrimaries) {
+				await ctx.db.patch(img._id, { isPrimary: false, updatedAt: Date.now() });
 			}
 		}
 		const now = Date.now();
@@ -195,14 +197,18 @@ export const internalUpdate = internalMutation({
 		if (existing.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
-		// If promoting to primary, demote any existing primary for the same tour
+		// If promoting to primary, demote any existing primary for the
+		// same tour. Use by_tour_primary to fetch only primaries (small
+		// set) instead of all tour images.
 		if (args.isPrimary && !existing.isPrimary) {
 			const others = await ctx.db
 				.query("tourImages")
-				.withIndex("by_tour", (q) => q.eq("tourId", existing.tourId))
+				.withIndex("by_tour_primary", (q) =>
+					q.eq("tourId", existing.tourId).eq("isPrimary", true),
+				)
 				.collect();
 			for (const img of others) {
-				if (img.isPrimary && img._id !== existing._id) {
+				if (img._id !== existing._id) {
 					await ctx.db.patch(img._id, { isPrimary: false, updatedAt: Date.now() });
 				}
 			}
