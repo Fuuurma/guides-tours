@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { centsToInputValue } from "@/lib/format";
 import {
@@ -121,29 +121,15 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			form.set("guestNames", b.guestNames ?? "");
 			form.set("languageRequired", b.languageRequired ?? "");
 			form.set("notes", b.notes ?? "");
-			form.set(
-				"depositUsd",
-				centsToInputValue(b.depositAmountCents),
-			);
-			form.set(
-				"totalUsd",
-				centsToInputValue(b.totalAmountCents),
-			);
+			form.set("depositUsd", centsToInputValue(b.depositAmountCents));
+			form.set("totalUsd", centsToInputValue(b.totalAmountCents));
 			form.set("paymentMethod", b.paymentMethod ?? "");
 			setLoaded(true);
 		}
 	}, [booking, loaded, form]);
 
 	if (booking === undefined) {
-		return (
-			<div className="space-y-4 p-4">
-				<Skeleton className="h-8 w-1/3" />
-				<Skeleton className="h-4 w-1/2" />
-				<Skeleton className="h-32 w-full" />
-				<Skeleton className="h-4 w-full" />
-				<Skeleton className="h-4 w-2/3" />
-			</div>
-		);
+		return <DetailSkeleton />;
 	}
 	if (booking === null) {
 		return <p className="text-muted-foreground">Booking not found.</p>;

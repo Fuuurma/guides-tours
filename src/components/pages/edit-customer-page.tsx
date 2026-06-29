@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
 	MAX_NAME_LEN,
@@ -104,15 +104,7 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 	}, [customer, loaded, form]);
 
 	if (customer === undefined) {
-		return (
-			<div className="space-y-4 p-4">
-				<Skeleton className="h-8 w-1/3" />
-				<Skeleton className="h-4 w-1/2" />
-				<Skeleton className="h-32 w-full" />
-				<Skeleton className="h-4 w-full" />
-				<Skeleton className="h-4 w-2/3" />
-			</div>
-		);
+		return <DetailSkeleton />;
 	}
 	if (customer === null) {
 		return (

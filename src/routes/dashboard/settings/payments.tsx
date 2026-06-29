@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import { FormActions, FormField } from "../../../components/form";
 
@@ -94,15 +94,7 @@ function PaymentSettingsPage() {
 	};
 
 	if (isPending) {
-		return (
-			<div className="space-y-4 p-4">
-				<Skeleton className="h-8 w-1/3" />
-				<Skeleton className="h-4 w-1/2" />
-				<Skeleton className="h-32 w-full" />
-				<Skeleton className="h-4 w-full" />
-				<Skeleton className="h-4 w-2/3" />
-			</div>
-		);
+		return <DetailSkeleton />;
 	}
 
 	return (

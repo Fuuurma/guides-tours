@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { centsToInputValue } from "@/lib/format";
 import {
 	Select,
 	SelectContent,
@@ -14,8 +13,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { centsToInputValue } from "@/lib/format";
 import {
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
@@ -168,25 +168,14 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			form.set("minGuests", String(t.minGuests));
 			form.set("maxGuests", String(t.maxGuests));
 			form.set("isActive", t.isActive);
-			form.set(
-				"priceUsd",
-				centsToInputValue(t.basePriceCents),
-			);
+			form.set("priceUsd", centsToInputValue(t.basePriceCents));
 			form.set("languages", (t.languages ?? ["en"]).join(", "));
 			setLoaded(true);
 		}
 	}, [tour, loaded, form]);
 
 	if (tour === undefined) {
-		return (
-			<div className="space-y-4 p-4">
-				<Skeleton className="h-8 w-1/3" />
-				<Skeleton className="h-4 w-1/2" />
-				<Skeleton className="h-32 w-full" />
-				<Skeleton className="h-4 w-full" />
-				<Skeleton className="h-4 w-2/3" />
-			</div>
-		);
+		return <DetailSkeleton />;
 	}
 	if (tour === null) {
 		return (
