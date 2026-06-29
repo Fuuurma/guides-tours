@@ -1,10 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
-import { Button } from "@/components/ui/button";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -34,14 +33,7 @@ function VehicleDetailPage() {
 		return <p className="text-destructive text-sm">Error: {error.message}</p>;
 	}
 	if (!vehicle) {
-		return (
-			<div className="space-y-4">
-				<p className="text-muted-foreground">Vehicle not found.</p>
-				<Button asChild variant="outline">
-					<Link to="/dashboard/vehicles">← Back to vehicles</Link>
-				</Button>
-			</div>
-		);
+		return <DetailPage title="Vehicle not found" backTo="/dashboard/vehicles" />;
 	}
 
 	return (

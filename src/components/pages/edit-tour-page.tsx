@@ -1,9 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery as useTanstackQuery } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
 import { useQuery as useConvexQuery, useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { DetailPage } from "@/components/detail-page";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -56,7 +56,6 @@ interface EditTourPageProps {
 }
 
 export function EditTourPage({ tourId }: EditTourPageProps) {
-	const navigate = useNavigate();
 	const tour = useConvexQuery(api.tours.get, { tourId: tourId as Id<"tours"> });
 	const update = useMutation(api.tours.update);
 	const { data: categories } = useTanstackQuery(
@@ -178,18 +177,7 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 		return <DetailSkeleton />;
 	}
 	if (tour === null) {
-		return (
-			<div className="space-y-4">
-				<p className="text-muted-foreground">Tour not found.</p>
-				<button
-					type="button"
-					className="text-blue-600 hover:underline"
-					onClick={() => navigate({ to: "/dashboard/tours" })}
-				>
-					← Back to tours
-				</button>
-			</div>
-		);
+		return <DetailPage title="Tour not found" backTo="/dashboard/tours" />;
 	}
 
 	const activeCategories = (categories ?? []).filter(
