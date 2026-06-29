@@ -45,12 +45,15 @@ export const getOrgAndToursBySlug = query({
 		)) as { id?: string; name?: string } | null;
 		if (!org?.id) return null;
 
+		// by_org_active leads with (org, isActive) so inactive tours
+		// are skipped at the index level instead of fetched + filtered.
 		const tours = await ctx.db
 			.query("tours")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", org.id as string),
+			.withIndex("by_org_active", (q) =>
+				q
+					.eq("organizationId", org.id as string)
+					.eq("isActive", true),
 			)
-			.filter((q) => q.eq(q.field("isActive"), true))
 			.collect();
 
 		return {

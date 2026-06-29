@@ -66,16 +66,25 @@ export const list = query({
 		const sortOrder = args.sortOrder ?? "desc";
 		const order = sortOrder === "asc" ? "asc" : "desc";
 
-		// We can't do a single Convex query that conditionally filters by
-		// vipOnly/source; instead, fetch by org index then filter in JS.
-		// For the scale we're targeting (≤10k customers per org), this is
-		// fine. If we hit pagination perf issues, add per-filter indexes.
-		const all = await ctx.db
-			.query("customers")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.collect();
+		// Pick the most selective index when vipOnly is set — the
+		// by_org_vip compound index leads with (org, vipStatus) so the
+		// server can skip non-VIP customers entirely instead of
+		// fetching every customer and filtering in JS.
+		const all = await (args.vipOnly
+			? ctx.db
+					.query("customers")
+					.withIndex("by_org_vip", (q) =>
+						q
+							.eq("organizationId", member.organizationId)
+							.eq("vipStatus", true),
+					)
+					.collect()
+			: ctx.db
+					.query("customers")
+					.withIndex("by_org", (q) =>
+						q.eq("organizationId", member.organizationId),
+					)
+					.collect());
 
 		let filtered = all;
 		if (args.search) {
@@ -87,9 +96,7 @@ export const list = query({
 					c.phone.toLowerCase().includes(q),
 			);
 		}
-		if (args.vipOnly) {
-			filtered = filtered.filter((c) => c.vipStatus);
-		}
+		// vipOnly is handled by the by_org_vip index above.
 		if (args.source) {
 			filtered = filtered.filter((c) => c.source === args.source);
 		}
