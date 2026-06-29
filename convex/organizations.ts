@@ -51,6 +51,12 @@ export const activeOrganization = query({
 /**
  * List organizations the current user belongs to. Powers the
  * OrgSwitcher dropdown.
+ *
+ * @internal
+ * No FE caller as of 2026-06-29. The navbar doesn't have an
+ * OrgSwitcher yet — single-org users only. When multi-org
+ * is fully wired, this will be called by the switcher.
+ * See docs/DATA_LAYER_STATUS.md.
  */
 export const listMyOrganizations = query({
 	args: {},
@@ -78,6 +84,13 @@ export const listMyOrganizations = query({
  * Switch the active organization. Writes to session.activeOrganizationId
  * via Better Auth's setActiveOrganization. The frontend should reload
  * after this to refresh all tenant-scoped data.
+ *
+ * @internal
+ * No FE caller as of 2026-06-29. The FE should call
+ * `auth.api.setActiveOrganization` directly via Better Auth's client
+ * SDK rather than going through a Convex mutation. This export is
+ * kept as a fallback for non-React clients.
+ * See docs/DATA_LAYER_STATUS.md.
  */
 export const setActiveOrganization = mutation({
 	args: { organizationId: v.string() },

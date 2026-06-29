@@ -74,6 +74,11 @@ export const getUrl = query({
 
 // ---- mutations ----
 
+/**
+ * @internal
+ * No FE caller. Internal version (`internalAdd`) is what's wired up.
+ * See docs/DATA_LAYER_STATUS.md.
+ */
 export const add = mutation({
 	args: {
 		tourId: v.id("tours"),
@@ -285,6 +290,12 @@ export const internalRemove = internalMutation({
 	},
 });
 
+/**
+ * @internal
+ * No FE caller. Use `files.generateUploadUrl` for new UI work; this one
+ * is duplicated for the tourImages table specifically. See
+ * docs/DATA_LAYER_STATUS.md.
+ */
 export const generateUploadUrl = mutation({
 	args: {},
 	handler: async (ctx) => {

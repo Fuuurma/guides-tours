@@ -236,6 +236,13 @@ export const markFailed = internalMutation({
 	},
 });
 
+/**
+ * @internal
+ * No FE caller as of 2026-06-29. Stripe webhook handles automatic refunds
+ * via charge.refunded events. Kept as a public mutation so it can be
+ * wired to a "refund" button in the bookings detail page when needed.
+ * See docs/DATA_LAYER_STATUS.md for the current dead-surface list.
+ */
 export const refund = mutation({
 	args: {
 		paymentId: v.id("payments"),

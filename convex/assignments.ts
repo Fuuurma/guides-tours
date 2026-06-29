@@ -134,6 +134,13 @@ export const get = query({
  * every overlapping assignment first, dedupe their tourIds, fetch
  * each unique tour once, then map back. For N conflicts this is
  * O(unique tours) lookups instead of O(N).
+ *
+ * @internal
+ * No FE caller as of 2026-06-29. The `assignments.create` mutation
+ * runs the same `checkConflictsHelper` server-side as a guard, so the
+ * public query is currently used only for ad-hoc debugging. Wired up
+ * to the new-assignment form when live pre-flight validation is added.
+ * See docs/DATA_LAYER_STATUS.md.
  */
 export const checkConflicts = query({
 	args: {

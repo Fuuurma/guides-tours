@@ -55,6 +55,13 @@ export const get = query({
 	},
 });
 
+/**
+ * @internal
+ * No FE caller. `getUrl` is a thin wrapper around `ctx.storage.getUrl`
+ * with auth gating. Not needed yet — server-side rendering of file
+ * URLs works without a public query.
+ * See docs/DATA_LAYER_STATUS.md.
+ */
 export const getUrl = query({
 	args: { storageId: v.id("_storage") },
 	handler: async (ctx, args) => {
@@ -77,6 +84,13 @@ export const getUrl = query({
 
 // ---- mutations ----
 
+/**
+ * @internal
+ * No FE caller. The internal version (`internalTrack`) is used by the
+ * `upload` action chain. The public version was kept for symmetry with
+ * `generateUploadUrl` but no UI calls it yet.
+ * See docs/DATA_LAYER_STATUS.md.
+ */
 export const track = mutation({
 	args: {
 		storageId: v.id("_storage"),

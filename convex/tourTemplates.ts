@@ -226,6 +226,12 @@ export const internalUpdate = internalMutation({
 	},
 });
 
+/**
+ * @internal
+ * No FE caller. Useful for "clone template → new tour" workflow that
+ * the templates list page doesn't have a button for yet.
+ * See docs/DATA_LAYER_STATUS.md.
+ */
 export const instantiate = mutation({
 	args: { templateId: v.id("tourTemplates") },
 	handler: async (ctx, args) => {

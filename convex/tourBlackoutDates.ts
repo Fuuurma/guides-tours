@@ -39,8 +39,15 @@ export const list = query({
 });
 
 // Returns true if any blackout covers the given (tourId, date).
-// Exported as `isBlackout` query for production use; the logic is
-// available as `isBlackoutHelper` for tests (no auth context).
+/**
+ * @internal
+ * No FE caller as of 2026-06-29. The public booking flow calls
+ * `isBlackoutHelper` server-side via `public_booking.internalCreate`
+ * to reject blacked-out dates. The public query is useful for
+ * FE pre-flight validation (grey out blackout dates in the date
+ * picker) but no UI consumes it yet.
+ * See docs/DATA_LAYER_STATUS.md.
+ */
 export const isBlackout = query({
 	args: {
 		tourId: v.id("tours"),

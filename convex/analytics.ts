@@ -449,6 +449,12 @@ export const getTopTours = query({
 	},
 });
 
+/**
+ * @internal
+ * No FE caller. The analytics page derives source counts from the
+ * `getOverview` query instead. The internal mirror is used by tests.
+ * See docs/DATA_LAYER_STATUS.md.
+ */
 export const getBookingSources = query({
 	args: {
 		startDate: v.string(),
