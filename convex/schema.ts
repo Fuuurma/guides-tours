@@ -638,6 +638,46 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"]),
 
+	// Refunds: one row per refund event (full or partial). Distinct from
+	// payments.status="refunded" which only tracks the final state. A
+	// single payment can have multiple refunds (partial refunds).
+	// stripeRefundId is NOT encrypted — needed for Stripe webhook
+	// lookups (similar to stripePaymentIntentId on payments).
+	refunds: defineTable({
+		organizationId: orgId,
+		paymentId: v.id("payments"),
+		// Optional link to the booking for booking-scoped refund reports.
+		bookingId: v.optional(v.id("bookings")),
+		// Refund amount (may be partial — sum across rows ≤ original payment)
+		amountCents: v.int64(),
+		currency,
+		// What Stripe returned as the processor fee portion of this refund.
+		processorFeeRefundedCents: v.optional(v.int64()),
+		stripeRefundId: v.string(),
+		// pending | succeeded | failed | canceled
+		status: v.union(
+			v.literal("pending"),
+			v.literal("succeeded"),
+			v.literal("failed"),
+			v.literal("canceled"),
+		),
+		// customer_request | duplicate | fraudulent | admin_correction | other
+		reason: v.optional(v.string()),
+		refundedBy: v.optional(userId),
+		refundedAt: v.number(),
+		processedAt: v.optional(v.number()),
+		failureReason: v.optional(v.string()),
+		// Free-form metadata (Stripe response, internal notes, etc.)
+		metadata: jsonField,
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_org", ["organizationId"])
+		.index("by_payment", ["paymentId"])
+		.index("by_stripe_refund", ["stripeRefundId"])
+		.index("by_booking", ["bookingId"])
+		.index("by_org_status", ["organizationId", "status"]),
+
 	// ----- Notifications -----
 
 	notificationTemplates: defineTable({
