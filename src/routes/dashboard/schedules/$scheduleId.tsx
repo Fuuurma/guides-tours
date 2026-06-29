@@ -41,19 +41,16 @@ function ScheduleDetailPage() {
 			tourId: schedule?.tourId as Id<"tours">,
 		}),
 	);
-	const { data: bookings } = useQuery(
+	const { data: bookings, error: bookingsError } = useQuery(
 		convexQuery(api.bookings.listBySchedule, {
 			scheduleId: scheduleId as Id<"tourSchedules">,
 		}),
 	);
 
 	if (isPending) {
-		return (
-		<DetailSkeleton />
-		);
+		return <DetailSkeleton />;
 	}
-	if (error)
-		return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={error.message} />;
 	if (!schedule)
 		return (
 			<DetailPage title="Schedule not found" backTo="/dashboard/schedules" />
@@ -64,6 +61,11 @@ function ScheduleDetailPage() {
 		: 0;
 
 	const bookingRows = (bookings ?? []) as ScheduleBooking[];
+	const bookingsErrorNode = bookingsError ? (
+		<p className="text-muted-foreground text-sm">
+			<span className="italic text-muted-foreground">(failed to load)</span>
+		</p>
+	) : null;
 
 	const columns: DataTableColumn<ScheduleBooking>[] = [
 		{
@@ -95,10 +97,7 @@ function ScheduleDetailPage() {
 			actions={
 				tour ? (
 					<Button asChild variant="outline">
-						<Link
-							to="/dashboard/tours/$tourId"
-							params={{ tourId: tour._id }}
-						>
+						<Link to="/dashboard/tours/$tourId" params={{ tourId: tour._id }}>
 							View tour
 						</Link>
 					</Button>
@@ -134,18 +133,19 @@ function ScheduleDetailPage() {
 				title={`Bookings (${bookingRows.length})`}
 				description="Active bookings assigned to this schedule"
 			>
-				{bookingRows.length === 0 ? (
-					<p className="text-muted-foreground text-sm">
-						No bookings yet for this schedule.
-					</p>
-				) : (
-					<DataTable
-						data={bookingRows}
-						columns={columns}
-						rowKey={(b) => b._id}
-						emptyMessage="No bookings yet for this schedule."
-					/>
-				)}
+				{bookingsErrorNode ??
+					(bookingRows.length === 0 ? (
+						<p className="text-muted-foreground text-sm">
+							No bookings yet for this schedule.
+						</p>
+					) : (
+						<DataTable
+							data={bookingRows}
+							columns={columns}
+							rowKey={(b) => b._id}
+							emptyMessage="No bookings yet for this schedule."
+						/>
+					))}
 			</DetailSection>
 
 			{schedule.notes && (

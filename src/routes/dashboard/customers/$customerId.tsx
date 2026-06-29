@@ -57,7 +57,7 @@ function CustomerDetailPage() {
 			customerId: customerId as Id<"customers">,
 		}),
 	);
-	const { data: history } = useQuery(
+	const { data: history, error: historyError } = useQuery(
 		convexQuery(api.customers.history, {
 			customerId: customerId as Id<"customers">,
 		}),
@@ -144,12 +144,16 @@ function CustomerDetailPage() {
 				title="Booking history"
 				description={`${bookings.length} booking${bookings.length === 1 ? "" : "s"} on file`}
 			>
-				<DataTable
-					data={bookings}
-					columns={bookingColumns}
-					rowKey={(b) => String(b._id)}
-					emptyMessage="No bookings yet for this customer."
-				/>
+				{historyError ? (
+					<p className="text-muted-foreground text-sm italic">(failed to load)</p>
+				) : (
+					<DataTable
+						data={bookings}
+						columns={bookingColumns}
+						rowKey={(b) => String(b._id)}
+						emptyMessage="No bookings yet for this customer."
+					/>
+				)}
 			</DetailSection>
 		</DetailPage>
 	);

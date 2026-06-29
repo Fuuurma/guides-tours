@@ -34,12 +34,12 @@ function AssignmentDetailPage() {
 			tourId: assignment?.tourId as Id<"tours">,
 		}),
 	);
-	const { data: vehicle } = useQuery(
+	const { data: vehicle, error: vehicleError } = useQuery(
 		convexQuery(api.vehicles.get, {
 			vehicleId: assignment?.vehicleId as Id<"vehicles">,
 		}),
 	);
-	const { data: driver } = useQuery(
+	const { data: driver, error: driverError } = useQuery(
 		convexQuery(api.drivers.get, {
 			driverId: assignment?.driverId as Id<"drivers">,
 		}),
@@ -167,6 +167,8 @@ function AssignmentDetailPage() {
 							>
 								{vehicle.name}
 							</Link>
+						) : vehicleError ? (
+							<span className="italic text-muted-foreground">(failed to load)</span>
 						) : (
 							<span className="italic text-muted-foreground">Not assigned</span>
 						)
@@ -183,6 +185,8 @@ function AssignmentDetailPage() {
 							>
 								{driver.userId}
 							</Link>
+						) : driverError ? (
+							<span className="italic text-muted-foreground">(failed to load)</span>
 						) : (
 							<span className="italic text-muted-foreground">Not assigned</span>
 						)
