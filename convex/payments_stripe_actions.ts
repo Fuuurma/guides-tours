@@ -147,7 +147,24 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	// Find the paymentSettings row via metadata.organizationId.
 	// The event payload includes our metadata so we can do the
 	// org lookup without a URL parameter.
-	let parsed: { type?: string; data?: { object?: { id?: string; metadata?: { organizationId?: string } } } };
+	let parsed: {
+		type?: string;
+		data?: {
+			object?: {
+				id?: string;
+				metadata?: { organizationId?: string };
+				refunds?: {
+					data?: Array<{
+						id: string;
+						amount: number;
+						currency: string;
+						reason?: string;
+						created?: number;
+					}>;
+				};
+			};
+		};
+	};
 	try {
 		parsed = JSON.parse(rawBody);
 	} catch {
@@ -211,7 +228,35 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 					)?.last_payment_error?.message ?? undefined,
 			});
 		} else if (eventType === "charge.refunded") {
-			await ctx.runMutation(internal.payments.markRefunded, { paymentId });
+			// Pull refund details from the Charge payload so we can write
+			// a refunds row (idempotent — markRefunded dedupes by
+			// stripeRefundId). `refunds.data` is a list of refund objects;
+			// we record the most recent one (last in the array, per
+			// Stripe's API order).
+			const charge = parsed.data?.object;
+			const refundsData = (charge?.refunds?.data ?? []) as Array<{
+				id: string;
+				amount: number;
+				currency: string;
+				reason?: string;
+				created?: number;
+			}>;
+			const lastRefund = refundsData[refundsData.length - 1];
+			const refund = lastRefund
+				? {
+						stripeRefundId: lastRefund.id,
+						amountCents: BigInt(lastRefund.amount),
+						currency: lastRefund.currency.toUpperCase(),
+						reason: lastRefund.reason,
+						processedAt: lastRefund.created
+							? lastRefund.created * 1000
+							: undefined,
+					}
+				: undefined;
+			await ctx.runMutation(internal.payments.markRefunded, {
+				paymentId,
+				refund,
+			});
 		}
 	}
 

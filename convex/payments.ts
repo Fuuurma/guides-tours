@@ -515,13 +515,57 @@ export const recordFromAction = internalMutation({
  *  Idempotent for already-refunded rows. Refuses to mark non-succeeded
  *  rows as refunded — Stripe can re-deliver charge.refunded for a
  *  cancelled/failed PaymentIntent, but we must not claim a refund
- *  for a charge that never landed. */
+ *  for a charge that never landed.
+ *
+ *  Optionally writes a refunds row when refund details are provided
+ *  (from the Stripe webhook payload). */
 export const markRefunded = internalMutation({
-	args: { paymentId: v.id("payments") },
+	args: {
+		paymentId: v.id("payments"),
+		// Optional refund details from the Stripe webhook. When present,
+		// a corresponding row is written to the refunds table.
+		refund: v.optional(
+			v.object({
+				stripeRefundId: v.string(),
+				amountCents: v.int64(),
+				currency: v.string(),
+				reason: v.optional(v.string()),
+				processedAt: v.optional(v.number()),
+			}),
+		),
+	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) throw new ConvexError("Payment not found");
-		if (p.status === "refunded") return args.paymentId;
+		if (p.status === "refunded") {
+			// Idempotent — but if a refund row is missing, backfill it.
+			if (args.refund) {
+				const existing = await ctx.db
+					.query("refunds")
+					.withIndex("by_stripe_refund", (q) =>
+						q.eq("stripeRefundId", args.refund!.stripeRefundId),
+					)
+					.first();
+				if (!existing) {
+					await ctx.db.insert("refunds", {
+						organizationId: p.organizationId,
+						paymentId: p._id,
+						stripeRefundId: args.refund.stripeRefundId,
+						amountCents: args.refund.amountCents,
+						currency: args.refund.currency,
+						status: "succeeded",
+						reason: args.refund.reason,
+						refundedBy: "stripe_webhook",
+						refundedAt: Date.now(),
+						processedAt: args.refund.processedAt ?? Date.now(),
+						metadata: {},
+						createdAt: Date.now(),
+						updatedAt: Date.now(),
+					});
+				}
+			}
+			return args.paymentId;
+		}
 		if (p.status !== "succeeded") {
 			throw new ConvexError(
 				`Cannot mark non-succeeded payment as refunded (was ${p.status})`,
@@ -532,6 +576,24 @@ export const markRefunded = internalMutation({
 			status: "refunded",
 			updatedAt: now,
 		});
+		// Write the refunds row when details are present.
+		if (args.refund) {
+			await ctx.db.insert("refunds", {
+				organizationId: p.organizationId,
+				paymentId: p._id,
+				stripeRefundId: args.refund.stripeRefundId,
+				amountCents: args.refund.amountCents,
+				currency: args.refund.currency,
+				status: "succeeded",
+				reason: args.refund.reason,
+				refundedBy: "stripe_webhook",
+				refundedAt: now,
+				processedAt: args.refund.processedAt ?? now,
+				metadata: {},
+				createdAt: now,
+				updatedAt: now,
+			});
+		}
 		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",
