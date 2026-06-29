@@ -5,6 +5,7 @@ import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -29,7 +30,7 @@ function NotificationTemplateDetailPage() {
 		return <DetailSkeleton />;
 	}
 	if (error)
-		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+		return <ErrorBanner message={error.message} />;
 	if (!template) {
 		return (
 			<DetailPage

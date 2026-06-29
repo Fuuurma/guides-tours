@@ -52,6 +52,7 @@
 		--sidebar-border: oklch(0.929 0.013 255.508);
 		--sidebar-ring: oklch(0.704 0.04 256.788);
 		--link: oklch(0.546 0.215 262.881);
+		--star: oklch(0.795 0.184 86.047);
 	}
 
 	.dark {
@@ -88,6 +89,7 @@
 		--sidebar-border: oklch(1 0 0 / 10%);
 		--sidebar-ring: oklch(0.551 0.027 264.364);
 		--link: oklch(0.707 0.165 254.624);
+		--star: oklch(0.821 0.169 84.929);
 	}
 }
 
@@ -117,6 +119,7 @@
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
 	--color-link: var(--link);
+	--color-star: var(--star);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);

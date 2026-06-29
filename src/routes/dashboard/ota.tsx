@@ -14,6 +14,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -111,9 +112,7 @@ function OtaIntegrationsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{error && (
-						<p className="text-destructive text-sm">Error: {error.message}</p>
-					)}
+					{error && <ErrorBanner message={`Error: ${error.message}`} />}
 					{isPending ? (
 						<div className="space-y-2">
 							<Skeleton className="h-12 w-full" />
@@ -335,7 +334,7 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 						Sandbox / test environment
 					</label>
 
-					{error && <p className="text-destructive text-sm">{error}</p>}
+					{error && <ErrorBanner message={error} />}
 
 					<FormActions pending={pending} submitLabel="Create integration" />
 				</form>

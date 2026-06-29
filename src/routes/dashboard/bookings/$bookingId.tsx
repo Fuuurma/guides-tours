@@ -9,6 +9,7 @@ import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../../convex/_generated/api";
@@ -86,7 +87,7 @@ function BookingDetailPage() {
 		);
 	}
 	if (error)
-		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+		return <ErrorBanner message={`Error: ${error.message}`} />;
 	if (!booking) {
 		return (
 			<DetailPage title="Booking not found" backTo="/dashboard/bookings" />
@@ -283,7 +284,7 @@ function BookingDetailPage() {
 										onClick={() => setReviewRating(String(n))}
 										className={`text-3xl leading-none p-1 rounded hover:bg-accent ${
 											reviewRating === String(n)
-												? "text-yellow-500"
+												? "text-star"
 												: "text-muted-foreground"
 										}`}
 									>

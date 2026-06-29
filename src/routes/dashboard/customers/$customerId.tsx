@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { formatCentsCompact } from "@/lib/format";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -68,7 +69,7 @@ function CustomerDetailPage() {
 		);
 	}
 	if (error) {
-		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+		return <ErrorBanner message={`Error: ${error.message}`} />;
 	}
 	if (!customer) {
 		return (
