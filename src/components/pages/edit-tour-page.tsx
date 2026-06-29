@@ -4,6 +4,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -164,7 +165,15 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 	}, [tour, loaded, form]);
 
 	if (tour === undefined) {
-		return <p className="text-muted-foreground">Loading…</p>;
+		return (
+			<div className="space-y-4 p-4">
+				<Skeleton className="h-8 w-1/3" />
+				<Skeleton className="h-4 w-1/2" />
+				<Skeleton className="h-32 w-full" />
+				<Skeleton className="h-4 w-full" />
+				<Skeleton className="h-4 w-2/3" />
+			</div>
+		);
 	}
 	if (tour === null) {
 		return (

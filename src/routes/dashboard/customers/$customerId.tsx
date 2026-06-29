@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
@@ -68,7 +69,15 @@ function CustomerDetailPage() {
 	);
 
 	if (isPending) {
-		return <p className="text-muted-foreground">Loading…</p>;
+		return (
+			<div className="space-y-4 p-4">
+				<Skeleton className="h-8 w-1/3" />
+				<Skeleton className="h-4 w-1/2" />
+				<Skeleton className="h-32 w-full" />
+				<Skeleton className="h-4 w-full" />
+				<Skeleton className="h-4 w-2/3" />
+			</div>
+		);
 	}
 	if (error) {
 		return <p className="text-destructive text-sm">Error: {error.message}</p>;

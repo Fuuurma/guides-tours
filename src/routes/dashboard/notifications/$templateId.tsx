@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
@@ -20,7 +21,17 @@ function NotificationTemplateDetailPage() {
 		}),
 	);
 
-	if (isPending) return <p className="text-muted-foreground">Loading…</p>;
+	if (isPending) {
+		return (
+			<div className="space-y-4 p-4">
+				<Skeleton className="h-8 w-1/3" />
+				<Skeleton className="h-4 w-1/2" />
+				<Skeleton className="h-32 w-full" />
+				<Skeleton className="h-4 w-full" />
+				<Skeleton className="h-4 w-2/3" />
+			</div>
+		);
+	}
 	if (error)
 		return (
 			<p className="text-destructive text-sm">Error: {error.message}</p>

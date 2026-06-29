@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Select,
 	SelectContent,
@@ -112,9 +113,12 @@ function OtaIntegrationsPage() {
 							Error: {error.message}
 						</p>
 					)}
-					{isPending ? (
-						<p className="text-muted-foreground text-sm">Loading…</p>
-					) : items.length === 0 ? (
+				{isPending ? (
+					<div className="space-y-2">
+						<Skeleton className="h-12 w-full" />
+						<Skeleton className="h-12 w-full" />
+					</div>
+				) : items.length === 0 ? (
 						<p className="text-muted-foreground text-sm">
 							No integrations yet. Add one below.
 						</p>

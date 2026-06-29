@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MetricCard } from "@/components/metric-card";
 import { api } from "../../../convex/_generated/api";
 
@@ -121,7 +122,15 @@ function AnalyticsPage() {
 		);
 	}
 
-	if (orgPending) return <p className="text-muted-foreground">Loading…</p>;
+	if (orgPending) {
+		return (
+			<div className="space-y-4 p-4">
+				<Skeleton className="h-8 w-1/3" />
+				<Skeleton className="h-32 w-full" />
+				<Skeleton className="h-4 w-1/2" />
+			</div>
+		);
+	}
 	if (!org) {
 		return <p className="text-muted-foreground">No organization selected.</p>;
 	}

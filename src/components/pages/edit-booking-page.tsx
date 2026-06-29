@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { FormField } from "../form";
@@ -133,7 +134,15 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 	}, [booking, loaded, form]);
 
 	if (booking === undefined) {
-		return <p className="text-muted-foreground">Loading…</p>;
+		return (
+			<div className="space-y-4 p-4">
+				<Skeleton className="h-8 w-1/3" />
+				<Skeleton className="h-4 w-1/2" />
+				<Skeleton className="h-32 w-full" />
+				<Skeleton className="h-4 w-full" />
+				<Skeleton className="h-4 w-2/3" />
+			</div>
+		);
 	}
 	if (booking === null) {
 		return <p className="text-muted-foreground">Booking not found.</p>;

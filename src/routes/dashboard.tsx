@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
 	Card,
 	CardContent,
@@ -29,7 +30,11 @@ function DashboardLayout() {
 	if (userPending || orgPending) {
 		return (
 			<main className="mx-auto max-w-6xl px-4 py-12">
-				<p className="text-muted-foreground">Loading…</p>
+				<div className="space-y-4">
+					<Skeleton className="h-8 w-1/3" />
+					<Skeleton className="h-4 w-1/2" />
+					<Skeleton className="h-32 w-full" />
+				</div>
 			</main>
 		);
 	}
