@@ -107,7 +107,7 @@ function VacationDetailPage() {
 					title="Review"
 					description="Approve or reject this request"
 				>
-					{errorMsg && <p className="text-destructive text-sm">{errorMsg}</p>}
+					{errorMsg && <ErrorBanner message={errorMsg} />}
 					<div className="flex gap-2">
 						<Button onClick={onApprove} disabled={pending}>
 							{pending ? "Working…" : "Approve"}

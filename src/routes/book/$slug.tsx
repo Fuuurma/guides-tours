@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import {
 	EMAIL_REGEX,
 	MAX_EMAIL_LEN,
@@ -462,16 +463,7 @@ function PublicBookingPage() {
 							</div>
 						</CardContent>
 						<CardFooter className="flex flex-col gap-3">
-							{submitErr && (
-								<div
-									className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
-									role="alert"
-								>
-									<p className="text-destructive text-sm font-medium">
-										{submitErr}
-									</p>
-								</div>
-							)}
+							{submitErr && <ErrorBanner message={submitErr} />}
 							<Button type="submit" disabled={submitting} className="w-full">
 								{submitting ? "Booking…" : "Confirm booking"}
 							</Button>

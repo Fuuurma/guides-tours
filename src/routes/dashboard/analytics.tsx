@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { formatCents, formatCentsWhole } from "@/lib/format";
 import { lastNDays, type DateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
@@ -106,25 +107,24 @@ function AnalyticsPage() {
 		return (
 			<div className="space-y-4">
 				<h1 className="text-2xl font-semibold">Analytics</h1>
-				<div className="rounded-md border border-destructive/50 bg-destructive/10 p-4">
-					<p className="text-destructive text-sm font-medium">
-						Failed to load analytics
-					</p>
-					<p className="text-muted-foreground text-xs mt-1">
-						{orgError?.message ??
-							overviewError?.message ??
-							revenueError?.message ??
-							"Unknown error"}
-					</p>
-					<Button
-						variant="outline"
-						size="sm"
-						className="mt-2"
-						onClick={() => window.location.reload()}
-					>
-						Reload
-					</Button>
-				</div>
+				<ErrorBanner
+					message="Failed to load analytics"
+					hint={
+						orgError?.message ??
+						overviewError?.message ??
+						revenueError?.message ??
+						"Unknown error"
+					}
+					action={
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => window.location.reload()}
+						>
+							Reload
+						</Button>
+					}
+				/>
 			</div>
 		);
 	}
@@ -268,7 +268,7 @@ function AnalyticsPage() {
 							label="Avg booking"
 							value={
 								revenue
-									? formatCents(revenue.avgBookingValueCents as unknown as number)
+									? formatCents(revenue.avgBookingValueCents)
 									: undefined
 							}
 							isPending={revenuePending}

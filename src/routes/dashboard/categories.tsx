@@ -15,6 +15,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
@@ -262,7 +263,7 @@ function NewCategoryForm() {
 							/>
 						</FormField>
 					</div>
-					{error && <p className="text-destructive text-sm">{error}</p>}
+					{error && <ErrorBanner message={error} />}
 					<FormActions pending={pending} submitLabel="Add category" />
 				</form>
 			</CardContent>

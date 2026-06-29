@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -78,7 +79,7 @@ export function DataTable<T>({
 		);
 	}
 	if (error) {
-		return <p className="text-destructive text-sm">Error: {error.message}</p>;
+		return <ErrorBanner message={`Error: ${error.message}`} />;
 	}
 	if (!data?.length) {
 		return <p className="text-muted-foreground text-sm">{emptyMessage}</p>;

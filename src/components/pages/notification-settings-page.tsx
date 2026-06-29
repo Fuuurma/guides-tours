@@ -14,6 +14,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
@@ -291,7 +292,7 @@ export function NotificationSettingsPage() {
 					</CardContent>
 				</Card>
 
-				{error && <p className="text-destructive text-sm">{error}</p>}
+				{error && <ErrorBanner message={error} />}
 
 				<FormActions pending={pending} submitLabel="Save settings" />
 			</form>

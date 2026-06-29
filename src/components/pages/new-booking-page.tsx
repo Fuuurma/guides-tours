@@ -8,6 +8,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -287,14 +288,7 @@ export function NewBookingPage() {
 							</p>
 						</FormField>
 
-						{error && (
-							<div
-								className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
-								role="alert"
-							>
-								<p className="text-destructive text-sm font-medium">{error}</p>
-							</div>
-						)}
+						{error && <ErrorBanner message={error} />}
 
 						<FormActions
 							onCancel={() => navigate({ to: "/dashboard/bookings" })}

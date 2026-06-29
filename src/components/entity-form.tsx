@@ -3,7 +3,6 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/lib/utils";
 import {
 	Card,
 	CardContent,
@@ -11,6 +10,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { getErrorMessage } from "@/lib/utils";
 
 /**
  * Hook for entity create/edit form state. Eliminates the
@@ -178,16 +179,7 @@ export function EntityFormPage<
 					>
 						{children}
 						<div className="flex flex-col gap-3">
-							{form.error && (
-								<div
-									className="rounded-md border border-destructive/50 bg-destructive/10 p-3"
-									role="alert"
-								>
-									<p className="text-destructive text-sm font-medium">
-										{form.error}
-									</p>
-								</div>
-							)}
+							{form.error && <ErrorBanner message={form.error} />}
 							<div className="flex justify-end gap-2">
 								<Button type="button" variant="outline" asChild>
 									<Link to={backTo}>{backLabel}</Link>

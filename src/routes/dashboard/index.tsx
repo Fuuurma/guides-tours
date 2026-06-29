@@ -11,6 +11,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { formatCentsWhole } from "@/lib/format";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -78,14 +79,10 @@ function DashboardIndex() {
 	return (
 		<div className="space-y-6">
 			{firstError && (
-				<div className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
-					<p className="text-destructive text-sm">
-						Some data failed to load: {firstError.message}
-					</p>
-					<p className="text-muted-foreground text-xs mt-1">
-						Cards below may show stale or empty data. Refresh to retry.
-					</p>
-				</div>
+				<ErrorBanner
+					message={`Some data failed to load: ${firstError.message}`}
+					hint="Cards below may show stale or empty data. Refresh to retry."
+				/>
 			)}
 			<header className="flex items-center justify-between">
 				<div>
