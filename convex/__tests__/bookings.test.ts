@@ -999,7 +999,7 @@ describe("convex/bookings — internalComplete (checkIn→complete flow)", () =>
 
 		await expect(
 			t.mutation(internal.bookings.internalComplete, { bookingId }),
-		).rejects.toThrow(/Only checked-in bookings can be completed/);
+		).rejects.toThrow(/Cannot complete a cancelled booking/);
 	});
 
 	it("rejects double-complete (idempotency guard against stat re-bump)", async () => {

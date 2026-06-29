@@ -881,6 +881,13 @@ async function performComplete(
 	if (booking.status === "completed") {
 		throw new ConvexError("Booking is already completed");
 	}
+	// Terminal state guard: cancelled bookings must never be
+	// completed. performCancel doesn't clear checkedInAt, so a
+	// checked-in booking can be cancelled and then erroneously
+	// completed via this path. Refuse explicitly.
+	if (booking.status === "cancelled") {
+		throw new ConvexError("Cannot complete a cancelled booking");
+	}
 	if (!booking.checkedInAt) {
 		throw new ConvexError("Only checked-in bookings can be completed");
 	}

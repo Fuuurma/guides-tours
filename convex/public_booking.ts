@@ -211,6 +211,21 @@ export const internalCreate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		// Normalize email to lowercase+trim so "Bob@Example.com" and
+		// "bob@example.com" don't create duplicate customers. The
+		// dashboard's customers.create also does this; public booking
+		// previously did not, causing duplicates when a customer
+		// re-books with different casing.
+		const normalizedEmail = args.customerEmail.toLowerCase().trim();
+
+		// Lightweight email shape check — reject obviously invalid
+		// inputs before they hit the customers table. The dashboard
+		// already validates via @/lib/validation; the public form
+		// previously passed any string through.
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail)) {
+			throw new ConvexError("Invalid email address");
+		}
+
 		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
 		if (
@@ -268,7 +283,9 @@ export const internalCreate = internalMutation({
 		const existing = await ctx.db
 			.query("customers")
 			.withIndex("by_org_email", (q) =>
-				q.eq("organizationId", args.organizationId).eq("email", args.customerEmail),
+				q
+					.eq("organizationId", args.organizationId)
+					.eq("email", normalizedEmail),
 			)
 			.unique();
 
@@ -278,7 +295,7 @@ export const internalCreate = internalMutation({
 			(await ctx.db.insert("customers", {
 				organizationId: args.organizationId,
 				name: args.customerName,
-				email: args.customerEmail,
+				email: normalizedEmail,
 				phone: args.customerPhone ?? "",
 				notes: args.notes ?? "",
 				// Source default: False for both consent fields
