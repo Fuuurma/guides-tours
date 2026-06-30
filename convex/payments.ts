@@ -23,6 +23,11 @@ import {
 } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import {
+	CURRENCY_REGEX,
+	MAX_STRIPE_INTENT_ID_LEN,
+	assertFieldWithinLimit,
+} from "./lib/validation";
 
 // ----- Queries -----
 
@@ -118,6 +123,19 @@ export const record = mutation({
 			"admin",
 			"member",
 		]);
+		// Validate currency shape (ISO 4217) and stripe intent id length.
+		// The FE sends validated values, but any Convex client can call
+		// this — defending in depth keeps the table clean.
+		if (!CURRENCY_REGEX.test(args.currency)) {
+			throw new ConvexError(
+				`Invalid currency: "${args.currency}" must be 3 uppercase letters`,
+			);
+		}
+		assertFieldWithinLimit(
+			"stripePaymentIntentId",
+			args.stripePaymentIntentId,
+			MAX_STRIPE_INTENT_ID_LEN,
+		);
 		// Idempotency check.
 		const existing = await ctx.db
 			.query("payments")
@@ -509,6 +527,20 @@ export const recordFromAction = internalMutation({
 		stripePaymentIntentId: v.string(),
 	},
 	handler: async (ctx, args) => {
+		// Same validation as the public record mutation — internal callers
+		// (public booking flow, refunds action, webhook) all need to
+		// send a valid currency + bounded intent id.
+		if (!CURRENCY_REGEX.test(args.currency)) {
+			throw new ConvexError(
+				`Invalid currency: "${args.currency}" must be 3 uppercase letters`,
+			);
+		}
+		assertFieldWithinLimit(
+			"stripePaymentIntentId",
+			args.stripePaymentIntentId,
+			MAX_STRIPE_INTENT_ID_LEN,
+		);
+
 		const existing = await ctx.db
 			.query("payments")
 			.withIndex("by_stripe_intent", (q) =>

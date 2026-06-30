@@ -34,6 +34,13 @@ export const MAX_EMAIL_SUBJECT_LEN = 200;
  *  cover multi-segment with a margin. */
 export const MAX_SMS_BODY_LEN = 1000;
 
+/** ISO 4217 currency code is always 3 uppercase letters (USD, EUR, GBP).
+ *  Matches the FE's CURRENCY_REGEX. */
+export const CURRENCY_REGEX = /^[A-Z]{3}$/;
+
+/** Max length for a Stripe payment intent ID (`pi_` + 24+ chars). */
+export const MAX_STRIPE_INTENT_ID_LEN = 64;
+
 /** Max length for guest-names CSV (one line per guest, joined). */
 export const MAX_GUEST_NAMES_LEN = 2000;
 

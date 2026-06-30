@@ -120,7 +120,7 @@ describe("convex/payments — record (idempotent by stripePaymentIntentId)", () 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 10000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_001",
 		});
 		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
@@ -139,14 +139,14 @@ describe("convex/payments — record (idempotent by stripePaymentIntentId)", () 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 10000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_002",
 		});
 		const second = await t.mutation(internal.payments.recordFromAction, {
 			organizationId: orgId,
 			bookingId,
 			amountCents: 10000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_002",
 		});
 		expect(second).toBe(first);
@@ -164,7 +164,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 5000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_003",
 		});
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
@@ -183,7 +183,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 5000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_004",
 		});
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
@@ -203,7 +203,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 5000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_005",
 		});
 		await t.mutation(internal.payments.markFailed, {
@@ -227,7 +227,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 5000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_guard_1",
 		});
 		await t.mutation(internal.payments.markFailed, {
@@ -251,7 +251,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 5000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_guard_2",
 		});
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
@@ -275,7 +275,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 5000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_guard_3",
 		});
 		// status is "pending" — markRefunded must reject
@@ -296,7 +296,7 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 			organizationId: orgId,
 			bookingId,
 			amountCents: 5000n,
-			currency: "usd",
+			currency: "USD",
 			stripePaymentIntentId: "pi_test_guard_4",
 		});
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
@@ -507,5 +507,75 @@ describe("payments_stripe — parseStripeSignature + verifyStripeSignature", () 
 			(timestamp + 3600) * 1000,
 		);
 		expect(ok).toBe(false);
+	});
+});
+
+describe("convex/payments — input validation (defense in depth)", () => {
+	// The FE sends validated values, but the BE is reachable by any
+	// Convex client. These tests prove the BE rejects malformed inputs
+	// even if the FE is bypassed. Use the internal mirror (recordFromAction)
+	// to bypass the requireRole auth check that the public record has.
+
+	it("rejects lowercase currency code (must be uppercase ISO 4217)", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, "org_pay_cur"),
+		);
+		await expect(
+			t.mutation(internal.payments.recordFromAction, {
+				organizationId: "org_pay_cur",
+				bookingId,
+				amountCents: 1000n,
+				currency: "usd",
+				stripePaymentIntentId: "pi_test_cur_1",
+			}),
+		).rejects.toThrow(/Invalid currency/);
+	});
+
+	it("rejects currency code with digits", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, "org_pay_cur2"),
+		);
+		await expect(
+			t.mutation(internal.payments.recordFromAction, {
+				organizationId: "org_pay_cur2",
+				bookingId,
+				amountCents: 1000n,
+				currency: "US1",
+				stripePaymentIntentId: "pi_test_cur_2",
+			}),
+		).rejects.toThrow(/Invalid currency/);
+	});
+
+	it("rejects stripePaymentIntentId over MAX_STRIPE_INTENT_ID_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, "org_pay_int"),
+		);
+		await expect(
+			t.mutation(internal.payments.recordFromAction, {
+				organizationId: "org_pay_int",
+				bookingId,
+				amountCents: 1000n,
+				currency: "USD",
+				stripePaymentIntentId: `pi_${"x".repeat(70)}`,
+			}),
+		).rejects.toThrow(/stripePaymentIntentId is too long/);
+	});
+
+	it("accepts a valid uppercase 3-letter currency code", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, "org_pay_ok"),
+		);
+		const id = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: "org_pay_ok",
+			bookingId,
+			amountCents: 1000n,
+			currency: "EUR",
+			stripePaymentIntentId: "pi_test_ok_eur",
+		});
+		expect(id).toBeDefined();
 	});
 });
