@@ -939,7 +939,14 @@ export default defineSchema({
 	// spray arbitrary slugs.
 
 	publicBookingAttempts: defineTable({
-		organizationId: v.optional(orgId),
+		// Organization ID is captured when the slug resolves to a real
+		// org — failed lookups (unknown slug) still record so attackers
+		// can't spray arbitrary slugs. Typed as v.optional(v.string())
+		// because we record the attempt BEFORE looking up the org (the
+		// whole point is to rate-limit unknown-slug spray), and the
+		// value isn't validated as a real Id<"organizations"> at insert
+		// time. The by_org_created index still works on string fields.
+		organizationId: v.optional(v.string()),
 		email: v.string(),
 		// success | rejected_unknown_slug | rejected_rate_limit |
 		// rejected_validation | rejected_capacity

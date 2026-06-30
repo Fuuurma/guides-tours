@@ -61,7 +61,7 @@ export const recordAttempt = internalMutation({
 		// Always record — both successes and rejections — so we can
 		// audit attempts even when the rate limit is bypassed.
 		const attemptId = await ctx.db.insert("publicBookingAttempts", {
-			organizationId: args.organizationId as never,
+			organizationId: args.organizationId,
 			email: args.email,
 			slug: args.slug,
 			outcome: allowed ? args.outcome : "rejected_rate_limit",
@@ -111,9 +111,16 @@ export const updateAttemptOutcome = internalMutation({
 	args: {
 		attemptId: v.id("publicBookingAttempts"),
 		outcome: v.string(),
+		organizationId: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		await ctx.db.patch(args.attemptId, { outcome: args.outcome });
+		const patch: { outcome: string; organizationId?: string } = {
+			outcome: args.outcome,
+		};
+		if (args.organizationId !== undefined) {
+			patch.organizationId = args.organizationId;
+		}
+		await ctx.db.patch(args.attemptId, patch);
 		return { updated: true };
 	},
 });

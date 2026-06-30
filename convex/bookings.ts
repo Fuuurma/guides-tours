@@ -214,9 +214,9 @@ async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">
 		uniqueCustomerIds.map((id) => ctx.db.get(id)),
 	);
 	const customerById = new Map<Id<"customers">, NonNullable<typeof customerDocs[number]>>();
-	for (let i = 0; i < uniqueCustomerIds.length; i++) {
+	for (const [i, id] of uniqueCustomerIds.entries()) {
 		const c = customerDocs[i];
-		if (c) customerById.set(uniqueCustomerIds[i]!, c);
+		if (c) customerById.set(id, c);
 	}
 	return active.map((b) => {
 		const c = customerById.get(b.customerId);

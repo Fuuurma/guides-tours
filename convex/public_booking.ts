@@ -26,6 +26,10 @@ import type { Id } from "./_generated/dataModel";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
 import { isBlackoutHelper } from "./tourBlackoutDates";
+import {
+	assertValidCustomerInput,
+	normalizeEmail,
+} from "./lib/validation";
 
 // ----- Public query: org + active tours by slug -----
 //
@@ -85,7 +89,7 @@ export const getOrgAndToursBySlug = query({
 export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 	args: {
 		slug: v.string(),
-		tourId: v.string(),
+		tourId: v.id("tours"),
 		customerName: v.string(),
 		customerEmail: v.string(),
 		customerPhone: v.optional(v.string()),
@@ -117,7 +121,11 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 				updateAttemptOutcome: FunctionReference<
 					"mutation",
 					"internal",
-					{ attemptId: Id<"publicBookingAttempts">; outcome: string },
+					{
+						attemptId: Id<"publicBookingAttempts">;
+						outcome: string;
+						organizationId?: string;
+					},
 					{ updated: boolean }
 				>;
 			};
@@ -167,7 +175,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 				internal.public_booking.internalCreate,
 				{
 					organizationId,
-					tourId: args.tourId as never,
+					tourId: args.tourId,
 					customerName: args.customerName,
 					customerEmail: args.customerEmail,
 					customerPhone: args.customerPhone,
@@ -180,12 +188,14 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: "success",
+				organizationId,
 			});
 			return bookingId;
 		} catch (err) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: `failure_${err instanceof ConvexError ? err.data : "unknown"}`,
+				organizationId,
 			});
 			throw err;
 		}
@@ -211,20 +221,25 @@ export const internalCreate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		// Normalize email to lowercase+trim so "Bob@Example.com" and
-		// "bob@example.com" don't create duplicate customers. The
-		// dashboard's customers.create also does this; public booking
-		// previously did not, causing duplicates when a customer
-		// re-books with different casing.
-		const normalizedEmail = args.customerEmail.toLowerCase().trim();
-
-		// Lightweight email shape check — reject obviously invalid
-		// inputs before they hit the customers table. The dashboard
-		// already validates via @/lib/validation; the public form
-		// previously passed any string through.
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail)) {
+		// Normalize + validate email via the shared helper. Rejects
+		// invalid shapes AND overlong addresses (>254 chars) before
+		// they hit the customers table. Mirrors FE's EMAIL_REGEX +
+		// MAX_EMAIL_LEN in src/lib/validation.ts.
+		const normalizedEmail = normalizeEmail(args.customerEmail);
+		if (!normalizedEmail) {
 			throw new ConvexError("Invalid email address");
 		}
+
+		// Length validation on customer-supplied free-text fields. The
+		// FE validates these too (maxLength on the inputs), but the
+		// public endpoint is reachable by anyone — defending in depth
+		// here prevents a 10MB customer name from being inserted if
+		// someone hits the action directly.
+		const validInput = assertValidCustomerInput({
+			name: args.customerName,
+			notes: args.notes,
+			phone: args.customerPhone,
+		});
 
 		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
@@ -294,10 +309,10 @@ export const internalCreate = internalMutation({
 			existing?._id ??
 			(await ctx.db.insert("customers", {
 				organizationId: args.organizationId,
-				name: args.customerName,
+				name: validInput.name,
 				email: normalizedEmail,
-				phone: args.customerPhone ?? "",
-				notes: args.notes ?? "",
+				phone: validInput.phone,
+				notes: validInput.notes,
 				// Source default: False for both consent fields
 				// (models.py:891-892). The public booking form should
 				// collect explicit consent before flipping these on.
@@ -325,7 +340,7 @@ export const internalCreate = internalMutation({
 			guests: args.guests,
 			guestNames: "",
 			languageRequired: "",
-			notes: args.notes ?? "",
+			notes: validInput.notes,
 			status: "confirmed",
 			depositAmountCents: 0n,
 			totalAmountCents: 0n,

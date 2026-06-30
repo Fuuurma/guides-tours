@@ -17,6 +17,12 @@ import { v, ConvexError } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import {
+	assertValidCustomerInput,
+	MAX_NOTES_LEN,
+	MAX_PHONE_LEN,
+	normalizeEmail,
+} from "./lib/validation";
 
 // Whitelisted update fields. Source's ALLOWED_CUSTOMER_UPDATE_FIELDS.
 const ALLOWED_UPDATE_FIELDS = new Set([
@@ -227,17 +233,21 @@ export const create = mutation({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
-		// Normalize email to lowercase so "Bob@Example.com" and
-		// "bob@example.com" don't create duplicate customers. The
-		// public booking flow already lowercases in http.ts before
-		// calling internalCreate; dashboard create did not.
-		const email = args.email.toLowerCase().trim();
-		// Shape check — same regex as public_booking and the FE
-		// validateEmail helper. Catches obvious typos before they
-		// hit the customers table.
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) {
+		// Normalize + validate email via shared helper. Same regex +
+		// length cap as the public booking flow and the FE validator.
+		const email = normalizeEmail(args.email);
+		if (!email) {
 			throw new ConvexError("Invalid email address");
 		}
+		// Length-validate the free-text fields. The FE caps these via
+		// maxLength on the inputs, but the BE is reachable by any
+		// Convex client (mobile app, cron job, future API) — defending
+		// in depth here keeps the table clean.
+		const validInput = assertValidCustomerInput({
+			name: args.name,
+			notes: args.notes,
+			phone: args.phone,
+		});
 		// Email uniqueness per org (source: Customer.objects.filter(company=..., email=...).exists())
 		const dup = await ctx.db
 			.query("customers")
@@ -256,10 +266,10 @@ export const create = mutation({
 		const now = Date.now();
 		const customerId = await ctx.db.insert("customers", {
 			organizationId: member.organizationId,
-			name: args.name,
+			name: validInput.name,
 			email,
-			phone: args.phone ?? "",
-			notes: args.notes ?? "",
+			phone: validInput.phone,
+			notes: validInput.notes,
 			smsConsent: args.smsConsent ?? false,
 			emailConsent: args.emailConsent ?? true,
 			smsConsentDate: args.smsConsent ? now : undefined,
@@ -329,9 +339,13 @@ export const update = mutation({
 
 		// Email change requires uniqueness check.
 		if (args.email !== undefined) {
-			// Normalize like customers.create does so "Bob@Example.com"
-			// doesn't sneak past the case-sensitive index lookup.
-			const normalizedEmail = args.email.toLowerCase().trim();
+			// Normalize via shared helper so "Bob@Example.com" doesn't
+			// sneak past the case-sensitive index lookup, and reject
+			// invalid shapes / overlong addresses.
+			const normalizedEmail = normalizeEmail(args.email);
+			if (!normalizedEmail) {
+				throw new ConvexError("Invalid email address");
+			}
 			if (normalizedEmail !== customer.email) {
 				const dup = await ctx.db
 					.query("customers")
@@ -350,6 +364,25 @@ export const update = mutation({
 				};
 				patch.email = normalizedEmail;
 			}
+		}
+
+		// Length-validate any incoming free-text fields. Same limits
+		// as the create mutation and the FE maxLength attributes.
+		if (args.name !== undefined) {
+			assertValidCustomerInput({ name: args.name });
+			if (args.name.trim().length === 0) {
+				throw new ConvexError("Name cannot be empty");
+			}
+		}
+		if (args.notes !== undefined && args.notes.length > MAX_NOTES_LEN) {
+			throw new ConvexError(
+				`Notes are too long (max ${MAX_NOTES_LEN} characters)`,
+			);
+		}
+		if (args.phone !== undefined && args.phone.length > MAX_PHONE_LEN) {
+			throw new ConvexError(
+				`Phone is too long (max ${MAX_PHONE_LEN} characters)`,
+			);
 		}
 
 		for (const field of ALLOWED_UPDATE_FIELDS) {

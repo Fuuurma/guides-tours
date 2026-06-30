@@ -7,8 +7,10 @@
 //   - Audit: who/when/what for every webhook
 //   - Replay: re-trigger processing of failed webhooks from admin
 //
-// Called from the OTA webhook_handler.ts factory and (TODO) the
+// Called from the OTA webhook_handler.ts factory and the
 // stripeWebhook httpAction in payments_stripe_actions.ts.
+// Both call sites catch recordDelivery failures so a DB hiccup
+// doesn't block the actual webhook dispatch.
 
 import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";

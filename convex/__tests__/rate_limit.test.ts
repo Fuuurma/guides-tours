@@ -58,6 +58,7 @@ const recordAttempt = (internal as unknown as {
 			{
 				attemptId: import("../_generated/dataModel").Id<"publicBookingAttempts">;
 				outcome: string;
+				organizationId?: string;
 			},
 			{ updated: boolean }
 		>;
@@ -262,5 +263,51 @@ describe("public booking rate limit", () => {
 				.collect(),
 		);
 		expect(rows[0]!.outcome).toBe("failure_org_not_found");
+	});
+
+	test("updateAttemptOutcome can backfill organizationId", async () => {
+		// The attempt is recorded BEFORE the slug → org lookup so we
+		// can rate-limit unknown-slug spray. Once we know the orgId
+		// (or confirm the slug doesn't resolve), the caller patches
+		// it in via updateAttemptOutcome.
+		const t = convexTest(schema, modules);
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "kate@example.com",
+			slug: "test-org",
+			organizationId: undefined,
+			outcome: "pending",
+		});
+		// organizationId is undefined initially
+		const beforePatch = await t.run(async (ctx) => ctx.db.get(r.attemptId));
+		expect(beforePatch?.organizationId).toBeUndefined();
+		// Patch in the orgId once we've resolved the slug
+		await t.mutation(recordAttempt.updateAttemptOutcome, {
+			attemptId: r.attemptId,
+			outcome: "success",
+			organizationId: "org_abc123",
+		});
+		const afterPatch = await t.run(async (ctx) => ctx.db.get(r.attemptId));
+		expect(afterPatch?.organizationId).toBe("org_abc123");
+		expect(afterPatch?.outcome).toBe("success");
+	});
+
+	test("updateAttemptOutcome leaves organizationId untouched when not provided", async () => {
+		// Passing only outcome (no organizationId) must NOT clear an
+		// already-set organizationId. This protects against accidentally
+		// unsetting it on later outcome updates.
+		const t = convexTest(schema, modules);
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "liam@example.com",
+			slug: "test-org",
+			organizationId: "org_first",
+			outcome: "pending",
+		});
+		await t.mutation(recordAttempt.updateAttemptOutcome, {
+			attemptId: r.attemptId,
+			outcome: "success",
+		});
+		const row = await t.run(async (ctx) => ctx.db.get(r.attemptId));
+		expect(row?.organizationId).toBe("org_first");
+		expect(row?.outcome).toBe("success");
 	});
 });

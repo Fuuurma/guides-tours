@@ -32,20 +32,28 @@ export const getForWebhook = internalQuery({
 /**
  * Public list query for the OTA admin UI. Tenant-scoped via the
  * Better Auth org plugin.
+ *
+ * Strips `webhookSecret` and `apiSecret` from the response so they
+ * never leak to the client. The FE never needs to see these —
+ * write paths (create/update) accept them via the user typing them
+ * in; read paths never round-trip them. The webhook handler reads
+ * via the internal `getForWebhook` query above.
  */
 export const list = query({
 	args: {},
 	handler: async (ctx) => {
 		const member = await requireMembership(ctx);
-		return await ctx.db
+		const rows = await ctx.db
 			.query("otaIntegrations")
 			.withIndex("by_org", (q) => q.eq("organizationId", member.organizationId))
 			.collect();
+		return rows.map(stripSecrets);
 	},
 });
 
 /**
  * Single-integration lookup for the admin UI. Tenant-scoped.
+ * Strips secrets — see `list` for rationale.
  */
 export const get = query({
 	args: { integrationId: v.id("otaIntegrations") },
@@ -53,7 +61,22 @@ export const get = query({
 		const member = await requireMembership(ctx);
 		const row = await ctx.db.get(args.integrationId);
 		if (!row || row.organizationId !== member.organizationId) return null;
-		return row;
+		return stripSecrets(row);
 	},
 });
+
+/**
+ * Strip webhook/API secret fields from an OTA integration row
+ * before returning it to the client. These secrets are write-only
+ * from the FE perspective; the server-side webhook handler reads
+ * them via `getForWebhook` (internal).
+ */
+function stripSecrets<T extends { webhookSecret?: string; apiSecret?: string }>(
+	row: T,
+): Omit<T, "webhookSecret" | "apiSecret"> {
+	const { webhookSecret: _ws, apiSecret: _as, ...safe } = row;
+	void _ws;
+	void _as;
+	return safe;
+}
 

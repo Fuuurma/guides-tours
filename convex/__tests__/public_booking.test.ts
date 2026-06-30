@@ -167,6 +167,107 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		).rejects.toThrow(/Tour not found/);
 	});
 
+	it("rejects name over the shared MAX_NAME_LEN (defense in depth)", async () => {
+		// The FE caps customerName via maxLength, but the public
+		// endpoint is reachable from anyone — if the FE is bypassed
+		// (curl, replay, etc.) we must still reject absurd payloads.
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_e_len";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "x".repeat(101),
+				customerEmail: "toolong@example.com",
+				date: "2026-08-25",
+				startTime: "09:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/Name is too long/);
+	});
+
+	it("rejects notes over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_notes";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Eve",
+				customerEmail: "notes@example.com",
+				date: "2026-08-26",
+				startTime: "09:00",
+				guests: 1,
+				notes: "n".repeat(1001),
+			}),
+		).rejects.toThrow(/Notes are too long/);
+	});
+
+	it("rejects phone over MAX_PHONE_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_phone";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Eve",
+				customerEmail: "phone@example.com",
+				date: "2026-08-27",
+				startTime: "09:00",
+				guests: 1,
+				customerPhone: "5".repeat(31),
+			}),
+		).rejects.toThrow(/Phone is too long/);
+	});
+
+	it("rejects overlong email addresses (MAX_EMAIL_LEN)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_longemail";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		const longLocal = "a".repeat(255);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Eve",
+				customerEmail: `${longLocal}@x.com`,
+				date: "2026-08-28",
+				startTime: "09:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/Invalid email address/);
+	});
+
+	it("rejects empty customerName (must be at least 2 chars)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_noname";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "",
+				customerEmail: "noname@example.com",
+				date: "2026-08-29",
+				startTime: "09:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/at least 2 characters/);
+	});
+
 	it("writes audit log with action 'booking.created_public'", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub_f";
