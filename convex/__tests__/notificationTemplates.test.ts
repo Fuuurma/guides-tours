@@ -122,3 +122,83 @@ describe("notification templates", () => {
 		).toBe(true);
 	});
 });
+
+describe("convex/notificationTemplates — length validation", () => {
+	it("rejects emailBodyText over MAX_EMAIL_BODY_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.notificationTemplates.internalCreate, {
+				organizationId: "org_tpl_len",
+				name: "t",
+				templateType: "booking_confirmation",
+				channel: "email",
+				emailSubject: "ok",
+				emailBodyText: "x".repeat(50_001),
+				sendTiming: "immediate",
+			}),
+		).rejects.toThrow(/emailBodyText is too long/);
+	});
+
+	it("rejects emailSubject over MAX_EMAIL_SUBJECT_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.notificationTemplates.internalCreate, {
+				organizationId: "org_tpl_subj",
+				name: "t",
+				templateType: "booking_confirmation",
+				channel: "email",
+				emailSubject: "s".repeat(201),
+				emailBodyText: "ok",
+				sendTiming: "immediate",
+			}),
+		).rejects.toThrow(/emailSubject is too long/);
+	});
+
+	it("rejects smsBody over MAX_SMS_BODY_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.notificationTemplates.internalCreate, {
+				organizationId: "org_tpl_sms",
+				name: "t",
+				templateType: "booking_confirmation",
+				channel: "sms",
+				emailSubject: "ok",
+				emailBodyText: "ok",
+				smsBody: "s".repeat(1001),
+				sendTiming: "immediate",
+			}),
+		).rejects.toThrow(/smsBody is too long/);
+	});
+
+	it("rejects name over MAX_NAME_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.notificationTemplates.internalCreate, {
+				organizationId: "org_tpl_name",
+				name: "n".repeat(101),
+				templateType: "booking_confirmation",
+				channel: "email",
+				emailSubject: "ok",
+				emailBodyText: "ok",
+				sendTiming: "immediate",
+			}),
+		).rejects.toThrow(/Name is too long/);
+	});
+
+	it("accepts body at exactly MAX_EMAIL_BODY_LEN (boundary)", async () => {
+		const t = convexTest(schema, modules);
+		const id = await t.mutation(
+			internal.notificationTemplates.internalCreate,
+			{
+				organizationId: "org_tpl_max",
+				name: "max body",
+				templateType: "booking_confirmation",
+				channel: "email",
+				emailSubject: "ok",
+				emailBodyText: "x".repeat(50_000),
+				sendTiming: "immediate",
+			},
+		);
+		expect(id).toBeDefined();
+	});
+});

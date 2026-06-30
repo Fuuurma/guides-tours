@@ -19,6 +19,27 @@ export const MAX_NAME_LEN = 100;
 /** Max length for free-text notes / descriptions. */
 export const MAX_NOTES_LEN = 1000;
 
+/** Max length for tour/category descriptions. Same as FE. */
+export const MAX_DESCRIPTION_LEN = 2000;
+
+/** Max length for notification template bodies (HTML can run long). */
+export const MAX_EMAIL_BODY_LEN = 50_000;
+
+/** Max length for notification template subjects (RFC says 998 max
+ *  but most clients truncate at 78; we use 200 to be safe). */
+export const MAX_EMAIL_SUBJECT_LEN = 200;
+
+/** Max length for SMS bodies. Single-segment SMS is 160 chars;
+ *  multipart SMS (concatenated) is 153*4 = 612. We use 1000 to
+ *  cover multi-segment with a margin. */
+export const MAX_SMS_BODY_LEN = 1000;
+
+/** Max length for guest-names CSV (one line per guest, joined). */
+export const MAX_GUEST_NAMES_LEN = 2000;
+
+/** Max length for a single short field like language code. */
+export const MAX_SHORT_FIELD_LEN = 50;
+
 /** Max length for phone-number fields. */
 export const MAX_PHONE_LEN = 30;
 
@@ -71,4 +92,19 @@ export function assertValidCustomerInput(input: {
 		);
 	}
 	return { name, notes, phone };
+}
+
+/**
+ * Throws if a free-text booking field exceeds its max length. Use
+ * for `bookings.notes`, `recordReview.comment`, `guestNames`, etc.
+ * Pass the field's display name for the error message.
+ */
+export function assertFieldWithinLimit(
+	fieldName: string,
+	value: string,
+	max: number,
+): void {
+	if (value.length > max) {
+		throw new Error(`${fieldName} is too long (max ${max} characters)`);
+	}
 }

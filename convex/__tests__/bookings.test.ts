@@ -1119,3 +1119,92 @@ describe("convex/bookings — internalComplete (checkIn→complete flow)", () =>
 		expect(customer.vipStatus).toBe(true);
 	});
 });
+
+describe("convex/bookings — input length validation (defense in depth)", () => {
+	// The FE caps free-text fields via maxLength attributes, but the
+	// BE is reachable by any Convex client. These tests prove the
+	// BE rejects overlong payloads even if the FE is bypassed.
+
+	it("internalUpdate rejects notes over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_len");
+			const customerId = await seedCustomer(c, "org_bu_len");
+			return await seedBooking(c, "org_bu_len", tourId, customerId);
+		});
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				notes: "n".repeat(1001),
+			}),
+		).rejects.toThrow(/notes is too long/);
+	});
+
+	it("internalUpdate rejects guestNames over MAX_GUEST_NAMES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_gn");
+			const customerId = await seedCustomer(c, "org_bu_gn");
+			return await seedBooking(c, "org_bu_gn", tourId, customerId);
+		});
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				guestNames: "g".repeat(2001),
+			}),
+		).rejects.toThrow(/guestNames is too long/);
+	});
+
+	it("internalUpdate rejects languageRequired over MAX_SHORT_FIELD_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_lr");
+			const customerId = await seedCustomer(c, "org_bu_lr");
+			return await seedBooking(c, "org_bu_lr", tourId, customerId);
+		});
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				languageRequired: "en".repeat(26),
+			}),
+		).rejects.toThrow(/languageRequired is too long/);
+	});
+
+	it("internalUpdate accepts notes at exactly MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_ok");
+			const customerId = await seedCustomer(c, "org_bu_ok");
+			return await seedBooking(c, "org_bu_ok", tourId, customerId);
+		});
+		// 1000 chars is exactly at the limit — must be accepted.
+		const result = await t.mutation(internal.bookings.internalUpdate, {
+			bookingId,
+			notes: "n".repeat(1000),
+		});
+		expect(result).toBe(bookingId);
+	});
+
+	it("internalRecordReview rejects comment over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_bu_rev");
+			const customerId = await seedCustomer(c, "org_bu_rev");
+			return await seedBooking(c, "org_bu_rev", tourId, customerId, {
+				status: "completed",
+			});
+		});
+		await expect(
+			t.mutation(internal.bookings.internalRecordReview, {
+				bookingId,
+				rating: 5,
+				comment: "c".repeat(1001),
+			}),
+		).rejects.toThrow(/comment is too long/);
+	});
+});

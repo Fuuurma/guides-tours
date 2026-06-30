@@ -354,3 +354,60 @@ describe("tours", () => {
 		});
 	});
 });
+
+describe("tours — length validation (defense in depth)", () => {
+	it("rejects name over MAX_NAME_LEN on create", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.tours.internalCreate, {
+				organizationId: "org_tour_len",
+				userId: "user-1",
+				name: "n".repeat(101),
+				durationHours: 2,
+				capacity: 10,
+			}),
+		).rejects.toThrow(/Name is too long/);
+	});
+
+	it("rejects description over MAX_DESCRIPTION_LEN on create", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.tours.internalCreate, {
+				organizationId: "org_tour_desc",
+				userId: "user-1",
+				name: "ok",
+				description: "d".repeat(2001),
+				durationHours: 2,
+				capacity: 10,
+			}),
+		).rejects.toThrow(/description is too long/);
+	});
+
+	it("rejects name over MAX_NAME_LEN on update", async () => {
+		const t = convexTest(schema, modules);
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as Parameters<typeof seedTour>[0];
+			return await seedTour(c, { orgId: "org_tour_upd" });
+		});
+		await expect(
+			t.mutation(internal.tours.internalUpdate, {
+				organizationId: "org_tour_upd",
+				userId: "user-1",
+				tourId,
+				name: "n".repeat(101),
+			}),
+		).rejects.toThrow(/Name is too long/);
+	});
+
+	it("accepts name at exactly MAX_NAME_LEN (boundary)", async () => {
+		const t = convexTest(schema, modules);
+		const id = await t.mutation(internal.tours.internalCreate, {
+			organizationId: "org_tour_max",
+			userId: "user-1",
+			name: "n".repeat(100),
+			durationHours: 2,
+			capacity: 10,
+		});
+		expect(id).toBeDefined();
+	});
+});

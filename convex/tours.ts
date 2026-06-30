@@ -9,6 +9,11 @@ import { ConvexError } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
+import {
+	MAX_DESCRIPTION_LEN,
+	MAX_NAME_LEN,
+	assertFieldWithinLimit,
+} from "./lib/validation";
 import { logAudit } from "./lib/audit";
 
 // ----- Queries -----
@@ -107,6 +112,23 @@ export const internalCreate = internalMutation({
 		templateId: v.optional(v.id("tourTemplates")),
 	},
 	handler: async (ctx, args) => {
+		// Length validation on free-text fields. Same caps as FE maxLength
+		// (validateName/validateDescriptionOptional). The BE is reachable
+		// by any Convex client — defending in depth prevents overlong
+		// inserts even if the FE is bypassed.
+		if (args.name.length > MAX_NAME_LEN) {
+			throw new ConvexError(
+				`Name is too long (max ${MAX_NAME_LEN} characters)`,
+			);
+		}
+		if (args.description !== undefined) {
+			assertFieldWithinLimit(
+				"description",
+				args.description,
+				MAX_DESCRIPTION_LEN,
+			);
+		}
+
 		const now = Date.now();
 		const tourId = await ctx.db.insert("tours", {
 			organizationId: args.organizationId,
@@ -216,6 +238,21 @@ export const internalUpdate = internalMutation({
 				throw new ConvexError("Forbidden: category belongs to a different organization");
 			}
 		}
+
+		// Length validation on free-text fields (same caps as create).
+		if (args.name !== undefined && args.name.length > MAX_NAME_LEN) {
+			throw new ConvexError(
+				`Name is too long (max ${MAX_NAME_LEN} characters)`,
+			);
+		}
+		if (args.description !== undefined) {
+			assertFieldWithinLimit(
+				"description",
+				args.description,
+				MAX_DESCRIPTION_LEN,
+			);
+		}
+
 		const now = Date.now();
 		const { tourId, organizationId, userId, ...patch } = args;
 		await ctx.db.patch(args.tourId, { ...patch, updatedAt: now });

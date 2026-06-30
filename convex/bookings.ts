@@ -29,6 +29,12 @@ import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
+import {
+	MAX_GUEST_NAMES_LEN,
+	MAX_NOTES_LEN,
+	MAX_SHORT_FIELD_LEN,
+	assertFieldWithinLimit,
+} from "./lib/validation";
 
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
 // minus currency/conversion noise (we are cents-only).
@@ -380,6 +386,28 @@ export const create = mutation({
 			);
 		}
 
+		// Length validation on free-text fields. The FE caps these via
+		// maxLength but the BE is reachable by any Convex client
+		// (mobile app, future API, curl) — defending in depth keeps
+		// the table clean and prevents overlong inserts.
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
+		if (args.guestNames !== undefined) {
+			assertFieldWithinLimit(
+				"guestNames",
+				args.guestNames,
+				MAX_GUEST_NAMES_LEN,
+			);
+		}
+		if (args.languageRequired !== undefined) {
+			assertFieldWithinLimit(
+				"languageRequired",
+				args.languageRequired,
+				MAX_SHORT_FIELD_LEN,
+			);
+		}
+
 		// If a scheduleId was provided, validate it belongs to the
 		// same tour + org before we attempt to increment its counter.
 		if (args.scheduleId) {
@@ -563,6 +591,25 @@ export const update = mutation({
 			patch[field] = incoming;
 		}
 
+		// Length validation on free-text fields (same caps as create).
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
+		if (args.guestNames !== undefined) {
+			assertFieldWithinLimit(
+				"guestNames",
+				args.guestNames,
+				MAX_GUEST_NAMES_LEN,
+			);
+		}
+		if (args.languageRequired !== undefined) {
+			assertFieldWithinLimit(
+				"languageRequired",
+				args.languageRequired,
+				MAX_SHORT_FIELD_LEN,
+			);
+		}
+
 		// Source: balance_due = total_amount - deposit_amount on total update.
 		if (patch.totalAmountCents !== undefined) {
 			const newTotal = patch.totalAmountCents as bigint;
@@ -631,6 +678,25 @@ export const internalUpdate = internalMutation({
 				changes[field] = { old: oldValue, new: incoming };
 			}
 			patch[field] = incoming;
+		}
+
+		// Same length caps as the public update.
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
+		if (args.guestNames !== undefined) {
+			assertFieldWithinLimit(
+				"guestNames",
+				args.guestNames,
+				MAX_GUEST_NAMES_LEN,
+			);
+		}
+		if (args.languageRequired !== undefined) {
+			assertFieldWithinLimit(
+				"languageRequired",
+				args.languageRequired,
+				MAX_SHORT_FIELD_LEN,
+			);
 		}
 
 		if (patch.totalAmountCents !== undefined) {
@@ -992,12 +1058,49 @@ export const recordReview = mutation({
 		if (args.rating < 1 || args.rating > 5) {
 			throw new ConvexError("Rating must be 1..5");
 		}
+		// Reviews can run long (a customer might write a paragraph)
+		// but we still cap to keep the table bounded. MAX_NOTES_LEN
+		// (1000) is the same cap we use elsewhere for free text.
+		if (args.comment !== undefined) {
+			assertFieldWithinLimit("comment", args.comment, MAX_NOTES_LEN);
+		}
 
 		const now = Date.now();
 		await ctx.db.patch(args.bookingId, {
 			reviewRating: args.rating,
 			reviewComment: args.comment ?? "",
 			updatedAt: now,
+		});
+		return args.bookingId;
+	},
+});
+
+/** Internal mirror of recordReview — no auth, used by tests. */
+export const internalRecordReview = internalMutation({
+	args: {
+		bookingId: v.id("bookings"),
+		rating: v.number(),
+		comment: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) throw new ConvexError("Booking not found");
+		if (booking.status !== "completed") {
+			throw new ConvexError(
+				"Reviews can only be recorded for completed bookings",
+			);
+		}
+		if (args.rating < 1 || args.rating > 5) {
+			throw new ConvexError("Rating must be 1..5");
+		}
+		if (args.comment !== undefined) {
+			assertFieldWithinLimit("comment", args.comment, MAX_NOTES_LEN);
+		}
+
+		await ctx.db.patch(args.bookingId, {
+			reviewRating: args.rating,
+			reviewComment: args.comment ?? "",
+			updatedAt: Date.now(),
 		});
 		return args.bookingId;
 	},

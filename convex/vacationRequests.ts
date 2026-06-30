@@ -15,6 +15,7 @@ import type { QueryCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { MAX_NOTES_LEN } from "./lib/validation";
 
 // ---- helpers ----
 
@@ -243,6 +244,15 @@ export const internalCreate = internalMutation({
 		if (overlap) {
 			throw new ConvexError(
 				"Vacation request overlaps with an existing pending or approved request",
+			);
+		}
+
+		// Length validation on the optional reason field. Same cap as
+		// booking/customer notes — defends against arbitrarily large
+		// payloads from any Convex client.
+		if (args.reason !== undefined && args.reason.length > MAX_NOTES_LEN) {
+			throw new ConvexError(
+				`Reason is too long (max ${MAX_NOTES_LEN} characters)`,
 			);
 		}
 

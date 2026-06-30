@@ -501,7 +501,8 @@ export const internalCreate = internalMutation({
 		driverId: args.driverId,
 	});
 	if (conflicts.length > 0) {
-		throw new ConvexError(conflicts[0]!.message);
+		const first = conflicts[0];
+		throw new ConvexError(first?.message ?? "Schedule conflict");
 	}
 
 	const now = Date.now();
@@ -612,7 +613,8 @@ export const internalUpdate = internalMutation({
 			excludeAssignmentId: args.assignmentId,
 		});
 		if (conflicts.length > 0) {
-			throw new ConvexError(conflicts[0]!.message);
+			const first = conflicts[0];
+			throw new ConvexError(first?.message ?? "Schedule conflict");
 		}
 
 		const now = Date.now();
@@ -844,7 +846,7 @@ export async function checkConflictsHelper(
 			) {
 				out.push({
 					conflictType,
-					message: `${conflictType[0]!.toUpperCase() + conflictType.slice(1)} already assigned to '${tourName}' from ${r.startTime} to ${r.endTime ?? r.startTime}`,
+					message: `${(conflictType[0] ?? "").toUpperCase()}${conflictType.slice(1)} already assigned to '${tourName}' from ${r.startTime} to ${r.endTime ?? r.startTime}`,
 				});
 			}
 		}

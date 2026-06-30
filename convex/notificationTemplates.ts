@@ -15,6 +15,13 @@ import {
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import {
+	MAX_EMAIL_BODY_LEN,
+	MAX_EMAIL_SUBJECT_LEN,
+	MAX_NAME_LEN,
+	MAX_SMS_BODY_LEN,
+	assertFieldWithinLimit,
+} from "./lib/validation";
 
 // ---- queries ----
 
@@ -108,6 +115,39 @@ export const internalCreate = internalMutation({
 		retryCount: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
+		// Length validation on free-text fields. Email bodies can run
+		// long (HTML) but the FE caps via maxLength; defending in depth
+		// here keeps the table bounded.
+		if (args.name.length > MAX_NAME_LEN) {
+			throw new ConvexError(
+				`Name is too long (max ${MAX_NAME_LEN} characters)`,
+			);
+		}
+		assertFieldWithinLimit(
+			"emailSubject",
+			args.emailSubject,
+			MAX_EMAIL_SUBJECT_LEN,
+		);
+		assertFieldWithinLimit(
+			"emailBodyText",
+			args.emailBodyText,
+			MAX_EMAIL_BODY_LEN,
+		);
+		if (args.emailBodyHtml !== undefined) {
+			assertFieldWithinLimit(
+				"emailBodyHtml",
+				args.emailBodyHtml,
+				MAX_EMAIL_BODY_LEN,
+			);
+		}
+		if (args.smsBody !== undefined) {
+			assertFieldWithinLimit(
+				"smsBody",
+				args.smsBody,
+				MAX_SMS_BODY_LEN,
+			);
+		}
+
 		const now = Date.now();
 		const id = await ctx.db.insert("notificationTemplates", {
 			organizationId: args.organizationId,
@@ -195,6 +235,42 @@ export const internalUpdate = internalMutation({
 		if (existing.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
+
+		// Same length caps as the create path.
+		if (args.name !== undefined && args.name.length > MAX_NAME_LEN) {
+			throw new ConvexError(
+				`Name is too long (max ${MAX_NAME_LEN} characters)`,
+			);
+		}
+		if (args.emailSubject !== undefined) {
+			assertFieldWithinLimit(
+				"emailSubject",
+				args.emailSubject,
+				MAX_EMAIL_SUBJECT_LEN,
+			);
+		}
+		if (args.emailBodyText !== undefined) {
+			assertFieldWithinLimit(
+				"emailBodyText",
+				args.emailBodyText,
+				MAX_EMAIL_BODY_LEN,
+			);
+		}
+		if (args.emailBodyHtml !== undefined) {
+			assertFieldWithinLimit(
+				"emailBodyHtml",
+				args.emailBodyHtml,
+				MAX_EMAIL_BODY_LEN,
+			);
+		}
+		if (args.smsBody !== undefined) {
+			assertFieldWithinLimit(
+				"smsBody",
+				args.smsBody,
+				MAX_SMS_BODY_LEN,
+			);
+		}
+
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		for (const field of [
 			"name",

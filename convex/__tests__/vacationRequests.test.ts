@@ -310,3 +310,49 @@ describe("vacation requests", () => {
 		).rejects.toThrow(/Unauth/i);
 	});
 });
+
+describe("vacationRequests — length validation", () => {
+	it("internalCreate rejects reason over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.vacationRequests.internalCreate, {
+				organizationId: "org_vac_len",
+				userId: "user-1",
+				startDate: "2026-08-01",
+				endDate: "2026-08-05",
+				reason: "r".repeat(1001),
+			}),
+		).rejects.toThrow(/Reason is too long/);
+	});
+
+	it("internalCreate accepts reason at exactly MAX_NOTES_LEN (boundary)", async () => {
+		const t = convexTest(schema, modules);
+		const id = await t.mutation(internal.vacationRequests.internalCreate, {
+			organizationId: "org_vac_max",
+			userId: "user-1",
+			startDate: "2026-08-01",
+			endDate: "2026-08-05",
+			reason: "r".repeat(1000),
+		});
+		expect(id).toBeDefined();
+	});
+
+	it("internalCreate accepts empty/undefined reason", async () => {
+		const t = convexTest(schema, modules);
+		const id1 = await t.mutation(internal.vacationRequests.internalCreate, {
+			organizationId: "org_vac_empty",
+			userId: "user-1",
+			startDate: "2026-09-01",
+			endDate: "2026-09-02",
+		});
+		expect(id1).toBeDefined();
+		const id2 = await t.mutation(internal.vacationRequests.internalCreate, {
+			organizationId: "org_vac_empty",
+			userId: "user-1",
+			startDate: "2026-09-03",
+			endDate: "2026-09-04",
+			reason: "",
+		});
+		expect(id2).toBeDefined();
+	});
+});
