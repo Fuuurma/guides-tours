@@ -13,6 +13,11 @@ import {
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import {
+	MAX_LICENSE_LEN,
+	MAX_NOTES_LEN,
+	assertFieldWithinLimit,
+} from "./lib/validation";
 
 const ALLOWED_UPDATE_FIELDS = ["licenseInfo", "notes", "isActive"] as const;
 
@@ -84,6 +89,10 @@ export const internalCreate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		assertFieldWithinLimit("licenseInfo", args.licenseInfo, MAX_LICENSE_LEN);
+		if (args.notes) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
 		// One driver profile per user per company (source: driver_service.py:48-50).
 		const existing = await ctx.db
 			.query("drivers")
@@ -148,6 +157,12 @@ export const internalUpdate = internalMutation({
 		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
+		if (args.licenseInfo !== undefined) {
+			assertFieldWithinLimit("licenseInfo", args.licenseInfo, MAX_LICENSE_LEN);
+		}
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
 		const existing = await ctx.db.get(args.driverId);
 		if (!existing) throw new ConvexError("Driver not found");
 		if (existing.organizationId !== args.organizationId) {

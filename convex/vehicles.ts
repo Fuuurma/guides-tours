@@ -13,6 +13,13 @@ import {
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import {
+	MAX_LICENSE_LEN,
+	MAX_NOTES_LEN,
+	MAX_SHORT_FIELD_LEN,
+	MAX_VEHICLE_NAME_LEN,
+	assertFieldWithinLimit,
+} from "./lib/validation";
 
 const ALLOWED_UPDATE_FIELDS = [
 	"name",
@@ -126,6 +133,14 @@ export const internalCreate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		assertFieldWithinLimit("name", args.name, MAX_VEHICLE_NAME_LEN);
+		assertFieldWithinLimit("vehicleType", args.vehicleType, MAX_SHORT_FIELD_LEN);
+		if (args.licensePlate !== undefined) {
+			assertFieldWithinLimit("licensePlate", args.licensePlate, MAX_LICENSE_LEN);
+		}
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
 		if (args.capacity <= 0) {
 			throw new ConvexError("Capacity must be positive");
 		}
@@ -207,6 +222,18 @@ export const internalUpdate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		if (args.name !== undefined) {
+			assertFieldWithinLimit("name", args.name, MAX_VEHICLE_NAME_LEN);
+		}
+		if (args.vehicleType !== undefined) {
+			assertFieldWithinLimit("vehicleType", args.vehicleType, MAX_SHORT_FIELD_LEN);
+		}
+		if (args.licensePlate !== undefined) {
+			assertFieldWithinLimit("licensePlate", args.licensePlate, MAX_LICENSE_LEN);
+		}
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
 		const existing = await ctx.db.get(args.vehicleId);
 		if (!existing) throw new ConvexError("Vehicle not found");
 		if (existing.organizationId !== args.organizationId) {

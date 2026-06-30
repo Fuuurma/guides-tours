@@ -32,6 +32,7 @@ import { logAudit } from "./lib/audit";
 import {
 	MAX_GUEST_NAMES_LEN,
 	MAX_NOTES_LEN,
+	MAX_PAYMENT_METHOD_LEN,
 	MAX_SHORT_FIELD_LEN,
 	assertFieldWithinLimit,
 } from "./lib/validation";
@@ -407,6 +408,13 @@ export const create = mutation({
 				MAX_SHORT_FIELD_LEN,
 			);
 		}
+		if (args.paymentMethod !== undefined) {
+			assertFieldWithinLimit(
+				"paymentMethod",
+				args.paymentMethod,
+				MAX_PAYMENT_METHOD_LEN,
+			);
+		}
 
 		// If a scheduleId was provided, validate it belongs to the
 		// same tour + org before we attempt to increment its counter.
@@ -577,6 +585,20 @@ export const update = mutation({
 			);
 		}
 
+		// Length validation on free-text fields (defense in depth).
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
+		if (args.guestNames !== undefined) {
+			assertFieldWithinLimit("guestNames", args.guestNames, MAX_GUEST_NAMES_LEN);
+		}
+		if (args.languageRequired !== undefined) {
+			assertFieldWithinLimit("languageRequired", args.languageRequired, MAX_SHORT_FIELD_LEN);
+		}
+		if (args.paymentMethod !== undefined) {
+			assertFieldWithinLimit("paymentMethod", args.paymentMethod, MAX_PAYMENT_METHOD_LEN);
+		}
+
 		const now = Date.now();
 		const patch: Record<string, unknown> = {};
 		const changes: Record<string, { old: unknown; new: unknown }> = {};
@@ -696,6 +718,13 @@ export const internalUpdate = internalMutation({
 				"languageRequired",
 				args.languageRequired,
 				MAX_SHORT_FIELD_LEN,
+			);
+		}
+		if (args.paymentMethod !== undefined) {
+			assertFieldWithinLimit(
+				"paymentMethod",
+				args.paymentMethod,
+				MAX_PAYMENT_METHOD_LEN,
 			);
 		}
 

@@ -136,4 +136,72 @@ describe("vehicles", () => {
 			}),
 		).rejects.toThrow(/Forbidden/);
 	});
+
+	it("create: rejects name over MAX_VEHICLE_NAME_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.vehicles.internalCreate, {
+				organizationId: "org_v_long",
+				userId: "user-1",
+				name: "V".repeat(101),
+				vehicleType: "van",
+				capacity: 8,
+			}),
+		).rejects.toThrow(/name is too long/);
+	});
+
+	it("create: rejects vehicleType over MAX_SHORT_FIELD_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.vehicles.internalCreate, {
+				organizationId: "org_v_tlong",
+				userId: "user-1",
+				name: "Van",
+				vehicleType: "T".repeat(51),
+				capacity: 8,
+			}),
+		).rejects.toThrow(/vehicleType is too long/);
+	});
+
+	it("create: rejects licensePlate over MAX_LICENSE_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.vehicles.internalCreate, {
+				organizationId: "org_v_plong",
+				userId: "user-1",
+				name: "Van",
+				vehicleType: "van",
+				capacity: 8,
+				licensePlate: "P".repeat(201),
+			}),
+		).rejects.toThrow(/licensePlate is too long/);
+	});
+
+	it("update: rejects name over MAX_VEHICLE_NAME_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_v_ulong";
+		const id = await t.run((ctx) => seedVehicle(ctx, orgId));
+		await expect(
+			t.mutation(internal.vehicles.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				vehicleId: id,
+				name: "V".repeat(101),
+			}),
+		).rejects.toThrow(/name is too long/);
+	});
+
+	it("update: rejects notes over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_v_unlong";
+		const id = await t.run((ctx) => seedVehicle(ctx, orgId));
+		await expect(
+			t.mutation(internal.vehicles.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				vehicleId: id,
+				notes: "N".repeat(1001),
+			}),
+		).rejects.toThrow(/notes is too long/);
+	});
 });

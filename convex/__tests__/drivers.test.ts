@@ -138,4 +138,57 @@ describe("drivers", () => {
 		)) as any;
 		expect(logs.some((l: any) => l.action === "driver.deleted")).toBe(true);
 	});
+
+	it("create: rejects licenseInfo over MAX_LICENSE_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.drivers.internalCreate, {
+				organizationId: "org_d_long",
+				createdByUserId: "user-1",
+				userId: "driver-long",
+				licenseInfo: "L".repeat(201),
+			}),
+		).rejects.toThrow(/licenseInfo is too long/);
+	});
+
+	it("create: rejects notes over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.drivers.internalCreate, {
+				organizationId: "org_d_nlong",
+				createdByUserId: "user-1",
+				userId: "driver-nlong",
+				licenseInfo: "ok",
+				notes: "N".repeat(1001),
+			}),
+		).rejects.toThrow(/notes is too long/);
+	});
+
+	it("update: rejects licenseInfo over MAX_LICENSE_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_d_ulong";
+		const id = await t.run((ctx) => seedDriver(ctx, orgId));
+		await expect(
+			t.mutation(internal.drivers.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				driverId: id,
+				licenseInfo: "L".repeat(201),
+			}),
+		).rejects.toThrow(/licenseInfo is too long/);
+	});
+
+	it("update: rejects notes over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_d_unlong";
+		const id = await t.run((ctx) => seedDriver(ctx, orgId));
+		await expect(
+			t.mutation(internal.drivers.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				driverId: id,
+				notes: "N".repeat(1001),
+			}),
+		).rejects.toThrow(/notes is too long/);
+	});
 });

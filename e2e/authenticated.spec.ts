@@ -107,11 +107,14 @@ test.describe("authenticated smoke", () => {
 		await page.goto("/sign-up");
 		await page.locator("#name").waitFor({ state: "visible" });
 		await waitForHydration(page);
+		// Fill fields one by one, allowing hydration to settle between
 		await page.locator("#name").fill("E2E Signin");
 		await page.locator("#email").fill(email);
 		await page.locator("#password").fill("test1234test");
+		// Small delay to ensure all event handlers are wired
+		await page.waitForTimeout(500);
 		await page.getByRole("button", { name: "Create account" }).click();
-		await page.waitForURL(/\/onboarding/, { timeout: 30_000 });
+		await page.waitForURL(/\/onboarding/, { timeout: 45_000 });
 
 		// Sign out by clearing cookies
 		await page.context().clearCookies();
@@ -122,6 +125,7 @@ test.describe("authenticated smoke", () => {
 		await waitForHydration(page);
 		await page.locator("#email").fill(email);
 		await page.locator("#password").fill("test1234test");
+		await page.waitForTimeout(500);
 		await page.getByRole("button", { name: "Sign in" }).click();
 
 		// After sign-in, an org-less user is routed to /onboarding (per

@@ -579,3 +579,101 @@ describe("convex/payments — input validation (defense in depth)", () => {
 		expect(id).toBeDefined();
 	});
 });
+
+describe("convex/payments — upsertSettings validation", () => {
+	it("rejects depositPercentage > 100", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.payments.upsertSettingsInternal, {
+				_organizationId: "org_dep_high",
+				stripeEnabled: false,
+				stripePublishableKey: "",
+				stripeSecretKey: "placeholder-no-change",
+				stripeWebhookSecret: "placeholder-no-change",
+				stripeIsSandbox: true,
+				acceptDeposits: true,
+				depositPercentage: 150,
+				defaultCurrency: "USD",
+			}),
+		).rejects.toThrow(/depositPercentage must be between/);
+	});
+
+	it("rejects depositPercentage < 0", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.payments.upsertSettingsInternal, {
+				_organizationId: "org_dep_low",
+				stripeEnabled: false,
+				stripePublishableKey: "",
+				stripeSecretKey: "placeholder-no-change",
+				stripeWebhookSecret: "placeholder-no-change",
+				stripeIsSandbox: true,
+				acceptDeposits: true,
+				depositPercentage: -10,
+				defaultCurrency: "USD",
+			}),
+		).rejects.toThrow(/depositPercentage must be between/);
+	});
+
+	it("rejects lowercase currency in upsertSettings", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.payments.upsertSettingsInternal, {
+				_organizationId: "org_cur_bad",
+				stripeEnabled: false,
+				stripePublishableKey: "",
+				stripeSecretKey: "placeholder-no-change",
+				stripeWebhookSecret: "placeholder-no-change",
+				stripeIsSandbox: true,
+				acceptDeposits: false,
+				depositPercentage: 30,
+				defaultCurrency: "usd",
+			}),
+		).rejects.toThrow(/Invalid currency/);
+	});
+
+	it("accepts depositPercentage 0 and 100", async () => {
+		const t = convexTest(schema, modules);
+		// 0%
+		await t.mutation(internal.payments.upsertSettingsInternal, {
+			_organizationId: "org_dep_0",
+			stripeEnabled: false,
+			stripePublishableKey: "",
+			stripeSecretKey: "placeholder-no-change",
+			stripeWebhookSecret: "placeholder-no-change",
+			stripeIsSandbox: true,
+			acceptDeposits: false,
+			depositPercentage: 0,
+			defaultCurrency: "USD",
+		});
+		const s0 = await t.run(async (ctx) => {
+			const r = await ctx.db
+				.query("paymentSettings")
+				.withIndex("by_org", (q) => q.eq("organizationId", "org_dep_0"))
+				.unique();
+			return r;
+		});
+		expect(s0?.depositPercentage).toBe(0);
+
+		// 100%
+		await t.mutation(internal.payments.upsertSettingsInternal, {
+			_organizationId: "org_dep_100",
+			stripeEnabled: false,
+			stripePublishableKey: "",
+			stripeSecretKey: "placeholder-no-change",
+			stripeWebhookSecret: "placeholder-no-change",
+			stripeIsSandbox: true,
+			acceptDeposits: true,
+			depositPercentage: 100,
+			defaultCurrency: "EUR",
+		});
+		const s100 = await t.run(async (ctx) => {
+			const r = await ctx.db
+				.query("paymentSettings")
+				.withIndex("by_org", (q) => q.eq("organizationId", "org_dep_100"))
+				.unique();
+			return r;
+		});
+		expect(s100?.depositPercentage).toBe(100);
+	});
+});

@@ -1207,4 +1207,19 @@ describe("convex/bookings — input length validation (defense in depth)", () =>
 			}),
 		).rejects.toThrow(/comment is too long/);
 	});
+
+	it("update: rejects paymentMethod over MAX_PAYMENT_METHOD_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const bookingId = await t.run(async (c) => {
+			const tid = await seedTour(c, "org_bu_pm");
+			const cid = await seedCustomer(c, "org_bu_pm");
+			return await seedBooking(c, "org_bu_pm", tid, cid);
+		});
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				paymentMethod: "P".repeat(51),
+			}),
+		).rejects.toThrow(/paymentMethod is too long/);
+	});
 });

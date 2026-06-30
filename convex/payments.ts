@@ -26,6 +26,8 @@ import { logAudit } from "./lib/audit";
 import {
 	CURRENCY_REGEX,
 	MAX_STRIPE_INTENT_ID_LEN,
+	MIN_DEPOSIT_PERCENTAGE,
+	MAX_DEPOSIT_PERCENTAGE,
 	assertFieldWithinLimit,
 } from "./lib/validation";
 
@@ -338,6 +340,16 @@ export const upsertSettings = mutation({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
+
+		// Validate inputs before touching secrets
+		if (args.depositPercentage < MIN_DEPOSIT_PERCENTAGE || args.depositPercentage > MAX_DEPOSIT_PERCENTAGE) {
+			throw new ConvexError(
+				`depositPercentage must be between ${MIN_DEPOSIT_PERCENTAGE} and ${MAX_DEPOSIT_PERCENTAGE}`,
+			);
+		}
+		if (!CURRENCY_REGEX.test(args.defaultCurrency)) {
+			throw new ConvexError("Invalid currency: must be 3 uppercase letters (e.g. USD)");
+		}
 		const { encrypt } = await import("./lib/crypto");
 
 		const now = Date.now();
@@ -408,6 +420,17 @@ export const upsertSettingsInternal = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const orgId = args._organizationId!;
+
+		// Validate inputs before touching secrets (defense in depth)
+		if (args.depositPercentage < MIN_DEPOSIT_PERCENTAGE || args.depositPercentage > MAX_DEPOSIT_PERCENTAGE) {
+			throw new ConvexError(
+				`depositPercentage must be between ${MIN_DEPOSIT_PERCENTAGE} and ${MAX_DEPOSIT_PERCENTAGE}`,
+			);
+		}
+		if (!CURRENCY_REGEX.test(args.defaultCurrency)) {
+			throw new ConvexError("Invalid currency: must be 3 uppercase letters (e.g. USD)");
+		}
+
 		const { encrypt } = await import("./lib/crypto");
 
 		const now = Date.now();
