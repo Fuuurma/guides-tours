@@ -1,6 +1,16 @@
 import { Link } from "@tanstack/react-router";
+import { useQuery } from "convex/react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { authClient } from "@/lib/auth-client";
+import { api } from "../../convex/_generated/api";
 
 interface NavBarProps {
 	orgName: string;
@@ -33,6 +43,9 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function NavBar({ orgName, userName, role }: NavBarProps) {
+	const orgs = useQuery(api.organizations.listMyOrganizations);
+	const [switching, setSwitching] = useState(false);
+
 	const handleSignOut = async () => {
 		await authClient.signOut({
 			fetchOptions: {
@@ -43,12 +56,52 @@ export function NavBar({ orgName, userName, role }: NavBarProps) {
 		});
 	};
 
+	const handleSwitchOrg = async (orgId: string) => {
+		setSwitching(true);
+		try {
+			await authClient.organization.setActive({
+				organizationId: orgId,
+			});
+			// Reload to pick up the new active org across all queries.
+			window.location.assign("/dashboard");
+		} catch {
+			setSwitching(false);
+		}
+	};
+
+	const orgList = (orgs ?? []) as Array<{
+		id: string;
+		name: string;
+		slug: string;
+		logo: string | null;
+		isActive: boolean;
+	}>;
+
 	return (
 		<nav className="border-b bg-white">
 			<div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
-				<Link to="/dashboard" className="text-lg font-semibold">
-					{orgName}
-				</Link>
+				{orgList.length > 1 ? (
+					<Select
+						value={orgList.find((o) => o.isActive)?.id ?? ""}
+						onValueChange={(v) => void handleSwitchOrg(v)}
+						disabled={switching}
+					>
+						<SelectTrigger className="w-auto gap-1 border-0 bg-transparent p-0 text-lg font-semibold shadow-none hover:bg-transparent">
+							<SelectValue>{orgName}</SelectValue>
+						</SelectTrigger>
+						<SelectContent>
+							{orgList.map((o) => (
+								<SelectItem key={o.id} value={o.id}>
+									{o.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				) : (
+					<Link to="/dashboard" className="text-lg font-semibold">
+						{orgName}
+					</Link>
+				)}
 				<div className="flex flex-1 flex-wrap gap-1">
 					{NAV_ITEMS.map((item) => (
 						<Link

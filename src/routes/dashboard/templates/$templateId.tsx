@@ -1,11 +1,15 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
+import { useState } from "react";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -15,6 +19,10 @@ export const Route = createFileRoute("/dashboard/templates/$templateId")({
 
 function TemplateDetailPage() {
 	const { templateId } = Route.useParams();
+	const navigate = useNavigate();
+	const instantiate = useMutation(api.tourTemplates.instantiate);
+	const [creating, setCreating] = useState(false);
+	const [instantiateErr, setInstantiateErr] = useState<string | null>(null);
 	const {
 		data: template,
 		isPending,
@@ -34,12 +42,39 @@ function TemplateDetailPage() {
 			<DetailPage title="Template not found" backTo="/dashboard/templates" />
 		);
 
+	const handleInstantiate = async () => {
+		setCreating(true);
+		setInstantiateErr(null);
+		try {
+			const tourId = await instantiate({
+				templateId: templateId as Id<"tourTemplates">,
+			});
+			void navigate({
+				to: "/dashboard/tours/$tourId",
+				params: { tourId },
+			});
+		} catch (err) {
+			setInstantiateErr(getErrorMessage(err));
+		} finally {
+			setCreating(false);
+		}
+	};
+
 	return (
 		<DetailPage
 			title={template.name}
 			subtitle={`${template.tourType} · ${template.durationHours}h`}
 			backTo="/dashboard/templates"
 		>
+			<div className="mb-4 flex items-center gap-3">
+				<Button onClick={() => void handleInstantiate()} disabled={creating}>
+					{creating ? "Creating tour…" : "Use template"}
+				</Button>
+				{instantiateErr && (
+					<span className="text-destructive text-sm">{instantiateErr}</span>
+				)}
+			</div>
+
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard
 					label="Capacity"
