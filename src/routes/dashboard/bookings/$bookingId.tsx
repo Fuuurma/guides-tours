@@ -30,16 +30,24 @@ function BookingDetailPage() {
 	} = useQuery(
 		convexQuery(api.bookings.get, { bookingId: bookingId as Id<"bookings"> }),
 	);
+	const payments = useQuery(
+		convexQuery(api.payments.list, {
+			bookingId: bookingId as Id<"bookings">,
+		}),
+	);
 	const checkIn = useMutation(api.bookings.checkIn);
 	const complete = useMutation(api.bookings.complete);
 	const cancelBooking = useMutation(api.bookings.cancel);
 	const recordReview = useMutation(api.bookings.recordReview);
+	const refundPayment = useMutation(api.payments.refund);
 	const [pending, setPending] = useState(false);
 	const [showCancelForm, setShowCancelForm] = useState(false);
 	const [cancelReason, setCancelReason] = useState("");
 	const [showReviewForm, setShowReviewForm] = useState(false);
 	const [reviewRating, setReviewRating] = useState("5");
 	const [reviewComment, setReviewComment] = useState("");
+	const [showRefundForm, setShowRefundForm] = useState(false);
+	const [refundReason, setRefundReason] = useState("");
 
 	const runAction = async (fn: () => Promise<unknown>, msg: string) => {
 		setPending(true);
@@ -92,6 +100,29 @@ function BookingDetailPage() {
 	}
 
 	const b = booking as unknown as BookingDetail;
+
+	// Find a succeeded payment for the refund button.
+	const paymentList = payments as unknown as
+		| { items: Array<{ _id: string; status: string }> }
+		| undefined;
+	const succeededPayment = (paymentList?.items ?? []).find(
+		(p: { status: string }) => p.status === "succeeded",
+	) as { _id: string; status: string } | undefined;
+
+	const onRefund = () => {
+		if (!succeededPayment) return;
+		runAction(
+			() =>
+				refundPayment({
+					paymentId: succeededPayment._id as Id<"payments">,
+					reason: refundReason.trim() || undefined,
+				}),
+			"Payment refunded",
+		).then(() => {
+			setShowRefundForm(false);
+			setRefundReason("");
+		});
+	};
 
 	return (
 		<DetailPage
@@ -162,6 +193,36 @@ function BookingDetailPage() {
 				</div>
 			)}
 
+			{showRefundForm && succeededPayment && (
+				<div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-4">
+					<p className="text-sm font-medium">
+						Refund {formatCentsCompact(b.totalAmountCents)} — this marks the
+						payment as refunded.
+					</p>
+					<Textarea
+						value={refundReason}
+						onChange={(e) => setRefundReason(e.target.value)}
+						placeholder="Reason for refund (optional)"
+						rows={2}
+						maxLength={500}
+					/>
+					<div className="flex gap-2">
+						<Button variant="destructive" onClick={onRefund} disabled={pending}>
+							{pending ? "Refunding…" : "Confirm refund"}
+						</Button>
+						<Button
+							variant="outline"
+							onClick={() => {
+								setShowRefundForm(false);
+								setRefundReason("");
+							}}
+						>
+							Cancel
+						</Button>
+					</div>
+				</div>
+			)}
+
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard
 					label="Total"
@@ -180,6 +241,19 @@ function BookingDetailPage() {
 					value={formatCentsCompact(b.netRevenueCents)}
 				/>
 			</div>
+
+			{succeededPayment && (
+				<div className="mt-2">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => setShowRefundForm(true)}
+						disabled={pending}
+					>
+						Refund payment
+					</Button>
+				</div>
+			)}
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<DetailSection title="Tour" description="Booked experience">

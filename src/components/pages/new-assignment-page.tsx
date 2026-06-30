@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
+import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,6 +18,7 @@ import { FormField } from "../form";
 interface Tour {
 	_id: string;
 	name: string;
+	durationHours: number;
 }
 interface Vehicle {
 	_id: string;
@@ -45,14 +47,28 @@ const INITIAL: FormValues = {
 	driverId: "",
 };
 
+function addHours(time: string, hours: number): string {
+	const [h, m] = time.split(":").map(Number);
+	const totalMinutes = h * 60 + m + Math.round(hours * 60);
+	const newH = Math.floor(totalMinutes / 60) % 24;
+	const newM = totalMinutes % 60;
+	return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
+}
+
 export function NewAssignmentPage() {
 	const create = useMutation(api.assignments.create);
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 	const { data: vehicles } = useQuery(convexQuery(api.vehicles.list, {}));
 	const { data: drivers } = useQuery(convexQuery(api.drivers.list, {}));
+	const [conflicts, setConflicts] = useState<string[]>([]);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
+			if (conflicts.length > 0) {
+				throw new Error(
+					`Scheduling conflicts detected: ${conflicts.join("; ")}`,
+				);
+			}
 			const id = await create({
 				tourId: v.tourId as Id<"tours">,
 				guideId: v.guideId.trim(),
@@ -75,6 +91,13 @@ export function NewAssignmentPage() {
 		redirectTo: (id) => `/dashboard/assignments/${id}`,
 		successMessage: "Assignment created",
 	});
+
+	// Check conflicts when date/time/guide/vehicle/driver change.
+	const tour = ((tours ?? []) as Tour[]).find(
+		(t) => t._id === form.values.tourId,
+	);
+	const hasConflictData =
+		form.values.date && form.values.startTime && tour?.durationHours;
 
 	return (
 		<EntityFormPage
@@ -143,6 +166,26 @@ export function NewAssignmentPage() {
 				</FormField>
 			</div>
 
+			{hasConflictData && tour && (
+				<ConflictChecker
+					date={form.values.date}
+					startTime={form.values.startTime}
+					endTime={addHours(form.values.startTime, tour.durationHours)}
+					guideId={form.values.guideId.trim() || undefined}
+					vehicleId={
+						form.values.vehicleId
+							? (form.values.vehicleId as Id<"vehicles">)
+							: undefined
+					}
+					driverId={
+						form.values.driverId
+							? (form.values.driverId as Id<"drivers">)
+							: undefined
+					}
+					onConflictsChange={setConflicts}
+				/>
+			)}
+
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField label="Vehicle (optional)" htmlFor="vehicle">
 					<Select
@@ -184,3 +227,68 @@ export function NewAssignmentPage() {
 		</EntityFormPage>
 	);
 }
+
+function ConflictChecker({
+	date,
+	startTime,
+	endTime,
+	guideId,
+	vehicleId,
+	driverId,
+	onConflictsChange,
+}: {
+	date: string;
+	startTime: string;
+	endTime: string;
+	guideId?: string;
+	vehicleId?: Id<"vehicles">;
+	driverId?: Id<"drivers">;
+	onConflictsChange: (conflicts: string[]) => void;
+}) {
+	const { data: conflicts } = useQuery(
+		convexQuery(
+			api.assignments.checkConflicts,
+			date && startTime && endTime
+				? {
+						date,
+						startTime,
+						endTime,
+						guideId: guideId || undefined,
+						vehicleId,
+						driverId,
+					}
+				: { date: "", startTime: "", endTime: "" },
+		),
+	);
+
+	const conflictList = (conflicts ?? []) as Array<{
+		conflictType: "guide" | "vehicle" | "driver";
+		assignmentId: string;
+		tourName: string;
+		message: string;
+	}>;
+	const messages = conflictList.map((c) => c.message);
+
+	const prevRef = React.useRef<string>("");
+	const key = JSON.stringify(messages);
+	if (key !== prevRef.current) {
+		prevRef.current = key;
+		queueMicrotask(() => onConflictsChange(messages));
+	}
+
+	if (conflictList.length === 0) return null;
+
+	return (
+		<div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+			<p className="font-medium">Scheduling conflicts detected:</p>
+			<ul className="mt-1 list-disc pl-5">
+				{conflictList.map((c) => (
+					<li key={c.assignmentId}>{c.message}</li>
+				))}
+			</ul>
+		</div>
+	);
+}
+
+// Need React import for useRef.
+import React from "react";
