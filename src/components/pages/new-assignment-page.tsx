@@ -11,6 +11,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { addHours } from "@/lib/time";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
@@ -46,14 +47,6 @@ const INITIAL: FormValues = {
 	vehicleId: "",
 	driverId: "",
 };
-
-function addHours(time: string, hours: number): string {
-	const [h, m] = time.split(":").map(Number);
-	const totalMinutes = h * 60 + m + Math.round(hours * 60);
-	const newH = Math.floor(totalMinutes / 60) % 24;
-	const newM = totalMinutes % 60;
-	return `${String(newH).padStart(2, "0")}:${String(newM).padStart(2, "0")}`;
-}
 
 export function NewAssignmentPage() {
 	const create = useMutation(api.assignments.create);

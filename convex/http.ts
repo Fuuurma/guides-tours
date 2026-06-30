@@ -90,10 +90,21 @@ http.route({
 		const date = typeof payload.date === "string" ? payload.date : null;
 		const startTime =
 			typeof payload.startTime === "string" ? payload.startTime : null;
+		// SECURITY: reject non-positive or over-large guests rather than
+		// silently defaulting to 1 — a sloppy default would let an
+		// attacker bypass the min-guests validation by sending a
+		// non-number (string, object, NaN, etc). 200 is an absolute
+		// upper bound; the tour's own maxGuests is enforced by
+		// createForSlug inside the action.
+		const MAX_GUESTS_PER_BOOKING = 200;
+		const rawGuests = payload.guests;
 		const guests =
-			typeof payload.guests === "number" && payload.guests > 0
-				? Math.floor(payload.guests)
-				: 1;
+			typeof rawGuests === "number" &&
+			Number.isFinite(rawGuests) &&
+			rawGuests >= 1 &&
+			rawGuests <= MAX_GUESTS_PER_BOOKING
+				? Math.floor(rawGuests)
+				: null;
 		const customerPhone =
 			typeof payload.customerPhone === "string"
 				? payload.customerPhone
@@ -101,9 +112,16 @@ http.route({
 		const notes =
 			typeof payload.notes === "string" ? payload.notes : undefined;
 
-		if (!tourId || !customerName || !customerEmail || !date || !startTime) {
+		if (
+			!tourId ||
+			!customerName ||
+			!customerEmail ||
+			!date ||
+			!startTime ||
+			guests === null
+		) {
 			return new Response(
-				"missing required fields: tourId, customerName, customerEmail, date, startTime",
+				"missing or invalid required fields: tourId, customerName, customerEmail, date, startTime, guests (positive integer <= 200)",
 				{ status: 400 },
 			);
 		}

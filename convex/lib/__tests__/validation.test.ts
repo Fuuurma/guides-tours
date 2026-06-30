@@ -3,12 +3,14 @@
 // These are pure-function tests (no Convex harness needed) —
 // validation.ts doesn't touch the DB.
 
+import { ConvexError } from "convex/values";
 import { describe, expect, it } from "vitest";
 import {
 	MAX_EMAIL_LEN,
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
 	MAX_PHONE_LEN,
+	assertFieldWithinLimit,
 	assertValidCustomerInput,
 	normalizeEmail,
 } from "../validation";
@@ -130,5 +132,64 @@ describe("assertValidCustomerInput", () => {
 			phone: "+1 (555) 010-0100",
 		});
 		expect(out.phone).toBe("+1 (555) 010-0100");
+	});
+});
+
+describe("assertFieldWithinLimit", () => {
+	it("throws ConvexError (not plain Error) when value is too long", () => {
+		let caught: unknown;
+		try {
+			assertFieldWithinLimit("notes", "x".repeat(101), 100);
+		} catch (err) {
+			caught = err;
+		}
+		expect(caught).toBeInstanceOf(ConvexError);
+		expect((caught as ConvexError<string>).data).toMatch(
+			/notes is too long \(max 100 characters\)/,
+		);
+	});
+
+	it("accepts a value at exactly the limit", () => {
+		expect(() => assertFieldWithinLimit("notes", "x".repeat(100), 100)).not.toThrow();
+	});
+});
+
+describe("validation throws ConvexError (not plain Error)", () => {
+	// The public http.ts endpoint distinguishes user-input errors from
+	// internal errors by checking `err instanceof ConvexError`. If
+	// validation throws plain Error, a malformed name would surface
+	// as 500 instead of 400. These tests pin the error type so a
+	// future refactor can't silently regress it.
+	it("assertValidCustomerInput throws ConvexError on too-long name", () => {
+		expect(() =>
+			assertValidCustomerInput({ name: "a".repeat(MAX_NAME_LEN + 1) }),
+		).toThrow(ConvexError);
+	});
+
+	it("assertValidCustomerInput throws ConvexError on too-long notes", () => {
+		expect(() =>
+			assertValidCustomerInput({
+				name: "Bob",
+				notes: "x".repeat(MAX_NOTES_LEN + 1),
+			}),
+		).toThrow(ConvexError);
+	});
+
+	it("assertValidCustomerInput throws ConvexError on too-long phone", () => {
+		expect(() =>
+			assertValidCustomerInput({
+				name: "Bob",
+				phone: "5".repeat(MAX_PHONE_LEN + 1),
+			}),
+		).toThrow(ConvexError);
+	});
+
+	it("normalizeEmail does not throw on bad input — returns null", () => {
+		// normalizeEmail is the "soft" validator used by customers.create.
+		// It must never throw — the caller checks for null and returns
+		// its own ConvexError with a user-friendly message.
+		expect(normalizeEmail("not-an-email")).toBeNull();
+		expect(normalizeEmail("a".repeat(MAX_EMAIL_LEN + 1) + "@x.com")).toBeNull();
+		expect(normalizeEmail("   ")).toBeNull();
 	});
 });
