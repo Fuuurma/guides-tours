@@ -2,15 +2,15 @@
 //
 // Source: backend/notifications/service.py::NotificationService.
 //
-// Email dispatch via fetch + Signature V4 signing (see convex/lib/awsSigV4.ts). Works in
-// the Convex default runtime + Cloudflare Workers without node-specific
-// imports. SMS is still a stub (would use @aws-sdk/client-sns in
-// production).
+// Email dispatch via the shared SES helper at convex/lib/sendEmail.ts (which
+// uses convex/lib/awsSigV4.ts under the hood). Works in the Convex default
+// runtime + Cloudflare Workers without node-specific imports. SMS is still a
+// stub (would use @aws-sdk/client-sns in production).
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import { signSesRequest, buildSesSendEmailXml } from "./lib/awsSigV4";
+import { sendTemplatedEmail } from "./lib/sendEmail";
 
 export type DispatchChannel = "email" | "sms" | "none";
 
@@ -230,15 +230,27 @@ async function sendEmail(params: {
 	bodyText: string;
 	bodyHtml: string;
 }): Promise<DispatchResult> {
-	const region = process.env.AWS_REGION;
-	const accessKey = process.env.AWS_ACCESS_KEY_ID;
-	const secretKey = process.env.AWS_SECRET_ACCESS_KEY;
-	const from = process.env.SES_FROM_ADDRESS;
+	const result = await sendTemplatedEmail({
+		to: params.to,
+		subject: params.subject,
+		bodyText: params.bodyText,
+		bodyHtml: params.bodyHtml,
+	});
 
-	if (!region || !accessKey || !secretKey || !from) {
-		console.warn(
-			"[dispatch] SES not configured (AWS_REGION / AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / SES_FROM_ADDRESS) — skipping email send",
-		);
+	if (result.status === "sent") {
+		return {
+			channel: "email",
+			status: "sent",
+			rendered: {
+				to: params.to,
+				subject: params.subject,
+				bodyText: params.bodyText,
+				bodyHtml: params.bodyHtml,
+			},
+		};
+	}
+
+	if (result.status === "skipped") {
 		return {
 			channel: "email",
 			status: "skipped",
@@ -251,60 +263,10 @@ async function sendEmail(params: {
 		};
 	}
 
-	const xmlBody = buildSesSendEmailXml({
-		from,
-		to: params.to,
-		subject: params.subject,
-		bodyText: params.bodyText,
-		bodyHtml: params.bodyHtml,
-	});
-
-	const signed = await signSesRequest({
-		region,
-		accessKey,
-		secretKey,
-		body: xmlBody,
-	});
-
-	let resp: Response;
-	try {
-		resp = await fetch(signed.url, {
-			method: signed.method,
-			headers: signed.headers,
-			body: signed.body,
-		});
-	} catch (e) {
-		return {
-			channel: "email",
-			status: "failed",
-			error: `fetch error: ${(e as Error).message}`,
-			rendered: {
-				to: params.to,
-				subject: params.subject,
-				bodyText: params.bodyText,
-				bodyHtml: params.bodyHtml,
-			},
-		};
-	}
-
-	if (!resp.ok) {
-		const errText = await resp.text();
-		return {
-			channel: "email",
-			status: "failed",
-			error: `SES ${resp.status}: ${errText.slice(0, 500)}`,
-			rendered: {
-				to: params.to,
-				subject: params.subject,
-				bodyText: params.bodyText,
-				bodyHtml: params.bodyHtml,
-			},
-		};
-	}
-
 	return {
 		channel: "email",
-		status: "sent",
+		status: "failed",
+		error: result.error,
 		rendered: {
 			to: params.to,
 			subject: params.subject,
