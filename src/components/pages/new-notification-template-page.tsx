@@ -1,5 +1,4 @@
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -60,12 +59,9 @@ const INITIAL: FormValues = {
 
 export function NewNotificationTemplatePage() {
 	const create = useMutation(api.notificationTemplates.create);
-	const [retriesErr, setRetriesErr] = useState<string | null>(null);
+
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const retriesError = validateNonNegativeNumber(v.retryCount, "Retries");
-			setRetriesErr(retriesError);
-			if (retriesError) throw new Error(retriesError);
 			const id = await create({
 				name: v.name.trim(),
 				templateType: v.templateType,
@@ -77,6 +73,12 @@ export function NewNotificationTemplatePage() {
 				retryCount: Number(v.retryCount),
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const retriesErr = validateNonNegativeNumber(v.retryCount, "Retries");
+			if (retriesErr) errs.retryCount = retriesErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/notifications/${id}`,
@@ -202,17 +204,14 @@ export function NewNotificationTemplatePage() {
 				<FormField
 					label="Retries"
 					htmlFor="retries"
-					error={retriesErr ?? undefined}
+					error={form.fieldErrors.retryCount}
 				>
 					<Input
 						id="retries"
 						type="number"
 						min="0"
 						value={form.values.retryCount}
-						onChange={(e) => {
-							form.set("retryCount", e.target.value);
-							if (retriesErr) setRetriesErr(null);
-						}}
+						onChange={(e) => form.set("retryCount", e.target.value)}
 					/>
 				</FormField>
 			</div>

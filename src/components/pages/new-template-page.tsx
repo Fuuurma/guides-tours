@@ -1,5 +1,4 @@
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -59,37 +58,14 @@ const INITIAL: FormValues = {
 
 export function NewTemplatePage() {
 	const create = useMutation(api.tourTemplates.create);
-	const [durErr, setDurErr] = useState<string | null>(null);
-	const [capErr, setCapErr] = useState<string | null>(null);
-	const [minErr, setMinErr] = useState<string | null>(null);
-	const [maxErr, setMaxErr] = useState<string | null>(null);
-	const [descErr, setDescErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const durError = validatePositiveNumber(v.durationHours, "Duration");
-			const capError = validatePositiveInteger(v.capacity, "Capacity");
-			const minError = validatePositiveInteger(v.minGuests, "Min guests");
-			const maxError = validatePositiveInteger(v.maxGuests, "Max guests");
-			setDurErr(durError);
-			setCapErr(capError);
-			setMinErr(minError);
-			setMaxErr(maxError);
-			if (durError || capError || minError || maxError) {
-				throw new Error(
-					durError ?? capError ?? minError ?? maxError ?? "Invalid input",
-				);
-			}
 			const minG = Number(v.minGuests);
 			const maxG = Number(v.maxGuests);
 			if (minG > maxG) {
-				const msg = "minGuests cannot exceed maxGuests";
-				setMinErr(msg);
-				throw new Error(msg);
+				throw new Error("minGuests cannot exceed maxGuests");
 			}
-			const descError = validateDescriptionOptional(v.description);
-			setDescErr(descError);
-			if (descError) throw new Error(descError);
 			const split = (s: string) =>
 				s
 					.split("\n")
@@ -114,6 +90,24 @@ export function NewTemplatePage() {
 				highlights: split(v.highlights),
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const durErr = validatePositiveNumber(v.durationHours, "Duration");
+			if (durErr) errs.durationHours = durErr;
+			const capErr = validatePositiveInteger(v.capacity, "Capacity");
+			if (capErr) errs.capacity = capErr;
+			const minErr = validatePositiveInteger(v.minGuests, "Min guests");
+			if (minErr) errs.minGuests = minErr;
+			const maxErr = validatePositiveInteger(v.maxGuests, "Max guests");
+			if (maxErr) errs.maxGuests = maxErr;
+			if (!minErr && !maxErr && Number(v.minGuests) > Number(v.maxGuests)) {
+				errs.minGuests = "minGuests cannot exceed maxGuests";
+				errs.maxGuests = "minGuests cannot exceed maxGuests";
+			}
+			const descErr = validateDescriptionOptional(v.description);
+			if (descErr) errs.description = descErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/templates/${id}`,
@@ -142,15 +136,12 @@ export function NewTemplatePage() {
 			<FormField
 				label="Description"
 				htmlFor="desc"
-				error={descErr ?? undefined}
+				error={form.fieldErrors.description}
 			>
 				<Textarea
 					id="desc"
 					value={form.values.description}
-					onChange={(e) => {
-						form.set("description", e.target.value);
-						if (descErr) setDescErr(null);
-					}}
+					onChange={(e) => form.set("description", e.target.value)}
 					rows={3}
 					maxLength={MAX_DESCRIPTION_LEN}
 					placeholder="Optional"
@@ -178,7 +169,7 @@ export function NewTemplatePage() {
 				<FormField
 					label="Duration (hours) *"
 					htmlFor="dur"
-					error={durErr ?? undefined}
+					error={form.fieldErrors.durationHours}
 				>
 					<Input
 						id="dur"
@@ -187,50 +178,50 @@ export function NewTemplatePage() {
 						min="0.5"
 						required
 						value={form.values.durationHours}
-						onChange={(e) => {
-							form.set("durationHours", e.target.value);
-							if (durErr) setDurErr(null);
-						}}
+						onChange={(e) => form.set("durationHours", e.target.value)}
 					/>
 				</FormField>
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-3">
-				<FormField label="Capacity *" htmlFor="cap" error={capErr ?? undefined}>
+				<FormField
+					label="Capacity *"
+					htmlFor="cap"
+					error={form.fieldErrors.capacity}
+				>
 					<Input
 						id="cap"
 						type="number"
 						min="1"
 						required
 						value={form.values.capacity}
-						onChange={(e) => {
-							form.set("capacity", e.target.value);
-							if (capErr) setCapErr(null);
-						}}
+						onChange={(e) => form.set("capacity", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Min guests" htmlFor="min" error={minErr ?? undefined}>
+				<FormField
+					label="Min guests"
+					htmlFor="min"
+					error={form.fieldErrors.minGuests}
+				>
 					<Input
 						id="min"
 						type="number"
 						min="1"
 						value={form.values.minGuests}
-						onChange={(e) => {
-							form.set("minGuests", e.target.value);
-							if (minErr) setMinErr(null);
-						}}
+						onChange={(e) => form.set("minGuests", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Max guests" htmlFor="max" error={maxErr ?? undefined}>
+				<FormField
+					label="Max guests"
+					htmlFor="max"
+					error={form.fieldErrors.maxGuests}
+				>
 					<Input
 						id="max"
 						type="number"
 						min="1"
 						value={form.values.maxGuests}
-						onChange={(e) => {
-							form.set("maxGuests", e.target.value);
-							if (maxErr) setMaxErr(null);
-						}}
+						onChange={(e) => form.set("maxGuests", e.target.value)}
 					/>
 				</FormField>
 			</div>

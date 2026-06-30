@@ -1,7 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -47,25 +46,9 @@ const INITIAL: FormValues = {
 export function NewSchedulePage() {
 	const create = useMutation(api.tourSchedules.create);
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
-	const [capErr, setCapErr] = useState<string | null>(null);
-	const [notesErr, setNotesErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			if (!v.tourId) throw new Error("Please select a tour");
-			if (!v.date || !v.startTime || !v.endTime) {
-				throw new Error("Date and times are required");
-			}
-			if (v.startTime >= v.endTime) {
-				throw new Error("End time must be after start time");
-			}
-			const capError = validatePositiveInteger(v.capacityTotal, "Capacity");
-			setCapErr(capError);
-			const notesError = validateNotesOptional(v.notes);
-			setNotesErr(notesError);
-			if (capError || notesError) {
-				throw new Error(capError ?? notesError ?? "Invalid input");
-			}
 			const id = await create({
 				tourId: v.tourId as Id<"tours">,
 				date: v.date,
@@ -75,6 +58,21 @@ export function NewSchedulePage() {
 				notes: v.notes.trim() || undefined,
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			if (!v.tourId) errs.tourId = "Please select a tour";
+			if (!v.date) errs.date = "Date is required";
+			if (!v.startTime) errs.startTime = "Start time is required";
+			if (!v.endTime) errs.endTime = "End time is required";
+			if (v.startTime && v.endTime && v.startTime >= v.endTime) {
+				errs.endTime = "End time must be after start time";
+			}
+			const capErr = validatePositiveInteger(v.capacityTotal, "Capacity");
+			if (capErr) errs.capacityTotal = capErr;
+			const notesErr = validateNotesOptional(v.notes);
+			if (notesErr) errs.notes = notesErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/schedules/${id}`,
@@ -89,7 +87,7 @@ export function NewSchedulePage() {
 			backTo="/dashboard/schedules"
 			submitLabel="Create schedule"
 		>
-			<FormField label="Tour *" htmlFor="tour">
+			<FormField label="Tour *" htmlFor="tour" error={form.fieldErrors.tourId}>
 				<Select
 					value={form.values.tourId}
 					onValueChange={(v) => form.set("tourId", v)}
@@ -107,7 +105,7 @@ export function NewSchedulePage() {
 				</Select>
 			</FormField>
 
-			<FormField label="Date *" htmlFor="date">
+			<FormField label="Date *" htmlFor="date" error={form.fieldErrors.date}>
 				<Input
 					id="date"
 					type="date"
@@ -118,7 +116,11 @@ export function NewSchedulePage() {
 			</FormField>
 
 			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Start time *" htmlFor="start">
+				<FormField
+					label="Start time *"
+					htmlFor="start"
+					error={form.fieldErrors.startTime}
+				>
 					<Input
 						id="start"
 						type="time"
@@ -127,7 +129,11 @@ export function NewSchedulePage() {
 						onChange={(e) => form.set("startTime", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="End time *" htmlFor="end">
+				<FormField
+					label="End time *"
+					htmlFor="end"
+					error={form.fieldErrors.endTime}
+				>
 					<Input
 						id="end"
 						type="time"
@@ -138,28 +144,26 @@ export function NewSchedulePage() {
 				</FormField>
 			</div>
 
-			<FormField label="Capacity *" htmlFor="cap" error={capErr ?? undefined}>
+			<FormField
+				label="Capacity *"
+				htmlFor="cap"
+				error={form.fieldErrors.capacityTotal}
+			>
 				<Input
 					id="cap"
 					type="number"
 					min="1"
 					required
 					value={form.values.capacityTotal}
-					onChange={(e) => {
-						form.set("capacityTotal", e.target.value);
-						if (capErr) setCapErr(null);
-					}}
+					onChange={(e) => form.set("capacityTotal", e.target.value)}
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
+			<FormField label="Notes" htmlFor="notes" error={form.fieldErrors.notes}>
 				<Textarea
 					id="notes"
 					value={form.values.notes}
-					onChange={(e) => {
-						form.set("notes", e.target.value);
-						if (notesErr) setNotesErr(null);
-					}}
+					onChange={(e) => form.set("notes", e.target.value)}
 					rows={3}
 					maxLength={MAX_NOTES_LEN}
 					placeholder="Optional"

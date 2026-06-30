@@ -37,30 +37,9 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 	});
 	const update = useMutation(api.customers.update);
 	const [loaded, setLoaded] = useState(false);
-	const [nameErr, setNameErr] = useState<string | null>(null);
-	const [emailErr, setEmailErr] = useState<string | null>(null);
-	const [phoneErr, setPhoneErr] = useState<string | null>(null);
-	const [notesErr, setNotesErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const nameError = validateName(v.name);
-			const emailError = validateEmail(v.email);
-			const phoneError = validatePhoneOptional(v.phone);
-			const notesError = validateNotesOptional(v.notes);
-			setNameErr(nameError);
-			setEmailErr(emailError);
-			setPhoneErr(phoneError);
-			setNotesErr(notesError);
-			if (nameError || emailError || phoneError || notesError) {
-				throw new Error(
-					nameError ??
-						emailError ??
-						phoneError ??
-						notesError ??
-						"Invalid input",
-				);
-			}
 			await update({
 				customerId: customerId as Id<"customers">,
 				name: v.name.trim(),
@@ -71,6 +50,18 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				vipStatus: v.vipStatus,
 			});
 			return customerId;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const nameErr = validateName(v.name);
+			if (nameErr) errs.name = nameErr;
+			const emailErr = validateEmail(v.email);
+			if (emailErr) errs.email = emailErr;
+			const phoneErr = validatePhoneOptional(v.phone);
+			if (phoneErr) errs.phone = phoneErr;
+			const notesErr = validateNotesOptional(v.notes);
+			if (notesErr) errs.notes = notesErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: {
 			name: "",
@@ -124,24 +115,21 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 			<FormField
 				label="Name *"
 				htmlFor="edit-customer-name"
-				error={nameErr ?? undefined}
+				error={form.fieldErrors.name}
 			>
 				<Input
 					id="edit-customer-name"
 					required
 					maxLength={MAX_NAME_LEN}
 					value={form.values.name}
-					onChange={(e) => {
-						form.set("name", e.target.value);
-						if (nameErr) setNameErr(null);
-					}}
+					onChange={(e) => form.set("name", e.target.value)}
 				/>
 			</FormField>
 
 			<FormField
 				label="Email *"
 				htmlFor="edit-customer-email"
-				error={emailErr ?? undefined}
+				error={form.fieldErrors.email}
 			>
 				<Input
 					id="edit-customer-email"
@@ -149,27 +137,21 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 					required
 					maxLength={254}
 					value={form.values.email}
-					onChange={(e) => {
-						form.set("email", e.target.value);
-						if (emailErr) setEmailErr(null);
-					}}
+					onChange={(e) => form.set("email", e.target.value)}
 				/>
 			</FormField>
 
 			<FormField
 				label="Phone"
 				htmlFor="edit-customer-phone"
-				error={phoneErr ?? undefined}
+				error={form.fieldErrors.phone}
 			>
 				<Input
 					id="edit-customer-phone"
 					type="tel"
 					maxLength={30}
 					value={form.values.phone}
-					onChange={(e) => {
-						form.set("phone", e.target.value);
-						if (phoneErr) setPhoneErr(null);
-					}}
+					onChange={(e) => form.set("phone", e.target.value)}
 				/>
 			</FormField>
 
@@ -185,15 +167,12 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 			<FormField
 				label="Notes"
 				htmlFor="edit-customer-notes"
-				error={notesErr ?? undefined}
+				error={form.fieldErrors.notes}
 			>
 				<Textarea
 					id="edit-customer-notes"
 					value={form.values.notes}
-					onChange={(e) => {
-						form.set("notes", e.target.value);
-						if (notesErr) setNotesErr(null);
-					}}
+					onChange={(e) => form.set("notes", e.target.value)}
 					rows={3}
 					maxLength={MAX_NOTES_LEN}
 					placeholder="Optional"

@@ -1,5 +1,4 @@
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,18 +20,21 @@ const INITIAL: FormValues = {
 
 export function NewDriverPage() {
 	const create = useMutation(api.drivers.create);
-	const [notesErr, setNotesErr] = useState<string | null>(null);
+
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const notesError = validateNotesOptional(v.notes);
-			setNotesErr(notesError);
-			if (notesError) throw new Error(notesError);
 			const id = await create({
 				userId: v.userId.trim(),
 				licenseInfo: v.licenseInfo.trim(),
 				notes: v.notes.trim() || undefined,
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const notesErr = validateNotesOptional(v.notes);
+			if (notesErr) errs.notes = notesErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/drivers/${id}`,
@@ -77,14 +79,11 @@ export function NewDriverPage() {
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
+			<FormField label="Notes" htmlFor="notes" error={form.fieldErrors.notes}>
 				<Textarea
 					id="notes"
 					value={form.values.notes}
-					onChange={(e) => {
-						form.set("notes", e.target.value);
-						if (notesErr) setNotesErr(null);
-					}}
+					onChange={(e) => form.set("notes", e.target.value)}
 					rows={3}
 					maxLength={MAX_NOTES_LEN}
 					placeholder="Optional"

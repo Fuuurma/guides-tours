@@ -1,5 +1,4 @@
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,29 +20,26 @@ const INITIAL: FormValues = {
 
 export function NewVacationPage() {
 	const create = useMutation(api.vacationRequests.create);
-	const [dateErr, setDateErr] = useState<string | null>(null);
-	const [reasonErr, setReasonErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			let dateError: string | null = null;
-			if (!v.startDate || !v.endDate) {
-				dateError = "Start and end dates are required";
-			} else if (Date.parse(v.endDate) < Date.parse(v.startDate)) {
-				dateError = "End date cannot be before start date";
-			}
-			setDateErr(dateError);
-			const reasonError = validateNotesOptional(v.reason);
-			setReasonErr(reasonError);
-			if (dateError || reasonError) {
-				throw new Error(dateError ?? reasonError ?? "Invalid input");
-			}
 			const id = await create({
 				startDate: v.startDate,
 				endDate: v.endDate,
 				reason: v.reason.trim() || undefined,
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			if (!v.startDate || !v.endDate) {
+				errs.endDate = "Start and end dates are required";
+			} else if (Date.parse(v.endDate) < Date.parse(v.startDate)) {
+				errs.endDate = "End date cannot be before start date";
+			}
+			const reasonErr = validateNotesOptional(v.reason);
+			if (reasonErr) errs.reason = reasonErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/vacations/${id}`,
@@ -65,38 +61,33 @@ export function NewVacationPage() {
 						type="date"
 						required
 						value={form.values.startDate}
-						onChange={(e) => {
-							form.set("startDate", e.target.value);
-							if (dateErr) setDateErr(null);
-						}}
+						onChange={(e) => form.set("startDate", e.target.value)}
 					/>
 				</FormField>
 				<FormField
 					label="End date *"
 					htmlFor="end"
-					error={dateErr ?? undefined}
+					error={form.fieldErrors.endDate}
 				>
 					<Input
 						id="end"
 						type="date"
 						required
 						value={form.values.endDate}
-						onChange={(e) => {
-							form.set("endDate", e.target.value);
-							if (dateErr) setDateErr(null);
-						}}
+						onChange={(e) => form.set("endDate", e.target.value)}
 					/>
 				</FormField>
 			</div>
 
-			<FormField label="Reason" htmlFor="reason" error={reasonErr ?? undefined}>
+			<FormField
+				label="Reason"
+				htmlFor="reason"
+				error={form.fieldErrors.reason}
+			>
 				<Textarea
 					id="reason"
 					value={form.values.reason}
-					onChange={(e) => {
-						form.set("reason", e.target.value);
-						if (reasonErr) setReasonErr(null);
-					}}
+					onChange={(e) => form.set("reason", e.target.value)}
 					rows={3}
 					maxLength={MAX_NOTES_LEN}
 					placeholder="Optional — short note for the reviewer"

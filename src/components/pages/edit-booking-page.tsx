@@ -38,17 +38,9 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 	});
 	const update = useMutation(api.bookings.update);
 	const [loaded, setLoaded] = useState(false);
-	const [guestsErr, setGuestsErr] = useState<string | null>(null);
-	const [notesErr, setNotesErr] = useState<string | null>(null);
-	const [depositErr, setDepositErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const guestsError = validatePositiveInteger(v.guests, "Guests");
-			setGuestsErr(guestsError);
-			const notesError = validateNotesOptional(v.notes);
-			setNotesErr(notesError);
-
 			const totalCents = v.totalUsd.trim() ? parseUsdToCents(v.totalUsd) : null;
 			if (v.totalUsd.trim() && totalCents === null) {
 				throw new Error("Total amount must be a non-negative number");
@@ -57,7 +49,6 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				? parseUsdToCents(v.depositUsd)
 				: null;
 			if (v.depositUsd.trim() && depositCents === null) {
-				setDepositErr("Deposit must be a non-negative number");
 				throw new Error("Deposit must be a non-negative number");
 			}
 			if (
@@ -65,12 +56,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				totalCents !== null &&
 				depositCents > totalCents
 			) {
-				setDepositErr("Deposit cannot exceed the total amount");
 				throw new Error("Deposit cannot exceed the total amount");
-			}
-
-			if (guestsError || notesError) {
-				throw new Error(guestsError ?? notesError ?? "Invalid input");
 			}
 
 			await update({
@@ -86,6 +72,25 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				paymentMethod: v.paymentMethod.trim() || undefined,
 			});
 			return bookingId;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const guestsErr = validatePositiveInteger(v.guests, "Guests");
+			if (guestsErr) errs.guests = guestsErr;
+			const notesErr = validateNotesOptional(v.notes);
+			if (notesErr) errs.notes = notesErr;
+			if (v.depositUsd.trim()) {
+				const depositCents = parseUsdToCents(v.depositUsd);
+				if (depositCents === null) {
+					errs.depositUsd = "Deposit must be a non-negative number";
+				} else if (v.totalUsd.trim()) {
+					const totalCents = parseUsdToCents(v.totalUsd);
+					if (totalCents !== null && depositCents > totalCents) {
+						errs.depositUsd = "Deposit cannot exceed the total amount";
+					}
+				}
+			}
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: {
 			date: "",
@@ -186,7 +191,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				<FormField
 					label="Guests"
 					htmlFor="edit-guests"
-					error={guestsErr ?? undefined}
+					error={form.fieldErrors.guests}
 				>
 					<Input
 						id="edit-guests"
@@ -194,10 +199,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 						min="1"
 						required
 						value={form.values.guests}
-						onChange={(e) => {
-							form.set("guests", e.target.value);
-							if (guestsErr) setGuestsErr(null);
-						}}
+						onChange={(e) => form.set("guests", e.target.value)}
 					/>
 				</FormField>
 			</div>
@@ -229,15 +231,12 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			<FormField
 				label="Notes"
 				htmlFor="edit-notes"
-				error={notesErr ?? undefined}
+				error={form.fieldErrors.notes}
 			>
 				<Textarea
 					id="edit-notes"
 					value={form.values.notes}
-					onChange={(e) => {
-						form.set("notes", e.target.value);
-						if (notesErr) setNotesErr(null);
-					}}
+					onChange={(e) => form.set("notes", e.target.value)}
 					rows={3}
 					maxLength={MAX_NOTES_LEN}
 					placeholder="Allergies, special requests…"
@@ -261,7 +260,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				<FormField
 					label="Deposit (USD)"
 					htmlFor="edit-deposit"
-					error={depositErr ?? undefined}
+					error={form.fieldErrors.depositUsd}
 				>
 					<Input
 						id="edit-deposit"
@@ -269,10 +268,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 						step="0.01"
 						min="0"
 						value={form.values.depositUsd}
-						onChange={(e) => {
-							form.set("depositUsd", e.target.value);
-							if (depositErr) setDepositErr(null);
-						}}
+						onChange={(e) => form.set("depositUsd", e.target.value)}
 					/>
 				</FormField>
 				<FormField label="Payment method" htmlFor="edit-payment">

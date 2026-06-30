@@ -62,41 +62,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 		convexQuery(api.tourCategories.list, {}),
 	);
 	const [loaded, setLoaded] = useState(false);
-	const [durErr, setDurErr] = useState<string | null>(null);
-	const [capErr, setCapErr] = useState<string | null>(null);
-	const [minErr, setMinErr] = useState<string | null>(null);
-	const [maxErr, setMaxErr] = useState<string | null>(null);
-	const [descErr, setDescErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const durError = validatePositiveNumber(v.durationHours, "Duration");
-			const capError = validatePositiveInteger(v.capacity, "Capacity");
-			const minError = validatePositiveInteger(v.minGuests, "Min guests");
-			const maxError = validatePositiveInteger(v.maxGuests, "Max guests");
-			setDurErr(durError);
-			setCapErr(capError);
-			setMinErr(minError);
-			setMaxErr(maxError);
 			const minG = Number(v.minGuests);
 			const maxG = Number(v.maxGuests);
-			if (!minError && !maxError && minG > maxG) {
-				const msg = "minGuests cannot exceed maxGuests";
-				setMinErr(msg);
-				setMaxErr(msg);
-			}
-			const descError = validateDescriptionOptional(v.description);
-			setDescErr(descError);
-			if (durError || capError || minError || maxError || descError) {
-				throw new Error(
-					durError ??
-						capError ??
-						minError ??
-						maxError ??
-						descError ??
-						"Invalid input",
-				);
-			}
 			if (minG > maxG) {
 				throw new Error("minGuests cannot exceed maxGuests");
 			}
@@ -124,6 +94,24 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 					.filter(Boolean),
 			});
 			return tourId;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const durErr = validatePositiveNumber(v.durationHours, "Duration");
+			if (durErr) errs.durationHours = durErr;
+			const capErr = validatePositiveInteger(v.capacity, "Capacity");
+			if (capErr) errs.capacity = capErr;
+			const minErr = validatePositiveInteger(v.minGuests, "Min guests");
+			if (minErr) errs.minGuests = minErr;
+			const maxErr = validatePositiveInteger(v.maxGuests, "Max guests");
+			if (maxErr) errs.maxGuests = maxErr;
+			if (!minErr && !maxErr && Number(v.minGuests) > Number(v.maxGuests)) {
+				errs.minGuests = "minGuests cannot exceed maxGuests";
+				errs.maxGuests = "minGuests cannot exceed maxGuests";
+			}
+			const descErr = validateDescriptionOptional(v.description);
+			if (descErr) errs.description = descErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: {
 			name: "",
@@ -205,15 +193,12 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			<FormField
 				label="Description"
 				htmlFor="edit-desc"
-				error={descErr ?? undefined}
+				error={form.fieldErrors.description}
 			>
 				<Textarea
 					id="edit-desc"
 					value={form.values.description}
-					onChange={(e) => {
-						form.set("description", e.target.value);
-						if (descErr) setDescErr(null);
-					}}
+					onChange={(e) => form.set("description", e.target.value)}
 					rows={3}
 					maxLength={MAX_DESCRIPTION_LEN}
 					placeholder="Optional"
@@ -269,7 +254,7 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				<FormField
 					label="Duration (hours) *"
 					htmlFor="edit-dur"
-					error={durErr ?? undefined}
+					error={form.fieldErrors.durationHours}
 				>
 					<Input
 						id="edit-dur"
@@ -278,10 +263,7 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 						min="0.5"
 						required
 						value={form.values.durationHours}
-						onChange={(e) => {
-							form.set("durationHours", e.target.value);
-							if (durErr) setDurErr(null);
-						}}
+						onChange={(e) => form.set("durationHours", e.target.value)}
 					/>
 				</FormField>
 			</div>
@@ -290,7 +272,7 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				<FormField
 					label="Capacity *"
 					htmlFor="edit-cap"
-					error={capErr ?? undefined}
+					error={form.fieldErrors.capacity}
 				>
 					<Input
 						id="edit-cap"
@@ -298,42 +280,33 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 						min="1"
 						required
 						value={form.values.capacity}
-						onChange={(e) => {
-							form.set("capacity", e.target.value);
-							if (capErr) setCapErr(null);
-						}}
+						onChange={(e) => form.set("capacity", e.target.value)}
 					/>
 				</FormField>
 				<FormField
 					label="Min guests"
 					htmlFor="edit-min"
-					error={minErr ?? undefined}
+					error={form.fieldErrors.minGuests}
 				>
 					<Input
 						id="edit-min"
 						type="number"
 						min="1"
 						value={form.values.minGuests}
-						onChange={(e) => {
-							form.set("minGuests", e.target.value);
-							if (minErr) setMinErr(null);
-						}}
+						onChange={(e) => form.set("minGuests", e.target.value)}
 					/>
 				</FormField>
 				<FormField
 					label="Max guests"
 					htmlFor="edit-max"
-					error={maxErr ?? undefined}
+					error={form.fieldErrors.maxGuests}
 				>
 					<Input
 						id="edit-max"
 						type="number"
 						min="1"
 						value={form.values.maxGuests}
-						onChange={(e) => {
-							form.set("maxGuests", e.target.value);
-							if (maxErr) setMaxErr(null);
-						}}
+						onChange={(e) => form.set("maxGuests", e.target.value)}
 					/>
 				</FormField>
 			</div>

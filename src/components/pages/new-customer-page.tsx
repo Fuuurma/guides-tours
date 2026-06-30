@@ -1,5 +1,4 @@
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,38 +31,28 @@ const INITIAL: FormValues = {
 
 export function NewCustomerPage() {
 	const create = useMutation(api.customers.create);
-	const [nameErr, setNameErr] = useState<string | null>(null);
-	const [emailErr, setEmailErr] = useState<string | null>(null);
-	const [phoneErr, setPhoneErr] = useState<string | null>(null);
-	const [notesErr, setNotesErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (values) => {
-			const nameError = validateName(values.name);
-			const emailError = validateEmail(values.email);
-			const phoneError = validatePhoneOptional(values.phone);
-			const notesError = validateNotesOptional(values.notes);
-			setNameErr(nameError);
-			setEmailErr(emailError);
-			setPhoneErr(phoneError);
-			setNotesErr(notesError);
-			if (nameError || emailError || phoneError || notesError) {
-				throw new Error(
-					nameError ??
-						emailError ??
-						phoneError ??
-						notesError ??
-						"Invalid input",
-				);
-			}
-			const id = await create({
+			return await create({
 				name: values.name.trim(),
 				email: values.email.trim().toLowerCase(),
 				phone: values.phone.trim() || undefined,
 				preferredLanguage: values.preferredLanguage.trim() || "en",
 				notes: values.notes.trim() || undefined,
 			});
-			return id;
+		},
+		validate: (values) => {
+			const errs: Record<string, string> = {};
+			const nameErr = validateName(values.name);
+			if (nameErr) errs.name = nameErr;
+			const emailErr = validateEmail(values.email);
+			if (emailErr) errs.email = emailErr;
+			const phoneErr = validatePhoneOptional(values.phone);
+			if (phoneErr) errs.phone = phoneErr;
+			const notesErr = validateNotesOptional(values.notes);
+			if (notesErr) errs.notes = notesErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/customers/${id}`,
@@ -78,45 +67,36 @@ export function NewCustomerPage() {
 			backTo="/dashboard/customers"
 			submitLabel="Create customer"
 		>
-			<FormField label="Name *" htmlFor="name" error={nameErr ?? undefined}>
+			<FormField label="Name *" htmlFor="name" error={form.fieldErrors.name}>
 				<Input
 					id="name"
 					required
 					maxLength={MAX_NAME_LEN}
 					value={form.values.name}
-					onChange={(e) => {
-						form.set("name", e.target.value);
-						if (nameErr) setNameErr(null);
-					}}
+					onChange={(e) => form.set("name", e.target.value)}
 					placeholder="Jane Doe"
 				/>
 			</FormField>
 
-			<FormField label="Email *" htmlFor="email" error={emailErr ?? undefined}>
+			<FormField label="Email *" htmlFor="email" error={form.fieldErrors.email}>
 				<Input
 					id="email"
 					type="email"
 					required
 					maxLength={254}
 					value={form.values.email}
-					onChange={(e) => {
-						form.set("email", e.target.value);
-						if (emailErr) setEmailErr(null);
-					}}
+					onChange={(e) => form.set("email", e.target.value)}
 					placeholder="jane@example.com"
 				/>
 			</FormField>
 
-			<FormField label="Phone" htmlFor="phone" error={phoneErr ?? undefined}>
+			<FormField label="Phone" htmlFor="phone" error={form.fieldErrors.phone}>
 				<Input
 					id="phone"
 					type="tel"
 					maxLength={30}
 					value={form.values.phone}
-					onChange={(e) => {
-						form.set("phone", e.target.value);
-						if (phoneErr) setPhoneErr(null);
-					}}
+					onChange={(e) => form.set("phone", e.target.value)}
 					placeholder="+1 555 555 5555"
 				/>
 			</FormField>
@@ -131,14 +111,11 @@ export function NewCustomerPage() {
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
+			<FormField label="Notes" htmlFor="notes" error={form.fieldErrors.notes}>
 				<Textarea
 					id="notes"
 					value={form.values.notes}
-					onChange={(e) => {
-						form.set("notes", e.target.value);
-						if (notesErr) setNotesErr(null);
-					}}
+					onChange={(e) => form.set("notes", e.target.value)}
 					rows={3}
 					maxLength={MAX_NOTES_LEN}
 					placeholder="Optional"

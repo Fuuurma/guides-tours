@@ -59,17 +59,6 @@ export function NewTourPage() {
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const durError = validatePositiveInteger(v.durationHours, "Duration");
-			if (durError) throw new Error(durError);
-			const capError = validatePositiveInteger(v.capacity, "Capacity");
-			if (capError) throw new Error(capError);
-			const minGError = validatePositiveInteger(v.minGuests, "Min guests");
-			if (minGError) throw new Error(minGError);
-			const maxGError = validatePositiveInteger(v.maxGuests, "Max guests");
-			if (maxGError) throw new Error(maxGError);
-			if (Number(v.minGuests) > Number(v.maxGuests)) {
-				throw new Error("Min guests cannot exceed max guests");
-			}
 			const priceCents = parseUsdToCents(v.priceUsd);
 			if (v.priceUsd && priceCents === null) {
 				throw new Error("Invalid price amount");
@@ -92,6 +81,22 @@ export function NewTourPage() {
 					.filter(Boolean),
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const durErr = validatePositiveInteger(v.durationHours, "Duration");
+			if (durErr) errs.durationHours = durErr;
+			const capErr = validatePositiveInteger(v.capacity, "Capacity");
+			if (capErr) errs.capacity = capErr;
+			const minGErr = validatePositiveInteger(v.minGuests, "Min guests");
+			if (minGErr) errs.minGuests = minGErr;
+			const maxGErr = validatePositiveInteger(v.maxGuests, "Max guests");
+			if (maxGErr) errs.maxGuests = maxGErr;
+			if (!minGErr && !maxGErr && Number(v.minGuests) > Number(v.maxGuests)) {
+				errs.minGuests = "Min guests cannot exceed max guests";
+				errs.maxGuests = "Min guests cannot exceed max guests";
+			}
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/tours/${id}`,
@@ -174,7 +179,11 @@ export function NewTourPage() {
 					</Select>
 				</FormField>
 
-				<FormField label="Duration (hours) *" htmlFor="dur">
+				<FormField
+					label="Duration (hours) *"
+					htmlFor="dur"
+					error={form.fieldErrors.durationHours}
+				>
 					<Input
 						id="dur"
 						type="number"
@@ -188,7 +197,11 @@ export function NewTourPage() {
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-3">
-				<FormField label="Capacity *" htmlFor="cap">
+				<FormField
+					label="Capacity *"
+					htmlFor="cap"
+					error={form.fieldErrors.capacity}
+				>
 					<Input
 						id="cap"
 						type="number"
@@ -198,7 +211,11 @@ export function NewTourPage() {
 						onChange={(e) => form.set("capacity", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Min guests" htmlFor="min">
+				<FormField
+					label="Min guests"
+					htmlFor="min"
+					error={form.fieldErrors.minGuests}
+				>
 					<Input
 						id="min"
 						type="number"
@@ -207,7 +224,11 @@ export function NewTourPage() {
 						onChange={(e) => form.set("minGuests", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Max guests" htmlFor="max">
+				<FormField
+					label="Max guests"
+					htmlFor="max"
+					error={form.fieldErrors.maxGuests}
+				>
 					<Input
 						id="max"
 						type="number"

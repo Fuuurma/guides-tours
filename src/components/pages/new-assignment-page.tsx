@@ -1,7 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -51,22 +50,9 @@ export function NewAssignmentPage() {
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 	const { data: vehicles } = useQuery(convexQuery(api.vehicles.list, {}));
 	const { data: drivers } = useQuery(convexQuery(api.drivers.list, {}));
-	const [guideErr, setGuideErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			let guideError: string | null = null;
-			if (!v.tourId) {
-				throw new Error("Please select a tour");
-			}
-			if (!v.guideId.trim()) {
-				guideError = "Guide user ID is required";
-			}
-			setGuideErr(guideError);
-			if (!v.date || !v.startTime) {
-				throw new Error(guideError ?? "Date and start time are required");
-			}
-			if (guideError) throw new Error(guideError);
 			const id = await create({
 				tourId: v.tourId as Id<"tours">,
 				guideId: v.guideId.trim(),
@@ -76,6 +62,14 @@ export function NewAssignmentPage() {
 				driverId: v.driverId ? (v.driverId as Id<"drivers">) : undefined,
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			if (!v.tourId) errs.tourId = "Please select a tour";
+			if (!v.guideId.trim()) errs.guideId = "Guide user ID is required";
+			if (!v.date) errs.date = "Date is required";
+			if (!v.startTime) errs.startTime = "Start time is required";
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/assignments/${id}`,
@@ -90,7 +84,7 @@ export function NewAssignmentPage() {
 			backTo="/dashboard/assignments"
 			submitLabel="Create assignment"
 		>
-			<FormField label="Tour *" htmlFor="tour">
+			<FormField label="Tour *" htmlFor="tour" error={form.fieldErrors.tourId}>
 				<Select
 					value={form.values.tourId}
 					onValueChange={(v) => form.set("tourId", v)}
@@ -112,23 +106,20 @@ export function NewAssignmentPage() {
 				label="Guide user ID *"
 				hint="Better Auth user ID of the guide (must have 'guide' role)"
 				htmlFor="guide"
-				error={guideErr ?? undefined}
+				error={form.fieldErrors.guideId}
 			>
 				<Input
 					id="guide"
 					required
 					maxLength={200}
 					value={form.values.guideId}
-					onChange={(e) => {
-						form.set("guideId", e.target.value);
-						if (guideErr) setGuideErr(null);
-					}}
+					onChange={(e) => form.set("guideId", e.target.value)}
 					placeholder="user_abc123"
 				/>
 			</FormField>
 
 			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Date *" htmlFor="date">
+				<FormField label="Date *" htmlFor="date" error={form.fieldErrors.date}>
 					<Input
 						id="date"
 						type="date"
@@ -137,7 +128,11 @@ export function NewAssignmentPage() {
 						onChange={(e) => form.set("date", e.target.value)}
 					/>
 				</FormField>
-				<FormField label="Start time *" htmlFor="start">
+				<FormField
+					label="Start time *"
+					htmlFor="start"
+					error={form.fieldErrors.startTime}
+				>
 					<Input
 						id="start"
 						type="time"

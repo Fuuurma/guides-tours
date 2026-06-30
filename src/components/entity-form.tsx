@@ -26,7 +26,7 @@ import { getErrorMessage } from "@/lib/utils";
  *
  *   return (
  *     <EntityFormPage form={form} title="New tour" ... >
- *       <FormField label="Name" htmlFor="name">
+ *       <FormField label="Name" htmlFor="name" error={form.fieldErrors.name}>
  *         <Input
  *           id="name"
  *           required
@@ -42,8 +42,12 @@ export interface UseEntityFormOptions<TValues, TResult> {
 	mutation: (args: TValues) => Promise<TResult>;
 	/** Called with the mutation's return value to determine redirect path. */
 	redirectTo: (result: TResult) => string;
-	/** Optional validate hook — return an error string to block submit. */
-	validate?: (values: TValues) => string | null;
+	/**
+	 * Optional per-field validate hook — return a map of field name →
+	 * error message to block submit and show inline errors. Return null
+	 * to allow submit.
+	 */
+	validate?: (values: TValues) => Record<string, string> | null;
 	/** Optional success toast (default: "{title} saved"). */
 	successMessage?: string;
 	/** Optional error toast prefix. */
@@ -53,14 +57,16 @@ export interface UseEntityFormOptions<TValues, TResult> {
 export interface EntityFormHandle<TValues, TResult> {
 	/** Current form values — pass into the mutation on submit. */
 	values: TValues;
-	/** Patch a single field. */
+	/** Patch a single field. Also clears that field's error. */
 	set: <K extends keyof TValues>(key: K, value: TValues[K]) => void;
-	/** Patch many fields. */
+	/** Patch many fields. Also clears errors for patched fields. */
 	setMany: (patch: Partial<TValues>) => void;
 	/** True while the mutation is in flight. */
 	pending: boolean;
-	/** Last error message (null when none). */
+	/** Last global error message (null when none). */
 	error: string | null;
+	/** Per-field error map (empty when no errors). */
+	fieldErrors: Record<string, string>;
 	/** Submit the form — runs validate, calls mutation, navigates on success. */
 	submit: (e?: React.FormEvent) => Promise<void>;
 	/** The mutation result (set after success). */
@@ -71,7 +77,7 @@ export function useEntityForm<TValues extends object, TResult>(opts: {
 	mutation: (args: TValues) => Promise<TResult>;
 	redirectTo: (result: TResult) => string;
 	initialValues: TValues;
-	validate?: (values: TValues) => string | null;
+	validate?: (values: TValues) => Record<string, string> | null;
 	successMessage?: string;
 	errorPrefix?: string;
 }): EntityFormHandle<TValues, TResult> {
@@ -79,28 +85,51 @@ export function useEntityForm<TValues extends object, TResult>(opts: {
 	const [values, setValues] = React.useState<TValues>(opts.initialValues);
 	const [pending, setPending] = React.useState(false);
 	const [error, setError] = React.useState<string | null>(null);
+	const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>(
+		{},
+	);
 	const [result, setResult] = React.useState<TResult | null>(null);
 
 	const set = React.useCallback(
 		<K extends keyof TValues>(key: K, value: TValues[K]) => {
 			setValues((prev) => ({ ...prev, [key]: value }));
+			// Clear the field error when the user edits the field.
+			setFieldErrors((prev) => {
+				if (!((key as string) in prev)) return prev;
+				const next = { ...prev };
+				delete next[key as string];
+				return next;
+			});
 		},
 		[],
 	);
 
 	const setMany = React.useCallback((patch: Partial<TValues>) => {
 		setValues((prev) => ({ ...prev, ...patch }));
+		// Clear errors for all patched fields.
+		setFieldErrors((prev) => {
+			const keys = Object.keys(patch);
+			if (!keys.some((k) => k in prev)) return prev;
+			const next = { ...prev };
+			for (const k of keys) delete next[k];
+			return next;
+		});
 	}, []);
 
 	const submit = React.useCallback(
 		async (e?: React.FormEvent) => {
 			e?.preventDefault();
 			setError(null);
+			setFieldErrors({});
 
 			if (opts.validate) {
-				const err = opts.validate(values);
-				if (err) {
-					setError(err);
+				const errs = opts.validate(values);
+				if (errs) {
+					setFieldErrors(errs);
+					// Also set the global error to the first field error
+					// so the ErrorBanner at the bottom shows something.
+					const first = Object.values(errs)[0];
+					if (first) setError(first);
 					return;
 				}
 			}
@@ -122,7 +151,7 @@ export function useEntityForm<TValues extends object, TResult>(opts: {
 		[values, navigate, opts],
 	);
 
-	return { values, set, setMany, pending, error, submit, result };
+	return { values, set, setMany, pending, error, fieldErrors, submit, result };
 }
 
 /**
@@ -138,7 +167,9 @@ export function useEntityForm<TValues extends object, TResult>(opts: {
  *     backTo="/dashboard/tours"
  *     submitLabel="Create tour"
  *   >
- *     <FormField label="Name" htmlFor="name"> ... </FormField>
+ *     <FormField label="Name" htmlFor="name" error={form.fieldErrors.name}>
+ *       ...
+ *     </FormField>
  *   </EntityFormPage>
  */
 export interface EntityFormPageProps<TValues extends object, TResult> {

@@ -1,5 +1,4 @@
 import { useMutation } from "convex/react";
-import { useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -57,28 +56,10 @@ const INITIAL: FormValues = {
 
 export function NewVehiclePage() {
 	const create = useMutation(api.vehicles.create);
-	const [capErr, setCapErr] = useState<string | null>(null);
-	const [yearErr, setYearErr] = useState<string | null>(null);
-	const [notesErr, setNotesErr] = useState<string | null>(null);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
-			const capError = validatePositiveInteger(v.capacity, "Capacity");
-			setCapErr(capError);
 			const yr = v.year.trim() ? Number(v.year) : undefined;
-			let yearError: string | null = null;
-			if (
-				yr !== undefined &&
-				(!Number.isFinite(yr) || yr < 1900 || yr > 2100)
-			) {
-				yearError = "Year must be between 1900 and 2100";
-			}
-			setYearErr(yearError);
-			const notesError = validateNotesOptional(v.notes);
-			setNotesErr(notesError);
-			if (capError || yearError || notesError) {
-				throw new Error(capError ?? yearError ?? notesError ?? "Invalid input");
-			}
 			const id = await create({
 				name: v.name.trim(),
 				vehicleType: v.vehicleType,
@@ -92,6 +73,21 @@ export function NewVehiclePage() {
 				notes: v.notes.trim() || undefined,
 			});
 			return id;
+		},
+		validate: (v) => {
+			const errs: Record<string, string> = {};
+			const capErr = validatePositiveInteger(v.capacity, "Capacity");
+			if (capErr) errs.capacity = capErr;
+			const yr = v.year.trim() ? Number(v.year) : undefined;
+			if (
+				yr !== undefined &&
+				(!Number.isFinite(yr) || yr < 1900 || yr > 2100)
+			) {
+				errs.year = "Year must be between 1900 and 2100";
+			}
+			const notesErr = validateNotesOptional(v.notes);
+			if (notesErr) errs.notes = notesErr;
+			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: INITIAL,
 		redirectTo: (id) => `/dashboard/vehicles/${id}`,
@@ -135,17 +131,18 @@ export function NewVehiclePage() {
 						</SelectContent>
 					</Select>
 				</FormField>
-				<FormField label="Capacity *" htmlFor="cap" error={capErr ?? undefined}>
+				<FormField
+					label="Capacity *"
+					htmlFor="cap"
+					error={form.fieldErrors.capacity}
+				>
 					<Input
 						id="cap"
 						type="number"
 						min="1"
 						required
 						value={form.values.capacity}
-						onChange={(e) => {
-							form.set("capacity", e.target.value);
-							if (capErr) setCapErr(null);
-						}}
+						onChange={(e) => form.set("capacity", e.target.value)}
 					/>
 				</FormField>
 			</div>
@@ -198,17 +195,14 @@ export function NewVehiclePage() {
 						placeholder="Sprinter"
 					/>
 				</FormField>
-				<FormField label="Year" htmlFor="year" error={yearErr ?? undefined}>
+				<FormField label="Year" htmlFor="year" error={form.fieldErrors.year}>
 					<Input
 						id="year"
 						type="number"
 						min="1900"
 						max="2100"
 						value={form.values.year}
-						onChange={(e) => {
-							form.set("year", e.target.value);
-							if (yearErr) setYearErr(null);
-						}}
+						onChange={(e) => form.set("year", e.target.value)}
 						placeholder="2022"
 					/>
 				</FormField>
@@ -224,14 +218,11 @@ export function NewVehiclePage() {
 				/>
 			</FormField>
 
-			<FormField label="Notes" htmlFor="notes" error={notesErr ?? undefined}>
+			<FormField label="Notes" htmlFor="notes" error={form.fieldErrors.notes}>
 				<Textarea
 					id="notes"
 					value={form.values.notes}
-					onChange={(e) => {
-						form.set("notes", e.target.value);
-						if (notesErr) setNotesErr(null);
-					}}
+					onChange={(e) => form.set("notes", e.target.value)}
 					rows={3}
 					maxLength={MAX_NOTES_LEN}
 					placeholder="Optional"
