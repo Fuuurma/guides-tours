@@ -8,14 +8,14 @@ import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { DetailSkeleton } from "@/components/ui/skeleton";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCentsCompact } from "@/lib/format";
-import { api } from "../../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
-import type { Id } from "../../../../convex/_generated/dataModel";
 import type { BookingDetail } from "@/types/entities";
+import { api } from "../../../../convex/_generated/api";
+import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/bookings/$bookingId")({
 	component: BookingDetailPage,
@@ -82,12 +82,9 @@ function BookingDetailPage() {
 	};
 
 	if (isPending) {
-		return (
-		<DetailSkeleton />
-		);
+		return <DetailSkeleton />;
 	}
-	if (error)
-		return <ErrorBanner message={`Error: ${error.message}`} />;
+	if (error) return <ErrorBanner message={`Error: ${error.message}`} />;
 	if (!booking) {
 		return (
 			<DetailPage title="Booking not found" backTo="/dashboard/bookings" />

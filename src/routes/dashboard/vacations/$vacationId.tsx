@@ -10,8 +10,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
-import { api } from "../../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
+import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/vacations/$vacationId")({
@@ -37,8 +37,7 @@ function VacationDetailPage() {
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
-	if (error)
-		return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={error.message} />;
 	if (!vacation)
 		return (
 			<DetailPage

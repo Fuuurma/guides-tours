@@ -15,7 +15,10 @@ function isoDate(d: Date): string {
 	return d.toISOString().slice(0, 10);
 }
 
-function lastNDays(n: number, now: Date = new Date()): {
+function lastNDays(
+	n: number,
+	now: Date = new Date(),
+): {
 	startDate: string;
 	endDate: string;
 } {

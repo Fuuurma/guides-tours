@@ -17,8 +17,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
-import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
+import { api } from "../../../convex/_generated/api";
 import { FormActions, FormField } from "../form";
 
 export const Route = createFileRoute("/dashboard/notifications/settings")({

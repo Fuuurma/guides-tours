@@ -8,10 +8,10 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { api } from "../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
-import type { Id } from "../../../convex/_generated/dataModel";
 import type { Customer } from "@/types/entities";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/customers")({
 	component: CustomersPage,

@@ -5,12 +5,12 @@ import { useState } from "react";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { TourCell } from "@/components/tour-cell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TourCell } from "@/components/tour-cell";
 import { defaultDateRange } from "@/lib/date-range";
-import { api } from "../../../convex/_generated/api";
 import type { Schedule } from "@/types/entities";
+import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/schedules")({
 	component: SchedulesPage,
@@ -43,7 +43,8 @@ function SchedulesPage() {
 	);
 	const items = (schedules ?? []) as Schedule[];
 	const itemCount = items.length;
-	const filtersActive = status !== null || range.from !== defaultDateRange().from;
+	const filtersActive =
+		status !== null || range.from !== defaultDateRange().from;
 
 	const columns: DataTableColumn<Schedule>[] = [
 		{

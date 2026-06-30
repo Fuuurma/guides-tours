@@ -38,11 +38,26 @@ describe("statusVariant", () => {
 describe("STATUS_VARIANTS coverage", () => {
 	test("all 16 statuses have a variant", () => {
 		const expected = [
-			"pending", "confirmed", "checked_in", "completed", "cancelled",
-			"available", "full", "in_use", "maintenance", "retired",
-			"scheduled", "approved", "rejected",
-			"email", "sms", "both",
-			"active", "inactive", "vip", "regular",
+			"pending",
+			"confirmed",
+			"checked_in",
+			"completed",
+			"cancelled",
+			"available",
+			"full",
+			"in_use",
+			"maintenance",
+			"retired",
+			"scheduled",
+			"approved",
+			"rejected",
+			"email",
+			"sms",
+			"both",
+			"active",
+			"inactive",
+			"vip",
+			"regular",
 		];
 		for (const status of expected) {
 			expect(STATUS_VARIANTS).toHaveProperty(status);

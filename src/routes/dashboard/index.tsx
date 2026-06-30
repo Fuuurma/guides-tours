@@ -10,8 +10,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { formatCentsWhole } from "@/lib/format";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { formatCentsWhole } from "@/lib/format";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -226,9 +226,9 @@ function DashboardIndex() {
 												)}
 											</p>
 											<p className="text-muted-foreground text-xs">
-											{b.startTime} · {b.guests} guest
-											{b.guests === 1 ? "" : "s"} ·{" "}
-											{formatCentsWhole(b.totalAmountCents)}
+												{b.startTime} · {b.guests} guest
+												{b.guests === 1 ? "" : "s"} ·{" "}
+												{formatCentsWhole(b.totalAmountCents)}
 											</p>
 										</div>
 										<Link

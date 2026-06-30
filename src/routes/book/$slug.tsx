@@ -4,7 +4,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { getErrorMessage } from "@/lib/utils";
 import {
 	Card,
 	CardContent,
@@ -13,10 +12,11 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { getErrorMessage } from "@/lib/utils";
 import {
 	EMAIL_REGEX,
 	MAX_EMAIL_LEN,
@@ -339,7 +339,9 @@ function PublicBookingPage() {
 									value={guests}
 									onChange={(e) => setGuests(e.target.value)}
 									aria-invalid={Boolean(fieldErr.guests)}
-									aria-describedby={fieldErr.guests ? "guests-error" : undefined}
+									aria-describedby={
+										fieldErr.guests ? "guests-error" : undefined
+									}
 								/>
 								{selectedTour && !fieldErr.guests && (
 									<p className="text-muted-foreground text-xs">
@@ -391,45 +393,45 @@ function PublicBookingPage() {
 								<label htmlFor="email" className="text-sm font-medium">
 									Email *
 								</label>
-							<Input
-								id="email"
-								type="email"
-								required
-								maxLength={MAX_EMAIL_LEN}
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								aria-invalid={Boolean(fieldErr.email)}
-								aria-describedby={fieldErr.email ? "email-error" : undefined}
-							/>
-							{fieldErr.email && (
-								<p
-									id="email-error"
-									role="alert"
-									className="text-destructive text-xs"
-								>
-									{fieldErr.email}
-								</p>
-							)}
+								<Input
+									id="email"
+									type="email"
+									required
+									maxLength={MAX_EMAIL_LEN}
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+									aria-invalid={Boolean(fieldErr.email)}
+									aria-describedby={fieldErr.email ? "email-error" : undefined}
+								/>
+								{fieldErr.email && (
+									<p
+										id="email-error"
+										role="alert"
+										className="text-destructive text-xs"
+									>
+										{fieldErr.email}
+									</p>
+								)}
 							</div>
 							<div className="space-y-1">
 								<label htmlFor="phone" className="text-sm font-medium">
 									Phone (optional)
 								</label>
-							<Input
-								id="phone"
-								type="tel"
-								maxLength={MAX_PHONE_LEN}
-								value={phone}
-								onChange={(e) => setPhone(e.target.value)}
-								aria-invalid={Boolean(fieldErr.phone)}
-								aria-describedby={fieldErr.phone ? "phone-error" : undefined}
-							/>
-							{fieldErr.phone && (
-								<p
-									id="phone-error"
-									role="alert"
-									className="text-destructive text-xs"
-								>
+								<Input
+									id="phone"
+									type="tel"
+									maxLength={MAX_PHONE_LEN}
+									value={phone}
+									onChange={(e) => setPhone(e.target.value)}
+									aria-invalid={Boolean(fieldErr.phone)}
+									aria-describedby={fieldErr.phone ? "phone-error" : undefined}
+								/>
+								{fieldErr.phone && (
+									<p
+										id="phone-error"
+										role="alert"
+										className="text-destructive text-xs"
+									>
 										{fieldErr.phone}
 									</p>
 								)}
@@ -438,28 +440,28 @@ function PublicBookingPage() {
 								<label htmlFor="notes" className="text-sm font-medium">
 									Special requests (optional)
 								</label>
-							<Textarea
-								id="notes"
-								value={notes}
-								onChange={(e) => setNotes(e.target.value)}
-								rows={3}
-								maxLength={MAX_NOTES_LEN}
-								placeholder="Allergies, accessibility needs, etc."
-								aria-invalid={Boolean(fieldErr.notes)}
-								aria-describedby={fieldErr.notes ? "notes-error" : undefined}
-							/>
-							<p className="text-muted-foreground text-xs text-right">
-								{notes.length} / {MAX_NOTES_LEN}
-							</p>
-							{fieldErr.notes && (
-								<p
-									id="notes-error"
-									role="alert"
-									className="text-destructive text-xs"
-								>
-									{fieldErr.notes}
+								<Textarea
+									id="notes"
+									value={notes}
+									onChange={(e) => setNotes(e.target.value)}
+									rows={3}
+									maxLength={MAX_NOTES_LEN}
+									placeholder="Allergies, accessibility needs, etc."
+									aria-invalid={Boolean(fieldErr.notes)}
+									aria-describedby={fieldErr.notes ? "notes-error" : undefined}
+								/>
+								<p className="text-muted-foreground text-xs text-right">
+									{notes.length} / {MAX_NOTES_LEN}
 								</p>
-							)}
+								{fieldErr.notes && (
+									<p
+										id="notes-error"
+										role="alert"
+										className="text-destructive text-xs"
+									>
+										{fieldErr.notes}
+									</p>
+								)}
 							</div>
 						</CardContent>
 						<CardFooter className="flex flex-col gap-3">

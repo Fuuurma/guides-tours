@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { DetailPage } from "@/components/detail-page";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
@@ -108,7 +108,9 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 		return <DetailSkeleton />;
 	}
 	if (customer === null) {
-		return <DetailPage title="Customer not found" backTo="/dashboard/customers" />;
+		return (
+			<DetailPage title="Customer not found" backTo="/dashboard/customers" />
+		);
 	}
 
 	return (

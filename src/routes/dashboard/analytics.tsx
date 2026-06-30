@@ -11,11 +11,11 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { type DateRange, lastNDays } from "@/lib/date-range";
 import { formatCents, formatCentsWhole } from "@/lib/format";
-import { lastNDays, type DateRange } from "@/lib/date-range";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -248,9 +248,11 @@ function AnalyticsPage() {
 				<CardHeader>
 					<CardTitle>Revenue</CardTitle>
 					<CardDescription>
-						{revenue
-							? `${revenue.totalBookings} bookings · ${revenue.totalGuests} guests`
-							: <Skeleton className="h-4 w-1/2 inline-block" />}
+						{revenue ? (
+							`${revenue.totalBookings} bookings · ${revenue.totalGuests} guests`
+						) : (
+							<Skeleton className="h-4 w-1/2 inline-block" />
+						)}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
@@ -258,18 +260,14 @@ function AnalyticsPage() {
 						<MetricCard
 							label="Gross revenue"
 							value={
-								revenue
-									? formatCents(revenue.totalRevenueCents)
-									: undefined
+								revenue ? formatCents(revenue.totalRevenueCents) : undefined
 							}
 							isPending={revenuePending}
 						/>
 						<MetricCard
 							label="Avg booking"
 							value={
-								revenue
-									? formatCents(revenue.avgBookingValueCents)
-									: undefined
+								revenue ? formatCents(revenue.avgBookingValueCents) : undefined
 							}
 							isPending={revenuePending}
 						/>
@@ -310,7 +308,8 @@ function AnalyticsPage() {
 											{String(t.tourName ?? "Unknown")}
 										</Link>
 										<div className="text-right text-xs whitespace-nowrap text-muted-foreground">
-									{t.totalBookings} bookings · {t.totalGuests} guests · {formatCentsWhole(t.totalRevenueCents)}
+											{t.totalBookings} bookings · {t.totalGuests} guests ·{" "}
+											{formatCentsWhole(t.totalRevenueCents)}
 										</div>
 									</li>
 								))}

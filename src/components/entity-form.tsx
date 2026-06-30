@@ -111,10 +111,10 @@ export function useEntityForm<TValues extends object, TResult>(opts: {
 				setResult(r);
 				toast.success(opts.successMessage ?? "Saved");
 				void navigate({ to: opts.redirectTo(r) as never });
-		} catch (err) {
-			const message = getErrorMessage(err);
-			setError(message);
-			toast.error(message);
+			} catch (err) {
+				const message = getErrorMessage(err);
+				setError(message);
+				toast.error(message);
 			} finally {
 				setPending(false);
 			}

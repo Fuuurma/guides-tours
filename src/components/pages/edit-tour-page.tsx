@@ -2,8 +2,8 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery as useTanstackQuery } from "@tanstack/react-query";
 import { useQuery as useConvexQuery, useMutation } from "convex/react";
 import { useEffect, useState } from "react";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { DetailPage } from "@/components/detail-page";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {

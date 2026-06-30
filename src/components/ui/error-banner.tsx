@@ -28,9 +28,7 @@ export function ErrorBanner({
 			)}
 		>
 			<p className="text-destructive text-sm font-medium">{message}</p>
-			{hint && (
-				<p className="text-muted-foreground text-sm mt-1">{hint}</p>
-			)}
+			{hint && <p className="text-muted-foreground text-sm mt-1">{hint}</p>}
 			{action && <div className="mt-2">{action}</div>}
 		</div>
 	);

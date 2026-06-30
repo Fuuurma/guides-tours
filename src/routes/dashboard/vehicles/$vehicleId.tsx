@@ -26,15 +26,15 @@ function VehicleDetailPage() {
 	);
 
 	if (isPending) {
-		return (
-		<DetailSkeleton />
-		);
+		return <DetailSkeleton />;
 	}
 	if (error) {
 		return <ErrorBanner message={error.message} />;
 	}
 	if (!vehicle) {
-		return <DetailPage title="Vehicle not found" backTo="/dashboard/vehicles" />;
+		return (
+			<DetailPage title="Vehicle not found" backTo="/dashboard/vehicles" />
+		);
 	}
 
 	return (

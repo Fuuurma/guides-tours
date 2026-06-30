@@ -9,10 +9,10 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCentsCompact } from "@/lib/format";
 import { defaultDateRange } from "@/lib/date-range";
-import { api } from "../../../convex/_generated/api";
+import { formatCentsCompact } from "@/lib/format";
 import type { Booking } from "@/types/entities";
+import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/bookings")({
 	component: BookingsPage,
@@ -78,7 +78,8 @@ function BookingsPage() {
 		error,
 	} = useQuery(convexQuery(api.bookings.list, args));
 	const itemCount = bookings?.items?.length ?? 0;
-	const filtersActive = source !== null || range.from !== defaultDateRange().from;
+	const filtersActive =
+		source !== null || range.from !== defaultDateRange().from;
 
 	return (
 		<ListPage

@@ -15,11 +15,7 @@ export type BookingStatus =
 	| "completed"
 	| "cancelled";
 
-export type VehicleStatus =
-	| "available"
-	| "in_use"
-	| "maintenance"
-	| "retired";
+export type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
 
 export type VacationStatus = "pending" | "approved" | "rejected";
 

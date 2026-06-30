@@ -23,9 +23,7 @@ function TourDetailPage() {
 	} = useQuery(convexQuery(api.tours.get, { tourId: tourId as Id<"tours"> }));
 
 	if (isPending) {
-		return (
-		<DetailSkeleton />
-		);
+		return <DetailSkeleton />;
 	}
 	if (error) {
 		return <ErrorBanner message={error.message} />;

@@ -24,12 +24,9 @@ function DriverDetailPage() {
 	);
 
 	if (isPending) {
-		return (
-		<DetailSkeleton />
-		);
+		return <DetailSkeleton />;
 	}
-	if (error)
-		return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={error.message} />;
 	if (!driver)
 		return <DetailPage title="Driver not found" backTo="/dashboard/drivers" />;
 

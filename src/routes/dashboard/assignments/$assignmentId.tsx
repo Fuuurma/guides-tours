@@ -10,8 +10,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
-import { api } from "../../../../convex/_generated/api";
 import { getErrorMessage } from "@/lib/utils";
+import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/dashboard/assignments/$assignmentId")({
@@ -93,8 +93,7 @@ function AssignmentDetailPage() {
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
-	if (error)
-		return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={error.message} />;
 	if (!assignment)
 		return (
 			<DetailPage
@@ -168,7 +167,9 @@ function AssignmentDetailPage() {
 								{vehicle.name}
 							</Link>
 						) : vehicleError ? (
-							<span className="italic text-muted-foreground">(failed to load)</span>
+							<span className="italic text-muted-foreground">
+								(failed to load)
+							</span>
 						) : (
 							<span className="italic text-muted-foreground">Not assigned</span>
 						)
@@ -186,7 +187,9 @@ function AssignmentDetailPage() {
 								{driver.userId}
 							</Link>
 						) : driverError ? (
-							<span className="italic text-muted-foreground">(failed to load)</span>
+							<span className="italic text-muted-foreground">
+								(failed to load)
+							</span>
 						) : (
 							<span className="italic text-muted-foreground">Not assigned</span>
 						)

@@ -7,12 +7,12 @@ import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DetailSkeleton } from "@/components/ui/skeleton";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { DetailSkeleton } from "@/components/ui/skeleton";
 import { formatCentsCompact } from "@/lib/format";
+import type { CustomerDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import type { CustomerDetail } from "@/types/entities";
 
 export const Route = createFileRoute("/dashboard/customers/$customerId")({
 	component: CustomerDetailPage,
@@ -64,9 +64,7 @@ function CustomerDetailPage() {
 	);
 
 	if (isPending) {
-		return (
-		<DetailSkeleton />
-		);
+		return <DetailSkeleton />;
 	}
 	if (error) {
 		return <ErrorBanner message={`Error: ${error.message}`} />;
@@ -145,7 +143,9 @@ function CustomerDetailPage() {
 				description={`${bookings.length} booking${bookings.length === 1 ? "" : "s"} on file`}
 			>
 				{historyError ? (
-					<p className="text-muted-foreground text-sm italic">(failed to load)</p>
+					<p className="text-muted-foreground text-sm italic">
+						(failed to load)
+					</p>
 				) : (
 					<DataTable
 						data={bookings}

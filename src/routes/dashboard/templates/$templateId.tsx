@@ -28,8 +28,7 @@ function TemplateDetailPage() {
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
-	if (error)
-		return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={error.message} />;
 	if (!template)
 		return (
 			<DetailPage title="Template not found" backTo="/dashboard/templates" />

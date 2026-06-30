@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { DetailPage } from "@/components/detail-page";
+import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
@@ -133,7 +133,9 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 		return <DetailSkeleton />;
 	}
 	if (booking === null) {
-		return <DetailPage title="Booking not found" backTo="/dashboard/bookings" />;
+		return (
+			<DetailPage title="Booking not found" backTo="/dashboard/bookings" />
+		);
 	}
 
 	// Refuse editing of terminal bookings (security guard: state
