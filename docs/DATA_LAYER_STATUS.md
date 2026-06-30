@@ -19,11 +19,11 @@ by integration tests:
 | Module           | What works in the FE                                  |
 |------------------|--------------------------------------------------------|
 | `auth.ts`        | sign-up, sign-in, OAuth (Better Auth catch-all)        |
-| `organizations.ts` | active org query, slug lookup                       |
+| `organizations.ts` | active org query, slug lookup, org switcher (listMyOrganizations) |
 | `tours.ts`       | list/get/create/update + Categories filter             |
 | `tourCategories.ts` | list/create/update/remove + enable/disable buttons  |
 | `tourSchedules.ts` | create + capacity tracking on book/cancel            |
-| `tourTemplates.ts` | list/create/update/remove + enable/disable buttons   |
+| `tourTemplates.ts` | list/create/update/remove + enable/disable + Use Template (instantiate) |
 | `customers.ts`   | list (search + VIP filter) + get + create/update + history |
 | `assignments.ts` | list + create + complete + cancel + remove             |
 | `bookings.ts`    | list + create + edit + check-in + complete + cancel + record review |
@@ -85,10 +85,8 @@ is to either wire them up or remove them in a future cleanup pass.
 None of these block the deploy.
 
 - `bookings.refund` (manual refund — Stripe webhook handles automatic)
-- `tourTemplates.instantiate` (template clone — no FE button yet)
-- `assignments.checkConflicts` (public query wrapper around `checkConflictsHelper` — could be used for FE pre-flight validation)
-- `tourBlackoutDates.isBlackout` (public query wrapper around `isBlackoutHelper` — could be used for FE pre-flight validation)
-- `organizations.listMyOrganizations` (no "switch org" UI yet)
+- `assignments.checkConflicts` (public query wrapper — needs endTime field in assignment form)
+- `tourBlackoutDates.isBlackout` (public query wrapper — needs date picker integration)
 
 ## Unused indexes (declared in schema, no query uses them)
 
@@ -108,5 +106,5 @@ the `e2e/smoke.spec.ts` Playwright suite. The data-layer-only modules
 are covered by their own unit tests — they're working code, they just
 lack a UI consumer.
 
-To run the full suite: `pnpm test` (575 tests) and
+To run the full suite: `pnpm test` (647 tests) and
 `pnpm test:e2e` (Playwright smoke).
