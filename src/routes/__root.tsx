@@ -12,6 +12,7 @@ import {
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
 import type * as React from "react";
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
@@ -65,6 +66,12 @@ function RootComponent() {
 }
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+	useEffect(() => {
+		// Mark the document as hydrated so e2e tests can wait for React
+		// event handlers to be attached (otherwise SSR-rendered forms
+		// native-submit before onSubmit is wired up).
+		document.body.dataset.hydrated = "true";
+	}, []);
 	return (
 		<html lang="en">
 			<HeadContent />
