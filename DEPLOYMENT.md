@@ -33,6 +33,9 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 |---|---|---|
 | `SITE_URL` | this app's prod URL | e.g. `https://guides-tours.fuurma.tech` |
 | `VITE_CONVEX_URL` | from `npx convex deploy --prod` output | auto-injected at build time |
+| `VITE_SITE_URL` | this app's prod URL | e.g. `https://guides-tours.fuurma.tech` — must match `SITE_URL` |
+| `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe dashboard | `pk_live_...` (publishable key is safe in the bundle) |
+| `ENCRYPTION_KEY` | local `openssl rand -hex 32` | 64-char hex used to encrypt OTA/Stripe secrets at rest in Convex |
 
 ### Convex (via `npx convex env set` or dashboard)
 
@@ -40,19 +43,29 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 |---|---|---|
 | `BETTER_AUTH_SECRET` | auth | `openssl rand -base64 32` |
 | `SITE_URL` | auth | must match Cloudflare Worker URL |
+| `ENCRYPTION_KEY` | OTA/Stripe secret encryption | same 64-char hex as the Worker; without it, secret round-trip will fail with `crypto.getRandomValues`-style errors at decrypt time |
 | `STRIPE_SECRET_KEY` | payments | `sk_live_...` |
 | `STRIPE_WEBHOOK_SECRET` | payments | from Stripe dashboard |
+| `STRIPE_PUBLISHABLE_KEY` | payments | `pk_live_...` (optional; read by some Stripe helpers) |
 | `AWS_REGION` | SES email | e.g. `us-east-1` |
 | `AWS_ACCESS_KEY_ID` | SES email | IAM user with `ses:SendEmail` |
 | `AWS_SECRET_ACCESS_KEY` | SES email | same IAM user |
 | `SES_FROM_ADDRESS` | SES email | verified sender in SES |
 | `OTA_VIATOR_API_KEY` | Viator | optional, per provider |
+| `OTA_VIATOR_API_SECRET` | Viator | optional (only if the provider signs with a shared secret) |
 | `OTA_GETYOURGUIDE_API_KEY` | GetYourGuide | optional |
+| `OTA_GETYOURGUIDE_PARTNER_ID` | GetYourGuide | optional |
 | `OTA_AIRBNB_API_KEY` | Airbnb | optional |
+| `OTA_AIRBNB_API_SECRET` | Airbnb | optional |
 | `OTA_TRIPADVISOR_API_KEY` | TripAdvisor | optional |
+| `OTA_TRIPADVISOR_PARTNER_ID` | TripAdvisor | optional |
+| `OTA_TRIPADVISOR_API_SECRET` | TripAdvisor | optional |
 | `OTA_KLOOK_API_KEY` | Klook | optional |
+| `OTA_KLOOK_API_SECRET` | Klook | optional |
 | `OTA_BOOKING_API_KEY` | Booking.com | optional |
+| `OTA_BOOKING_API_SECRET` | Booking.com | optional |
 | `OTA_EXPEDIA_API_KEY` | Expedia | optional |
+| `OTA_EXPEDIA_API_SECRET` | Expedia | optional |
 | `PUBLIC_BOOKING_ALLOWED_ORIGINS` | public booking form | comma-separated origins (e.g. `https://tours.example.com,https://www.example.com`); if unset, all origins allowed (dev only) |
 
 ## Deploy

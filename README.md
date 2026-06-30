@@ -24,7 +24,7 @@ Tour operator SaaS — TanStack Start + Convex + Better Auth + Stripe + SES.
 - **Email:** AWS SES via Web Crypto Signature V4 (works in Cloudflare + Convex default runtime — no `"use node"` directive needed). See `convex/lib/awsSigV4.ts`.
 - **Payments:** Stripe via raw `fetch` (no SDK — same edge-runtime rationale)
 - **Package manager:** pnpm 10.30.2
-- **Testing:** Vitest (579 tests) + Playwright smoke (22/22 e2e: 19 route smoke + 3 auth flows)
+- **Testing:** Vitest (579 tests) + Playwright smoke (23/23 e2e: 19 route smoke + 4 auth flows)
 
 ## First-time setup
 
@@ -52,7 +52,7 @@ pnpm dev                    # frontend on :3000 (separate terminal for backend)
 - `pnpm build` — Production build (Cloudflare Workers target)
 - `pnpm deploy` — Build + `wrangler deploy`
 - `pnpm test` — Vitest run (579 tests)
-- `pnpm test:e2e` — Playwright smoke (requires `pnpm dev` running)
+- `pnpm test:e2e` — Playwright smoke (23 tests; requires `pnpm dev` running)
 - `pnpm lint` — Biome lint
 - `pnpm check` — Biome lint + format check
 - `npx convex dev` — Convex backend dev (separate terminal)

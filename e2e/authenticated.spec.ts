@@ -131,4 +131,42 @@ test.describe("authenticated smoke", () => {
 			timeout: 15_000,
 		});
 	});
+
+	test("public booking page renders for a real org slug", async ({
+		page,
+	}) => {
+		const email = uniqueEmail("public");
+		const orgName = `E2E Public Org ${Date.now()}`;
+		const orgSlug = uniqueSlug("pb");
+
+		// 1. Sign up + onboard (creates a real org with a known slug)
+		await page.goto("/sign-up");
+		await page.locator("#name").waitFor({ state: "visible" });
+		await waitForHydration(page);
+		await page.locator("#name").fill("E2E Public");
+		await page.locator("#email").fill(email);
+		await page.locator("#password").fill("test1234test");
+		await page.getByRole("button", { name: "Create account" }).click();
+		await page.waitForURL(/\/onboarding/, { timeout: 30_000 });
+		await page.locator("#slug").waitFor({ state: "visible" });
+		await waitForHydration(page);
+		await page.locator("#name").fill(orgName);
+		await page.locator("#slug").fill(orgSlug);
+		await page.getByRole("button", { name: "Create organization" }).click();
+		await page.waitForURL(/\/dashboard$/, { timeout: 30_000 });
+
+		// 2. Sign out so we can hit the public booking page anonymously
+		await page.context().clearCookies();
+
+		// 3. Visit the public booking page for the real org slug.
+		// This proves the route renders <500 for a real (signed-up) org
+		// — the existing /book/nonexistent-org-slug smoke only covers
+		// the 404 path. We don't wait for the convexQuery to resolve
+		// (it can be slow on cold Vite dev compiles); just verify the
+		// route mounts.
+		const response = await page.goto(`/book/${orgSlug}`);
+		expect(response?.status()).toBeLessThan(500);
+		await waitForHydration(page);
+		await expect(page.locator("main")).toBeVisible({ timeout: 15_000 });
+	});
 });
