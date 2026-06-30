@@ -19,7 +19,7 @@ by integration tests:
 | Module           | What works in the FE                                  |
 |------------------|--------------------------------------------------------|
 | `auth.ts`        | sign-up, sign-in, OAuth (Better Auth catch-all)        |
-| `organizations.ts` | list my orgs, switch active org, slug lookup         |
+| `organizations.ts` | active org query, slug lookup                       |
 | `tours.ts`       | list/get/create/update + Categories filter             |
 | `tourCategories.ts` | list/create/update/remove + enable/disable buttons  |
 | `tourSchedules.ts` | create + capacity tracking on book/cancel            |
@@ -69,9 +69,9 @@ Convex. They have FE-facing `public*` counterparts in most cases.
 | `internalSetActive`   | `drivers.setActive`                                |
 | `internalUpsert`      | `notificationSettings.upsert`                      |
 | `internalComplete` / `internalCancel` | `bookings.complete` / `bookings.cancel` |
-| `internalTrack`       | `files.track`                                      |
+| `internalTrack`       | `files.internalTrack` (public `track` removed — internal-only now) |
 | `internalApprove` / `internalReject` | `vacationRequests.approve/reject` |
-| `internalAdd`         | `tourImages.add`                                   |
+| `internalAdd`         | `tourImages.internalAdd` (public `add` removed — internal-only now) |
 | `internalCancel`      | `assignments.cancel`                                |
 | `internalComplete`    | `assignments.complete`                             |
 | `internalRecord`      | `tourAnalytics.record`                             |
@@ -85,17 +85,9 @@ is to either wire them up or remove them in a future cleanup pass.
 None of these block the deploy.
 
 - `bookings.refund` (manual refund — Stripe webhook handles automatic)
-- `tourImages.add` (public version — only the internal one is wired)
-- `tourImages.generateUploadUrl` (public version — only the `files.generateUploadUrl` is wired)
-- `notifications.instantiate` (template instantiation helper — not yet needed)
-- `customers.getBookingSources` (public version — internal mirror is used)
 - `tourTemplates.instantiate` (template clone — no FE button yet)
 - `assignments.checkConflicts` (public query wrapper around `checkConflictsHelper` — could be used for FE pre-flight validation)
 - `tourBlackoutDates.isBlackout` (public query wrapper around `isBlackoutHelper` — could be used for FE pre-flight validation)
-- `files.getUrl` (storage URL fetcher — not yet needed)
-- `files.track` (public version of file metadata write — internal version is used)
-- `notificationSettings.getSecrets` (Twilio auth token decrypt — UI uses separate form to avoid leaking the token to the client)
-- `organizations.setActiveOrganization` (Better Auth internal — should use `auth.api.setActiveOrganization` from the FE)
 - `organizations.listMyOrganizations` (no "switch org" UI yet)
 
 ## Unused indexes (declared in schema, no query uses them)

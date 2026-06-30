@@ -74,32 +74,6 @@ export const getUrl = query({
 
 // ---- mutations ----
 
-/**
- * @internal
- * No FE caller. Internal version (`internalAdd`) is what's wired up.
- * See docs/DATA_LAYER_STATUS.md.
- */
-export const add = mutation({
-	args: {
-		tourId: v.id("tours"),
-		storageId: v.id("_storage"),
-		altText: v.optional(v.string()),
-		isPrimary: v.optional(v.boolean()),
-		displayOrder: v.optional(v.number()),
-		width: v.optional(v.number()),
-		height: v.optional(v.number()),
-		fileSize: v.optional(v.number()),
-		format: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
-		return await ctx.runMutation(
-			internalAdd as unknown as FunctionReference<"mutation", "public" | "internal">,
-			{ organizationId: member.organizationId, userId: member.userId, ...args },
-		);
-	},
-});
-
 export const internalAdd = internalMutation({
 	args: {
 		organizationId: v.string(),
@@ -293,19 +267,5 @@ export const internalRemove = internalMutation({
 			newValues: {},
 		});
 		return args.imageId;
-	},
-});
-
-/**
- * @internal
- * No FE caller. Use `files.generateUploadUrl` for new UI work; this one
- * is duplicated for the tourImages table specifically. See
- * docs/DATA_LAYER_STATUS.md.
- */
-export const generateUploadUrl = mutation({
-	args: {},
-	handler: async (ctx) => {
-		await requireRole(ctx, ["owner", "admin", "member"]);
-		return await ctx.storage.generateUploadUrl();
 	},
 });

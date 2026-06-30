@@ -55,62 +55,7 @@ export const get = query({
 	},
 });
 
-/**
- * @internal
- * No FE caller. `getUrl` is a thin wrapper around `ctx.storage.getUrl`
- * with auth gating. Not needed yet — server-side rendering of file
- * URLs works without a public query.
- * See docs/DATA_LAYER_STATUS.md.
- */
-export const getUrl = query({
-	args: { storageId: v.id("_storage") },
-	handler: async (ctx, args) => {
-		// SECURITY: require membership + verify the storageId is
-		// tracked under this org's files table. Without this check,
-		// any signed-in user could fetch a signed URL for any blob
-		// in Convex storage by guessing/iterating IDs.
-		const member = await requireMembership(ctx);
-		const f = await ctx.db
-			.query("files")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.filter((q) => q.eq(q.field("storageId"), args.storageId))
-			.first();
-		if (!f) return null;
-		return await ctx.storage.getUrl(args.storageId);
-	},
-});
-
 // ---- mutations ----
-
-/**
- * @internal
- * No FE caller. The internal version (`internalTrack`) is used by the
- * `upload` action chain. The public version was kept for symmetry with
- * `generateUploadUrl` but no UI calls it yet.
- * See docs/DATA_LAYER_STATUS.md.
- */
-export const track = mutation({
-	args: {
-		storageId: v.id("_storage"),
-		filename: v.string(),
-		contentType: v.string(),
-		size: v.number(),
-		purpose: v.string(),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member", "guide"]);
-		return await ctx.runMutation(
-			internalTrack as unknown as FunctionReference<"mutation", "public" | "internal">,
-			{
-				organizationId: member.organizationId,
-				uploadedBy: member.userId,
-				...args,
-			},
-		);
-	},
-});
 
 export const internalTrack = internalMutation({
 	args: {

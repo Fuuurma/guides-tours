@@ -32,28 +32,6 @@ export const get = query({
 	},
 });
 
-/**
- * @internal
- * No FE caller. The settings page (`settings/payments.tsx` and the
- * notifications settings page) uses separate `upsert` mutations instead
- * of fetching the decrypted token back to the client. The decryption
- * happens server-side at dispatch time, so the FE never needs the
- * raw secret.
- * See docs/DATA_LAYER_STATUS.md.
- */
-export const getSecrets = query({
-	args: {},
-	handler: async (ctx) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
-		const row = await ctx.db
-			.query("notificationSettings")
-			.withIndex("by_org", (q) => q.eq("organizationId", member.organizationId))
-			.first();
-		if (!row) return null;
-		return row; // includes encrypted twilioAuthToken
-	},
-});
-
 // ---- mutations ----
 
 export const upsert = mutation({
