@@ -24,9 +24,10 @@ by integration tests:
 | `tourCategories.ts` | list/create/update/remove + enable/disable buttons  |
 | `tourSchedules.ts` | create + capacity tracking on book/cancel            |
 | `tourTemplates.ts` | list/create/update/remove + enable/disable + Use Template (instantiate) |
+| `tourBlackoutDates.ts` | `isBlackout` query (auth-gated — needs public variant for booking page) |
 | `customers.ts`   | list (search + VIP filter) + get + create/update + history |
-| `assignments.ts` | list + create + complete + cancel + remove             |
-| `bookings.ts`    | list + create + edit + check-in + complete + cancel + record review |
+| `assignments.ts` | list + create + complete + cancel + remove + conflict checker |
+| `bookings.ts`    | list + create + edit + check-in + complete + cancel + record review + refund |
 | `drivers.ts`     | list + create/update + activate/deactivate + remove    |
 | `vehicles.ts`    | list + create + status changer + remove                |
 | `vacationRequests.ts` | list + create + approve + reject                   |
@@ -84,9 +85,7 @@ Public functions with no FE caller AND no internal caller. The plan
 is to either wire them up or remove them in a future cleanup pass.
 None of these block the deploy.
 
-- `bookings.refund` (manual refund — Stripe webhook handles automatic)
-- `assignments.checkConflicts` (public query wrapper — needs endTime field in assignment form)
-- `tourBlackoutDates.isBlackout` (public query wrapper — needs date picker integration)
+- `tourBlackoutDates.isBlackout` (auth-gated query — needs public variant for unauthenticated booking page)
 
 ## Unused indexes (declared in schema, no query uses them)
 
