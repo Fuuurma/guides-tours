@@ -12,6 +12,12 @@
 // but skipping BE validation has bitten us before (the public
 // booking case-dup bug from earlier was caused by missing email
 // normalization on the BE side).
+//
+// Throws ConvexError (not plain Error) so the http.ts public
+// booking endpoint can distinguish user-input errors from
+// internal errors and return 400 vs 500 respectively.
+
+import { ConvexError } from "convex/values";
 
 /** Max length for human-name fields (customer, guide, driver). */
 export const MAX_NAME_LEN = 100;
@@ -102,18 +108,22 @@ export function assertValidCustomerInput(input: {
 }): { name: string; notes: string; phone: string } {
 	const name = input.name.trim();
 	if (name.length < 2) {
-		throw new Error("Name must be at least 2 characters");
+		throw new ConvexError("Name must be at least 2 characters");
 	}
 	if (name.length > MAX_NAME_LEN) {
-		throw new Error(`Name is too long (max ${MAX_NAME_LEN} characters)`);
+		throw new ConvexError(
+			`Name is too long (max ${MAX_NAME_LEN} characters)`,
+		);
 	}
 	const notes = input.notes ?? "";
 	if (notes.length > MAX_NOTES_LEN) {
-		throw new Error(`Notes are too long (max ${MAX_NOTES_LEN} characters)`);
+		throw new ConvexError(
+			`Notes are too long (max ${MAX_NOTES_LEN} characters)`,
+		);
 	}
 	const phone = input.phone ?? "";
 	if (phone.length > MAX_PHONE_LEN) {
-		throw new Error(
+		throw new ConvexError(
 			`Phone is too long (max ${MAX_PHONE_LEN} characters)`,
 		);
 	}
@@ -131,6 +141,8 @@ export function assertFieldWithinLimit(
 	max: number,
 ): void {
 	if (value.length > max) {
-		throw new Error(`${fieldName} is too long (max ${max} characters)`);
+		throw new ConvexError(
+			`${fieldName} is too long (max ${max} characters)`,
+		);
 	}
 }
