@@ -139,6 +139,28 @@ export const internalCreate = internalMutation({
 				MAX_DESCRIPTION_LEN,
 			);
 		}
+		// Cap each language/inclusion/exclusion/highlight entry. The FE
+		// caps inclusions/exclusions/highlights at 5000 chars; languages
+		// are short codes. Defense in depth.
+		if (args.languages !== undefined) {
+			for (const lang of args.languages) {
+				assertFieldWithinLimit("language", lang, 10);
+			}
+		}
+		for (const [field, max] of [
+			["inclusions", 5000],
+			["exclusions", 5000],
+			["highlights", 5000],
+		] as const) {
+			const arr = args[field as keyof typeof args] as
+				| string[]
+				| undefined;
+			if (arr !== undefined) {
+				for (const item of arr) {
+					assertFieldWithinLimit(field, item, max);
+				}
+			}
+		}
 
 		const now = Date.now();
 		const tourId = await ctx.db.insert("tours", {
