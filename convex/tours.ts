@@ -26,7 +26,9 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		// by_org_active leads with (org, isActive) — push the active
-		// filter into the index when onlyActive is set.
+		// filter into the index when onlyActive is set. Bound the result
+		// so an org with thousands of tours doesn't OOM the response.
+		const MAX_TOURS = 500;
 		if (args.onlyActive === true) {
 			const all = await ctx.db
 				.query("tours")
@@ -35,7 +37,7 @@ export const list = query({
 						.eq("organizationId", member.organizationId)
 						.eq("isActive", true),
 				)
-				.collect();
+				.take(MAX_TOURS);
 			return all.filter((t) => t.deletedAt === undefined);
 		}
 		const all = await ctx.db
@@ -43,7 +45,7 @@ export const list = query({
 			.withIndex("by_org", (q) =>
 				q.eq("organizationId", member.organizationId),
 			)
-			.collect();
+			.take(MAX_TOURS);
 		return all.filter((t) => t.deletedAt === undefined);
 	},
 });
@@ -369,12 +371,16 @@ export const listInternal = internalQuery({
 		onlyActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
+		// Bound the result so an org with thousands of tours doesn't
+		// OOM the response. The public booking page renders at most
+		// a few dozen active tours.
+		const MAX_TOURS = 500;
 		const all = await ctx.db
 			.query("tours")
 			.withIndex("by_org", (q) =>
 				q.eq("organizationId", args.organizationId),
 			)
-			.collect();
+			.take(MAX_TOURS);
 		const visible = all.filter((t) => t.deletedAt === undefined);
 		return args.onlyActive === true
 			? visible.filter((t) => t.isActive)
