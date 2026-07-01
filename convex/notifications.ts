@@ -349,19 +349,22 @@ export const cleanupOldAssignments = internalMutation({
 		// index sorts by status first, so each query is bounded.
 		// Run the two passes in parallel — they hit the same index
 		// but with different status values, so they're independent.
+		// Bound the scan to prevent OOM on orgs with millions of old
+		// assignments.
+		const MAX_CLEANUP = 5000;
 		const [completed, cancelled] = await Promise.all([
 			ctx.db
 				.query("assignments")
 				.withIndex("by_status_date", (q) =>
 					q.eq("status", "completed").lt("date", cutoffDate),
 				)
-				.collect(),
+				.take(MAX_CLEANUP),
 			ctx.db
 				.query("assignments")
 				.withIndex("by_status_date", (q) =>
 					q.eq("status", "cancelled").lt("date", cutoffDate),
 				)
-				.collect(),
+				.take(MAX_CLEANUP),
 		]);
 
 		const targets = [...completed, ...cancelled].filter(
