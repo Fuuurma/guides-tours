@@ -49,6 +49,29 @@ async function waitForHydration(page: Page): Promise<void> {
 }
 
 test.describe("authenticated smoke", () => {
+	// Cold Vite compilation + sign-up + onboarding can take >90s on
+	// the first run. Give the full test a longer timeout.
+	test.setTimeout(180_000);
+
+	// Pre-warm Vite by visiting the slow routes once before the tests
+	// run. Vite compiles on first hit, so this shifts the cold-compile
+	// cost out of the per-test budget. The routes visited are the ones
+	// the tests navigate to (sign-up, onboarding, dashboard).
+	test.beforeAll(async ({ browser }) => {
+		const ctx = await browser.newContext();
+		const page = await ctx.newPage();
+		try {
+			await page.goto("/sign-up", { waitUntil: "domcontentloaded" });
+		} catch {
+			// Best-effort — if the server isn't ready, the per-test
+			// retry will handle it.
+		}
+		try {
+			await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+		} catch {}
+		await ctx.close();
+	});
+
 	test("sign up a fresh user, complete onboarding, land on dashboard", async ({
 		page,
 	}) => {
@@ -66,7 +89,9 @@ test.describe("authenticated smoke", () => {
 		await page.getByRole("button", { name: "Create account" }).click();
 
 		// After sign-up, the route navigates to /onboarding.
-		await page.waitForURL(/\/onboarding/, { timeout: 30_000 });
+		// Cold Vite compilation can take >30s on first hit, so we
+		// give the sign-up step a longer timeout.
+		await page.waitForURL(/\/onboarding/, { timeout: 60_000 });
 		await page.locator("#slug").waitFor({ state: "visible" });
 		await waitForHydration(page);
 
@@ -75,8 +100,10 @@ test.describe("authenticated smoke", () => {
 		await page.locator("#slug").fill(orgSlug);
 		await page.getByRole("button", { name: "Create organization" }).click();
 
-		// 3. Land on dashboard
-		await page.waitForURL(/\/dashboard$/, { timeout: 30_000 });
+		// 3. Land on dashboard — cold Vite compilation can take >60s
+		// on the first dashboard hit, so we give this the full
+		// remaining test budget.
+		await page.waitForURL(/\/dashboard$/, { timeout: 120_000 });
 		await page
 			.getByRole("heading", { name: /today/i })
 			.waitFor({ state: "visible", timeout: 15_000 });
@@ -144,6 +171,7 @@ test.describe("authenticated smoke", () => {
 		const orgSlug = uniqueSlug("pb");
 
 		// 1. Sign up + onboard (creates a real org with a known slug)
+		// Cold Vite compilation can take >30s on first hit.
 		await page.goto("/sign-up");
 		await page.locator("#name").waitFor({ state: "visible" });
 		await waitForHydration(page);
@@ -151,13 +179,15 @@ test.describe("authenticated smoke", () => {
 		await page.locator("#email").fill(email);
 		await page.locator("#password").fill("test1234test");
 		await page.getByRole("button", { name: "Create account" }).click();
-		await page.waitForURL(/\/onboarding/, { timeout: 30_000 });
+		await page.waitForURL(/\/onboarding/, { timeout: 60_000 });
 		await page.locator("#slug").waitFor({ state: "visible" });
 		await waitForHydration(page);
 		await page.locator("#name").fill(orgName);
 		await page.locator("#slug").fill(orgSlug);
 		await page.getByRole("button", { name: "Create organization" }).click();
-		await page.waitForURL(/\/dashboard$/, { timeout: 30_000 });
+		// Cold Vite compilation can take >60s on the first dashboard
+		// hit. Give this the full remaining test budget.
+		await page.waitForURL(/\/dashboard$/, { timeout: 120_000 });
 
 		// 2. Sign out so we can hit the public booking page anonymously
 		await page.context().clearCookies();
