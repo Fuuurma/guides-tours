@@ -101,6 +101,11 @@ export const list = query({
 		// dateTo into the index range so we don't scan every booking with
 		// the given source. When no filter is present and sorting by
 		// `date`, use by_org_date with .order() to skip the JS sort below.
+		// Bound the scan: a single page is at most 100, but the JS filter
+		// (status, tourId, customerId, search) needs every matching row.
+		// Cap at 5000 — the FE paginates, so this is fine for reasonable
+		// org sizes.
+		const MAX_SCAN = 5000;
 		const canUseDateOrder =
 			sortBy === "date" &&
 			!args.search &&
@@ -122,7 +127,7 @@ export const list = query({
 						if (args.dateTo) return eq.lte("date", args.dateTo!);
 						return eq;
 					})
-					.collect()
+					.take(MAX_SCAN)
 			: args.dateFrom || args.dateTo
 				? ctx.db
 						.query("bookings")
@@ -135,7 +140,7 @@ export const list = query({
 							if (args.dateTo) return eq.lte("date", args.dateTo);
 							return eq;
 						})
-						.collect()
+						.take(MAX_SCAN)
 				: canUseDateOrder
 					? ctx.db
 							.query("bookings")
@@ -143,13 +148,13 @@ export const list = query({
 								q.eq("organizationId", member.organizationId),
 							)
 							.order(order)
-							.collect()
+							.take(MAX_SCAN)
 					: ctx.db
 							.query("bookings")
 							.withIndex("by_org", (q) =>
 								q.eq("organizationId", member.organizationId),
 							)
-							.collect());
+							.take(MAX_SCAN));
 
 		let filtered = all;
 		if (args.status) {
