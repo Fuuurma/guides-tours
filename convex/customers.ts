@@ -463,12 +463,14 @@ export const remove = mutation({
 		// Refuse if the customer has any non-cancelled bookings — same
 		// behavior source would have via FK CASCADE (lost data) but
 		// louder. Cancelled bookings are still kept for history.
+		// Bounded scan: a customer with thousands of cancelled
+		// bookings would otherwise slow down every delete.
 		const bookings = await ctx.db
 			.query("bookings")
 			.withIndex("by_customer_date", (q) =>
 				q.eq("customerId", args.customerId),
 			)
-			.collect();
+			.take(500);
 		const live = bookings.filter((b) => b.status !== "cancelled");
 		if (live.length > 0) {
 			throw new ConvexError(
