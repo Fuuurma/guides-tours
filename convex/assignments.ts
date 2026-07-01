@@ -248,7 +248,7 @@ export const checkConflicts = query({
 			indexField: string,
 			value: string,
 			conflictType: Conflict["conflictType"],
-		) {
+		): Promise<void> {
 			const rows = await ctx.db
 				.query("assignments")
 				.withIndex(indexName, (q: any) =>
@@ -279,25 +279,29 @@ export const checkConflicts = query({
 			}
 		}
 
-		if (args.guideId) {
-			await collect("by_guide_date", "guideId", args.guideId, "guide");
-		}
-		if (args.vehicleId) {
-			await collect(
-				"by_vehicle_date",
-				"vehicleId",
-				args.vehicleId,
-				"vehicle",
-			);
-		}
-		if (args.driverId) {
-			await collect(
-				"by_driver_date",
-				"driverId",
-				args.driverId,
-				"driver",
-			);
-		}
+		// Guide, vehicle, and driver conflict lookups are independent
+		// index scans — run them in parallel when all three are provided.
+		await Promise.all([
+			args.guideId
+				? collect("by_guide_date", "guideId", args.guideId, "guide")
+				: Promise.resolve(),
+			args.vehicleId
+				? collect(
+						"by_vehicle_date",
+						"vehicleId",
+						args.vehicleId,
+						"vehicle",
+					)
+				: Promise.resolve(),
+			args.driverId
+				? collect(
+						"by_driver_date",
+						"driverId",
+						args.driverId,
+						"driver",
+					)
+				: Promise.resolve(),
+		]);
 
 		// Batched tour lookup: dedupe + fetch once + Map.
 		const uniqueTourIds = [...new Set(assignmentsList.map((a) => a.tourId))];
