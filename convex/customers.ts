@@ -150,16 +150,25 @@ export const get = query({
 		// booking. For a high-volume customer, .collect() would pull
 		// every row just to compute totalBookings + upcomingBookingsCount.
 		// We split into two scans: cancelled/old bookings vs upcoming
-		// active bookings.
+		// active bookings. The two scans are independent — run in parallel.
 		const today = new Date().toISOString().slice(0, 10);
-		const upcomingBookings = await ctx.db
-			.query("bookings")
-			.withIndex("by_customer_date", (q) =>
-				q
-					.eq("customerId", args.customerId)
-					.gte("date", today),
-			)
-			.take(500);
+		const MAX_BOOKINGS_TO_COUNT = 1000;
+		const [upcomingBookings, sampled] = await Promise.all([
+			ctx.db
+				.query("bookings")
+				.withIndex("by_customer_date", (q) =>
+					q
+						.eq("customerId", args.customerId)
+						.gte("date", today),
+				)
+				.take(500),
+			ctx.db
+				.query("bookings")
+				.withIndex("by_customer_date", (q) =>
+					q.eq("customerId", args.customerId),
+				)
+				.take(MAX_BOOKINGS_TO_COUNT + 1),
+		]);
 
 		const upcomingBookingsCount = upcomingBookings.filter(
 			(b) => b.status === "pending" || b.status === "confirmed",
@@ -167,14 +176,8 @@ export const get = query({
 
 		// For totalBookings we need every row, but a customer with
 		// thousands of bookings would blow up the response. Cap at
-		// 1000 + flag whether there are more.
-		const MAX_BOOKINGS_TO_COUNT = 1000;
-		const sampled = await ctx.db
-			.query("bookings")
-			.withIndex("by_customer_date", (q) =>
-				q.eq("customerId", args.customerId),
-			)
-			.take(MAX_BOOKINGS_TO_COUNT + 1);
+		// 1000 + flag whether there are more. The `sampled` array came
+		// from the parallel scan above (same index, same customer).
 		const totalBookings =
 			sampled.length > MAX_BOOKINGS_TO_COUNT
 				? `${MAX_BOOKINGS_TO_COUNT}+`
