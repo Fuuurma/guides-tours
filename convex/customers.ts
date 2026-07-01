@@ -143,24 +143,44 @@ export const get = query({
 		if (!customer) return null;
 		if (customer.organizationId !== member.organizationId) return null;
 
-		const bookings = await ctx.db
+		// Count bookings in bounded scans instead of fetching every
+		// booking. For a high-volume customer, .collect() would pull
+		// every row just to compute totalBookings + upcomingBookingsCount.
+		// We split into two scans: cancelled/old bookings vs upcoming
+		// active bookings.
+		const today = new Date().toISOString().slice(0, 10);
+		const upcomingBookings = await ctx.db
+			.query("bookings")
+			.withIndex("by_customer_date", (q) =>
+				q
+					.eq("customerId", args.customerId)
+					.gte("date", today),
+			)
+			.take(500);
+
+		const upcomingBookingsCount = upcomingBookings.filter(
+			(b) => b.status === "pending" || b.status === "confirmed",
+		).length;
+
+		// For totalBookings we need every row, but a customer with
+		// thousands of bookings would blow up the response. Cap at
+		// 1000 + flag whether there are more.
+		const MAX_BOOKINGS_TO_COUNT = 1000;
+		const sampled = await ctx.db
 			.query("bookings")
 			.withIndex("by_customer_date", (q) =>
 				q.eq("customerId", args.customerId),
 			)
-			.collect();
-
-		const today = new Date().toISOString().slice(0, 10);
-		const upcomingCount = bookings.filter(
-			(b) =>
-				(b.status === "pending" || b.status === "confirmed") &&
-				b.date >= today,
-		).length;
+			.take(MAX_BOOKINGS_TO_COUNT + 1);
+		const totalBookings =
+			sampled.length > MAX_BOOKINGS_TO_COUNT
+				? `${MAX_BOOKINGS_TO_COUNT}+`
+				: sampled.length;
 
 		return {
 			...customer,
-			totalBookings: bookings.length,
-			upcomingBookingsCount: upcomingCount,
+			totalBookings,
+			upcomingBookingsCount,
 		};
 	},
 });

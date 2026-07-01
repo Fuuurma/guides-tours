@@ -130,10 +130,12 @@ function PublicBookingPage() {
 		else if (nameTrimmed.length > MAX_NAME_LEN)
 			errs.name = `Name is too long (max ${MAX_NAME_LEN} characters)`;
 		const emailTrimmed = email.trim();
-		if (!EMAIL_REGEX.test(emailTrimmed))
+		// Check length BEFORE shape — a 5000-char string would fail
+		// the regex check, so the user would see "invalid email"
+		// instead of the more accurate "too long" message.
+		if (emailTrimmed.length > MAX_EMAIL_LEN) errs.email = "Email is too long";
+		else if (!EMAIL_REGEX.test(emailTrimmed))
 			errs.email = "Please enter a valid email address";
-		else if (emailTrimmed.length > MAX_EMAIL_LEN)
-			errs.email = "Email is too long";
 		if (phone && phone.length > 0) {
 			const phoneDigits = phone.replace(/\D/g, "");
 			if (phoneDigits.length < 6 || phoneDigits.length > 20) {

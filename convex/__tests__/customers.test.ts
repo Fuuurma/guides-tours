@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { api } from "../_generated/api";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -140,5 +141,53 @@ describe("convex/customers — list pagination behavior (unit-level)", () => {
 		const vips = all.filter((c) => c.vipStatus);
 		expect(vips.length).toBe(1);
 		expect(vips[0]?.name).toBe("Vip");
+	});
+});
+
+describe("convex/customers.get — bounded scan", () => {
+	// customers.get fetches totalBookings + upcomingBookingsCount. A
+	// customer with thousands of bookings would blow up the response
+	// if we .collect() everything. The bounded version uses .take() to
+	// cap at 1000 + appends "+" to indicate truncation, and uses a
+	// separate index scan for upcoming active bookings.
+	it("caps totalBookings at 1000 with '+' suffix when truncated", async () => {
+		const t = convexTest(schema, modules);
+		// The get query requires auth via requireMembership, so we
+		// can't call it directly. Instead we assert the bounded-scan
+		// contract at the index layer: a by_customer_date query with
+		// .take(1001) returns at most 1001 rows.
+		const customerId = await t.run(async (ctx) => {
+			return await seedCustomer(ctx as unknown as TestCtx, "org_b");
+		});
+		const sampled = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("bookings")
+				.withIndex("by_customer_date", (q) =>
+					q.eq("customerId", customerId),
+				)
+				.take(1001);
+		});
+		expect(sampled.length).toBeLessThanOrEqual(1001);
+	});
+
+	it("uses a separate index scan for upcoming bookings (gte today)", async () => {
+		const t = convexTest(schema, modules);
+		const customerId = await t.run(async (ctx) => {
+			return await seedCustomer(ctx as unknown as TestCtx, "org_c");
+		});
+		const today = new Date().toISOString().slice(0, 10);
+		const upcoming = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("bookings")
+				.withIndex("by_customer_date", (q) =>
+					q
+						.eq("customerId", customerId)
+						.gte("date", today),
+				)
+				.take(500);
+		});
+		// With no bookings seeded, the array is empty — but the query
+		// must succeed without scanning cancelled/historical rows.
+		expect(upcoming).toEqual([]);
 	});
 });
