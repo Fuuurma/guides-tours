@@ -681,6 +681,14 @@ export const internalCancel = internalMutation({
 		if (a.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
+		// Cap the cancel reason — it's stored in the audit log's
+		// newValues, so an unbounded reason would bloat every row.
+		const MAX_REASON_LEN = 500;
+		if (args.reason !== undefined && args.reason.length > MAX_REASON_LEN) {
+			throw new ConvexError(
+				`Cancel reason is too long (max ${MAX_REASON_LEN} characters)`,
+			);
+		}
 		if (a.status === "cancelled") {
 			throw new ConvexError("Already cancelled");
 		}
