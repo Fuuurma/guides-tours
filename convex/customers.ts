@@ -77,6 +77,10 @@ export const list = query({
 		// by_org_vip compound index leads with (org, vipStatus) so the
 		// server can skip non-VIP customers entirely instead of
 		// fetching every customer and filtering in JS.
+		// Bound the scan: a single page is at most 100, but the JS
+		// filter needs every matching row. Cap at 5000 — the FE
+		// paginates, so this is fine for reasonable org sizes.
+		const MAX_SCAN = 5000;
 		const all = await (args.vipOnly
 			? ctx.db
 					.query("customers")
@@ -85,13 +89,13 @@ export const list = query({
 							.eq("organizationId", member.organizationId)
 							.eq("vipStatus", true),
 					)
-					.collect()
+					.take(MAX_SCAN)
 			: ctx.db
 					.query("customers")
 					.withIndex("by_org", (q) =>
 						q.eq("organizationId", member.organizationId),
 					)
-					.collect());
+					.take(MAX_SCAN));
 
 		let filtered = all;
 		if (args.search) {
