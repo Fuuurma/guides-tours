@@ -57,11 +57,13 @@ export const getScheduledForDispatch = internalQuery({
 		]);
 		if (!template || !booking) return null;
 
-		const customer = await ctx.db.get(booking.customerId);
+		// Customer and tour are both independent lookups against the
+		// booking — fetch in parallel.
+		const [customer, tour] = await Promise.all([
+			ctx.db.get(booking.customerId),
+			ctx.db.get(booking.tourId),
+		]);
 		if (!customer) return null;
-
-		// Tour name is needed for the template body.
-		const tour = await ctx.db.get(booking.tourId);
 		const tourName = tour?.name ?? "your tour";
 
 		return {
