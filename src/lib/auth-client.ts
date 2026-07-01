@@ -1,14 +1,22 @@
-import { createAuthClient } from "better-auth/react";
-import { createAuthClient as createAuthClientWithPlugins } from "better-auth/client";
+import { convexClient, crossDomainClient } from "@convex-dev/better-auth/client/plugins";
 import { organizationClient } from "better-auth/client/plugins";
+import { createAuthClient } from "better-auth/react";
 import { ac, roles } from "../../convex/authz";
 
-// Provider-facing client: a plain React auth client with the org plugin
-// and nothing else. The ConvexBetterAuthProvider accepts a plain
-// AuthClient shape; crossDomain/convex plugins break the useSession
-// contract so they live on a separate client (see auth-convex.ts).
+// ConvexBetterAuthProvider requires a client with BOTH `convexClient()`
+// and `crossDomainClient()` (see @convex-dev/better-auth react/src/index.ts:
+// useUseAuthFromBetterAuth calls `authClient.convex.token(...)` and
+// `authClient.crossDomain.oneTimeToken.verify(...)`). The org plugin
+// is the product-specific one for multi-tenant organizations.
+//
+// Type note: the AuthClient type in @convex-dev/better-auth 0.12.5 is a
+// discriminated union; our client satisfies `PluginsWithCrossDomain` but
+// the type narrows `useSession().data` to `never` which fails structural
+// assignment in `__root.tsx`. We cast there with a `biome-ignore` reason.
 export const authClient = createAuthClient({
 	plugins: [
+		convexClient(),
+		crossDomainClient(),
 		organizationClient({
 			ac,
 			roles,
@@ -16,16 +24,5 @@ export const authClient = createAuthClient({
 	],
 });
 
-// Convex-side bridge: created once, used to wire the auth client's
-// token fetcher into the Convex HTTP client. See __root.tsx for the
-// beforeLoad that calls convexQueryClient.serverHttpClient?.setAuth.
-export const authClientForConvex = createAuthClientWithPlugins({
-	plugins: [
-		organizationClient({
-			ac,
-			roles,
-		}),
-	],
-});
-
-export const { signIn, signOut, signUp, organization } = authClient;
+export const { signIn, signOut, signUp } = authClient;
+export const { organization } = authClient;

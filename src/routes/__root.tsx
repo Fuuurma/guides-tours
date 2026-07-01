@@ -55,7 +55,8 @@ function RootComponent() {
 	return (
 		<ConvexBetterAuthProvider
 			client={context.convexQueryClient.convexClient}
-			authClient={authClient}
+			// biome-ignore lint/suspicious/noExplicitAny: AuthClient from @convex-dev/better-auth 0.12.5 is a discriminated union; our client satisfies PluginsWithCrossDomain but the type narrows useSession().data to `never` which is structural. Cast is safe.
+			authClient={authClient as any}
 			initialToken={context.token}
 		>
 			<RootDocument>
