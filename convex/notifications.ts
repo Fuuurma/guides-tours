@@ -112,27 +112,49 @@ export const processPendingNotifications = internalMutation({
 		let processed = 0;
 		let failed = 0;
 
-		for (const scheduled of eligible) {
-			try {
-				await ctx.scheduler.runAfter(
-					0,
-					internal.notification_dispatch.dispatchScheduled,
-					{ scheduledId: scheduled._id },
-				);
-				processed += 1;
-			} catch (err) {
+		// Run the scheduler enqueues in parallel — they're independent
+		// (each dispatches to a different scheduled notification) and
+		// ctx.scheduler.runAfter is async. Sequential was adding latency
+		// proportional to the batch size on every cron tick.
+		const enqueueResults = await Promise.allSettled(
+			eligible.map((scheduled) =>
+				ctx.scheduler
+					.runAfter(
+						0,
+						internal.notification_dispatch.dispatchScheduled,
+						{ scheduledId: scheduled._id },
+					)
+					.then(
+						() => ({ scheduled, ok: true as const }),
+						(err: unknown) => ({ scheduled, ok: false as const, err }),
+					),
+			),
+		);
+
+		for (const result of enqueueResults) {
+			if (result.status === "rejected") {
 				failed += 1;
-				const message =
-					err instanceof ConvexError
-						? err.message
-						: err instanceof Error
-							? err.message
-							: "unknown error";
 				console.error(
-					`[cron] failed to enqueue dispatch for ${scheduled._id}: ${message}`,
+					`[cron] failed to enqueue dispatch: ${result.reason}`,
 				);
-				await bumpRetryOrAbandon(ctx, scheduled, message);
+				continue;
 			}
+			if (result.value.ok) {
+				processed += 1;
+				continue;
+			}
+			failed += 1;
+			const { scheduled, err } = result.value;
+			const message =
+				err instanceof ConvexError
+					? err.message
+					: err instanceof Error
+						? err.message
+						: "unknown error";
+			console.error(
+				`[cron] failed to enqueue dispatch for ${scheduled._id}: ${message}`,
+			);
+			await bumpRetryOrAbandon(ctx, scheduled, message);
 		}
 
 		if (processed > 0 || failed > 0) {
