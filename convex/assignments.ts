@@ -90,9 +90,15 @@ export const list = query({
 		),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
+const member = await requireMembership(ctx);
 
-// Pick the most selective index. If a non-status, non-date
+		// Bound the result so an org with thousands of assignments
+		// doesn't OOM the response. 500 covers ~6 months of daily
+		// assignments per guide; callers can filter by date/status to
+		// narrow further.
+		const MAX_ASSIGNMENTS = 500;
+
+		// Pick the most selective index. If a non-status, non-date
 		// filter is set, use the leading-by-that-field index. Otherwise
 		// use by_org_date with optional range scan + .order("asc") to
 		// skip the date portion of the JS sort.
@@ -101,7 +107,7 @@ export const list = query({
 			all = await ctx.db
 				.query("assignments")
 				.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId!))
-				.collect();
+				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.guideId) {
 			all = await ctx.db
@@ -109,7 +115,7 @@ export const list = query({
 				.withIndex("by_guide_date", (q) =>
 					q.eq("guideId", args.guideId!),
 				)
-				.collect();
+				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.vehicleId) {
 			all = await ctx.db
@@ -117,7 +123,7 @@ export const list = query({
 				.withIndex("by_vehicle_date", (q) =>
 					q.eq("vehicleId", args.vehicleId!),
 				)
-				.collect();
+				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.driverId) {
 			all = await ctx.db
@@ -125,7 +131,7 @@ export const list = query({
 				.withIndex("by_driver_date", (q) =>
 					q.eq("driverId", args.driverId!),
 				)
-				.collect();
+				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.status) {
 			all = await ctx.db
@@ -135,7 +141,7 @@ export const list = query({
 						.eq("organizationId", member.organizationId)
 						.eq("status", args.status!),
 				)
-				.collect();
+				.take(MAX_ASSIGNMENTS);
 		} else {
 			all = await ctx.db
 				.query("assignments")
@@ -149,7 +155,7 @@ export const list = query({
 					return eq;
 				})
 				.order("asc")
-				.collect();
+				.take(MAX_ASSIGNMENTS);
 		}
 		let filtered = all.filter((a) => !a.deletedAt);
 		if (args.dateFrom && (args.tourId || args.guideId || args.vehicleId || args.driverId || args.status)) {
