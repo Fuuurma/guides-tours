@@ -71,7 +71,11 @@ export const list = query({
 						.eq("vehicleType", args.vehicleType!),
 				);
 		}
-		const all = await q.collect();
+		// Bound the result so an org with thousands of vehicles
+		// doesn't OOM the response. The FE page renders at most a
+		// few dozen.
+		const MAX_VEHICLES = 500;
+		const all = await q.take(MAX_VEHICLES);
 		return all.sort((a, b) => a.name.localeCompare(b.name));
 	},
 });
