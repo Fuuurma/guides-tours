@@ -95,10 +95,13 @@ export const list = query({
 		let filtered = all;
 		if (args.search) {
 			const q = args.search.toLowerCase();
+			// Email is already stored lowercase (normalized on insert via
+			// normalizeEmail), so skip .toLowerCase() on that field to
+			// avoid redundant work on every row.
 			filtered = filtered.filter(
 				(c) =>
 					c.name.toLowerCase().includes(q) ||
-					c.email.toLowerCase().includes(q) ||
+					c.email.includes(q) ||
 					c.phone.toLowerCase().includes(q),
 			);
 		}
