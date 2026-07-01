@@ -25,15 +25,26 @@ export const list = query({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
+		// by_org_active leads with (org, isActive) — push the active
+		// filter into the index when onlyActive is set.
+		if (args.onlyActive === true) {
+			const all = await ctx.db
+				.query("tours")
+				.withIndex("by_org_active", (q) =>
+					q
+						.eq("organizationId", member.organizationId)
+						.eq("isActive", true),
+				)
+				.collect();
+			return all.filter((t) => t.deletedAt === undefined);
+		}
 		const all = await ctx.db
 			.query("tours")
 			.withIndex("by_org", (q) =>
 				q.eq("organizationId", member.organizationId),
 			)
 			.collect();
-		return args.onlyActive === true
-			? all.filter((t) => t.isActive && t.deletedAt === undefined)
-			: all.filter((t) => t.deletedAt === undefined);
+		return all.filter((t) => t.deletedAt === undefined);
 	},
 });
 
