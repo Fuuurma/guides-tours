@@ -21,6 +21,10 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
+		// Bound the result so an org with hundreds of blackout
+		// windows doesn't OOM the response. The FE page renders at
+		// most a few dozen per tour.
+		const MAX_BLACKOUTS = 500;
 		let q = ctx.db
 			.query("tourBlackoutDates")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
@@ -33,7 +37,7 @@ export const list = query({
 				)
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
-		const all = await q.collect();
+		const all = await q.take(MAX_BLACKOUTS);
 		return all.sort((a, b) => a.startDate.localeCompare(b.startDate));
 	},
 });
