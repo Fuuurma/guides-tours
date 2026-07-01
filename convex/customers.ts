@@ -274,6 +274,22 @@ export const create = mutation({
 			notes: args.notes,
 			phone: args.phone,
 		});
+		if (
+			args.specialRequirements !== undefined &&
+			args.specialRequirements.length > MAX_NOTES_LEN
+		) {
+			throw new ConvexError(
+				`specialRequirements is too long (max ${MAX_NOTES_LEN} characters)`,
+			);
+		}
+		if (
+			args.sourceDetails !== undefined &&
+			args.sourceDetails.length > MAX_NOTES_LEN
+		) {
+			throw new ConvexError(
+				`sourceDetails is too long (max ${MAX_NOTES_LEN} characters)`,
+			);
+		}
 		// Email uniqueness per org (source: Customer.objects.filter(company=..., email=...).exists())
 		const dup = await ctx.db
 			.query("customers")
