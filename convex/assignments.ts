@@ -92,9 +92,10 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 
-		// Pick the most selective index. If a non-status, non-date
+// Pick the most selective index. If a non-status, non-date
 		// filter is set, use the leading-by-that-field index. Otherwise
-		// use by_org_date with optional range scan.
+		// use by_org_date with optional range scan + .order("asc") to
+		// skip the date portion of the JS sort.
 		let all;
 		if (args.tourId) {
 			all = await ctx.db
@@ -136,8 +137,6 @@ export const list = query({
 				)
 				.collect();
 		} else {
-			// No secondary filter — apply optional date range at the
-			// index level so we don't fetch every org assignment.
 			all = await ctx.db
 				.query("assignments")
 				.withIndex("by_org_date", (q) => {
@@ -149,6 +148,7 @@ export const list = query({
 					if (args.dateTo) return eq.lte("date", args.dateTo);
 					return eq;
 				})
+				.order("asc")
 				.collect();
 		}
 		let filtered = all.filter((a) => !a.deletedAt);
