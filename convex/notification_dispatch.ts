@@ -209,7 +209,7 @@ export const dispatchImmediateBookingConfirmation = internalAction({
 		await ctx.runMutation(
 			internal.notifications.recordImmediateDispatchResult,
 			{
-				organizationId: ctx_.booking.organizationId ?? "",
+				organizationId: ctx_.booking.organizationId,
 				bookingId: args.bookingId,
 				channel: result.channel,
 				success: result.status === "sent" || result.status === "skipped",
