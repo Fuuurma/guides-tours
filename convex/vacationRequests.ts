@@ -386,6 +386,13 @@ export const internalReject = internalMutation({
 				`Only pending requests can be rejected (current: ${vr.status})`,
 			);
 		}
+		// Cap the reject reason at MAX_NOTES_LEN — same limit as the
+		// create-side validation.
+		if (args.reason !== undefined && args.reason.length > MAX_NOTES_LEN) {
+			throw new ConvexError(
+				`Reason is too long (max ${MAX_NOTES_LEN} characters)`,
+			);
+		}
 
 		const now = Date.now();
 		await ctx.db.patch(args.requestId, {
