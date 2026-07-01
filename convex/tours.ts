@@ -285,6 +285,11 @@ export const internalUpdate = internalMutation({
 				MAX_DESCRIPTION_LEN,
 			);
 		}
+		if (args.languages !== undefined) {
+			for (const lang of args.languages) {
+				assertFieldWithinLimit("language", lang, 10);
+			}
+		}
 
 		const now = Date.now();
 		const { tourId, organizationId, userId, ...patch } = args;
