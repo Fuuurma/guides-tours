@@ -499,13 +499,21 @@ export const remove = mutation({
 		// behavior source would have via FK CASCADE (lost data) but
 		// louder. Cancelled bookings are still kept for history.
 		// Bounded scan: a customer with thousands of cancelled
-		// bookings would otherwise slow down every delete.
+		// bookings would otherwise slow down every delete. We check
+		// whether the scan hit the cap — if so, there might be more
+		// live bookings beyond the limit, so we conservatively refuse.
+		const MAX_SCAN = 500;
 		const bookings = await ctx.db
 			.query("bookings")
 			.withIndex("by_customer_date", (q) =>
 				q.eq("customerId", args.customerId),
 			)
-			.take(500);
+			.take(MAX_SCAN + 1);
+		if (bookings.length > MAX_SCAN) {
+			throw new ConvexError(
+				`Cannot delete customer with >${MAX_SCAN} bookings; archive old bookings first`,
+			);
+		}
 		const live = bookings.filter((b) => b.status !== "cancelled");
 		if (live.length > 0) {
 			throw new ConvexError(
