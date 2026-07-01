@@ -393,18 +393,20 @@ export const cleanupOldNotifications = internalMutation({
 			Date.now() - NOTIFICATION_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
 		// Fetch old logs and scheduled notifications in parallel —
-		// they're independent ranges on different tables.
+		// they're independent ranges on different tables. Bound the
+		// scan to prevent OOM on orgs with millions of old artifacts.
+		const MAX_CLEANUP = 5000;
 		const [oldLogs, oldScheduled] = await Promise.all([
 			ctx.db
 				.query("notificationLogs")
 				.withIndex("by_created_at", (q) => q.lt("createdAt", cutoff))
-				.collect(),
+				.take(MAX_CLEANUP),
 			ctx.db
 				.query("scheduledNotifications")
 				.withIndex("by_sent_scheduled", (q) =>
 					q.eq("sent", true).lt("scheduledFor", cutoff),
 				)
-				.collect(),
+				.take(MAX_CLEANUP),
 		]);
 
 		// Deletes on different tables are independent — parallelize.
