@@ -410,6 +410,22 @@ export const update = mutation({
 				`Phone is too long (max ${MAX_PHONE_LEN} characters)`,
 			);
 		}
+		if (
+			args.specialRequirements !== undefined &&
+			args.specialRequirements.length > MAX_NOTES_LEN
+		) {
+			throw new ConvexError(
+				`specialRequirements is too long (max ${MAX_NOTES_LEN} characters)`,
+			);
+		}
+		if (
+			args.sourceDetails !== undefined &&
+			args.sourceDetails.length > MAX_NOTES_LEN
+		) {
+			throw new ConvexError(
+				`sourceDetails is too long (max ${MAX_NOTES_LEN} characters)`,
+			);
+		}
 
 		for (const field of ALLOWED_UPDATE_FIELDS) {
 			const incoming = (args as Record<string, unknown>)[field];
