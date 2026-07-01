@@ -318,8 +318,12 @@ export const get = query({
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) return null;
 		if (booking.organizationId !== member.organizationId) return null;
-		const tour = await ctx.db.get(booking.tourId);
-		const customer = await ctx.db.get(booking.customerId);
+		// Tour and customer are independent lookups against the
+		// booking — fetch in parallel.
+		const [tour, customer] = await Promise.all([
+			ctx.db.get(booking.tourId),
+			ctx.db.get(booking.customerId),
+		]);
 		return {
 			...booking,
 			tour: tour ? { _id: tour._id, name: tour.name } : null,
