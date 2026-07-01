@@ -347,30 +347,36 @@ export const cleanupOldAssignments = internalMutation({
 
 		// Two passes — one per terminal status. The (status, date)
 		// index sorts by status first, so each query is bounded.
-		const completed = await ctx.db
-			.query("assignments")
-			.withIndex("by_status_date", (q) =>
-				q.eq("status", "completed").lt("date", cutoffDate),
-			)
-			.collect();
-		const cancelled = await ctx.db
-			.query("assignments")
-			.withIndex("by_status_date", (q) =>
-				q.eq("status", "cancelled").lt("date", cutoffDate),
-			)
-			.collect();
+		// Run the two passes in parallel — they hit the same index
+		// but with different status values, so they're independent.
+		const [completed, cancelled] = await Promise.all([
+			ctx.db
+				.query("assignments")
+				.withIndex("by_status_date", (q) =>
+					q.eq("status", "completed").lt("date", cutoffDate),
+				)
+				.collect(),
+			ctx.db
+				.query("assignments")
+				.withIndex("by_status_date", (q) =>
+					q.eq("status", "cancelled").lt("date", cutoffDate),
+				)
+				.collect(),
+		]);
 
 		const targets = [...completed, ...cancelled].filter(
 			(a) => a.deletedAt === undefined,
 		);
 
 		const now = Date.now();
-		for (const a of targets) {
-			await ctx.db.patch(a._id, {
-				deletedAt: now,
-				updatedAt: now,
-			});
-		}
+		await Promise.all(
+			targets.map((a) =>
+				ctx.db.patch(a._id, {
+					deletedAt: now,
+					updatedAt: now,
+				}),
+			),
+		);
 
 		console.log(
 			`[cron] cleanupOldAssignments archived ${targets.length} assignments older than ${cutoffDate}`,
