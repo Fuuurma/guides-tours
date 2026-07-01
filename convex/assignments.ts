@@ -436,11 +436,13 @@ export const internalCreate = internalMutation({
 	// Defense-in-depth: scope by orgId too. A guide belonging to
 	// multiple orgs (Better Auth allows this) shouldn't have their
 	// vacation in another org block an assignment in this org.
+	// Bound the scan: a guide with >500 vacation requests is unusual.
+	const MAX_VACATIONS = 500;
 	const vacations = await ctx.db
 		.query("vacationRequests")
 		.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
 		.filter((q) => q.eq(q.field("userId"), args.guideId))
-		.collect();
+		.take(MAX_VACATIONS);
 	const onVacation = vacations.some(
 		(vr) =>
 			vr.status === "approved" &&
@@ -869,6 +871,11 @@ export async function checkConflictsHelper(
 			}
 		}
 	};
+	// Bound the conflict scans: a single date's worth of assignments per
+	// guide/vehicle/driver is small in practice, but cap at 100 to
+	// prevent runaway queries if a guide is double-booked 1000+ times
+	// on the same day (which would be a data error anyway).
+	const MAX_CONFLICTS = 100;
 	if (args.guideId) {
 		const rows = await ctx.db
 			.query("assignments")
@@ -878,7 +885,7 @@ export async function checkConflictsHelper(
 			// SECURITY: scope to org — a guideId from another org must
 			// not surface as a "conflict" in this org's UI.
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
+			.take(MAX_CONFLICTS);
 		await checkOne("guide", rows, "(guide conflict)");
 	}
 	if (args.vehicleId) {
@@ -889,7 +896,7 @@ export async function checkConflictsHelper(
 			)
 			// SECURITY: scope to org.
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
+			.take(MAX_CONFLICTS);
 		await checkOne("vehicle", rows, "(vehicle conflict)");
 	}
 	if (args.driverId) {
@@ -900,7 +907,7 @@ export async function checkConflictsHelper(
 			)
 			// SECURITY: scope to org.
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
+			.take(MAX_CONFLICTS);
 		await checkOne("driver", rows, "(driver conflict)");
 	}
 	return out;
