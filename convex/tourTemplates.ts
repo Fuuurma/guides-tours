@@ -12,6 +12,11 @@ import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import {
+	MAX_DESCRIPTION_LEN,
+	MAX_NAME_LEN,
+	assertFieldWithinLimit,
+} from "./lib/validation";
 
 // ---- queries ----
 
@@ -97,6 +102,18 @@ export const internalCreate = internalMutation({
 		bookingCutoffHours: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
+		if (args.name.length > MAX_NAME_LEN) {
+			throw new ConvexError(
+				`Name is too long (max ${MAX_NAME_LEN} characters)`,
+			);
+		}
+		if (args.description !== undefined) {
+			assertFieldWithinLimit(
+				"description",
+				args.description,
+				MAX_DESCRIPTION_LEN,
+			);
+		}
 		if (args.capacity <= 0) throw new ConvexError("Capacity must be positive");
 		const now = Date.now();
 		const id = await ctx.db.insert("tourTemplates", {
