@@ -208,6 +208,19 @@ export const internalUpdate = internalMutation({
 		if (existing.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
+		// Length validation on free-text fields (defense in depth).
+		if (args.name !== undefined && args.name.length > MAX_NAME_LEN) {
+			throw new ConvexError(
+				`Name is too long (max ${MAX_NAME_LEN} characters)`,
+			);
+		}
+		if (args.description !== undefined) {
+			assertFieldWithinLimit(
+				"description",
+				args.description,
+				MAX_DESCRIPTION_LEN,
+			);
+		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		for (const field of [
 			"name",
