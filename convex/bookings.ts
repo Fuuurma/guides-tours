@@ -166,16 +166,24 @@ export const list = query({
 			);
 		}
 
-		filtered.sort((a, b) => {
-			const av = a[sortBy];
-			const bv = b[sortBy];
-			if (typeof av === "number" && typeof bv === "number") {
-				return order === "asc" ? av - bv : bv - av;
-			}
-			const as = String(av ?? "");
-			const bs = String(bv ?? "");
-			return order === "asc" ? as.localeCompare(bs) : bs.localeCompare(as);
-		});
+		// Skip the JS sort when the index already returns rows in the
+		// requested order. by_org_date and by_org_source_date both lead
+		// with `date`, so sorting by `date desc` (the default) is free.
+		const indexAlreadySorted =
+			(args.source || args.dateFrom || args.dateTo) &&
+			sortBy === "date";
+		if (!indexAlreadySorted) {
+			filtered.sort((a, b) => {
+				const av = a[sortBy];
+				const bv = b[sortBy];
+				if (typeof av === "number" && typeof bv === "number") {
+					return order === "asc" ? av - bv : bv - av;
+				}
+				const as = String(av ?? "");
+				const bs = String(bv ?? "");
+				return order === "asc" ? as.localeCompare(bs) : bs.localeCompare(as);
+			});
+		}
 
 		const total = filtered.length;
 		const offset = (page - 1) * pageSize;
