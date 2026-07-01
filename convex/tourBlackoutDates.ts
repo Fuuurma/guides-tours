@@ -64,13 +64,18 @@ export async function isBlackoutHelper(
 	tourId: string,
 	date: string,
 ): Promise<boolean> {
-	const all = await ctx.db
+	// Use by_tour_start index with lte(date) to only fetch blackouts
+	// that start before the target date — any blackout starting after
+	// `date` can't cover it. The remaining range check (endDate >= date)
+	// is done in JS since there's no endDate-leading index.
+	const candidates = await ctx.db
 		.query("tourBlackoutDates")
-		.withIndex("by_tour_start", (q: any) => q.eq("tourId", tourId))
+		.withIndex("by_tour_start", (q: any) =>
+			q.eq("tourId", tourId).lte("startDate", date),
+		)
 		.collect();
-	return all.some(
-		(b: { startDate: string; endDate: string }) =>
-			b.startDate <= date && b.endDate >= date,
+	return candidates.some(
+		(b: { startDate: string; endDate: string }) => b.endDate >= date,
 	);
 }
 
