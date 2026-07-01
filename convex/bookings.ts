@@ -348,12 +348,15 @@ export const create = mutation({
 			"member",
 		]);
 
-		const tour = await ctx.db.get(args.tourId);
+		// Tour and customer are independent lookups — fetch in parallel.
+		const [tour, customer] = await Promise.all([
+			ctx.db.get(args.tourId),
+			ctx.db.get(args.customerId),
+		]);
 		if (!tour) throw new ConvexError("Tour not found");
 		if (tour.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
 		}
-		const customer = await ctx.db.get(args.customerId);
 		if (!customer) throw new ConvexError("Customer not found");
 		if (customer.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: customer belongs to a different organization");
