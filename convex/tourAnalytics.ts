@@ -27,7 +27,11 @@ export const list = query({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const orgId = member.organizationId;
+const orgId = member.organizationId;
+		// Bound the result so an org with thousands of analytics
+		// rows doesn't OOM the response. The FE page renders at
+		// most a few hundred.
+		const MAX_ANALYTICS = 1000;
 		let all;
 		if (args.tourId) {
 			// SECURITY: scope to org even when filtering by tourId.
@@ -39,7 +43,7 @@ export const list = query({
 				.query("tourAnalytics")
 				.withIndex("by_tour_period", (q) => q.eq("tourId", args.tourId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId))
-				.collect();
+				.take(MAX_ANALYTICS);
 		} else if (args.periodType) {
 			// by_org_period leads with (org, periodDate, periodType).
 			// Apply the date range at the index level, then filter
@@ -50,15 +54,15 @@ export const list = query({
 					const eq = q
 						.eq("organizationId", orgId)
 						.gte("periodDate", args.dateFrom ?? "")
-						.lte("periodDate", args.dateTo ?? "\uffff");
+						.lte("periodDate", args.dateTo ?? "￿");
 					return eq;
 				})
-				.collect();
+				.take(MAX_ANALYTICS);
 		} else {
 			all = await ctx.db
 				.query("tourAnalytics")
 				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
-				.collect();
+				.take(MAX_ANALYTICS);
 		}
 		return all
 			.filter((r) => {
