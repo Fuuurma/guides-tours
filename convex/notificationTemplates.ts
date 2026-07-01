@@ -33,6 +33,10 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
+		// Bound the result so an org with hundreds of templates
+		// doesn't OOM the response. The FE page renders at most a
+		// few dozen active templates.
+		const MAX_TEMPLATES = 500;
 		let q = ctx.db
 			.query("notificationTemplates")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
@@ -52,7 +56,7 @@ export const list = query({
 					q.eq("organizationId", orgId).eq("isActive", args.isActive!),
 				);
 		}
-		return await q.collect();
+		return await q.take(MAX_TEMPLATES);
 	},
 });
 
