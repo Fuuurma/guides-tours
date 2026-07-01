@@ -28,6 +28,9 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
+		// Bound the result so an org with thousands of exception
+		// dates doesn't OOM the response.
+		const MAX_EXCEPTIONS = 500;
 		let q = ctx.db
 			.query("tourExceptionDates")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
@@ -38,7 +41,7 @@ export const list = query({
 				.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
-		const all = await q.collect();
+		const all = await q.take(MAX_EXCEPTIONS);
 		return all
 			.filter((e) => {
 				if (args.exceptionType && e.exceptionType !== args.exceptionType) return false;
