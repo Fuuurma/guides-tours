@@ -19,6 +19,7 @@ import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
 	assertValidCustomerInput,
+	assertValidTags,
 	MAX_NOTES_LEN,
 	MAX_PHONE_LEN,
 	normalizeEmail,
@@ -274,6 +275,7 @@ export const create = mutation({
 			notes: args.notes,
 			phone: args.phone,
 		});
+		assertValidTags(args.tags);
 		if (
 			args.specialRequirements !== undefined &&
 			args.specialRequirements.length > MAX_NOTES_LEN
@@ -416,6 +418,7 @@ export const update = mutation({
 				throw new ConvexError("Name cannot be empty");
 			}
 		}
+		assertValidTags(args.tags);
 		if (args.notes !== undefined && args.notes.length > MAX_NOTES_LEN) {
 			throw new ConvexError(
 				`Notes are too long (max ${MAX_NOTES_LEN} characters)`,

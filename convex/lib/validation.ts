@@ -25,6 +25,12 @@ export const MAX_NAME_LEN = 100;
 /** Max length for free-text notes / descriptions. */
 export const MAX_NOTES_LEN = 1000;
 
+/** Max length per tag in the tags array. Tags are short labels. */
+export const MAX_TAG_LEN = 50;
+
+/** Max number of tags per customer. */
+export const MAX_TAGS = 20;
+
 /** Max length for tour/category descriptions. Same as FE. */
 export const MAX_DESCRIPTION_LEN = 2000;
 
@@ -144,5 +150,23 @@ export function assertFieldWithinLimit(
 		throw new ConvexError(
 			`${fieldName} is too long (max ${max} characters)`,
 		);
+	}
+}
+
+/**
+ * Validate a tags array. Each tag must fit in MAX_TAG_LEN and the
+ * total count must not exceed MAX_TAGS. Throws ConvexError on violation.
+ */
+export function assertValidTags(tags: string[] | undefined): void {
+	if (!tags) return;
+	if (tags.length > MAX_TAGS) {
+		throw new ConvexError(`Too many tags (max ${MAX_TAGS})`);
+	}
+	for (const tag of tags) {
+		if (tag.length > MAX_TAG_LEN) {
+			throw new ConvexError(
+				`Tag is too long (max ${MAX_TAG_LEN} characters)`,
+			);
+		}
 	}
 }

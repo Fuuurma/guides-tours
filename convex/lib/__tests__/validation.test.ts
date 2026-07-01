@@ -10,8 +10,11 @@ import {
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
 	MAX_PHONE_LEN,
+	MAX_TAG_LEN,
+	MAX_TAGS,
 	assertFieldWithinLimit,
 	assertValidCustomerInput,
+	assertValidTags,
 	normalizeEmail,
 } from "../validation";
 
@@ -191,5 +194,40 @@ describe("validation throws ConvexError (not plain Error)", () => {
 		expect(normalizeEmail("not-an-email")).toBeNull();
 		expect(normalizeEmail("a".repeat(MAX_EMAIL_LEN + 1) + "@x.com")).toBeNull();
 		expect(normalizeEmail("   ")).toBeNull();
+	});
+});
+
+describe("assertValidTags", () => {
+	it("accepts undefined (tags are optional)", () => {
+		expect(() => assertValidTags(undefined)).not.toThrow();
+		expect(() => assertValidTags([])).not.toThrow();
+	});
+
+	it("accepts tags within limits", () => {
+		expect(() => assertValidTags(["vip", "repeat-buyer"])).not.toThrow();
+		expect(() =>
+			assertValidTags(["a".repeat(MAX_TAG_LEN)]),
+		).not.toThrow();
+	});
+
+	it("rejects too many tags", () => {
+		const tooMany = Array.from({ length: MAX_TAGS + 1 }, (_, i) => `t${i}`);
+		expect(() => assertValidTags(tooMany)).toThrow(/Too many tags/);
+	});
+
+	it("rejects individual tags over MAX_TAG_LEN", () => {
+		expect(() => assertValidTags(["a".repeat(MAX_TAG_LEN + 1)])).toThrow(
+			/Tag is too long/,
+		);
+	});
+
+	it("throws ConvexError (not plain Error)", () => {
+		let caught: unknown;
+		try {
+			assertValidTags(["a".repeat(MAX_TAG_LEN + 1)]);
+		} catch (err) {
+			caught = err;
+		}
+		expect(caught).toBeInstanceOf(ConvexError);
 	});
 });
