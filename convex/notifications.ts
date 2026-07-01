@@ -234,20 +234,24 @@ export const getBookingForImmediateDispatch = internalQuery({
 	handler: async (ctx, args) => {
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) return null;
-		const customer = await ctx.db.get(booking.customerId);
+		// Customer and tour are independent of each other (both
+		// reference the booking) — fetch in parallel.
+		const [customer, tour, template] = await Promise.all([
+			ctx.db.get(booking.customerId),
+			ctx.db.get(booking.tourId),
+			ctx.db
+				.query("notificationTemplates")
+				.withIndex("by_org_type", (q) =>
+					q
+						.eq("organizationId", booking.organizationId)
+						.eq("templateType", "booking_confirmation"),
+				)
+				.filter((q) => q.eq(q.field("isActive"), true))
+				.first(),
+		]);
 		if (!customer) return null;
-		const tour = await ctx.db.get(booking.tourId);
-		const tourName = tour?.name ?? "your tour";
-		const template = await ctx.db
-			.query("notificationTemplates")
-			.withIndex("by_org_type", (q) =>
-				q
-					.eq("organizationId", booking.organizationId)
-					.eq("templateType", "booking_confirmation"),
-			)
-			.filter((q) => q.eq(q.field("isActive"), true))
-			.first();
 		if (!template) return null;
+		const tourName = tour?.name ?? "your tour";
 		return {
 			template: {
 				name: template.name,
