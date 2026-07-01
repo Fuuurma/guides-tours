@@ -99,7 +99,15 @@ export const list = query({
 		// Pick the right index based on which filter is present.
 		// by_org_source_date leads with (org, source, date) — push dateFrom/
 		// dateTo into the index range so we don't scan every booking with
-		// the given source.
+		// the given source. When no filter is present and sorting by
+		// `date`, use by_org_date with .order() to skip the JS sort below.
+		const canUseDateOrder =
+			sortBy === "date" &&
+			!args.search &&
+			!args.source &&
+			!args.status &&
+			!args.tourId &&
+			!args.customerId;
 		const all = await (args.source
 			? ctx.db
 					.query("bookings")
@@ -128,12 +136,20 @@ export const list = query({
 							return eq;
 						})
 						.collect()
-				: ctx.db
-						.query("bookings")
-						.withIndex("by_org", (q) =>
-							q.eq("organizationId", member.organizationId),
-						)
-						.collect());
+				: canUseDateOrder
+					? ctx.db
+							.query("bookings")
+							.withIndex("by_org_date", (q) =>
+								q.eq("organizationId", member.organizationId),
+							)
+							.order(order)
+							.collect()
+					: ctx.db
+							.query("bookings")
+							.withIndex("by_org", (q) =>
+								q.eq("organizationId", member.organizationId),
+							)
+							.collect());
 
 		let filtered = all;
 		if (args.status) {
@@ -168,10 +184,11 @@ export const list = query({
 
 		// Skip the JS sort when the index already returns rows in the
 		// requested order. by_org_date and by_org_source_date both lead
-		// with `date`, so sorting by `date desc` (the default) is free.
+		// with `date`, so sorting by `date` is free when the index order
+		// matches (canUseDateOrder applies .order() explicitly).
 		const indexAlreadySorted =
-			(args.source || args.dateFrom || args.dateTo) &&
-			sortBy === "date";
+			canUseDateOrder ||
+			((args.source || args.dateFrom || args.dateTo) && sortBy === "date");
 		if (!indexAlreadySorted) {
 			filtered.sort((a, b) => {
 				const av = a[sortBy];
