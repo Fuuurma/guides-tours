@@ -386,26 +386,26 @@ export const cleanupOldNotifications = internalMutation({
 		const cutoff =
 			Date.now() - NOTIFICATION_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
 
-		// `by_created_at` index lets us range-scan the whole table by
-		// time without touching rows we don't care about.
-		const oldLogs = await ctx.db
-			.query("notificationLogs")
-			.withIndex("by_created_at", (q) => q.lt("createdAt", cutoff))
-			.collect();
+		// Fetch old logs and scheduled notifications in parallel —
+		// they're independent ranges on different tables.
+		const [oldLogs, oldScheduled] = await Promise.all([
+			ctx.db
+				.query("notificationLogs")
+				.withIndex("by_created_at", (q) => q.lt("createdAt", cutoff))
+				.collect(),
+			ctx.db
+				.query("scheduledNotifications")
+				.withIndex("by_sent_scheduled", (q) =>
+					q.eq("sent", true).lt("scheduledFor", cutoff),
+				)
+				.collect(),
+		]);
 
-		const oldScheduled = await ctx.db
-			.query("scheduledNotifications")
-			.withIndex("by_sent_scheduled", (q) =>
-				q.eq("sent", true).lt("scheduledFor", cutoff),
-			)
-			.collect();
-
-		for (const log of oldLogs) {
-			await ctx.db.delete(log._id);
-		}
-		for (const s of oldScheduled) {
-			await ctx.db.delete(s._id);
-		}
+		// Deletes on different tables are independent — parallelize.
+		await Promise.all([
+			...oldLogs.map((log) => ctx.db.delete(log._id)),
+			...oldScheduled.map((s) => ctx.db.delete(s._id)),
+		]);
 
 		console.log(
 			`[cron] cleanupOldNotifications deleted ${oldLogs.length} logs, ${oldScheduled.length} scheduled (cutoff=${new Date(cutoff).toISOString()})`,
