@@ -844,6 +844,14 @@ async function performCancel(
 	reason: string | undefined,
 	userIdForAudit: string,
 ): Promise<void> {
+	// Cap the cancel reason at the same limit as notes so an
+	// attacker can't bloat the row via the internal* mirror.
+	const MAX_CANCEL_REASON_LEN = 500;
+	if (reason !== undefined && reason.length > MAX_CANCEL_REASON_LEN) {
+		throw new ConvexError(
+			`Cancel reason is too long (max ${MAX_CANCEL_REASON_LEN} characters)`,
+		);
+	}
 	// Source: backend/tours/services/booking_service.py:206-207.
 	// Terminal states cannot be cancelled.
 	if (booking.status === "cancelled") {
