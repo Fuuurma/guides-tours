@@ -72,12 +72,14 @@ export async function isBlackoutHelper(
 	// that start before the target date — any blackout starting after
 	// `date` can't cover it. The remaining range check (endDate >= date)
 	// is done in JS since there's no endDate-leading index.
+	// Bound the scan: a tour with >100 blackouts is extremely unusual.
+	const MAX_CANDIDATES = 100;
 	const candidates = await ctx.db
 		.query("tourBlackoutDates")
 		.withIndex("by_tour_start", (q: any) =>
 			q.eq("tourId", tourId).lte("startDate", date),
 		)
-		.collect();
+		.take(MAX_CANDIDATES);
 	return candidates.some(
 		(b: { startDate: string; endDate: string }) => b.endDate >= date,
 	);
