@@ -51,23 +51,33 @@ async function buildOverview(
 	startDate: string,
 	endDate: string,
 ) {
-	const tours = await ctx.db
-		.query("tours")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
-		.collect();
+	// Run independent queries in parallel. The tours list and the
+	// assignments range scan and the pending vacations count don't
+	// depend on each other — serializing them was adding ~3x
+	// latency to the analytics overview query.
+	const [tours, allAssignments, pendingVacations] = await Promise.all([
+		ctx.db
+			.query("tours")
+			.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+			.collect(),
+		ctx.db
+			.query("assignments")
+			.withIndex("by_org_date", (q: any) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", startDate)
+					.lte("date", endDate),
+			)
+			.collect(),
+		ctx.db
+			.query("vacationRequests")
+			.withIndex("by_org_status", (q: any) =>
+				q.eq("organizationId", orgId).eq("status", "pending"),
+			)
+			.collect(),
+	]);
 	const activeTours = tours.filter((t: any) => !t.deletedAt);
 
-	// Use by_org_date with gte/lte to range-scan within the org —
-	// avoids fetching every org assignment and filtering in JS.
-	const allAssignments = await ctx.db
-		.query("assignments")
-		.withIndex("by_org_date", (q: any) =>
-			q
-				.eq("organizationId", orgId)
-				.gte("date", startDate)
-				.lte("date", endDate),
-		)
-		.collect();
 	const inRange = allAssignments.filter((a: any) => !a.deletedAt);
 	const completed = inRange.filter(
 		(a: any) => a.status === "completed",
@@ -92,13 +102,6 @@ async function buildOverview(
 			a.status === "scheduled" &&
 			!a.deletedAt,
 	).length;
-
-	const pendingVacations = await ctx.db
-		.query("vacationRequests")
-		.withIndex("by_org_status", (q: any) =>
-			q.eq("organizationId", orgId).eq("status", "pending"),
-		)
-		.collect();
 
 	let totalGuides = 0;
 	try {
