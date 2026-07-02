@@ -37,6 +37,9 @@ export function calculateVacationDays(
 
 // ---- queries ----
 
+/** Bound the vacation request scans to prevent OOM on large orgs. */
+const MAX_VACATION_REQUESTS = 200;
+
 export const list = query({
 	args: {
 		status: v.optional(
@@ -75,7 +78,10 @@ export const list = query({
 				.order("desc");
 		}
 
-		return await q.collect();
+		// Bound the result so a user with thousands of vacation
+		// requests doesn't OOM the response. The FE page renders at
+		// most a few dozen.
+		return await q.take(MAX_VACATION_REQUESTS);
 	},
 });
 
@@ -114,12 +120,14 @@ async function _calcStats(
 	orgId: string,
 	year: number,
 ) {
+	// Bound the scan: a user with thousands of approved vacations
+	// in the same org is extremely unusual.
 	const approved = await ctx.db
 		.query("vacationRequests")
 		.withIndex("by_user_status", (q) =>
 			q.eq("userId", targetUserId).eq("status", "approved"),
 		)
-		.collect();
+		.take(MAX_VACATION_REQUESTS);
 	const approvedInOrg = approved.filter(
 		(vr) => vr.organizationId === orgId,
 	);
@@ -134,7 +142,7 @@ async function _calcStats(
 		.withIndex("by_user_status", (q) =>
 			q.eq("userId", targetUserId).eq("status", "pending"),
 		)
-		.collect();
+		.take(MAX_VACATION_REQUESTS);
 	const pendingInOrg = pending.filter(
 		(vr) => vr.organizationId === orgId,
 	);
@@ -230,11 +238,13 @@ export const internalCreate = internalMutation({
 		// Overlap check: no existing pending/approved request may overlap (source: 123-130).
 		// Defense-in-depth: scope by org. A user belonging to multiple orgs
 		// shouldn't have their vacation in another org block a request here.
+		// Bound the scan: a user with thousands of vacation requests
+		// in the same org is extremely unusual.
 		const existing = await ctx.db
 			.query("vacationRequests")
 			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
 			.filter((q) => q.eq(q.field("userId"), args.userId))
-			.collect();
+			.take(MAX_VACATION_REQUESTS);
 		const overlap = existing.some(
 			(vr) =>
 				(vr.status === "pending" || vr.status === "approved") &&

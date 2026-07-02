@@ -23,6 +23,10 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
+		// Bound the result so an org with thousands of categories
+		// doesn't OOM the response. The FE page renders at most a
+		// few dozen.
+		const MAX_CATEGORIES = 200;
 		let q = ctx.db
 			.query("tourCategories")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
@@ -33,7 +37,7 @@ export const list = query({
 					q.eq("organizationId", orgId).eq("isActive", args.isActive!),
 				);
 		}
-		return await q.collect();
+		return await q.take(MAX_CATEGORIES);
 	},
 });
 

@@ -23,6 +23,10 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
+		// Bound the result so a tour with thousands of images
+		// doesn't OOM the response. The FE gallery renders at most
+		// a few dozen per tour.
+		const MAX_IMAGES = 200;
 		let q = ctx.db
 			.query("tourImages")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
@@ -33,7 +37,7 @@ export const list = query({
 				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
-		const rows = await q.collect();
+		const rows = await q.take(MAX_IMAGES);
 		return rows.sort((a, b) => a.displayOrder - b.displayOrder);
 	},
 });
