@@ -43,7 +43,8 @@
 //     'unsafe-eval' — production builds don't need either.
 //
 // CSP allows:
-//   - Scripts from self + Convex (for query infrastructure)
+//   - Scripts from self + inline (TanStack Start hydration requires
+//     inline scripts — they're all bundled by Vite, not user-supplied)
 //   - Styles from self + Google Fonts (CSS font loading)
 //   - Images from self + data: URIs (avatar URLs)
 //   - Connect to self + Convex (real-time queries)
@@ -72,7 +73,7 @@ const securityHeadersMiddleware = createMiddleware().server(
 			"Content-Security-Policy",
 			[
 				"default-src 'self'",
-				"script-src 'self'",
+				"script-src 'self' 'unsafe-inline'",
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 				"font-src 'self' https://fonts.gstatic.com data:",
 				"img-src 'self' data: https:",
