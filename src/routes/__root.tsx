@@ -79,17 +79,25 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			<body>
 				{children}
 				<Toaster />
-				<TanStackDevtools
-					config={{
-						position: "bottom-right",
-					}}
-					plugins={[
-						{
-							name: "Tanstack Router",
-							render: <TanStackRouterDevtoolsPanel />,
-						},
-					]}
-				/>
+				{/* Devtools are dev-only — the strategy doc says
+				    "Never ship as a product/runtime dependency." Vite's
+				    import.meta.env.DEV is statically replaced at build
+				    time, so this entire block is dead-code-eliminated in
+				    production builds (no runtime cost, no Devtools bundle
+				    in the Worker). */}
+				{import.meta.env.DEV ? (
+					<TanStackDevtools
+						config={{
+							position: "bottom-right",
+						}}
+						plugins={[
+							{
+								name: "Tanstack Router",
+								render: <TanStackRouterDevtoolsPanel />,
+							},
+						]}
+					/>
+				) : null}
 				<Scripts />
 			</body>
 		</html>
