@@ -60,15 +60,15 @@ test.describe("authenticated smoke", () => {
 	test.beforeAll(async ({ browser }) => {
 		const ctx = await browser.newContext();
 		const page = await ctx.newPage();
-		try {
-			await page.goto("/sign-up", { waitUntil: "domcontentloaded" });
-		} catch {
-			// Best-effort — if the server isn't ready, the per-test
-			// retry will handle it.
+		for (const route of ["/sign-up", "/dashboard", "/onboarding"]) {
+			try {
+				await page.goto(route, { waitUntil: "domcontentloaded" });
+				await page.waitForTimeout(500);
+			} catch {
+				// Best-effort — if the server isn't ready, the per-test
+				// retry will handle it.
+			}
 		}
-		try {
-			await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
-		} catch {}
 		await ctx.close();
 	});
 
