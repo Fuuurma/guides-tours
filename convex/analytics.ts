@@ -54,12 +54,15 @@ async function buildOverview(
 	// Run independent queries in parallel. The tours list and the
 	// assignments range scan and the pending vacations count don't
 	// depend on each other — serializing them was adding ~3x
-	// latency to the analytics overview query.
+	// latency to the analytics overview query. Bound each scan to
+	// prevent OOM on large orgs — the FE can render 1000s of data
+	// points but not millions.
+	const MAX_ANALYTICS_SCAN = 10_000;
 	const [tours, allAssignments, pendingVacations] = await Promise.all([
 		ctx.db
 			.query("tours")
 			.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
-			.collect(),
+			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("assignments")
 			.withIndex("by_org_date", (q: any) =>
@@ -68,13 +71,13 @@ async function buildOverview(
 					.gte("date", startDate)
 					.lte("date", endDate),
 			)
-			.collect(),
+			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("vacationRequests")
 			.withIndex("by_org_status", (q: any) =>
 				q.eq("organizationId", orgId).eq("status", "pending"),
 			)
-			.collect(),
+			.take(MAX_ANALYTICS_SCAN),
 	]);
 	const activeTours = tours.filter((t: any) => !t.deletedAt);
 
@@ -136,20 +139,23 @@ async function buildTourStats(
 	startDate: string,
 	endDate: string,
 ) {
-	const tours = await ctx.db
-		.query("tours")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
-		.collect();
-
-	const assignments = await ctx.db
-		.query("assignments")
-		.withIndex("by_org_date", (q: any) =>
-			q
-				.eq("organizationId", orgId)
-				.gte("date", startDate)
-				.lte("date", endDate),
-		)
-		.collect();
+	// Bound the scans to prevent OOM on large orgs.
+	const MAX_ANALYTICS_SCAN = 10_000;
+	const [tours, assignments] = await Promise.all([
+		ctx.db
+			.query("tours")
+			.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("assignments")
+			.withIndex("by_org_date", (q: any) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", startDate)
+					.lte("date", endDate),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+	]);
 
 	const inRange = assignments.filter((a: any) => !a.deletedAt);
 
@@ -181,6 +187,8 @@ async function buildGuideStats(
 	startDate: string,
 	endDate: string,
 ) {
+	// Bound the scan to prevent OOM on large orgs.
+	const MAX_ANALYTICS_SCAN = 10_000;
 	const assignments = await ctx.db
 		.query("assignments")
 		.withIndex("by_org_date", (q: any) =>
@@ -189,7 +197,7 @@ async function buildGuideStats(
 				.gte("date", startDate)
 				.lte("date", endDate),
 		)
-		.collect();
+		.take(MAX_ANALYTICS_SCAN);
 
 	const inRange = assignments.filter((a: any) => !a.deletedAt);
 
@@ -224,6 +232,8 @@ async function buildDailyStats(
 	startDate: string,
 	endDate: string,
 ) {
+	// Bound the scan to prevent OOM on large orgs.
+	const MAX_ANALYTICS_SCAN = 10_000;
 	const assignments = await ctx.db
 		.query("assignments")
 		.withIndex("by_org_date", (q: any) =>
@@ -232,7 +242,7 @@ async function buildDailyStats(
 				.gte("date", startDate)
 				.lte("date", endDate),
 		)
-		.collect();
+		.take(MAX_ANALYTICS_SCAN);
 
 	const inRange = assignments.filter((a: any) => !a.deletedAt);
 
@@ -268,6 +278,8 @@ async function buildRevenueSummary(
 ) {
 	// Range-scan within the org + date window to avoid a full-table
 	// collect. by_org_date is leading (orgId, date) so gte/lte work.
+	// Bound the scan to prevent OOM on large orgs.
+	const MAX_ANALYTICS_SCAN = 10_000;
 	const allBookingsInRange = await ctx.db
 		.query("bookings")
 		.withIndex("by_org_date", (q: any) =>
@@ -276,7 +288,7 @@ async function buildRevenueSummary(
 				.gte("date", startDate)
 				.lte("date", endDate),
 		)
-		.collect();
+		.take(MAX_ANALYTICS_SCAN);
 
 	const inRange = allBookingsInRange.filter(
 		(b: any) => b.status !== "cancelled",
@@ -318,21 +330,24 @@ async function buildTopTours(
 	endDate: string,
 	limit: number,
 ) {
-	const tours = await ctx.db
-		.query("tours")
-		.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
-		.collect();
+	// Bound the scans to prevent OOM on large orgs.
+	const MAX_ANALYTICS_SCAN = 10_000;
+	const [tours, bookings] = await Promise.all([
+		ctx.db
+			.query("tours")
+			.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("bookings")
+			.withIndex("by_org_date", (q: any) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", startDate)
+					.lte("date", endDate),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+	]);
 	const tourMap = new Map(tours.map((t: any) => [String(t._id), t.name]));
-
-	const bookings = await ctx.db
-		.query("bookings")
-		.withIndex("by_org_date", (q: any) =>
-			q
-				.eq("organizationId", orgId)
-				.gte("date", startDate)
-				.lte("date", endDate),
-		)
-		.collect();
 
 	const inRange = bookings.filter((b: any) => b.status !== "cancelled");
 
@@ -367,6 +382,8 @@ async function buildBookingSources(
 	startDate: string,
 	endDate: string,
 ) {
+	// Bound the scan to prevent OOM on large orgs.
+	const MAX_ANALYTICS_SCAN = 10_000;
 	const bookings = await ctx.db
 		.query("bookings")
 		.withIndex("by_org_date", (q: any) =>
@@ -375,7 +392,7 @@ async function buildBookingSources(
 				.gte("date", startDate)
 				.lte("date", endDate),
 		)
-		.collect();
+		.take(MAX_ANALYTICS_SCAN);
 
 	const inRange = bookings;
 
