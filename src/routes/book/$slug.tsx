@@ -300,283 +300,307 @@ function PublicBookingPage() {
 				</Card>
 			) : (
 				<form onSubmit={onSubmit} className="space-y-6">
-					<Card>
-						<CardHeader>
-							<CardTitle>1. Choose a tour</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-3">
-							{fieldErr.tour && (
-								<p role="alert" className="text-destructive text-sm">
-									{fieldErr.tour}
-								</p>
-							)}
-							{data.tours.map((t: PublicTour) => (
-								<label
-									key={t._id}
-									className={`block border rounded-lg p-4 cursor-pointer transition-colors ${
-										selectedTourId === t._id
-											? "border-primary bg-accent"
-											: "hover:border-muted-foreground"
-									}`}
-								>
-									<div className="flex items-start gap-3">
-										<input
-											type="radio"
-											name="tour"
-											value={t._id}
-											checked={selectedTourId === t._id}
+					<motion.div
+						initial={{ opacity: 0, y: 8 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0 }}
+					>
+						<Card>
+							<CardHeader>
+								<CardTitle>1. Choose a tour</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-3">
+								{fieldErr.tour && (
+									<p role="alert" className="text-destructive text-sm">
+										{fieldErr.tour}
+									</p>
+								)}
+								{data.tours.map((t: PublicTour) => (
+									<label
+										key={t._id}
+										className={`block border rounded-lg p-4 cursor-pointer transition-colors ${
+											selectedTourId === t._id
+												? "border-primary bg-accent"
+												: "hover:border-muted-foreground"
+										}`}
+									>
+										<div className="flex items-start gap-3">
+											<input
+												type="radio"
+												name="tour"
+												value={t._id}
+												checked={selectedTourId === t._id}
+												onChange={(e) => {
+													setSelectedTourId(e.target.value as Id<"tours">);
+													// Re-check blackout for the new tour with the
+													// currently-entered date (if any).
+													if (date && e.target.value) {
+														setBlackoutCheck({
+															tourId: e.target.value as Id<"tours">,
+															date,
+														});
+													}
+												}}
+												className="mt-1"
+											/>
+											<div className="flex-1">
+												<p className="font-medium">{t.name}</p>
+												<p className="text-muted-foreground text-sm">
+													{t.durationHours}h · up to {t.maxGuests} guests
+													{t.basePriceCents !== undefined
+														? ` · ${formatPrice(
+																Number(t.basePriceCents) / 100,
+																t.currency,
+															)} pp`
+														: ""}
+												</p>
+												{t.description && (
+													<p className="text-sm mt-2">{t.description}</p>
+												)}
+											</div>
+										</div>
+									</label>
+								))}
+							</CardContent>
+						</Card>
+					</motion.div>
+
+					<motion.div
+						initial={{ opacity: 0, y: 8 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0.1 }}
+					>
+						<Card>
+							<CardHeader>
+								<CardTitle>2. Pick a date and time</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								<div className="grid gap-4 sm:grid-cols-2">
+									<div className="space-y-1">
+										<label htmlFor="date" className="text-sm font-medium">
+											Date *
+										</label>
+										<Input
+											id="date"
+											type="date"
+											required
+											min={new Date().toISOString().slice(0, 10)}
+											value={date}
 											onChange={(e) => {
-												setSelectedTourId(e.target.value as Id<"tours">);
-												// Re-check blackout for the new tour with the
-												// currently-entered date (if any).
-												if (date && e.target.value) {
+												setDate(e.target.value);
+												// Trigger the blackout check for this tour+date.
+												if (selectedTourId && e.target.value) {
 													setBlackoutCheck({
-														tourId: e.target.value as Id<"tours">,
-														date,
+														tourId: selectedTourId,
+														date: e.target.value,
 													});
+												} else {
+													setBlackoutCheck(null);
 												}
 											}}
-											className="mt-1"
+											aria-invalid={Boolean(fieldErr.date || isBlackedOut)}
+											aria-describedby={
+												fieldErr.date
+													? "date-error"
+													: isBlackedOut
+														? "date-blackout"
+														: undefined
+											}
 										/>
-										<div className="flex-1">
-											<p className="font-medium">{t.name}</p>
-											<p className="text-muted-foreground text-sm">
-												{t.durationHours}h · up to {t.maxGuests} guests
-												{t.basePriceCents !== undefined
-													? ` · ${formatPrice(
-															Number(t.basePriceCents) / 100,
-															t.currency,
-														)} pp`
-													: ""}
+										{isBlackedOut && !fieldErr.date && (
+											<p
+												id="date-blackout"
+												role="alert"
+												className="text-destructive text-xs"
+											>
+												This date is not available — the operator has blocked
+												bookings on this day. Please pick another date.
 											</p>
-											{t.description && (
-												<p className="text-sm mt-2">{t.description}</p>
-											)}
-										</div>
+										)}
+										{fieldErr.date && (
+											<p
+												id="date-error"
+												role="alert"
+												className="text-destructive text-xs"
+											>
+												{fieldErr.date}
+											</p>
+										)}
 									</div>
-								</label>
-							))}
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>2. Pick a date and time</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							<div className="grid gap-4 sm:grid-cols-2">
+									<div className="space-y-1">
+										<label htmlFor="time" className="text-sm font-medium">
+											Start time *
+										</label>
+										<Input
+											id="time"
+											type="time"
+											required
+											value={startTime}
+											onChange={(e) => setStartTime(e.target.value)}
+										/>
+									</div>
+								</div>
 								<div className="space-y-1">
-									<label htmlFor="date" className="text-sm font-medium">
-										Date *
+									<label htmlFor="guests" className="text-sm font-medium">
+										Guests *
 									</label>
 									<Input
-										id="date"
-										type="date"
+										id="guests"
+										type="number"
+										min="1"
+										max={selectedTour?.maxGuests ?? 20}
 										required
-										min={new Date().toISOString().slice(0, 10)}
-										value={date}
-										onChange={(e) => {
-											setDate(e.target.value);
-											// Trigger the blackout check for this tour+date.
-											if (selectedTourId && e.target.value) {
-												setBlackoutCheck({
-													tourId: selectedTourId,
-													date: e.target.value,
-												});
-											} else {
-												setBlackoutCheck(null);
-											}
-										}}
-										aria-invalid={Boolean(fieldErr.date || isBlackedOut)}
+										value={guests}
+										onChange={(e) => setGuests(e.target.value)}
+										aria-invalid={Boolean(fieldErr.guests)}
 										aria-describedby={
-											fieldErr.date
-												? "date-error"
-												: isBlackedOut
-													? "date-blackout"
-													: undefined
+											fieldErr.guests ? "guests-error" : undefined
 										}
 									/>
-									{isBlackedOut && !fieldErr.date && (
-										<p
-											id="date-blackout"
-											role="alert"
-											className="text-destructive text-xs"
-										>
-											This date is not available — the operator has blocked
-											bookings on this day. Please pick another date.
+									{selectedTour && !fieldErr.guests && (
+										<p className="text-muted-foreground text-xs">
+											Max {selectedTour.maxGuests} guests
 										</p>
 									)}
-									{fieldErr.date && (
+									{fieldErr.guests && (
 										<p
-											id="date-error"
+											id="guests-error"
 											role="alert"
 											className="text-destructive text-xs"
 										>
-											{fieldErr.date}
+											{fieldErr.guests}
+										</p>
+									)}
+								</div>
+							</CardContent>
+						</Card>
+					</motion.div>
+
+					<motion.div
+						initial={{ opacity: 0, y: 8 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0.2 }}
+					>
+						<Card>
+							<CardHeader>
+								<CardTitle>3. Your details</CardTitle>
+							</CardHeader>
+							<CardContent className="space-y-4">
+								<div className="space-y-1">
+									<label htmlFor="name" className="text-sm font-medium">
+										Full name *
+									</label>
+									<Input
+										id="name"
+										required
+										maxLength={MAX_NAME_LEN}
+										value={name}
+										onChange={(e) => setName(e.target.value)}
+										aria-invalid={Boolean(fieldErr.name)}
+										aria-describedby={fieldErr.name ? "name-error" : undefined}
+									/>
+									{fieldErr.name && (
+										<p
+											id="name-error"
+											role="alert"
+											className="text-destructive text-xs"
+										>
+											{fieldErr.name}
 										</p>
 									)}
 								</div>
 								<div className="space-y-1">
-									<label htmlFor="time" className="text-sm font-medium">
-										Start time *
+									<label htmlFor="email" className="text-sm font-medium">
+										Email *
 									</label>
 									<Input
-										id="time"
-										type="time"
+										id="email"
+										type="email"
 										required
-										value={startTime}
-										onChange={(e) => setStartTime(e.target.value)}
+										maxLength={MAX_EMAIL_LEN}
+										value={email}
+										onChange={(e) => setEmail(e.target.value)}
+										aria-invalid={Boolean(fieldErr.email)}
+										aria-describedby={
+											fieldErr.email ? "email-error" : undefined
+										}
 									/>
+									{fieldErr.email && (
+										<p
+											id="email-error"
+											role="alert"
+											className="text-destructive text-xs"
+										>
+											{fieldErr.email}
+										</p>
+									)}
 								</div>
-							</div>
-							<div className="space-y-1">
-								<label htmlFor="guests" className="text-sm font-medium">
-									Guests *
-								</label>
-								<Input
-									id="guests"
-									type="number"
-									min="1"
-									max={selectedTour?.maxGuests ?? 20}
-									required
-									value={guests}
-									onChange={(e) => setGuests(e.target.value)}
-									aria-invalid={Boolean(fieldErr.guests)}
-									aria-describedby={
-										fieldErr.guests ? "guests-error" : undefined
-									}
-								/>
-								{selectedTour && !fieldErr.guests && (
-									<p className="text-muted-foreground text-xs">
-										Max {selectedTour.maxGuests} guests
+								<div className="space-y-1">
+									<label htmlFor="phone" className="text-sm font-medium">
+										Phone (optional)
+									</label>
+									<Input
+										id="phone"
+										type="tel"
+										maxLength={MAX_PHONE_LEN}
+										value={phone}
+										onChange={(e) => setPhone(e.target.value)}
+										aria-invalid={Boolean(fieldErr.phone)}
+										aria-describedby={
+											fieldErr.phone ? "phone-error" : undefined
+										}
+									/>
+									{fieldErr.phone && (
+										<p
+											id="phone-error"
+											role="alert"
+											className="text-destructive text-xs"
+										>
+											{fieldErr.phone}
+										</p>
+									)}
+								</div>
+								<div className="space-y-1">
+									<label htmlFor="notes" className="text-sm font-medium">
+										Special requests (optional)
+									</label>
+									<Textarea
+										id="notes"
+										value={notes}
+										onChange={(e) => setNotes(e.target.value)}
+										rows={3}
+										maxLength={MAX_NOTES_LEN}
+										placeholder="Allergies, accessibility needs, etc."
+										aria-invalid={Boolean(fieldErr.notes)}
+										aria-describedby={
+											fieldErr.notes ? "notes-error" : undefined
+										}
+									/>
+									<p className="text-muted-foreground text-xs text-right">
+										{notes.length} / {MAX_NOTES_LEN}
 									</p>
-								)}
-								{fieldErr.guests && (
-									<p
-										id="guests-error"
-										role="alert"
-										className="text-destructive text-xs"
-									>
-										{fieldErr.guests}
-									</p>
-								)}
-							</div>
-						</CardContent>
-					</Card>
-
-					<Card>
-						<CardHeader>
-							<CardTitle>3. Your details</CardTitle>
-						</CardHeader>
-						<CardContent className="space-y-4">
-							<div className="space-y-1">
-								<label htmlFor="name" className="text-sm font-medium">
-									Full name *
-								</label>
-								<Input
-									id="name"
-									required
-									maxLength={MAX_NAME_LEN}
-									value={name}
-									onChange={(e) => setName(e.target.value)}
-									aria-invalid={Boolean(fieldErr.name)}
-									aria-describedby={fieldErr.name ? "name-error" : undefined}
-								/>
-								{fieldErr.name && (
-									<p
-										id="name-error"
-										role="alert"
-										className="text-destructive text-xs"
-									>
-										{fieldErr.name}
-									</p>
-								)}
-							</div>
-							<div className="space-y-1">
-								<label htmlFor="email" className="text-sm font-medium">
-									Email *
-								</label>
-								<Input
-									id="email"
-									type="email"
-									required
-									maxLength={MAX_EMAIL_LEN}
-									value={email}
-									onChange={(e) => setEmail(e.target.value)}
-									aria-invalid={Boolean(fieldErr.email)}
-									aria-describedby={fieldErr.email ? "email-error" : undefined}
-								/>
-								{fieldErr.email && (
-									<p
-										id="email-error"
-										role="alert"
-										className="text-destructive text-xs"
-									>
-										{fieldErr.email}
-									</p>
-								)}
-							</div>
-							<div className="space-y-1">
-								<label htmlFor="phone" className="text-sm font-medium">
-									Phone (optional)
-								</label>
-								<Input
-									id="phone"
-									type="tel"
-									maxLength={MAX_PHONE_LEN}
-									value={phone}
-									onChange={(e) => setPhone(e.target.value)}
-									aria-invalid={Boolean(fieldErr.phone)}
-									aria-describedby={fieldErr.phone ? "phone-error" : undefined}
-								/>
-								{fieldErr.phone && (
-									<p
-										id="phone-error"
-										role="alert"
-										className="text-destructive text-xs"
-									>
-										{fieldErr.phone}
-									</p>
-								)}
-							</div>
-							<div className="space-y-1">
-								<label htmlFor="notes" className="text-sm font-medium">
-									Special requests (optional)
-								</label>
-								<Textarea
-									id="notes"
-									value={notes}
-									onChange={(e) => setNotes(e.target.value)}
-									rows={3}
-									maxLength={MAX_NOTES_LEN}
-									placeholder="Allergies, accessibility needs, etc."
-									aria-invalid={Boolean(fieldErr.notes)}
-									aria-describedby={fieldErr.notes ? "notes-error" : undefined}
-								/>
-								<p className="text-muted-foreground text-xs text-right">
-									{notes.length} / {MAX_NOTES_LEN}
+									{fieldErr.notes && (
+										<p
+											id="notes-error"
+											role="alert"
+											className="text-destructive text-xs"
+										>
+											{fieldErr.notes}
+										</p>
+									)}
+								</div>
+							</CardContent>
+							<CardFooter className="flex flex-col gap-3">
+								{submitErr && <ErrorBanner message={submitErr} />}
+								<Button type="submit" disabled={submitting} className="w-full">
+									{submitting ? "Booking…" : "Confirm booking"}
+								</Button>
+								<p className="text-muted-foreground text-xs text-center">
+									By booking you agree to the operator's cancellation policy.
 								</p>
-								{fieldErr.notes && (
-									<p
-										id="notes-error"
-										role="alert"
-										className="text-destructive text-xs"
-									>
-										{fieldErr.notes}
-									</p>
-								)}
-							</div>
-						</CardContent>
-						<CardFooter className="flex flex-col gap-3">
-							{submitErr && <ErrorBanner message={submitErr} />}
-							<Button type="submit" disabled={submitting} className="w-full">
-								{submitting ? "Booking…" : "Confirm booking"}
-							</Button>
-							<p className="text-muted-foreground text-xs text-center">
-								By booking you agree to the operator's cancellation policy.
-							</p>
-						</CardFooter>
-					</Card>
+							</CardFooter>
+						</Card>
+					</motion.div>
 				</form>
 			)}
 
