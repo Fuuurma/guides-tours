@@ -1,6 +1,8 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
 import { MetricCard } from "@/components/metric-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +13,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { Input } from "@/components/ui/input";
 import { formatCentsWhole } from "@/lib/format";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -143,6 +146,8 @@ function DashboardIndex() {
 				/>
 			</div>
 
+			{org?.slug && <PublicBookingLinkCard slug={org.slug} />}
+
 			<Card>
 				<CardHeader>
 					<CardTitle>Upcoming assignments</CardTitle>
@@ -181,7 +186,7 @@ function DashboardIndex() {
 												)}
 											</p>
 											<p className="text-muted-foreground text-xs">
-												{a.date} · {a.startTime}–{a.endTime} · Guide {a.guideId}
+												{a.date} · {a.startTime}–{a.endTime} · Guide assigned
 											</p>
 										</div>
 										<Link
@@ -276,5 +281,52 @@ function StatCard({
 		>
 			<MetricCard label={label} value={value} />
 		</Link>
+	);
+}
+
+function PublicBookingLinkCard({ slug }: { slug: string }) {
+	const url =
+		typeof window !== "undefined" ? `${window.location.origin}/book/${slug}` : "";
+	const [copied, setCopied] = useState(false);
+
+	const handleCopy = async () => {
+		try {
+			await navigator.clipboard.writeText(url);
+			setCopied(true);
+			toast.success("Link copied");
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			toast.error("Could not copy — please copy manually");
+		}
+	};
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Public booking page</CardTitle>
+				<CardDescription>
+					Share this link with your customers — no account required to book.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<div className="flex gap-2">
+					<Input
+						readOnly
+						value={url}
+						onClick={(e) => e.currentTarget.select()}
+						className="font-mono text-xs"
+						aria-label="Public booking URL"
+					/>
+					<Button onClick={handleCopy} disabled={!url} className="shrink-0">
+						{copied ? "Copied!" : "Copy"}
+					</Button>
+					<Button variant="outline" asChild className="shrink-0">
+						<Link to="/book/$slug" params={{ slug }}>
+							Open
+						</Link>
+					</Button>
+				</div>
+			</CardContent>
+		</Card>
 	);
 }

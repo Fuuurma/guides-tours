@@ -1,8 +1,8 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
-import schema from "../schema";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import { isBlackoutHelper } from "../tourBlackoutDates";
+import schema from "../schema";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -147,5 +147,44 @@ describe("tour blackout dates", () => {
 		});
 		const b = await t.run((ctx) => ctx.db.get(id));
 		expect(b).toBeNull();
+	});
+});
+
+describe("publicIsBlackout (no auth required)", () => {
+	it("returns true for date inside range via public query", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub1";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.mutation(internal.tourBlackoutDates.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			startDate: "2026-12-24",
+			endDate: "2026-12-26",
+		});
+		// Call the PUBLIC query — no auth context, no requireMembership.
+		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
+			tourId,
+			date: "2026-12-25",
+		});
+		expect(result).toBe(true);
+	});
+
+	it("returns false for date outside range via public query", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub2";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.mutation(internal.tourBlackoutDates.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			startDate: "2026-12-24",
+			endDate: "2026-12-26",
+		});
+		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
+			tourId,
+			date: "2026-12-27",
+		});
+		expect(result).toBe(false);
 	});
 });
