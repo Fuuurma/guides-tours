@@ -212,7 +212,7 @@ function PublicBookingPage() {
 
 	if (confirmation) {
 		return (
-			<main className="mx-auto max-w-2xl px-4 py-12">
+			<main className="mx-auto max-w-2xl px-4 py-12 space-y-6">
 				<Card>
 					<CardHeader>
 						<CardTitle>Booking confirmed</CardTitle>
@@ -221,13 +221,42 @@ function PublicBookingPage() {
 							confirmation to {email}.
 						</CardDescription>
 					</CardHeader>
-					<CardContent>
+					<CardContent className="space-y-4">
 						<p className="text-sm">
 							Reference:{" "}
 							<span className="font-mono text-xs">{confirmation}</span>
 						</p>
+						<p className="text-muted-foreground text-sm">
+							Save this reference if you need to contact the operator
+							about your booking.
+						</p>
+						<Button
+							variant="outline"
+							className="w-full"
+							onClick={() => {
+								setConfirmation(null);
+								setName("");
+								setEmail("");
+								setPhone("");
+								setDate("");
+								setStartTime("");
+								setGuests("1");
+								setNotes("");
+								setSelectedTourId("");
+								setBlackoutCheck(null);
+								setFieldErr({});
+								setSubmitErr(null);
+							}}
+						>
+							Book another
+						</Button>
 					</CardContent>
 				</Card>
+				<footer className="text-center">
+					<Button variant="link" asChild>
+						<Link to="/">← Back to home</Link>
+					</Button>
+				</footer>
 			</main>
 		);
 	}
