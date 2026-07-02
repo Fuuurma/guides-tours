@@ -263,8 +263,10 @@ export const checkConflicts = query({
 				// SECURITY: scope by org. A guide belonging to multiple
 				// orgs shouldn't surface other-org assignments as
 				// conflicts in this org's conflict-check UI.
+				// Bound the scan: a single date's worth of assignments
+				// per resource is small in practice.
 				.filter((q) => q.eq(q.field("organizationId"), orgId))
-				.collect();
+				.take(MAX_CONFLICTS);
 			for (const a of rows) {
 				if (a.deletedAt) continue;
 				if (a.status !== "scheduled") continue;

@@ -43,10 +43,14 @@ export const list = query({
 	args: {},
 	handler: async (ctx) => {
 		const member = await requireMembership(ctx);
+		// Bound the result so an org with thousands of OTA integrations
+		// doesn't OOM the response. The FE page renders at most a
+		// few dozen.
+		const MAX_INTEGRATIONS = 50;
 		const rows = await ctx.db
 			.query("otaIntegrations")
 			.withIndex("by_org", (q) => q.eq("organizationId", member.organizationId))
-			.collect();
+			.take(MAX_INTEGRATIONS);
 		return rows.map(stripSecrets);
 	},
 });

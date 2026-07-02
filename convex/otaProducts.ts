@@ -43,7 +43,11 @@ export const list = query({
 				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
-		const all = await q.collect();
+		// Bound the result so an org with thousands of OTA products
+		// doesn't OOM the response. The FE page renders at most a
+		// few hundred.
+		const MAX_OTA_PRODUCTS = 1000;
+		const all = await q.take(MAX_OTA_PRODUCTS);
 		return all
 			.filter((p) =>
 				args.syncStatus === undefined || p.syncStatus === args.syncStatus,

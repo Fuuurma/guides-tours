@@ -27,6 +27,10 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
+		// Bound the result so a guide with thousands of availability
+		// rows doesn't OOM the response. The FE page renders at most
+		// a few hundred.
+		const MAX_AVAILABILITIES = 1000;
 		let all;
 		if (args.userId) {
 			// SECURITY: scope to org even when filtering by userId.
@@ -36,7 +40,7 @@ export const list = query({
 					q.eq("userId", args.userId!),
 				)
 				.filter((q) => q.eq(q.field("organizationId"), orgId))
-				.collect();
+				.take(MAX_AVAILABILITIES);
 		} else {
 			// No userId — fetch by org then filter date in JS.
 			// (by_org_user_date leads with userId so we can't range-scan
@@ -46,7 +50,7 @@ export const list = query({
 				.withIndex("by_org_user_date", (q) =>
 					q.eq("organizationId", orgId),
 				)
-				.collect();
+				.take(MAX_AVAILABILITIES);
 		}
 		return all
 			.filter((a) => {
