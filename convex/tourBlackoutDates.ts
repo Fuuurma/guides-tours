@@ -63,6 +63,22 @@ export const isBlackout = query({
 	},
 });
 
+/**
+ * Public version of isBlackout — no auth required. Used by the
+ * unauthenticated public booking page to grey out blacked-out dates
+ * in the date picker. The backend `public_booking.internalCreate`
+ * still server-side validates with isBlackoutHelper as a guard.
+ */
+export const publicIsBlackout = query({
+	args: {
+		tourId: v.id("tours"),
+		date: v.string(),
+	},
+	handler: async (ctx, args) => {
+		return await isBlackoutHelper(ctx, args.tourId, args.date);
+	},
+});
+
 export async function isBlackoutHelper(
 	ctx: { db: { query: Function } },
 	tourId: string,

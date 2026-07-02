@@ -29,6 +29,9 @@ import { authComponent, createAuth } from "./auth";
 
 // ----- Time helpers (string "HH:MM" ↔ minutes-since-midnight) -----
 
+/** Bound the conflict scans in checkConflicts + checkConflictsHelper. */
+const MAX_CONFLICTS = 100;
+
 export function timeToMinutes(t: string): number {
 	const parts = t.split(":");
 	const h = Number.parseInt(parts[0] ?? "0", 10);
@@ -873,11 +876,6 @@ export async function checkConflictsHelper(
 			}
 		}
 	};
-	// Bound the conflict scans: a single date's worth of assignments per
-	// guide/vehicle/driver is small in practice, but cap at 100 to
-	// prevent runaway queries if a guide is double-booked 1000+ times
-	// on the same day (which would be a data error anyway).
-	const MAX_CONFLICTS = 100;
 	if (args.guideId) {
 		const rows = await ctx.db
 			.query("assignments")

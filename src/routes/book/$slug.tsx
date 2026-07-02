@@ -25,6 +25,7 @@ import {
 	MAX_PHONE_LEN,
 } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 
 export const Route = createFileRoute("/book/$slug")({
 	component: PublicBookingPage,
@@ -45,12 +46,24 @@ function PublicBookingPage() {
 	const { data, isPending, error } = useQuery(
 		convexQuery(api.public_booking.getOrgAndToursBySlug, { slug }),
 	);
-
-	const [selectedTourId, setSelectedTourId] = useState<string>("");
+	// Server-side is the source of truth — the booking action rejects
+	// blacked-out dates. This is a UX hint so the customer doesn't pick a
+	// date that the operator has blocked, then get an error after submitting.
+	const [date, setDate] = useState("");
+	const [blackoutCheck, setBlackoutCheck] = useState<{
+		tourId: Id<"tours">;
+		date: string;
+	} | null>(null);
+	const { data: isBlackedOut } = useQuery(
+		convexQuery(
+			api.tourBlackoutDates.publicIsBlackout,
+			blackoutCheck ?? { tourId: "" as Id<"tours">, date: "" },
+		),
+	);
+	const [selectedTourId, setSelectedTourId] = useState<Id<"tours"> | "">("");
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [phone, setPhone] = useState("");
-	const [date, setDate] = useState("");
 	const [startTime, setStartTime] = useState("");
 	const [guests, setGuests] = useState("1");
 	const [notes, setNotes] = useState("");
@@ -125,6 +138,12 @@ function PublicBookingPage() {
 		if (!guestCount || guestCount <= 0)
 			errs.guests = "Guests must be at least 1";
 		if (!date) errs.date = "Please pick a date";
+		// Client-side blackout guard — the backend also checks via
+		// isBlackoutHelper, but block the submit here so the user sees
+		// the error inline next to the date field instead of as a toast.
+		if (date && isBlackedOut) {
+			errs.date = "This date is not available";
+		}
 		const nameTrimmed = name.trim();
 		if (nameTrimmed.length < 2) errs.name = "Please enter your full name";
 		else if (nameTrimmed.length > MAX_NAME_LEN)
@@ -261,7 +280,17 @@ function PublicBookingPage() {
 											name="tour"
 											value={t._id}
 											checked={selectedTourId === t._id}
-											onChange={(e) => setSelectedTourId(e.target.value)}
+											onChange={(e) => {
+											setSelectedTourId(e.target.value as Id<"tours">);
+											// Re-check blackout for the new tour with the
+											// currently-entered date (if any).
+											if (date && e.target.value) {
+												setBlackoutCheck({
+													tourId: e.target.value as Id<"tours">,
+													date,
+												});
+											}
+										}}
 											className="mt-1"
 										/>
 										<div className="flex-1">
@@ -301,10 +330,37 @@ function PublicBookingPage() {
 										required
 										min={new Date().toISOString().slice(0, 10)}
 										value={date}
-										onChange={(e) => setDate(e.target.value)}
-										aria-invalid={Boolean(fieldErr.date)}
-										aria-describedby={fieldErr.date ? "date-error" : undefined}
+										onChange={(e) => {
+											setDate(e.target.value);
+											// Trigger the blackout check for this tour+date.
+											if (selectedTourId && e.target.value) {
+												setBlackoutCheck({
+													tourId: selectedTourId,
+													date: e.target.value,
+												});
+											} else {
+												setBlackoutCheck(null);
+											}
+										}}
+										aria-invalid={Boolean(fieldErr.date || isBlackedOut)}
+										aria-describedby={
+											fieldErr.date
+												? "date-error"
+												: isBlackedOut
+													? "date-blackout"
+													: undefined
+										}
 									/>
+									{isBlackedOut && !fieldErr.date && (
+										<p
+											id="date-blackout"
+											role="alert"
+											className="text-destructive text-xs"
+										>
+											This date is not available — the operator has blocked bookings
+											on this day. Please pick another date.
+										</p>
+									)}
 									{fieldErr.date && (
 										<p
 											id="date-error"
