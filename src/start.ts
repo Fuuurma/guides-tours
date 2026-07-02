@@ -52,7 +52,7 @@
 //   - Forms: self only
 //   - Base-URI: self (prevents <base> tag hijacking)
 
-import { createStart, createMiddleware } from "@tanstack/react-start";
+import { createMiddleware, createStart } from "@tanstack/react-start";
 import { setResponseHeader } from "@tanstack/react-start/server";
 
 const securityHeadersMiddleware = createMiddleware().server(

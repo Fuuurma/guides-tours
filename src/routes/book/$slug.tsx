@@ -227,8 +227,8 @@ function PublicBookingPage() {
 							<span className="font-mono text-xs">{confirmation}</span>
 						</p>
 						<p className="text-muted-foreground text-sm">
-							Save this reference if you need to contact the operator
-							about your booking.
+							Save this reference if you need to contact the operator about your
+							booking.
 						</p>
 						<Button
 							variant="outline"
@@ -310,16 +310,16 @@ function PublicBookingPage() {
 											value={t._id}
 											checked={selectedTourId === t._id}
 											onChange={(e) => {
-											setSelectedTourId(e.target.value as Id<"tours">);
-											// Re-check blackout for the new tour with the
-											// currently-entered date (if any).
-											if (date && e.target.value) {
-												setBlackoutCheck({
-													tourId: e.target.value as Id<"tours">,
-													date,
-												});
-											}
-										}}
+												setSelectedTourId(e.target.value as Id<"tours">);
+												// Re-check blackout for the new tour with the
+												// currently-entered date (if any).
+												if (date && e.target.value) {
+													setBlackoutCheck({
+														tourId: e.target.value as Id<"tours">,
+														date,
+													});
+												}
+											}}
 											className="mt-1"
 										/>
 										<div className="flex-1">
@@ -386,8 +386,8 @@ function PublicBookingPage() {
 											role="alert"
 											className="text-destructive text-xs"
 										>
-											This date is not available — the operator has blocked bookings
-											on this day. Please pick another date.
+											This date is not available — the operator has blocked
+											bookings on this day. Please pick another date.
 										</p>
 									)}
 									{fieldErr.date && (

@@ -305,7 +305,9 @@ function StatCard({
 
 function PublicBookingLinkCard({ slug }: { slug: string }) {
 	const url =
-		typeof window !== "undefined" ? `${window.location.origin}/book/${slug}` : "";
+		typeof window !== "undefined"
+			? `${window.location.origin}/book/${slug}`
+			: "";
 	const [copied, setCopied] = useState(false);
 
 	const handleCopy = async () => {

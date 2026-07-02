@@ -34,7 +34,7 @@
 //     )}
 //   </form.Field>
 
-import * as React from "react";
+import type * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
@@ -112,11 +112,7 @@ export function FormField({
 				</p>
 			)}
 			{hasError && (
-				<p
-					id={errorId}
-					role="alert"
-					className="text-sm text-destructive"
-				>
+				<p id={errorId} role="alert" className="text-sm text-destructive">
 					{field.state.meta.errors.map(errorMessage).join(", ")}
 				</p>
 			)}
