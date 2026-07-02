@@ -1,6 +1,7 @@
 import { useForm } from "@tanstack/react-form";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
@@ -53,29 +54,45 @@ function OnboardingPage() {
 	});
 
 	// Auto-derive slug from company name (lowercase, replace spaces with dashes).
-	// Re-runs whenever form state changes. Only auto-fill if the slug is
-	// empty (don't clobber a user-edited slug).
+	// Track the raw name in local state so we can debounce the auto-fill.
+	// Without debounce, the slug re-renders on every keystroke — which
+	// is wasteful and can clobber a user who manually edits the slug
+	// during typing.
+	const [rawName, setRawName] = useState("");
+	const [debouncedName] = useDebouncedValue(rawName, {
+		wait: 200,
+		leading: false,
+		trailing: true,
+	});
+
+	// Subscribe to form state changes to mirror the name field into
+	// our local rawName state.
 	useEffect(() => {
 		const subscription = form.store.subscribe(() => {
-			const state = form.store.state;
-			const name = state.values.name as string;
-			const slug = state.values.slug as string;
-			if (name && !slug) {
-				form.setFieldValue(
-					"slug",
-					name
-						.toLowerCase()
-						.trim()
-						.replace(/[^a-z0-9]+/g, "-")
-						.replace(/^-|-$/g, "")
-						.slice(0, 40),
-				);
+			const name = form.store.state.values.name as string;
+			if (name !== rawName) {
+				setRawName(name);
 			}
 		});
 		return () => {
 			subscription.unsubscribe();
 		};
-	}, [form]);
+	}, [form, rawName]);
+
+	// When the debounced name changes, auto-fill the slug if it's empty.
+	useEffect(() => {
+		if (debouncedName && !(form.store.state.values.slug as string)) {
+			form.setFieldValue(
+				"slug",
+				debouncedName
+					.toLowerCase()
+					.trim()
+					.replace(/[^a-z0-9]+/g, "-")
+					.replace(/^-|-$/g, "")
+					.slice(0, 40),
+			);
+		}
+	}, [debouncedName, form]);
 
 	return (
 		<main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
