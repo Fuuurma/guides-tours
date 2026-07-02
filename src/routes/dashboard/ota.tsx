@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
+import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ALL_PROVIDERS } from "@/components/ota-providers";
@@ -124,15 +125,25 @@ function OtaIntegrationsPage() {
 						</p>
 					) : (
 						<ul className="space-y-3">
-							{items.map((i) => {
+							{items.map((i, index) => {
 								const label =
 									ALL_PROVIDERS.find((p) => p.id === i.provider)?.label ??
 									i.provider;
 								const isBusy = pendingId === i._id;
 								return (
-									<li
+									// Stagger each integration card in by 40ms so the
+									// list feels responsive when it mounts. Stops
+									// looking like a flash of unstyled content.
+									<motion.li
 										key={i._id}
 										className="flex items-center justify-between gap-3 border rounded-lg p-3"
+										initial={{ opacity: 0, y: 4 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{
+											duration: 0.2,
+											delay: index * 0.04,
+											ease: "easeOut",
+										}}
 									>
 										<div className="min-w-0 flex-1">
 											<p className="font-medium">{label}</p>
@@ -169,7 +180,7 @@ function OtaIntegrationsPage() {
 												Delete
 											</Button>
 										</div>
-									</li>
+									</motion.li>
 								);
 							})}
 						</ul>
