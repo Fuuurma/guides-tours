@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -213,50 +214,65 @@ function PublicBookingPage() {
 	if (confirmation) {
 		return (
 			<main className="mx-auto max-w-2xl px-4 py-12 space-y-6">
-				<Card>
-					<CardHeader>
-						<CardTitle>Booking confirmed</CardTitle>
-						<CardDescription>
-							Thank you for booking with {data.organizationName}. We've sent a
-							confirmation to {email}.
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						<p className="text-sm">
-							Reference:{" "}
-							<span className="font-mono text-xs">{confirmation}</span>
-						</p>
-						<p className="text-muted-foreground text-sm">
-							Save this reference if you need to contact the operator about your
-							booking.
-						</p>
-						<Button
-							variant="outline"
-							className="w-full"
-							onClick={() => {
-								setConfirmation(null);
-								setName("");
-								setEmail("");
-								setPhone("");
-								setDate("");
-								setStartTime("");
-								setGuests("1");
-								setNotes("");
-								setSelectedTourId("");
-								setBlackoutCheck(null);
-								setFieldErr({});
-								setSubmitErr(null);
-							}}
-						>
-							Book another
+				{/* Success card animates in with a subtle scale + fade so the
+				    confirmation feels celebratory without being distracting.
+				    Stagger the card and footer link so the eye lands on the
+				    reference first, then the CTA. */}
+				<motion.div
+					initial={{ opacity: 0, scale: 0.96 }}
+					animate={{ opacity: 1, scale: 1 }}
+					transition={{ duration: 0.35, ease: "easeOut" }}
+				>
+					<Card>
+						<CardHeader>
+							<CardTitle>Booking confirmed</CardTitle>
+							<CardDescription>
+								Thank you for booking with {data.organizationName}. We've sent
+								a confirmation to {email}.
+							</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-4">
+							<p className="text-sm">
+								Reference:{" "}
+								<span className="font-mono text-xs">{confirmation}</span>
+							</p>
+							<p className="text-muted-foreground text-sm">
+								Save this reference if you need to contact the operator
+								about your booking.
+							</p>
+							<Button
+								variant="outline"
+								className="w-full"
+								onClick={() => {
+									setConfirmation(null);
+									setName("");
+									setEmail("");
+									setPhone("");
+									setDate("");
+									setStartTime("");
+									setGuests("1");
+									setNotes("");
+									setSelectedTourId("");
+									setBlackoutCheck(null);
+									setFieldErr({});
+									setSubmitErr(null);
+								}}
+							>
+								Book another
 						</Button>
 					</CardContent>
 				</Card>
-				<footer className="text-center">
+				</motion.div>
+				<motion.footer
+					className="text-center"
+					initial={{ opacity: 0 }}
+					animate={{ opacity: 1 }}
+					transition={{ duration: 0.3, delay: 0.2 }}
+				>
 					<Button variant="link" asChild>
 						<Link to="/">← Back to home</Link>
 					</Button>
-				</footer>
+				</motion.footer>
 			</main>
 		);
 	}
