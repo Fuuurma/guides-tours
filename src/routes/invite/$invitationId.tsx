@@ -1,8 +1,8 @@
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "@tanstack/react-form";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
 import { z } from "zod";
+import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -41,8 +41,7 @@ function AcceptInvitePage() {
 		organizationName: string;
 		role: string;
 	} | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [submitting, setSubmitting] = useState(false);
+	const [serverError, setServerError] = useState<string | null>(null);
 
 	// Fetch the invitation metadata so we know the email + org name.
 	useEffect(() => {
@@ -53,7 +52,7 @@ function AcceptInvitePage() {
 			});
 			if (cancelled) return;
 			if (!data) {
-				setError("Invitation not found or already used.");
+				setServerError("Invitation not found or already used.");
 				return;
 			}
 			setInvite({
@@ -67,47 +66,43 @@ function AcceptInvitePage() {
 		};
 	}, [invitationId]);
 
-	const {
-		register,
-		handleSubmit,
-		formState: { errors },
-	} = useForm<SignUpForm>({
-		resolver: zodResolver(signUpSchema),
-	});
-
-	const onSubmit = handleSubmit(async (values) => {
-		setError(null);
-		if (!invite) {
-			setError("Invitation not loaded yet");
-			return;
-		}
-		setSubmitting(true);
-		try {
-			// Sign up first (matches the invite's email).
-			const signUp = await authClient.signUp.email({
-				email: invite.email,
-				password: values.password,
-				name: values.name,
-			});
-			if (signUp.error) {
-				setError(signUp.error.message ?? "Sign up failed");
-				setSubmitting(false);
+	const form = useForm({
+		defaultValues: {
+			name: "",
+			password: "",
+			confirm: "",
+		} satisfies SignUpForm,
+		validators: { onSubmit: signUpSchema },
+		onSubmit: async ({ value }) => {
+			setServerError(null);
+			if (!invite) {
+				setServerError("Invitation not loaded yet");
 				return;
 			}
-			// Then accept the invite.
-			const accept = await authClient.organization.acceptInvitation({
-				invitationId,
-			});
-			if (accept.error) {
-				setError(accept.error.message ?? "Could not accept invitation");
-				setSubmitting(false);
-				return;
+			try {
+				// Sign up first (matches the invite's email).
+				const signUp = await authClient.signUp.email({
+					email: invite.email,
+					password: value.password,
+					name: value.name,
+				});
+				if (signUp.error) {
+					setServerError(signUp.error.message ?? "Sign up failed");
+					return;
+				}
+				// Then accept the invite.
+				const accept = await authClient.organization.acceptInvitation({
+					invitationId,
+				});
+				if (accept.error) {
+					setServerError(accept.error.message ?? "Could not accept invitation");
+					return;
+				}
+				window.location.assign("/dashboard");
+			} catch (e) {
+				setServerError(getErrorMessage(e));
 			}
-			window.location.assign("/dashboard");
-		} catch (e) {
-			setError(getErrorMessage(e));
-			setSubmitting(false);
-		}
+		},
 	});
 
 	if (invite && invite.role === "owner") {
@@ -125,10 +120,16 @@ function AcceptInvitePage() {
 					<CardDescription>
 						{invite
 							? `You've been invited to join as ${invite.role}. Create your account to accept.`
-							: (error ?? "Loading invitation...")}
+							: (serverError ?? "Loading invitation...")}
 					</CardDescription>
 				</CardHeader>
-				<form onSubmit={onSubmit}>
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						void form.handleSubmit();
+					}}
+				>
 					<CardContent className="space-y-4">
 						<div className="space-y-2">
 							<Label htmlFor="email">Email</Label>
@@ -140,47 +141,53 @@ function AcceptInvitePage() {
 								disabled
 							/>
 						</div>
-						<div className="space-y-2">
-							<Label htmlFor="name">Your name</Label>
-							<Input id="name" type="text" {...register("name")} />
-							{errors.name ? (
-								<p className="text-destructive text-sm">
-									{errors.name.message}
-								</p>
-							) : null}
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="password">Password</Label>
-							<Input id="password" type="password" {...register("password")} />
-							{errors.password ? (
-								<p className="text-destructive text-sm">
-									{errors.password.message}
-								</p>
-							) : null}
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="confirm">Confirm password</Label>
-							<Input id="confirm" type="password" {...register("confirm")} />
-							{errors.confirm ? (
-								<p className="text-destructive text-sm">
-									{errors.confirm.message}
-								</p>
-							) : null}
-						</div>
-						{error ? (
+
+						<form.Field name="name">
+							{(field) => <FormField field={field} label="Your name" />}
+						</form.Field>
+
+						<form.Field name="password">
+							{(field) => (
+								<FormField
+									field={field}
+									label="Password"
+									inputProps={{ type: "password" }}
+								/>
+							)}
+						</form.Field>
+
+						<form.Field name="confirm">
+							{(field) => (
+								<FormField
+									field={field}
+									label="Confirm password"
+									inputProps={{ type: "password" }}
+								/>
+							)}
+						</form.Field>
+
+						{serverError ? (
 							<p className="text-destructive text-sm" role="alert">
-								{error}
+								{serverError}
 							</p>
 						) : null}
 					</CardContent>
 					<CardFooter className="flex flex-col gap-3">
-						<Button
-							type="submit"
-							disabled={submitting || !invite}
-							className="w-full"
+						<form.Subscribe
+							selector={(state) =>
+								[state.canSubmit, state.isSubmitting] as const
+							}
 						>
-							{submitting ? "Creating account..." : "Accept invitation"}
-						</Button>
+							{([canSubmit, isSubmitting]) => (
+								<Button
+									type="submit"
+									disabled={!canSubmit || isSubmitting || !invite}
+									className="w-full"
+								>
+									{isSubmitting ? "Creating account..." : "Accept invitation"}
+								</Button>
+							)}
+						</form.Subscribe>
 						<p className="text-muted-foreground text-xs">
 							Already have an account?{" "}
 							<a
