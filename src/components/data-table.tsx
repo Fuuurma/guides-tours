@@ -1,3 +1,4 @@
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { type ReactNode, useState } from "react";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
@@ -54,7 +55,17 @@ export function DataTable<T>({
 	emptyMessage = "No records yet.",
 	searchPlaceholder,
 }: DataTableProps<T>) {
-	const [query, setQuery] = useState("");
+	const [rawQuery, setRawQuery] = useState("");
+	// Debounce 200ms so the filter doesn't re-run on every keystroke.
+	// Customers list is bounded (5000 rows by server) but JS filter
+	// is still O(n) per keystroke — debounce keeps it smooth on
+	// slower devices. Leading edge fires immediately for a snappy
+	// first-paint response.
+	const [query] = useDebouncedValue(rawQuery, {
+		wait: 200,
+		leading: true,
+		trailing: true,
+	});
 
 	const filtered = (() => {
 		if (!data) return undefined;
@@ -90,8 +101,8 @@ export function DataTable<T>({
 		<div className="space-y-3">
 			{searchPlaceholder && (
 				<Input
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
+					value={rawQuery}
+					onChange={(e) => setRawQuery(e.target.value)}
 					placeholder={searchPlaceholder}
 					aria-label={searchPlaceholder}
 				/>
