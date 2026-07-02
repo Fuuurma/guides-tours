@@ -227,8 +227,8 @@ function PublicBookingPage() {
 						<CardHeader>
 							<CardTitle>Booking confirmed</CardTitle>
 							<CardDescription>
-								Thank you for booking with {data.organizationName}. We've sent
-								a confirmation to {email}.
+								Thank you for booking with {data.organizationName}. We've sent a
+								confirmation to {email}.
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-4">
@@ -237,8 +237,8 @@ function PublicBookingPage() {
 								<span className="font-mono text-xs">{confirmation}</span>
 							</p>
 							<p className="text-muted-foreground text-sm">
-								Save this reference if you need to contact the operator
-								about your booking.
+								Save this reference if you need to contact the operator about
+								your booking.
 							</p>
 							<Button
 								variant="outline"
@@ -259,9 +259,9 @@ function PublicBookingPage() {
 								}}
 							>
 								Book another
-						</Button>
-					</CardContent>
-				</Card>
+							</Button>
+						</CardContent>
+					</Card>
 				</motion.div>
 				<motion.footer
 					className="text-center"
