@@ -1,7 +1,6 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +11,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/forms/form-field";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/sign-up")({
@@ -30,34 +28,25 @@ type SignUpForm = z.infer<typeof signUpSchema>;
 
 function SignUpPage() {
 	const navigate = useNavigate();
-	const [error, setError] = useState<string | null>(null);
-	const [submitting, setSubmitting] = useState(false);
+	const [serverError, setServerError] = useState<string | null>(null);
 
-	const {
-		register,
-		handleSubmit,
-		formState: { errors },
-	} = useForm<SignUpForm>({
-		resolver: zodResolver(signUpSchema),
-	});
-
-	const onSubmit = handleSubmit(async (values) => {
-		setError(null);
-		setSubmitting(true);
-		const { error: signUpError } = await authClient.signUp.email({
-			email: values.email,
-			password: values.password,
-			name: values.name,
-		});
-		setSubmitting(false);
-		if (signUpError) {
-			setError(signUpError.message ?? "Sign up failed");
-			return;
-		}
-		// First user → land on onboarding to create the company org.
-		// After that, sign-up via invite lands on dashboard directly
-		// (handled by the /invite/$invitationId route, Phase 4.4).
-		await navigate({ to: "/onboarding" });
+	const form = useForm({
+		defaultValues: { name: "", email: "", password: "" } satisfies SignUpForm,
+		validators: { onSubmit: signUpSchema },
+		onSubmit: async ({ value }) => {
+			setServerError(null);
+			const { error: signUpError } = await authClient.signUp.email({
+				email: value.email,
+				password: value.password,
+				name: value.name,
+			});
+			if (signUpError) {
+				setServerError(signUpError.message ?? "Sign up failed");
+				return;
+			}
+			// First user → land on onboarding to create the company org.
+			await navigate({ to: "/onboarding" });
+		},
 	});
 
 	return (
@@ -69,60 +58,75 @@ function SignUpPage() {
 						Start managing tours with guides-tours
 					</CardDescription>
 				</CardHeader>
-				<form onSubmit={onSubmit}>
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						void form.handleSubmit();
+					}}
+				>
 					<CardContent className="space-y-4">
-						<div className="space-y-2">
-							<Label htmlFor="name">Name</Label>
-							<Input
-								id="name"
-								type="text"
-								autoComplete="name"
-								{...register("name")}
-							/>
-							{errors.name ? (
-								<p className="text-destructive text-sm">
-									{errors.name.message}
-								</p>
-							) : null}
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="email">Email</Label>
-							<Input
-								id="email"
-								type="email"
-								autoComplete="email"
-								{...register("email")}
-							/>
-							{errors.email ? (
-								<p className="text-destructive text-sm">
-									{errors.email.message}
-								</p>
-							) : null}
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="password">Password</Label>
-							<Input
-								id="password"
-								type="password"
-								autoComplete="new-password"
-								{...register("password")}
-							/>
-							{errors.password ? (
-								<p className="text-destructive text-sm">
-									{errors.password.message}
-								</p>
-							) : null}
-						</div>
-						{error ? (
+						<form.Field name="name">
+							{(field) => (
+								<FormField
+									field={field}
+									label="Name"
+									inputProps={{
+										type: "text",
+										autoComplete: "name",
+									}}
+								/>
+							)}
+						</form.Field>
+
+						<form.Field name="email">
+							{(field) => (
+								<FormField
+									field={field}
+									label="Email"
+									inputProps={{
+										type: "email",
+										autoComplete: "email",
+									}}
+								/>
+							)}
+						</form.Field>
+
+						<form.Field name="password">
+							{(field) => (
+								<FormField
+									field={field}
+									label="Password"
+									inputProps={{
+										type: "password",
+										autoComplete: "new-password",
+									}}
+								/>
+							)}
+						</form.Field>
+
+						{serverError ? (
 							<p className="text-destructive text-sm" role="alert">
-								{error}
+								{serverError}
 							</p>
 						) : null}
 					</CardContent>
 					<CardFooter className="flex flex-col gap-3">
-						<Button type="submit" disabled={submitting} className="w-full">
-							{submitting ? "Creating account..." : "Create account"}
-						</Button>
+						<form.Subscribe
+							selector={(state) =>
+								[state.canSubmit, state.isSubmitting] as const
+							}
+						>
+							{([canSubmit, isSubmitting]) => (
+								<Button
+									type="submit"
+									disabled={!canSubmit || isSubmitting}
+									className="w-full"
+								>
+									{isSubmitting ? "Creating account..." : "Create account"}
+								</Button>
+							)}
+						</form.Subscribe>
 						<p className="text-muted-foreground text-sm">
 							Already have an account?{" "}
 							<Link to="/sign-in" className="text-foreground underline">

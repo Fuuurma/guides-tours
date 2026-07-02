@@ -1,7 +1,6 @@
-import { zodResolver } from "@hookform/resolvers/zod";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +11,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { FormField } from "@/components/forms/form-field";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/sign-in")({
@@ -29,35 +27,28 @@ type SignInForm = z.infer<typeof signInSchema>;
 
 function SignInPage() {
 	const navigate = useNavigate();
-	const [error, setError] = useState<string | null>(null);
-	const [submitting, setSubmitting] = useState(false);
+	const [serverError, setServerError] = useState<string | null>(null);
 
-	const {
-		register,
-		handleSubmit,
-		formState: { errors },
-	} = useForm<SignInForm>({
-		resolver: zodResolver(signInSchema),
-	});
-
-	const onSubmit = handleSubmit(async (values) => {
-		setError(null);
-		setSubmitting(true);
-		const { error: signInError } = await authClient.signIn.email({
-			email: values.email,
-			password: values.password,
-		});
-		setSubmitting(false);
-		if (signInError) {
-			setError(signInError.message ?? "Sign in failed");
-			return;
-		}
-		// After sign-in, peek at whether the user has any org. If not,
-		// route them through onboarding. Otherwise straight to dashboard.
-		const { data: orgs } = await authClient.organization.list();
-		await navigate({
-			to: orgs && orgs.length > 0 ? "/dashboard" : "/onboarding",
-		});
+	const form = useForm({
+		defaultValues: { email: "", password: "" } satisfies SignInForm,
+		validators: { onSubmit: signInSchema },
+		onSubmit: async ({ value }) => {
+			setServerError(null);
+			const { error: signInError } = await authClient.signIn.email({
+				email: value.email,
+				password: value.password,
+			});
+			if (signInError) {
+				setServerError(signInError.message ?? "Sign in failed");
+				return;
+			}
+			// After sign-in, peek at whether the user has any org. If not,
+			// route them through onboarding. Otherwise straight to dashboard.
+			const { data: orgs } = await authClient.organization.list();
+			await navigate({
+				to: orgs && orgs.length > 0 ? "/dashboard" : "/onboarding",
+			});
+		},
 	});
 
 	return (
@@ -67,46 +58,62 @@ function SignInPage() {
 					<CardTitle>Sign in</CardTitle>
 					<CardDescription>Welcome back to guides-tours</CardDescription>
 				</CardHeader>
-				<form onSubmit={onSubmit}>
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						void form.handleSubmit();
+					}}
+				>
 					<CardContent className="space-y-4">
-						<div className="space-y-2">
-							<Label htmlFor="email">Email</Label>
-							<Input
-								id="email"
-								type="email"
-								autoComplete="email"
-								{...register("email")}
-							/>
-							{errors.email ? (
-								<p className="text-destructive text-sm">
-									{errors.email.message}
-								</p>
-							) : null}
-						</div>
-						<div className="space-y-2">
-							<Label htmlFor="password">Password</Label>
-							<Input
-								id="password"
-								type="password"
-								autoComplete="current-password"
-								{...register("password")}
-							/>
-							{errors.password ? (
-								<p className="text-destructive text-sm">
-									{errors.password.message}
-								</p>
-							) : null}
-						</div>
-						{error ? (
+						<form.Field name="email">
+							{(field) => (
+								<FormField
+									field={field}
+									label="Email"
+									inputProps={{
+										type: "email",
+										autoComplete: "email",
+									}}
+								/>
+							)}
+						</form.Field>
+
+						<form.Field name="password">
+							{(field) => (
+								<FormField
+									field={field}
+									label="Password"
+									inputProps={{
+										type: "password",
+										autoComplete: "current-password",
+									}}
+								/>
+							)}
+						</form.Field>
+
+						{serverError ? (
 							<p className="text-destructive text-sm" role="alert">
-								{error}
+								{serverError}
 							</p>
 						) : null}
 					</CardContent>
 					<CardFooter className="flex flex-col gap-3">
-						<Button type="submit" disabled={submitting} className="w-full">
-							{submitting ? "Signing in..." : "Sign in"}
-						</Button>
+						<form.Subscribe
+							selector={(state) =>
+								[state.canSubmit, state.isSubmitting] as const
+							}
+						>
+							{([canSubmit, isSubmitting]) => (
+								<Button
+									type="submit"
+									disabled={!canSubmit || isSubmitting}
+									className="w-full"
+								>
+									{isSubmitting ? "Signing in..." : "Sign in"}
+								</Button>
+							)}
+						</form.Subscribe>
 						<p className="text-muted-foreground text-sm">
 							No account yet?{" "}
 							<Link to="/sign-up" className="text-foreground underline">
