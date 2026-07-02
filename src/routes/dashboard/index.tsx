@@ -157,9 +157,14 @@ function DashboardIndex() {
 				</CardHeader>
 				<CardContent>
 					{upcomingAssignments.length === 0 ? (
-						<p className="text-muted-foreground text-sm">
-							No upcoming assignments.
-						</p>
+						<div className="space-y-2">
+							<p className="text-muted-foreground text-sm">
+								No upcoming assignments.
+							</p>
+							<Button asChild variant="outline" size="sm">
+								<Link to="/dashboard/assignments/new">+ Create assignment</Link>
+							</Button>
+						</div>
 					) : (
 						<ul className="space-y-2">
 							{upcomingAssignments.map((a) => {
@@ -204,16 +209,23 @@ function DashboardIndex() {
 				</CardContent>
 			</Card>
 
-			{todaysBookings.length > 0 && (
-				<Card>
-					<CardHeader>
-						<CardTitle>Today's bookings</CardTitle>
-						<CardDescription>
-							{todaysBookings.length} booking
-							{todaysBookings.length === 1 ? "" : "s"} scheduled for today
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
+			<Card>
+				<CardHeader>
+					<CardTitle>Today's bookings</CardTitle>
+					<CardDescription>
+						{todaysBookings.length === 0
+							? "No bookings scheduled for today"
+							: `${todaysBookings.length} booking${todaysBookings.length === 1 ? "" : "s"} scheduled for today`}
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					{todaysBookings.length === 0 ? (
+						<div className="space-y-2">
+							<p className="text-muted-foreground text-sm">
+								Share your public booking link to start receiving bookings.
+							</p>
+						</div>
+					) : (
 						<ul className="space-y-2">
 							{todaysBookings.slice(0, 5).map((b) => {
 								const tourName = tourNameById.get(String(b.tourId));
@@ -258,9 +270,9 @@ function DashboardIndex() {
 								</li>
 							)}
 						</ul>
-					</CardContent>
-				</Card>
-			)}
+					)}
+				</CardContent>
+			</Card>
 		</div>
 	);
 }
