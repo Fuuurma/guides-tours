@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { MetricCard } from "@/components/metric-card";
@@ -286,13 +287,19 @@ function StatCard({
 	value: number | string;
 	link: string;
 }) {
+	// `whileHover` lifts the card 2px and dims the shadow so the
+	// existing hover:bg-muted background still reads as the primary
+	// affordance. `transition.tween` keeps the lift short and
+	// snappy — no spring overshoot.
 	return (
-		<Link
-			to={link}
-			className="block transition-colors hover:bg-muted rounded-md"
-		>
-			<MetricCard label={label} value={value} />
-		</Link>
+		<motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }}>
+			<Link
+				to={link}
+				className="block transition-colors hover:bg-muted rounded-md"
+			>
+				<MetricCard label={label} value={value} />
+			</Link>
+		</motion.div>
 	);
 }
 
