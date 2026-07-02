@@ -62,6 +62,16 @@ http.route({
 			}
 		}
 
+		// Content-Type must be JSON — reject anything else so a
+		// multipart upload or text blob can't slip past the JSON
+		// parser below.
+		const ct = request.headers.get("content-type") ?? "";
+		if (!ct.toLowerCase().startsWith("application/json")) {
+			return new Response("content-type must be application/json", {
+				status: 415,
+			});
+		}
+
 		const url = new URL(request.url);
 		const segments = url.pathname.split("/").filter(Boolean);
 		const slugIdx = segments.indexOf("book");
@@ -69,6 +79,15 @@ http.route({
 			return new Response("missing slug", { status: 400 });
 		}
 		const slug = segments[slugIdx + 1];
+
+		// Cap the request body at 8 KB — the booking payload is tiny
+		// (~6 fields). Anything larger is either an attacker probing
+		// for memory exhaustion or a buggy client.
+		const contentLength = Number(request.headers.get("content-length") ?? 0);
+		const MAX_BODY_BYTES = 8 * 1024;
+		if (contentLength > MAX_BODY_BYTES) {
+			return new Response("payload too large", { status: 413 });
+		}
 
 		let payload: unknown;
 		try {
