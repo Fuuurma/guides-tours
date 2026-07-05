@@ -9,7 +9,21 @@ const http = httpRouter();
 
 // Better Auth's catch-all handler for /api/auth/* (sign-up, sign-in,
 // get-session, OAuth callbacks, etc).
-authComponent.registerRoutes(http, createAuth);
+//
+// Using `registerRoutesLazy` (canonical pattern from
+// tech-stack/AUTH-OAUTH.md §4) so we can pass runtime config:
+// - basePath matches the same-origin proxy at /api/auth/*
+// - trustedOrigins includes both the app origin (SITE_URL) and the
+//   Convex site (used by `crossDomain` once Google OAuth is added)
+// - cors enabled so the dev cross-origin Vite proxy can hit it
+authComponent.registerRoutesLazy(http, createAuth, {
+  basePath: "/api/auth",
+  cors: true,
+  trustedOrigins: [
+    process.env.SITE_URL ?? "http://localhost:3000",
+    process.env.CONVEX_SITE_URL,
+  ].filter((origin): origin is string => typeof origin === "string"),
+});
 
 // Mount OTA webhook routes. Each provider's handler is registered
 // at /api/ota/webhooks/{provider}. Add new providers in
