@@ -25,6 +25,7 @@ import type * as lib_authz from "../lib/authz.js";
 import type * as lib_awsSigV4 from "../lib/awsSigV4.js";
 import type * as lib_crypto from "../lib/crypto.js";
 import type * as lib_rate_limit from "../lib/rate_limit.js";
+import type * as lib_sendEmail from "../lib/sendEmail.js";
 import type * as lib_time from "../lib/time.js";
 import type * as lib_validation from "../lib/validation.js";
 import type * as notificationSettings from "../notificationSettings.js";
@@ -97,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   "lib/awsSigV4": typeof lib_awsSigV4;
   "lib/crypto": typeof lib_crypto;
   "lib/rate_limit": typeof lib_rate_limit;
+  "lib/sendEmail": typeof lib_sendEmail;
   "lib/time": typeof lib_time;
   "lib/validation": typeof lib_validation;
   notificationSettings: typeof notificationSettings;

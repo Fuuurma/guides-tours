@@ -1,6 +1,6 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
-import { convex } from "@convex-dev/better-auth/plugins";
+import { convex, crossDomain } from "@convex-dev/better-auth/plugins";
 import { organization } from "better-auth/plugins";
 import { components } from "./_generated/api";
 import { query } from "./_generated/server";
@@ -72,6 +72,7 @@ const plugins = [
 		},
 	}),
 	convex({ authConfig }),
+	crossDomain({ siteUrl: getSiteUrl() }),
 ];
 
 // Site URL resolution is lazy and falls back to localhost so module-load
@@ -82,6 +83,20 @@ const plugins = [
 // must set it on the Convex dashboard for production.
 function getSiteUrl(): string {
 	return process.env.SITE_URL ?? "http://localhost:3000";
+}
+
+function googleSocialProviders():
+	| Record<string, { clientId: string; clientSecret: string }>
+	| Record<string, never> {
+	const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+	const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+	if (!clientId || !clientSecret) return {};
+	return {
+		google: {
+			clientId,
+			clientSecret,
+		},
+	};
 }
 
 // Returns BetterAuthOptions for components that need the raw config
@@ -97,6 +112,7 @@ export const createAuthOptions = (
 		enabled: true,
 		requireEmailVerification: false,
 	},
+	socialProviders: googleSocialProviders(),
 	plugins: [...plugins],
 });
 
@@ -111,6 +127,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 			enabled: true,
 			requireEmailVerification: false,
 		},
+		socialProviders: googleSocialProviders(),
 		user: {
 			additionalFields: {
 				phone: { type: "string", required: false, defaultValue: "" },
@@ -136,5 +153,15 @@ export const getCurrentUser = query({
 	args: {},
 	handler: async (ctx) => {
 		return await authComponent.getAuthUser(ctx);
+	},
+});
+
+export const isGoogleEnabled = query({
+	args: {},
+	handler: async () => {
+		return Boolean(
+			process.env.GOOGLE_CLIENT_ID?.trim() &&
+				process.env.GOOGLE_CLIENT_SECRET?.trim(),
+		);
 	},
 });

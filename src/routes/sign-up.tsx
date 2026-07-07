@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { FormField } from "@/components/forms/form-field";
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -127,6 +128,7 @@ function SignUpPage() {
 								</Button>
 							)}
 						</form.Subscribe>
+						<GoogleSignInButton callbackURL="/onboarding" />
 						<p className="text-muted-foreground text-sm">
 							Already have an account?{" "}
 							<Link to="/sign-in" className="text-foreground underline">
