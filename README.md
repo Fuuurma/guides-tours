@@ -40,7 +40,7 @@ npx convex dev
 
 # 4. Set secrets on Convex dashboard
 npx convex env set BETTER_AUTH_SECRET=$(openssl rand -base64 32)
-npx convex env set SITE_URL=http://localhost:3000
+npx convex env set SITE_URL=http://127.0.0.1:3020
 
 # 5. Start the app
 pnpm dev                    # frontend on :3000 (separate terminal for backend)

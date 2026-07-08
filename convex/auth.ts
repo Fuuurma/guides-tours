@@ -82,7 +82,7 @@ const plugins = [
 // time, an unset SITE_URL will cause Better Auth to misbehave — callers
 // must set it on the Convex dashboard for production.
 function getSiteUrl(): string {
-	return process.env.SITE_URL ?? "http://localhost:3000";
+	return process.env.SITE_URL ?? "http://127.0.0.1:3020";
 }
 
 function googleSocialProviders():

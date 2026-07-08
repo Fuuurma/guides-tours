@@ -20,7 +20,7 @@ authComponent.registerRoutesLazy(http, createAuth, {
   basePath: "/api/auth",
   cors: true,
   trustedOrigins: [
-    process.env.SITE_URL ?? "http://localhost:3000",
+    process.env.SITE_URL ?? "http://127.0.0.1:3020",
     process.env.CONVEX_SITE_URL,
   ].filter((origin): origin is string => typeof origin === "string"),
 });

@@ -25,7 +25,7 @@ export default defineConfig({
 		// Set a dummy value so importing the auth chain (transitively
 		// pulled in by convex/payments.ts → convex/lib/authz) works.
 		env: {
-			SITE_URL: "http://localhost:3000",
+			SITE_URL: "http://127.0.0.1:3020",
 		},
 		// jsdom is needed for any test that uses @testing-library/react.
 		// Component tests opt in via `// @vitest-environment jsdom` at

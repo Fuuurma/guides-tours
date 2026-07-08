@@ -1,7 +1,7 @@
 // Playwright smoke config for guides-tours.
 //
 // Runs a minimal end-to-end smoke against `pnpm dev` (already running
-// on localhost:3000) — sign-up → onboarding → dashboard. Acts as a
+// on 127.0.0.1:3020) — sign-up → onboarding → dashboard. Acts as a
 // deploy-gate so a broken frontend never reaches prod.
 //
 // To run locally:
@@ -21,7 +21,7 @@ export default defineConfig({
 	workers: 1,
 	reporter: process.env.CI ? "github" : "list",
 	use: {
-		baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+		baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3020",
 		trace: "retain-on-failure",
 		screenshot: "only-on-failure",
 	},
