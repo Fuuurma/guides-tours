@@ -89,7 +89,11 @@ function DashboardIndex() {
 				/>
 			)}
 			<header className="flex items-center justify-between">
-				<div>
+				<motion.div
+					initial={{ opacity: 0, y: 4 }}
+					animate={{ opacity: 1, y: 0 }}
+					transition={{ duration: 0.25, ease: "easeOut" }}
+				>
 					<h1 className="text-2xl font-semibold">Today</h1>
 					<p className="text-muted-foreground text-sm">
 						{new Date().toLocaleDateString(undefined, {
@@ -100,7 +104,7 @@ function DashboardIndex() {
 						{" · "}
 						{org?.name ?? "your workspace"}
 					</p>
-				</div>
+				</motion.div>
 				<Button asChild>
 					<Link to="/dashboard/bookings/new">+ New booking</Link>
 				</Button>
