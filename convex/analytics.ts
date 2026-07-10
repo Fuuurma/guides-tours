@@ -17,9 +17,16 @@
 // the client.
 
 import { v } from "convex/values";
+import type { GenericQueryCtx } from "convex/server";
+import type { DataModel, Doc } from "./_generated/dataModel";
 import { internalQuery, query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { requireMembership } from "./lib/authz";
+
+// Type aliases for the document shapes we work with. These come
+// straight from the generated DataModel — no `any` needed.
+type QCtx = GenericQueryCtx<DataModel>;
+type Booking = Doc<"bookings">;
 
 // ---- helpers ----
 
@@ -46,7 +53,7 @@ function round1(n: number): number {
 // so the logic stays in one place.
 
 async function buildOverview(
-	ctx: any,
+	ctx: QCtx,
 	orgId: string,
 	startDate: string,
 	endDate: string,
@@ -61,11 +68,11 @@ async function buildOverview(
 	const [tours, allAssignments, pendingVacations] = await Promise.all([
 		ctx.db
 			.query("tours")
-			.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("assignments")
-			.withIndex("by_org_date", (q: any) =>
+			.withIndex("by_org_date", (q) =>
 				q
 					.eq("organizationId", orgId)
 					.gte("date", startDate)
@@ -74,19 +81,19 @@ async function buildOverview(
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("vacationRequests")
-			.withIndex("by_org_status", (q: any) =>
+			.withIndex("by_org_status", (q) =>
 				q.eq("organizationId", orgId).eq("status", "pending"),
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
-	const activeTours = tours.filter((t: any) => !t.deletedAt);
+	const activeTours = tours.filter((t) => !t.deletedAt);
 
-	const inRange = allAssignments.filter((a: any) => !a.deletedAt);
+	const inRange = allAssignments.filter((a) => !a.deletedAt);
 	const completed = inRange.filter(
-		(a: any) => a.status === "completed",
+		(a) => a.status === "completed",
 	).length;
 	const cancelled = inRange.filter(
-		(a: any) => a.status === "cancelled",
+		(a) => a.status === "cancelled",
 	).length;
 	const total = inRange.length;
 	const completionRate = total > 0 ? round1((completed / total) * 100) : 0;
@@ -99,7 +106,7 @@ async function buildOverview(
 		.toISOString()
 		.slice(0, 10);
 	const upcoming = allAssignments.filter(
-		(a: any) =>
+		(a) =>
 			a.date >= today &&
 			a.date <= weekEnd &&
 			a.status === "scheduled" &&
@@ -134,7 +141,7 @@ async function buildOverview(
 }
 
 async function buildTourStats(
-	ctx: any,
+	ctx: QCtx,
 	orgId: string,
 	startDate: string,
 	endDate: string,
@@ -144,11 +151,11 @@ async function buildTourStats(
 	const [tours, assignments] = await Promise.all([
 		ctx.db
 			.query("tours")
-			.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("assignments")
-			.withIndex("by_org_date", (q: any) =>
+			.withIndex("by_org_date", (q) =>
 				q
 					.eq("organizationId", orgId)
 					.gte("date", startDate)
@@ -157,32 +164,32 @@ async function buildTourStats(
 			.take(MAX_ANALYTICS_SCAN),
 	]);
 
-	const inRange = assignments.filter((a: any) => !a.deletedAt);
+	const inRange = assignments.filter((a) => !a.deletedAt);
 
 	return tours
-		.filter((t: any) => !t.deletedAt)
-		.map((tour: any) => {
+		.filter((t) => !t.deletedAt)
+		.map((tour) => {
 			const tourAssignments = inRange.filter(
-				(a: any) => a.tourId === tour._id,
+				(a) => a.tourId === tour._id,
 			);
 			return {
 				tourId: tour._id,
 				tourName: tour.name,
 				totalAssignments: tourAssignments.length,
 				completed: tourAssignments.filter(
-					(a: any) => a.status === "completed",
+					(a) => a.status === "completed",
 				).length,
 				cancelled: tourAssignments.filter(
-					(a: any) => a.status === "cancelled",
+					(a) => a.status === "cancelled",
 				).length,
 			};
 		})
-		.sort((a: any, b: any) => b.totalAssignments - a.totalAssignments)
+		.sort((a, b) => b.totalAssignments - a.totalAssignments)
 		.slice(0, 10);
 }
 
 async function buildGuideStats(
-	ctx: any,
+	ctx: QCtx,
 	orgId: string,
 	startDate: string,
 	endDate: string,
@@ -191,7 +198,7 @@ async function buildGuideStats(
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const assignments = await ctx.db
 		.query("assignments")
-		.withIndex("by_org_date", (q: any) =>
+		.withIndex("by_org_date", (q) =>
 			q
 				.eq("organizationId", orgId)
 				.gte("date", startDate)
@@ -199,7 +206,7 @@ async function buildGuideStats(
 		)
 		.take(MAX_ANALYTICS_SCAN);
 
-	const inRange = assignments.filter((a: any) => !a.deletedAt);
+	const inRange = assignments.filter((a) => !a.deletedAt);
 
 	const guideMap = new Map<
 		string,
@@ -222,12 +229,12 @@ async function buildGuideStats(
 			completed: stats.completed,
 			cancelled: stats.cancelled,
 		}))
-		.sort((a: any, b: any) => b.totalAssignments - a.totalAssignments)
+		.sort((a, b) => b.totalAssignments - a.totalAssignments)
 		.slice(0, 10);
 }
 
 async function buildDailyStats(
-	ctx: any,
+	ctx: QCtx,
 	orgId: string,
 	startDate: string,
 	endDate: string,
@@ -236,7 +243,7 @@ async function buildDailyStats(
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const assignments = await ctx.db
 		.query("assignments")
-		.withIndex("by_org_date", (q: any) =>
+		.withIndex("by_org_date", (q) =>
 			q
 				.eq("organizationId", orgId)
 				.gte("date", startDate)
@@ -244,7 +251,7 @@ async function buildDailyStats(
 		)
 		.take(MAX_ANALYTICS_SCAN);
 
-	const inRange = assignments.filter((a: any) => !a.deletedAt);
+	const inRange = assignments.filter((a) => !a.deletedAt);
 
 	const dayMap = new Map<
 		string,
@@ -271,7 +278,7 @@ async function buildDailyStats(
 }
 
 async function buildRevenueSummary(
-	ctx: any,
+	ctx: QCtx,
 	orgId: string,
 	startDate: string,
 	endDate: string,
@@ -282,7 +289,7 @@ async function buildRevenueSummary(
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const allBookingsInRange = await ctx.db
 		.query("bookings")
-		.withIndex("by_org_date", (q: any) =>
+		.withIndex("by_org_date", (q) =>
 			q
 				.eq("organizationId", orgId)
 				.gte("date", startDate)
@@ -291,19 +298,19 @@ async function buildRevenueSummary(
 		.take(MAX_ANALYTICS_SCAN);
 
 	const inRange = allBookingsInRange.filter(
-		(b: any) => b.status !== "cancelled",
+		(b) => b.status !== "cancelled",
 	);
 
 	const totalBookings = inRange.length;
-	const totalGuests = inRange.reduce((sum: number, b: any) => sum + b.guests, 0);
+	const totalGuests = inRange.reduce((sum: number, b: Booking) => sum + b.guests, 0);
 	const totalRevenue = inRange.reduce(
-		(sum: number, b: any) => sum + Number(b.totalAmountCents),
+		(sum: number, b: Booking) => sum + Number(b.totalAmountCents),
 		0,
 	);
 	// `cancelled` requires a second pass — the inRange filter above
 	// already dropped them.
 	const cancelled = allBookingsInRange.filter(
-		(b: any) => b.status === "cancelled",
+		(b) => b.status === "cancelled",
 	).length;
 	const cancellationRate =
 		totalBookings + cancelled > 0
@@ -324,7 +331,7 @@ async function buildRevenueSummary(
 }
 
 async function buildTopTours(
-	ctx: any,
+	ctx: QCtx,
 	orgId: string,
 	startDate: string,
 	endDate: string,
@@ -335,11 +342,11 @@ async function buildTopTours(
 	const [tours, bookings] = await Promise.all([
 		ctx.db
 			.query("tours")
-			.withIndex("by_org", (q: any) => q.eq("organizationId", orgId))
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("bookings")
-			.withIndex("by_org_date", (q: any) =>
+			.withIndex("by_org_date", (q) =>
 				q
 					.eq("organizationId", orgId)
 					.gte("date", startDate)
@@ -347,9 +354,9 @@ async function buildTopTours(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
-	const tourMap = new Map(tours.map((t: any) => [String(t._id), t.name]));
+	const tourMap = new Map(tours.map((t) => [String(t._id), t.name]));
 
-	const inRange = bookings.filter((b: any) => b.status !== "cancelled");
+	const inRange = bookings.filter((b) => b.status !== "cancelled");
 
 	const tourRevenue = new Map<
 		string,
@@ -372,12 +379,12 @@ async function buildTopTours(
 			totalGuests: stats.guests,
 			totalRevenueCents: stats.revenue,
 		}))
-		.sort((a: any, b: any) => b.totalRevenueCents - a.totalRevenueCents)
+		.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents)
 		.slice(0, limit);
 }
 
 async function buildBookingSources(
-	ctx: any,
+	ctx: QCtx,
 	orgId: string,
 	startDate: string,
 	endDate: string,
@@ -386,7 +393,7 @@ async function buildBookingSources(
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const bookings = await ctx.db
 		.query("bookings")
-		.withIndex("by_org_date", (q: any) =>
+		.withIndex("by_org_date", (q) =>
 			q
 				.eq("organizationId", orgId)
 				.gte("date", startDate)
@@ -411,7 +418,7 @@ async function buildBookingSources(
 			totalBookings: stats.bookings,
 			totalGuests: stats.guests,
 		}))
-		.sort((a: any, b: any) => b.totalBookings - a.totalBookings);
+		.sort((a, b) => b.totalBookings - a.totalBookings);
 }
 
 // ---- public queries (auth via requireMembership) ----

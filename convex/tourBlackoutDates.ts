@@ -92,6 +92,7 @@ export async function isBlackoutHelper(
 	const MAX_CANDIDATES = 100;
 	const candidates = await ctx.db
 		.query("tourBlackoutDates")
+		// biome-ignore lint/suspicious/noExplicitAny: test helper accepts loose ctx
 		.withIndex("by_tour_start", (q: any) =>
 			q.eq("tourId", tourId).lte("startDate", date),
 		)
