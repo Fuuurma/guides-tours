@@ -8,17 +8,10 @@ import { defineConfig } from "vite";
 const config = defineConfig({
 	resolve: { tsconfigPaths: true },
 	optimizeDeps: {
-		include: [
-			"react-hook-form",
-			"@hookform/resolvers/zod",
-			"zod",
-			"@convex-dev/react-query",
-			"sonner",
-			"next-themes",
-		],
+		include: ["zod", "@convex-dev/react-query", "sonner", "next-themes"],
 	},
 	ssr: {
-		noExternal: ["@convex-dev/better-auth", "react-hook-form"],
+		noExternal: ["@convex-dev/better-auth"],
 	},
 	plugins: [
 		devtools(),

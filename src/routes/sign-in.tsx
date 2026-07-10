@@ -1,5 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { useState } from "react";
 import { z } from "zod";
 import { FormField } from "@/components/forms/form-field";
@@ -54,77 +55,83 @@ function SignInPage() {
 
 	return (
 		<main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-			<Card>
-				<CardHeader>
-					<CardTitle>Sign in</CardTitle>
-					<CardDescription>Welcome back to guides-tours</CardDescription>
-				</CardHeader>
-				<form
-					onSubmit={(e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						void form.handleSubmit();
-					}}
-				>
-					<CardContent className="space-y-4">
-						<form.Field name="email">
-							{(field) => (
-								<FormField
-									field={field}
-									label="Email"
-									inputProps={{
-										type: "email",
-										autoComplete: "email",
-									}}
-								/>
-							)}
-						</form.Field>
+			<motion.div
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.3, ease: "easeOut" }}
+			>
+				<Card>
+					<CardHeader>
+						<CardTitle>Sign in</CardTitle>
+						<CardDescription>Welcome back to guides-tours</CardDescription>
+					</CardHeader>
+					<form
+						onSubmit={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							void form.handleSubmit();
+						}}
+					>
+						<CardContent className="space-y-4">
+							<form.Field name="email">
+								{(field) => (
+									<FormField
+										field={field}
+										label="Email"
+										inputProps={{
+											type: "email",
+											autoComplete: "email",
+										}}
+									/>
+								)}
+							</form.Field>
 
-						<form.Field name="password">
-							{(field) => (
-								<FormField
-									field={field}
-									label="Password"
-									inputProps={{
-										type: "password",
-										autoComplete: "current-password",
-									}}
-								/>
-							)}
-						</form.Field>
+							<form.Field name="password">
+								{(field) => (
+									<FormField
+										field={field}
+										label="Password"
+										inputProps={{
+											type: "password",
+											autoComplete: "current-password",
+										}}
+									/>
+								)}
+							</form.Field>
 
-						{serverError ? (
-							<p className="text-destructive text-sm" role="alert">
-								{serverError}
+							{serverError ? (
+								<p className="text-destructive text-sm" role="alert">
+									{serverError}
+								</p>
+							) : null}
+						</CardContent>
+						<CardFooter className="flex flex-col gap-3">
+							<form.Subscribe
+								selector={(state) =>
+									[state.canSubmit, state.isSubmitting] as const
+								}
+							>
+								{([canSubmit, isSubmitting]) => (
+									<Button
+										type="submit"
+										disabled={!canSubmit || isSubmitting}
+										className="w-full"
+									>
+										{isSubmitting ? "Signing in..." : "Sign in"}
+									</Button>
+								)}
+							</form.Subscribe>
+							<GoogleSignInButton callbackURL="/dashboard" />
+							<p className="text-muted-foreground text-sm">
+								No account yet?{" "}
+								<Link to="/sign-up" className="text-foreground underline">
+									Create one
+								</Link>
 							</p>
-						) : null}
-					</CardContent>
-					<CardFooter className="flex flex-col gap-3">
-						<form.Subscribe
-							selector={(state) =>
-								[state.canSubmit, state.isSubmitting] as const
-							}
-						>
-							{([canSubmit, isSubmitting]) => (
-								<Button
-									type="submit"
-									disabled={!canSubmit || isSubmitting}
-									className="w-full"
-								>
-									{isSubmitting ? "Signing in..." : "Sign in"}
-								</Button>
-							)}
-						</form.Subscribe>
-						<GoogleSignInButton callbackURL="/dashboard" />
-						<p className="text-muted-foreground text-sm">
-							No account yet?{" "}
-							<Link to="/sign-up" className="text-foreground underline">
-								Create one
-							</Link>
-						</p>
-					</CardFooter>
-				</form>
-			</Card>
+						</CardFooter>
+					</form>
+				</Card>
+			</motion.div>
 		</main>
 	);
 }

@@ -1,5 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { useState } from "react";
 import { z } from "zod";
 import { FormField } from "@/components/forms/form-field";
@@ -52,92 +53,98 @@ function SignUpPage() {
 
 	return (
 		<main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-			<Card>
-				<CardHeader>
-					<CardTitle>Create your account</CardTitle>
-					<CardDescription>
-						Start managing tours with guides-tours
-					</CardDescription>
-				</CardHeader>
-				<form
-					onSubmit={(e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						void form.handleSubmit();
-					}}
-				>
-					<CardContent className="space-y-4">
-						<form.Field name="name">
-							{(field) => (
-								<FormField
-									field={field}
-									label="Name"
-									inputProps={{
-										type: "text",
-										autoComplete: "name",
-									}}
-								/>
-							)}
-						</form.Field>
+			<motion.div
+				initial={{ opacity: 0, y: 8 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.3, ease: "easeOut" }}
+			>
+				<Card>
+					<CardHeader>
+						<CardTitle>Create your account</CardTitle>
+						<CardDescription>
+							Start managing tours with guides-tours
+						</CardDescription>
+					</CardHeader>
+					<form
+						onSubmit={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							void form.handleSubmit();
+						}}
+					>
+						<CardContent className="space-y-4">
+							<form.Field name="name">
+								{(field) => (
+									<FormField
+										field={field}
+										label="Name"
+										inputProps={{
+											type: "text",
+											autoComplete: "name",
+										}}
+									/>
+								)}
+							</form.Field>
 
-						<form.Field name="email">
-							{(field) => (
-								<FormField
-									field={field}
-									label="Email"
-									inputProps={{
-										type: "email",
-										autoComplete: "email",
-									}}
-								/>
-							)}
-						</form.Field>
+							<form.Field name="email">
+								{(field) => (
+									<FormField
+										field={field}
+										label="Email"
+										inputProps={{
+											type: "email",
+											autoComplete: "email",
+										}}
+									/>
+								)}
+							</form.Field>
 
-						<form.Field name="password">
-							{(field) => (
-								<FormField
-									field={field}
-									label="Password"
-									inputProps={{
-										type: "password",
-										autoComplete: "new-password",
-									}}
-								/>
-							)}
-						</form.Field>
+							<form.Field name="password">
+								{(field) => (
+									<FormField
+										field={field}
+										label="Password"
+										inputProps={{
+											type: "password",
+											autoComplete: "new-password",
+										}}
+									/>
+								)}
+							</form.Field>
 
-						{serverError ? (
-							<p className="text-destructive text-sm" role="alert">
-								{serverError}
+							{serverError ? (
+								<p className="text-destructive text-sm" role="alert">
+									{serverError}
+								</p>
+							) : null}
+						</CardContent>
+						<CardFooter className="flex flex-col gap-3">
+							<form.Subscribe
+								selector={(state) =>
+									[state.canSubmit, state.isSubmitting] as const
+								}
+							>
+								{([canSubmit, isSubmitting]) => (
+									<Button
+										type="submit"
+										disabled={!canSubmit || isSubmitting}
+										className="w-full"
+									>
+										{isSubmitting ? "Creating account..." : "Create account"}
+									</Button>
+								)}
+							</form.Subscribe>
+							<GoogleSignInButton callbackURL="/onboarding" />
+							<p className="text-muted-foreground text-sm">
+								Already have an account?{" "}
+								<Link to="/sign-in" className="text-foreground underline">
+									Sign in
+								</Link>
 							</p>
-						) : null}
-					</CardContent>
-					<CardFooter className="flex flex-col gap-3">
-						<form.Subscribe
-							selector={(state) =>
-								[state.canSubmit, state.isSubmitting] as const
-							}
-						>
-							{([canSubmit, isSubmitting]) => (
-								<Button
-									type="submit"
-									disabled={!canSubmit || isSubmitting}
-									className="w-full"
-								>
-									{isSubmitting ? "Creating account..." : "Create account"}
-								</Button>
-							)}
-						</form.Subscribe>
-						<GoogleSignInButton callbackURL="/onboarding" />
-						<p className="text-muted-foreground text-sm">
-							Already have an account?{" "}
-							<Link to="/sign-in" className="text-foreground underline">
-								Sign in
-							</Link>
-						</p>
-					</CardFooter>
-				</form>
-			</Card>
+						</CardFooter>
+					</form>
+				</Card>
+			</motion.div>
 		</main>
 	);
 }
