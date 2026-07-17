@@ -6,6 +6,16 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 const config = defineConfig({
+	server: {
+		host: "127.0.0.1",
+		port: 3020,
+		strictPort: true,
+	},
+	preview: {
+		host: "127.0.0.1",
+		port: 4020,
+		strictPort: true,
+	},
 	resolve: { tsconfigPaths: true },
 	optimizeDeps: {
 		include: ["zod", "@convex-dev/react-query", "sonner", "next-themes"],

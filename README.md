@@ -48,7 +48,7 @@ pnpm dev                    # frontend on :3000 (separate terminal for backend)
 
 ## Scripts
 
-- `pnpm dev` — Vite dev server (port 3000)
+- `pnpm dev` — Vite dev server (port 3020)
 - `pnpm build` — Production build (Cloudflare Workers target)
 - `pnpm deploy` — Build + `wrangler deploy`
 - `pnpm test` — Vitest run (579 tests)
