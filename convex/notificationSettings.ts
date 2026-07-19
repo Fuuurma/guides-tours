@@ -122,8 +122,13 @@ export const internalUpsert = internalMutation({
 			patch.twilioAuthToken = args.encryptedAuthToken;
 		if (args.twilioPhoneNumber !== undefined)
 			patch.twilioPhoneNumber = args.twilioPhoneNumber;
-		if (args.twilioMessagingServiceSid !== undefined)
-			patch.twilioMessagingServiceSid = args.twilioMessagingServiceSid;
+		if (args.twilioMessagingServiceSid !== undefined) {
+			// Allow clearing: empty string → unset the field.
+			patch.twilioMessagingServiceSid =
+				args.twilioMessagingServiceSid.trim() === ""
+					? undefined
+					: args.twilioMessagingServiceSid;
+		}
 		if (args.whatsappEnabled !== undefined)
 			patch.whatsappEnabled = args.whatsappEnabled;
 		if (args.whatsappBusinessAccountId !== undefined)

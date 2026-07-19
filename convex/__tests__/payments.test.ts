@@ -171,9 +171,15 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 		const row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(row?.status).toBe("succeeded");
 		expect(row?.processedAt).toBeGreaterThan(0);
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		// seedBooking: total 10000, deposit 0 → balance 10000; paid 5000
+		expect(String(booking?.balanceDueCents)).toBe("5000");
+		expect(String(booking?.depositAmountCents)).toBe("5000");
 	});
 
-	it("markSucceeded is idempotent (re-applying keeps succeeded)", async () => {
+	it("markSucceeded is idempotent and does not double-apply balance", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pay_d";
 		const bookingId = await t.run(async (ctx) =>
@@ -191,6 +197,10 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 		await t.mutation(internal.payments.markSucceeded, { paymentId });
 		const second = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(second?.processedAt).toBe(first?.processedAt);
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		expect(String(booking?.balanceDueCents)).toBe("5000");
 	});
 
 	it("markFailed captures the failure reason", async () => {
@@ -341,6 +351,51 @@ describe("convex/payments — getStripeSecrets (returns ciphertext)", () => {
 		expect(result?.stripeSecretKey).toBe("iv:ct:tag");
 		expect(result?.defaultCurrency).toBe("USD");
 		expect(result?.stripeIsSandbox).toBe(true);
+		expect(result?.stripeEnabled).toBe(true);
+	});
+});
+
+describe("convex/payments — intent lookup helpers", () => {
+	it("getPaymentRowByIntent returns org when intent exists", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pi_row";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 1000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_row_1",
+		});
+		const row = await t.query(internal.payments.getPaymentRowByIntent, {
+			stripePaymentIntentId: "pi_row_1",
+		});
+		expect(row?.organizationId).toBe(orgId);
+		expect(row?.status).toBe("pending");
+	});
+
+	it("recordFromAction + markSucceeded applies balance (webhook create path)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_wh_create";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				totalAmountCents: 10000n,
+				depositAmountCents: 0n,
+			}),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 10000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_wh_create_1",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		const booking = await t.run(async (ctx) => ctx.db.get(bookingId));
+		expect(String(booking?.balanceDueCents)).toBe("0");
+		expect(String(booking?.depositAmountCents)).toBe("10000");
 	});
 });
 

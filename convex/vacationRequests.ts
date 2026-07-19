@@ -300,6 +300,7 @@ export const approve = mutation({
 	args: {
 		requestId: v.id("vacationRequests"),
 		reason: v.optional(v.string()),
+		force: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
@@ -310,6 +311,7 @@ export const approve = mutation({
 				userId: member.userId,
 				requestId: args.requestId,
 				reason: args.reason,
+				force: args.force,
 			},
 		);
 	},
@@ -321,6 +323,7 @@ export const internalApprove = internalMutation({
 		userId: v.string(),
 		requestId: v.id("vacationRequests"),
 		reason: v.optional(v.string()),
+		force: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const vr = await ctx.db.get(args.requestId);
@@ -331,6 +334,35 @@ export const internalApprove = internalMutation({
 		if (vr.status !== "pending") {
 			throw new ConvexError(
 				`Only pending requests can be approved (current: ${vr.status})`,
+			);
+		}
+
+		// Block approve when the guide already has scheduled assignments
+		// in the vacation window — unless the operator explicitly forces.
+		const overlapping = await ctx.db
+			.query("assignments")
+			.withIndex("by_guide_date", (q) =>
+				q
+					.eq("guideId", vr.userId)
+					.gte("date", vr.startDate)
+					.lte("date", vr.endDate),
+			)
+			.take(500);
+		const conflicts = overlapping.filter(
+			(a) =>
+				a.organizationId === args.organizationId &&
+				a.status === "scheduled" &&
+				a.deletedAt === undefined,
+		);
+		if (conflicts.length > 0 && !args.force) {
+			const sample = conflicts
+				.slice(0, 3)
+				.map((a) => `${a.date} ${a.startTime}`)
+				.join(", ");
+			// Stable code prefix — FE shows "Approve anyway" when this
+			// appears; do not rename without updating the vacation detail page.
+			throw new ConvexError(
+				`VACATION_ASSIGNMENT_CONFLICT: Guide has ${conflicts.length} scheduled assignment(s) in this range (${sample}). Approve anyway to proceed.`,
 			);
 		}
 

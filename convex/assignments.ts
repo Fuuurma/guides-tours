@@ -26,6 +26,7 @@ import type { Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { authComponent, createAuth } from "./auth";
+import { parseBookingTime } from "./lib/time";
 
 // ----- Time helpers (string "HH:MM" ↔ minutes-since-midnight) -----
 
@@ -362,6 +363,7 @@ const createArgs = {
 	startTime: v.string(),
 	vehicleId: v.optional(v.id("vehicles")),
 	driverId: v.optional(v.id("drivers")),
+	scheduleId: v.optional(v.id("tourSchedules")),
 };
 
 export const create = mutation({
@@ -403,6 +405,7 @@ export const create = mutation({
 				startTime: args.startTime,
 				vehicleId: args.vehicleId,
 				driverId: args.driverId,
+				scheduleId: args.scheduleId,
 			},
 		);
 	},
@@ -421,11 +424,54 @@ export const internalCreate = internalMutation({
 		startTime: v.string(),
 		vehicleId: v.optional(v.id("vehicles")),
 		driverId: v.optional(v.id("drivers")),
+		scheduleId: v.optional(v.id("tourSchedules")),
 		organizationId: v.string(),
 		userId: v.string(),
 	},
 	handler: async (ctx, args) => {
-	const tour = await ctx.db.get(args.tourId);
+	let tourId = args.tourId;
+	let date = args.date;
+	let startTime = args.startTime;
+	let scheduleId = args.scheduleId;
+
+	if (scheduleId) {
+		const schedule = await ctx.db.get(scheduleId);
+		if (!schedule) throw new ConvexError("Schedule not found");
+		if (schedule.organizationId !== args.organizationId) {
+			throw new ConvexError(
+				"Forbidden: schedule belongs to a different organization",
+			);
+		}
+		if (schedule.status === "cancelled") {
+			throw new ConvexError("Cannot assign a guide to a cancelled schedule");
+		}
+		tourId = schedule.tourId;
+		date = schedule.date;
+		startTime = schedule.startTime;
+
+		// One active assignment per schedule.
+		const existingForSlot = await ctx.db
+			.query("assignments")
+			.withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId!))
+			.take(100);
+		const active = existingForSlot.find(
+			(a) =>
+				a.organizationId === args.organizationId &&
+				a.status !== "cancelled" &&
+				a.deletedAt === undefined,
+		);
+		if (active) {
+			throw new ConvexError("This schedule already has a guide assigned");
+		}
+	}
+
+	if (parseBookingTime(date, startTime) === null) {
+		throw new ConvexError(
+			"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
+		);
+	}
+
+	const tour = await ctx.db.get(tourId);
 	if (!tour) throw new ConvexError("Tour not found");
 	if (tour.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: tour belongs to a different organization");
@@ -451,8 +497,8 @@ export const internalCreate = internalMutation({
 	const onVacation = vacations.some(
 		(vr) =>
 			vr.status === "approved" &&
-			vr.startDate <= args.date &&
-			vr.endDate >= args.date,
+			vr.startDate <= date &&
+			vr.endDate >= date,
 	);
 	if (onVacation) {
 		throw new ConvexError("Guide is on approved vacation on this date");
@@ -467,15 +513,34 @@ export const internalCreate = internalMutation({
 			q
 				.eq("organizationId", args.organizationId)
 				.eq("userId", args.guideId)
-				.eq("date", args.date),
+				.eq("date", date),
 		)
 		.unique();
 	if (avail && !avail.isAvailable) {
 		throw new ConvexError("Guide is marked as unavailable on this date");
 	}
 
-	const startTime = args.startTime;
 	const endTime = calculateEndTime(startTime, tour.durationHours);
+
+	// Prevent double-staffing the same tour slot (with or without
+	// an explicit scheduleId). Conflict checks cover guide/vehicle/
+	// driver overlap — this covers "two guides on one departure".
+	const sameDay = await ctx.db
+		.query("assignments")
+		.withIndex("by_tour_date", (q) => q.eq("tourId", tourId).eq("date", date))
+		.take(100);
+	const slotTaken = sameDay.find(
+		(a) =>
+			a.organizationId === args.organizationId &&
+			a.status !== "cancelled" &&
+			a.deletedAt === undefined &&
+			a.startTime === startTime,
+	);
+	if (slotTaken) {
+		throw new ConvexError(
+			`This tour already has a guide assigned on ${date} at ${startTime}`,
+		);
+	}
 
 	// Validate vehicle.
 	if (args.vehicleId) {
@@ -510,7 +575,7 @@ export const internalCreate = internalMutation({
 	// Conflict detection.
 	const conflicts = await checkConflictsHelper(ctx, {
 		organizationId: args.organizationId,
-		date: args.date,
+		date,
 		startTime,
 		endTime,
 		guideId: args.guideId,
@@ -525,11 +590,12 @@ export const internalCreate = internalMutation({
 	const now = Date.now();
 	const assignmentId = await ctx.db.insert("assignments", {
 		organizationId: args.organizationId,
-		tourId: args.tourId,
+		tourId,
+		scheduleId,
 		guideId: args.guideId,
 		vehicleId: args.vehicleId,
 		driverId: args.driverId,
-		date: args.date,
+		date,
 		startTime,
 		endTime,
 		status: "scheduled",
@@ -545,9 +611,10 @@ export const internalCreate = internalMutation({
 		resourceId: assignmentId,
 		oldValues: {},
 		newValues: {
-			tourId: args.tourId,
+			tourId,
 			guideId: args.guideId,
-			date: args.date,
+			scheduleId,
+			date,
 			startTime,
 			endTime,
 		},
@@ -617,7 +684,39 @@ export const internalUpdate = internalMutation({
 			date: args.date ?? existing.date,
 			startTime: args.startTime ?? existing.startTime,
 		};
+		if (parseBookingTime(next.date, next.startTime) === null) {
+			throw new ConvexError(
+				"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
+			);
+		}
 		const endTime = calculateEndTime(next.startTime, tour.durationHours);
+
+		// Same tour+date+startTime uniqueness as create — prevent
+		// rescheduling into an already-staffed departure.
+		if (
+			next.date !== existing.date ||
+			next.startTime !== existing.startTime
+		) {
+			const sameDay = await ctx.db
+				.query("assignments")
+				.withIndex("by_tour_date", (q) =>
+					q.eq("tourId", existing.tourId).eq("date", next.date),
+				)
+				.take(100);
+			const slotTaken = sameDay.find(
+				(a) =>
+					a._id !== args.assignmentId &&
+					a.organizationId === args.organizationId &&
+					a.status !== "cancelled" &&
+					a.deletedAt === undefined &&
+					a.startTime === next.startTime,
+			);
+			if (slotTaken) {
+				throw new ConvexError(
+					`This tour already has a guide assigned on ${next.date} at ${next.startTime}`,
+				);
+			}
+		}
 
 		const conflicts = await checkConflictsHelper(ctx, {
 			organizationId: args.organizationId,

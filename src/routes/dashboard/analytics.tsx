@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { type DateRange, lastNDays } from "@/lib/date-range";
 import { formatCents, formatCentsWhole } from "@/lib/format";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -103,6 +104,13 @@ function AnalyticsPage() {
 	const { data: sources } = useQuery(
 		convexQuery(api.analytics.getBookingSources, rangeArgs),
 	);
+	const { data: guideStats } = useQuery(
+		convexQuery(api.analytics.getGuideStats, rangeArgs),
+	);
+	const { data: dailyStats } = useQuery(
+		convexQuery(api.analytics.getDailyStats, rangeArgs),
+	);
+	const { displayName } = useOrgMembers(["guide", "owner", "admin"]);
 
 	if (orgError || overviewError || revenueError) {
 		return (
@@ -370,6 +378,73 @@ function AnalyticsPage() {
 										</div>
 									</li>
 								))}
+							</ul>
+						)}
+					</CardContent>
+				</Card>
+			</div>
+
+			<div className="grid gap-4 lg:grid-cols-2">
+				<Card>
+					<CardHeader>
+						<CardTitle>Guide performance</CardTitle>
+						<CardDescription>Assignments completed in range</CardDescription>
+					</CardHeader>
+					<CardContent>
+						{!guideStats || guideStats.length === 0 ? (
+							<p className="text-muted-foreground text-sm">
+								No assignments in this window.
+							</p>
+						) : (
+							<ul className="space-y-2 text-sm">
+								{guideStats.slice(0, 8).map((g) => (
+									<li
+										key={g.guideId}
+										className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0"
+									>
+										<span className="truncate">
+											{g.guideId === "unassigned"
+												? "Unassigned"
+												: displayName(g.guideId)}
+										</span>
+										<div className="text-right text-xs whitespace-nowrap text-muted-foreground">
+											{g.completed}/{g.totalAssignments} done
+											{g.cancelled > 0 ? ` · ${g.cancelled} cancelled` : ""}
+										</div>
+									</li>
+								))}
+							</ul>
+						)}
+					</CardContent>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle>Daily activity</CardTitle>
+						<CardDescription>Assignments per day</CardDescription>
+					</CardHeader>
+					<CardContent>
+						{!dailyStats || dailyStats.length === 0 ? (
+							<p className="text-muted-foreground text-sm">
+								No activity in this window.
+							</p>
+						) : (
+							<ul className="max-h-64 space-y-1 overflow-y-auto text-sm">
+								{[...dailyStats]
+									.sort((a, b) => b.date.localeCompare(a.date))
+									.slice(0, 14)
+									.map((d) => (
+										<li
+											key={d.date}
+											className="flex items-baseline justify-between gap-4 border-b pb-1.5 last:border-0"
+										>
+											<span className="font-mono text-xs">{d.date}</span>
+											<span className="text-xs text-muted-foreground">
+												{d.total} assignments
+												{d.completed > 0 ? ` · ${d.completed} done` : ""}
+											</span>
+										</li>
+									))}
 							</ul>
 						)}
 					</CardContent>

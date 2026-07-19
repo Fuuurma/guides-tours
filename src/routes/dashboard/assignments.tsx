@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { TourCell } from "@/components/tour-cell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { defaultDateRange } from "@/lib/date-range";
 import type { Assignment } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -32,6 +33,7 @@ function AssignmentsPage() {
 	if (range.to) args.dateTo = range.to;
 
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
+	const { displayName } = useOrgMembers();
 	const {
 		data: assignments,
 		isPending,
@@ -74,8 +76,8 @@ function AssignmentsPage() {
 		{
 			key: "guide",
 			header: "Guide",
-			render: (a) => a.guideId,
-			searchValue: (a) => a.guideId,
+			render: (a) => displayName(a.guideId),
+			searchValue: (a) => displayName(a.guideId),
 		},
 		{
 			key: "tour",

@@ -16,6 +16,51 @@ import {
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
+import { parseBookingTime } from "./lib/time";
+
+const SCHEDULE_STATUSES = ["available", "full", "cancelled"] as const;
+type ScheduleStatus = (typeof SCHEDULE_STATUSES)[number];
+
+function assertScheduleStatus(status: string): asserts status is ScheduleStatus {
+	if (!(SCHEDULE_STATUSES as readonly string[]).includes(status)) {
+		throw new ConvexError(
+			`Invalid schedule status "${status}" (expected available|full|cancelled)`,
+		);
+	}
+}
+
+/**
+ * Application-level uniqueness for (tourId, date, startTime).
+ * Convex indexes aren't unique constraints — callers must check
+ * in-transaction before insert/update (same pattern as customers
+ * email and OTA provider rows).
+ */
+export async function assertScheduleSlotFree(
+	ctx: MutationCtx,
+	args: {
+		tourId: Id<"tours">;
+		date: string;
+		startTime: string;
+		excludeId?: Id<"tourSchedules">;
+	},
+): Promise<void> {
+	const existing = await ctx.db
+		.query("tourSchedules")
+		.withIndex("by_tour_date_start", (q) =>
+			q
+				.eq("tourId", args.tourId)
+				.eq("date", args.date)
+				.eq("startTime", args.startTime),
+		)
+		.unique();
+	if (existing && existing._id !== args.excludeId) {
+		throw new ConvexError(
+			`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+		);
+	}
+}
 
 // ---- queries ----
 
@@ -127,11 +172,26 @@ export const internalCreate = internalMutation({
 		if (args.capacityTotal <= 0) {
 			throw new ConvexError("Capacity must be positive");
 		}
+		if (parseBookingTime(args.date, args.startTime) === null) {
+			throw new ConvexError(
+				"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
+			);
+		}
+		if (parseBookingTime(args.date, args.endTime) === null) {
+			throw new ConvexError(
+				"Invalid end time (expected HH:MM)",
+			);
+		}
 		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
 		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
 		}
+		await assertScheduleSlotFree(ctx, {
+			tourId: args.tourId,
+			date: args.date,
+			startTime: args.startTime,
+		});
 		const now = Date.now();
 		const id = await ctx.db.insert("tourSchedules", {
 			organizationId: args.organizationId,
@@ -170,7 +230,13 @@ export const update = mutation({
 		startTime: v.optional(v.string()),
 		endTime: v.optional(v.string()),
 		capacityTotal: v.optional(v.number()),
-		status: v.optional(v.string()),
+		status: v.optional(
+			v.union(
+				v.literal("available"),
+				v.literal("full"),
+				v.literal("cancelled"),
+			),
+		),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -192,7 +258,13 @@ export const internalUpdate = internalMutation({
 		startTime: v.optional(v.string()),
 		endTime: v.optional(v.string()),
 		capacityTotal: v.optional(v.number()),
-		status: v.optional(v.string()),
+		status: v.optional(
+			v.union(
+				v.literal("available"),
+				v.literal("full"),
+				v.literal("cancelled"),
+			),
+		),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -208,6 +280,28 @@ export const internalUpdate = internalMutation({
 			throw new ConvexError(
 				`Capacity ${args.capacityTotal} is below current bookings (${existing.capacityBooked})`,
 			);
+		}
+		const nextDate = args.date ?? existing.date;
+		const nextStart = args.startTime ?? existing.startTime;
+		const nextEnd = args.endTime ?? existing.endTime;
+		if (parseBookingTime(nextDate, nextStart) === null) {
+			throw new ConvexError(
+				"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
+			);
+		}
+		if (parseBookingTime(nextDate, nextEnd) === null) {
+			throw new ConvexError("Invalid end time (expected HH:MM)");
+		}
+		if (args.status !== undefined) {
+			assertScheduleStatus(args.status);
+		}
+		if (nextDate !== existing.date || nextStart !== existing.startTime) {
+			await assertScheduleSlotFree(ctx, {
+				tourId: existing.tourId,
+				date: nextDate,
+				startTime: nextStart,
+				excludeId: args.scheduleId,
+			});
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		for (const field of [

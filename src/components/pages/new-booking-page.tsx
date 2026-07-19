@@ -1,4 +1,8 @@
-import { useMutation, useQuery } from "convex/react";
+import { convexQuery } from "@convex-dev/react-query";
+import { useQuery } from "@tanstack/react-query";
+import { getRouteApi } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
+import { useEffect, useRef } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,15 +23,28 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
 
+const bookingNewRoute = getRouteApi("/dashboard/bookings/new");
+
 interface TourLite {
 	_id: string;
 	name: string;
 	maxGuests?: number;
+	basePriceCents?: bigint | number;
 }
 interface CustomerLite {
 	_id: string;
 	name: string;
 	email: string;
+}
+interface ScheduleLite {
+	_id: string;
+	date: string;
+	startTime: string;
+	endTime: string;
+	capacityTotal: number;
+	capacityBooked: number;
+	status: string;
+	tourId: string;
 }
 
 interface FormValues extends Record<string, unknown> {
@@ -35,6 +52,7 @@ interface FormValues extends Record<string, unknown> {
 	customerId: string;
 	date: string;
 	startTime: string;
+	scheduleId: string;
 	guests: string;
 	guestNames: string;
 	notes: string;
@@ -43,9 +61,19 @@ interface FormValues extends Record<string, unknown> {
 }
 
 export function NewBookingPage() {
+	const search = bookingNewRoute.useSearch();
 	const create = useMutation(api.bookings.create);
-	const tours = useQuery(api.tours.list, {});
-	const customers = useQuery(api.customers.list, {});
+	const tours = useQuery(convexQuery(api.tours.list, {}));
+	const customers = useQuery(convexQuery(api.customers.list, {}));
+	const prefillScheduleId = search.scheduleId as Id<"tourSchedules"> | undefined;
+	const { data: prefillSchedule } = useQuery(
+		convexQuery(
+			api.tourSchedules.get,
+			prefillScheduleId ? { scheduleId: prefillScheduleId } : "skip",
+		),
+	);
+
+	const daySlotsRef = useRef<ScheduleLite[]>([]);
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
@@ -67,11 +95,19 @@ export function NewBookingPage() {
 				throw new Error("Deposit cannot exceed the total amount");
 			}
 
+			const slots = daySlotsRef.current;
+			if (slots.length > 0 && !v.scheduleId) {
+				throw new Error("Please select a schedule slot");
+			}
+
 			const id = await create({
 				tourId: v.tourId as Id<"tours">,
 				customerId: v.customerId as Id<"customers">,
 				date: v.date,
 				startTime: v.startTime,
+				scheduleId: v.scheduleId
+					? (v.scheduleId as Id<"tourSchedules">)
+					: undefined,
 				guests: Number(v.guests),
 				guestNames: v.guestNames.trim() || undefined,
 				notes: v.notes.trim() || undefined,
@@ -82,19 +118,30 @@ export function NewBookingPage() {
 		},
 		validate: (v) => {
 			const errs: Record<string, string> = {};
+			const slots = daySlotsRef.current;
 			if (!v.tourId) errs.tourId = "Please select a tour";
 			if (!v.customerId) errs.customerId = "Please select a customer";
 			if (!v.date) errs.date = "Date is required";
 			if (!v.startTime) errs.startTime = "Start time is required";
+			if (slots.length > 0 && !v.scheduleId) {
+				errs.startTime = "Please select a schedule slot";
+			}
 			const guestsErr = validatePositiveInteger(v.guests, "Guests");
 			if (guestsErr) {
 				errs.guests = guestsErr;
 			} else {
-				const tour = ((tours ?? []) as TourLite[]).find(
+				const tour = ((tours.data ?? []) as TourLite[]).find(
 					(t) => t._id === v.tourId,
 				);
 				if (tour?.maxGuests && Number(v.guests) > tour.maxGuests) {
 					errs.guests = `Tour maximum is ${tour.maxGuests} guests`;
+				}
+				const slot = slots.find((s) => s._id === v.scheduleId);
+				if (slot) {
+					const seatsLeft = slot.capacityTotal - slot.capacityBooked;
+					if (Number(v.guests) > seatsLeft) {
+						errs.guests = `Only ${seatsLeft} seats left on this slot`;
+					}
 				}
 			}
 			const notesErr = validateNotesOptional(v.notes);
@@ -117,6 +164,7 @@ export function NewBookingPage() {
 			customerId: "",
 			date: "",
 			startTime: "10:00",
+			scheduleId: "",
 			guests: "1",
 			guestNames: "",
 			notes: "",
@@ -127,7 +175,46 @@ export function NewBookingPage() {
 		successMessage: "Booking created",
 	});
 
-	const currentTour = ((tours ?? []) as TourLite[]).find(
+	// Prefill from ?scheduleId=
+	useEffect(() => {
+		if (!prefillSchedule) return;
+		form.set("tourId", String(prefillSchedule.tourId));
+		form.set("date", prefillSchedule.date);
+		form.set("startTime", prefillSchedule.startTime);
+		form.set("scheduleId", String(prefillSchedule._id));
+		const tour = ((tours.data ?? []) as TourLite[]).find(
+			(t) => t._id === String(prefillSchedule.tourId),
+		);
+		if (tour?.basePriceCents !== undefined && !form.values.totalUsd) {
+			const cents = Number(tour.basePriceCents);
+			form.set("totalUsd", (cents / 100).toFixed(2));
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot prefill
+	}, [prefillSchedule?._id, tours.data]);
+
+	const daySchedulesQuery = useQuery(
+		convexQuery(
+			api.tourSchedules.list,
+			form.values.tourId && form.values.date
+				? {
+						tourId: form.values.tourId as Id<"tours">,
+						dateFrom: form.values.date,
+						dateTo: form.values.date,
+						status: "available",
+					}
+				: "skip",
+		),
+	);
+
+	const daySlots = ((daySchedulesQuery.data ?? []) as ScheduleLite[]).filter(
+		(s) =>
+			s.status === "available" &&
+			s.capacityBooked < s.capacityTotal &&
+			(!form.values.date || s.date === form.values.date),
+	);
+	daySlotsRef.current = daySlots;
+
+	const currentTour = ((tours.data ?? []) as TourLite[]).find(
 		(t) => t._id === form.values.tourId,
 	);
 	const maxGuests = currentTour?.maxGuests;
@@ -143,13 +230,16 @@ export function NewBookingPage() {
 			<FormField label="Tour *" htmlFor="tour" error={form.fieldErrors.tourId}>
 				<Select
 					value={form.values.tourId}
-					onValueChange={(v) => form.set("tourId", v)}
+					onValueChange={(v) => {
+						form.set("tourId", v);
+						form.set("scheduleId", "");
+					}}
 				>
 					<SelectTrigger id="tour">
 						<SelectValue placeholder="Select a tour…" />
 					</SelectTrigger>
 					<SelectContent>
-						{((tours ?? []) as TourLite[]).map((t) => (
+						{((tours.data ?? []) as TourLite[]).map((t) => (
 							<SelectItem key={t._id} value={t._id}>
 								{t.name}
 							</SelectItem>
@@ -171,7 +261,7 @@ export function NewBookingPage() {
 						<SelectValue placeholder="Select a customer…" />
 					</SelectTrigger>
 					<SelectContent>
-						{((customers?.items ?? []) as CustomerLite[]).map((c) => (
+						{((customers.data?.items ?? []) as CustomerLite[]).map((c) => (
 							<SelectItem key={c._id} value={c._id}>
 								{c.name} ({c.email})
 							</SelectItem>
@@ -188,22 +278,62 @@ export function NewBookingPage() {
 						required
 						min={new Date().toISOString().slice(0, 10)}
 						value={form.values.date}
-						onChange={(e) => form.set("date", e.target.value)}
+						onChange={(e) => {
+							form.set("date", e.target.value);
+							form.set("scheduleId", "");
+						}}
 					/>
 				</FormField>
-				<FormField
-					label="Start time *"
-					htmlFor="time"
-					error={form.fieldErrors.startTime}
-				>
-					<Input
-						id="time"
-						type="time"
-						required
-						value={form.values.startTime}
-						onChange={(e) => form.set("startTime", e.target.value)}
-					/>
-				</FormField>
+				{daySlots.length > 0 ? (
+					<FormField
+						label="Schedule slot *"
+						htmlFor="slot"
+						error={form.fieldErrors.startTime}
+						hint="Links capacity on the schedule"
+					>
+						<Select
+							value={form.values.scheduleId}
+							onValueChange={(id) => {
+								form.set("scheduleId", id);
+								const slot = daySlots.find((s) => s._id === id);
+								if (slot) {
+									form.set("startTime", slot.startTime);
+									form.set("date", slot.date);
+								}
+							}}
+						>
+							<SelectTrigger id="slot">
+								<SelectValue placeholder="Select a time…" />
+							</SelectTrigger>
+							<SelectContent>
+								{daySlots.map((s) => (
+									<SelectItem key={s._id} value={s._id}>
+										{s.startTime}
+										{s.endTime ? `–${s.endTime}` : ""} ·{" "}
+										{s.capacityTotal - s.capacityBooked} left
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</FormField>
+				) : (
+					<FormField
+						label="Start time *"
+						htmlFor="time"
+						error={form.fieldErrors.startTime}
+					>
+						<Input
+							id="time"
+							type="time"
+							required
+							value={form.values.startTime}
+							onChange={(e) => {
+								form.set("startTime", e.target.value);
+								form.set("scheduleId", "");
+							}}
+						/>
+					</FormField>
+				)}
 				<FormField
 					label="Guests *"
 					htmlFor="guests"
@@ -221,6 +351,14 @@ export function NewBookingPage() {
 					/>
 				</FormField>
 			</div>
+
+			{form.values.tourId && form.values.date && daySlots.length === 0 && (
+				<p className="text-muted-foreground text-xs">
+					No published available slots for this date — booking will use the
+					free-form time (capacity still attaches if a matching schedule
+					exists).
+				</p>
+			)}
 
 			<FormField
 				label="Guest names"

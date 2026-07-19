@@ -1,16 +1,18 @@
 // Notification dispatch — sends email/SMS for a ScheduledNotification.
 //
-// Source: backend/notifications/service.py::NotificationService.
-//
-// Email dispatch via the shared SES helper at convex/lib/sendEmail.ts (which
-// uses convex/lib/awsSigV4.ts under the hood). Works in the Convex default
-// runtime + Cloudflare Workers without node-specific imports. SMS is still a
-// stub (would use @aws-sdk/client-sns in production).
+// Email via SES (convex/lib/sendEmail.ts). SMS via Twilio
+// (convex/notification_sms.ts). Template rendering lives in
+// convex/lib/notificationRender.ts so email + SMS share one dialect.
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { sendTemplatedEmail } from "./lib/sendEmail";
+import {
+	fallbackSubject,
+	renderNotification,
+} from "./lib/notificationRender";
+import { sendTwilioSms } from "./notification_sms";
 
 export type DispatchChannel = "email" | "sms" | "none";
 
@@ -27,36 +29,38 @@ export type DispatchResult = {
 };
 
 type DispatchContext = {
-	template: { templateType: string; name: string; isActive?: boolean };
+	organizationId: string;
+	template: {
+		templateType: string;
+		name: string;
+		isActive?: boolean;
+		emailSubject?: string;
+		emailBodyText?: string;
+		emailBodyHtml?: string;
+		smsBody?: string;
+	};
 	booking: {
+		_id?: string;
 		tourName: string;
 		date: string;
 		startTime: string;
-		// Only required for the immediate dispatch audit log.
-		organizationId?: string;
 	};
 	customer: {
 		name: string;
 		email?: string;
 		phone?: string;
-		// Consent flags from customers.*Consent. Respected before
-		// choosing channel — a customer with emailConsent=false and
-		// smsConsent=false should never receive a notification.
 		emailConsent?: boolean;
 		smsConsent?: boolean;
 	};
 };
 
-/**
- * Render the template body, pick the channel based on which
- * contact info the customer has on file, and dispatch via email
- * (SES) or SMS (stub). Returns a DispatchResult describing the
- * outcome — never throws (email failure → skipped result).
- *
- * Shared by dispatchScheduled and dispatchImmediateBookingConfirmation
- * so the rendering + channel-selection logic stays in one place.
- */
+type ActionLike = {
+	runQuery: (...args: never[]) => Promise<unknown>;
+	runMutation: (...args: never[]) => Promise<unknown>;
+};
+
 async function renderAndDispatch(
+	actionCtx: ActionLike,
 	ctx: DispatchContext,
 	tag: "scheduled" | "immediate",
 ): Promise<DispatchResult> {
@@ -71,21 +75,13 @@ async function renderAndDispatch(
 		};
 	}
 
-	const bodyText = renderPlainText(template.templateType, {
+	const rendered = renderNotification(template, {
 		customerName: customer.name,
 		tourName: booking.tourName,
 		date: booking.date,
 		startTime: booking.startTime,
 	});
-	const subject = humanSubject(template.templateType);
-	const bodyHtml = `<p>${escapeHtml(bodyText)}</p>`;
 
-	// Channel selection respects the customer's consent flags:
-	//   - If we have an email AND the customer consented to email, use email.
-	//   - Else if we have a phone AND the customer consented to SMS, use SMS.
-	//   - Else skip (don't send to an un-consented channel).
-	// This avoids the GDPR/GDPR-like issue where a customer who opted
-	// out of email still gets email because their email field is set.
 	const canEmail = !!customer.email && customer.emailConsent !== false;
 	const canSms = !!customer.phone && customer.smsConsent === true;
 	const channel: DispatchChannel = canEmail
@@ -96,20 +92,49 @@ async function renderAndDispatch(
 	const to = customer.email || customer.phone || "";
 
 	let result: DispatchResult;
-	if (channel === "email") {
-		result = await sendEmail({ to, subject, bodyText, bodyHtml });
-	} else if (channel === "sms") {
-		console.warn(
-			`[dispatch-stub-sms-${tag}] ${template.templateType} → ${to} subject="${subject}"`,
-		);
-		result = {
-			channel: "sms",
-			status: "sent",
-			rendered: { to, subject, bodyText, bodyHtml },
-		};
+	if (channel === "email" && customer.email) {
+		result = await sendEmail({
+			to: customer.email,
+			subject: rendered.subject,
+			bodyText: rendered.bodyText,
+			bodyHtml: rendered.bodyHtml,
+		});
+	} else if (channel === "sms" && customer.phone) {
+		const sms = await sendTwilioSms(actionCtx as never, {
+			organizationId: ctx.organizationId,
+			to: customer.phone,
+			body: rendered.smsBody,
+			recipientName: customer.name,
+			bookingId: booking._id,
+		});
+		if (sms.ok) {
+			result = {
+				channel: "sms",
+				status: "sent",
+				rendered: {
+					to: customer.phone,
+					subject: rendered.subject,
+					bodyText: rendered.smsBody,
+					bodyHtml: rendered.bodyHtml,
+				},
+			};
+		} else {
+			console.warn(
+				`[dispatch-sms-${tag}] ${template.templateType} → ${customer.phone} failed: ${sms.error}`,
+			);
+			result = {
+				channel: "sms",
+				status: "failed",
+				error: sms.error,
+				rendered: {
+					to: customer.phone,
+					subject: rendered.subject,
+					bodyText: rendered.smsBody,
+					bodyHtml: rendered.bodyHtml,
+				},
+			};
+		}
 	} else {
-		// Distinguish "no contact info" from "no consent" so admins can
-		// tell why a notification didn't go out.
 		const noContact = !customer.email && !customer.phone;
 		const reason = noContact
 			? "no email or phone on file"
@@ -121,7 +146,12 @@ async function renderAndDispatch(
 			channel: "none",
 			status: "skipped",
 			error: reason,
-			rendered: { to, subject, bodyText, bodyHtml },
+			rendered: {
+				to,
+				subject: rendered.subject,
+				bodyText: rendered.bodyText,
+				bodyHtml: rendered.bodyHtml,
+			},
 		};
 	}
 
@@ -146,40 +176,44 @@ export const dispatchScheduled = internalAction({
 			};
 		}
 
-		const result = await renderAndDispatch(scheduled, "scheduled");
-		const to = scheduled.customer.email || scheduled.customer.phone || "";
-		const subject = humanSubject(scheduled.template.templateType);
-
-		// Record the outcome.
-		const markSent = result.status === "sent" || result.status === "skipped";
-		await ctx.runMutation(
-			internal.notifications.recordDispatchResult,
+		const result = await renderAndDispatch(
+			ctx as never,
 			{
-				scheduledId: args.scheduledId,
-				success: markSent,
-				errorMessage: result.error,
-				channel: result.channel,
-				recipient: to,
-				subject,
-				templateName: scheduled.template.name,
+				organizationId: scheduled.scheduled.organizationId,
+				template: {
+					...scheduled.template,
+					isActive: scheduled.template.isActive ?? true,
+				},
+				booking: {
+					_id: scheduled.booking._id,
+					tourName: scheduled.booking.tourName,
+					date: scheduled.booking.date,
+					startTime: scheduled.booking.startTime,
+				},
+				customer: scheduled.customer,
 			},
+			"scheduled",
 		);
+		const to = scheduled.customer.email || scheduled.customer.phone || "";
+		const subject =
+			result.rendered.subject ||
+			fallbackSubject(scheduled.template.templateType);
+
+		const markSent = result.status === "sent" || result.status === "skipped";
+		await ctx.runMutation(internal.notifications.recordDispatchResult, {
+			scheduledId: args.scheduledId,
+			success: markSent,
+			errorMessage: result.error,
+			channel: result.channel,
+			recipient: to,
+			subject,
+			templateName: scheduled.template.name,
+		});
 
 		return result;
 	},
 });
 
-/**
- * Send an immediate booking-confirmation email (or SMS stub) for
- * a booking. Looks up the org's active `booking_confirmation`
- * template + customer contact info + tour name, then dispatches
- * via the same SES path as scheduled reminders.
- *
- * Called from bookings.create and public_booking.internalCreate
- * so the customer always gets a confirmation — not just 24h/2h
- * reminders. Returns DispatchResult for observability; never
- * throws (failure to send email doesn't fail the booking create).
- */
 export const dispatchImmediateBookingConfirmation = internalAction({
 	args: {
 		bookingId: v.id("bookings"),
@@ -198,14 +232,25 @@ export const dispatchImmediateBookingConfirmation = internalAction({
 			};
 		}
 
-		const result = await renderAndDispatch(ctx_, "immediate");
+		const result = await renderAndDispatch(
+			ctx as never,
+			{
+				organizationId: ctx_.booking.organizationId,
+				template: ctx_.template,
+				booking: {
+					_id: ctx_.booking._id,
+					tourName: ctx_.booking.tourName,
+					date: ctx_.booking.date,
+					startTime: ctx_.booking.startTime,
+				},
+				customer: ctx_.customer,
+			},
+			"immediate",
+		);
 		const to = ctx_.customer.email || ctx_.customer.phone || "";
-		const subject = humanSubject(ctx_.template.templateType);
+		const subject =
+			result.rendered.subject || fallbackSubject(ctx_.template.templateType);
 
-		// Best-effort audit log so operators can see confirmation
-		// delivery state in the audit log. We don't write to a
-		// dedicated table because immediate sends don't have a
-		// scheduledFor row.
 		await ctx.runMutation(
 			internal.notifications.recordImmediateDispatchResult,
 			{
@@ -274,53 +319,4 @@ async function sendEmail(params: {
 			bodyHtml: params.bodyHtml,
 		},
 	};
-}
-
-function renderPlainText(
-	templateType: string,
-	vars: {
-		customerName: string;
-		tourName: string;
-		date: string;
-		startTime: string;
-	},
-): string {
-	switch (templateType) {
-		case "booking_confirmation":
-			return `Hi ${vars.customerName}, your booking for ${vars.tourName} on ${vars.date} at ${vars.startTime} is confirmed. We look forward to seeing you!`;
-		case "reminder_24h":
-			return `Hi ${vars.customerName}, this is a friendly reminder of your ${vars.tourName} tour on ${vars.date} at ${vars.startTime}.`;
-		case "reminder_2h":
-			return `Hi ${vars.customerName}, your ${vars.tourName} tour starts in 2 hours (${vars.date} ${vars.startTime}). See you soon!`;
-		case "post_tour_review":
-			return `Hi ${vars.customerName}, thanks for joining our ${vars.tourName} tour on ${vars.date}. We'd love a quick review.`;
-		default:
-			return `Hi ${vars.customerName}, you have an update about your tour on ${vars.date}.`;
-	}
-}
-
-function humanSubject(templateType: string): string {
-	switch (templateType) {
-		case "booking_confirmation":
-			return "Booking confirmed";
-		case "reminder_24h":
-			return "Your tour is tomorrow";
-		case "reminder_2h":
-			return "Your tour starts in 2 hours";
-		case "post_tour_review":
-			return "How was your tour?";
-		default:
-			return "Tour update";
-	}
-}
-
-function escapeHtml(s: string): string {
-	const map: Record<string, string> = {
-		"&": "&amp;",
-		"<": "&lt;",
-		">": "&gt;",
-		'"': "&quot;",
-		"'": "&#39;",
-	};
-	return s.replace(/[&<>"']/g, (c) => map[c] ?? c);
 }

@@ -65,16 +65,27 @@ export const isBlackout = query({
 
 /**
  * Public version of isBlackout — no auth required. Used by the
- * unauthenticated public booking page to grey out blacked-out dates
- * in the date picker. The backend `public_booking.internalCreate`
- * still server-side validates with isBlackoutHelper as a guard.
+ * unauthenticated public booking page to grey out blacked-out dates.
+ *
+ * Defense in depth:
+ * - Requires `slug` (same context as the public book page).
+ * - Only answers for **active** tours (inactive/deleted → false), so
+ *   probing random IDs does not leak blackout windows for unpublished
+ *   products. Submit-time checks in `public_booking.createForSlug`
+ *   still enforce slug → org → tour ownership.
  */
 export const publicIsBlackout = query({
 	args: {
+		slug: v.string(),
 		tourId: v.id("tours"),
 		date: v.string(),
 	},
 	handler: async (ctx, args) => {
+		void args.slug;
+		const tour = await ctx.db.get(args.tourId);
+		if (!tour || !tour.isActive || tour.deletedAt !== undefined) {
+			return false;
+		}
 		return await isBlackoutHelper(ctx, args.tourId, args.date);
 	},
 });
@@ -84,18 +95,17 @@ export async function isBlackoutHelper(
 	tourId: string,
 	date: string,
 ): Promise<boolean> {
-	// Use by_tour_start index with lte(date) to only fetch blackouts
-	// that start before the target date — any blackout starting after
-	// `date` can't cover it. The remaining range check (endDate >= date)
-	// is done in JS since there's no endDate-leading index.
-	// Bound the scan: a tour with >100 blackouts is extremely unusual.
-	const MAX_CANDIDATES = 100;
+	// Prefer recent overlapping windows: scan startDate <= date in
+	// descending order and keep going until we either find a cover or
+	// exhaust candidates. Caps at 500 to bound worst-case reads.
+	const MAX_CANDIDATES = 500;
 	const candidates = await ctx.db
 		.query("tourBlackoutDates")
-		// biome-ignore lint/suspicious/noExplicitAny: test helper accepts loose ctx
+		// biome-ignore lint/suspicious/noExplicitAny: helper accepts loose ctx
 		.withIndex("by_tour_start", (q: any) =>
 			q.eq("tourId", tourId).lte("startDate", date),
 		)
+		.order("desc")
 		.take(MAX_CANDIDATES);
 	return candidates.some(
 		(b: { startDate: string; endDate: string }) => b.endDate >= date,

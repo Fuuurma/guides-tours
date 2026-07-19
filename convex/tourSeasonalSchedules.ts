@@ -238,6 +238,292 @@ export const internalUpdate = internalMutation({
 	},
 });
 
+/**
+ * Materialize concrete tourSchedules from seasonal rules + exceptions,
+ * skipping blackout dates. Idempotent: skips tour+date+startTime that
+ * already exist.
+ */
+export const generate = mutation({
+	args: {
+		tourId: v.id("tours"),
+		dateFrom: v.string(),
+		dateTo: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		return await ctx.runMutation(
+			internalGenerate as unknown as FunctionReference<
+				"mutation",
+				"public" | "internal"
+			>,
+			{
+				organizationId: member.organizationId,
+				userId: member.userId,
+				...args,
+			},
+		);
+	},
+});
+
+export const internalGenerate = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		tourId: v.id("tours"),
+		dateFrom: v.string(),
+		dateTo: v.string(),
+	},
+	handler: async (ctx, args) => {
+		if (args.dateTo < args.dateFrom) {
+			throw new ConvexError("dateTo must be on or after dateFrom");
+		}
+
+		const tour = await ctx.db.get(args.tourId);
+		if (!tour) throw new ConvexError("Tour not found");
+		if (tour.organizationId !== args.organizationId) {
+			throw new ConvexError("Forbidden: tour belongs to a different organization");
+		}
+
+		const seasonals = await ctx.db
+			.query("tourSeasonalSchedules")
+			.withIndex("by_tour_active", (q) => q.eq("tourId", args.tourId))
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.collect();
+		const activeSeasonals = seasonals
+			.filter((s) => s.isActive)
+			.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+
+		const exceptions = await ctx.db
+			.query("tourExceptionDates")
+			.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId))
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.collect();
+		const exceptionByDate = new Map(exceptions.map((e) => [e.date, e]));
+
+		// Load only schedules in the generate window (indexed range) so
+		// idempotency isn't capped by a global take(2000) of all history.
+		const existingInRange = await ctx.db
+			.query("tourSchedules")
+			.withIndex("by_tour_date", (q) =>
+				q
+					.eq("tourId", args.tourId)
+					.gte("date", args.dateFrom)
+					.lte("date", args.dateTo),
+			)
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.take(5000);
+		const existingKeys = new Set(
+			existingInRange.map((s) => `${s.date}|${s.startTime}`),
+		);
+
+		// Load all blackouts for this tour once — avoids the per-day
+		// take(100) truncation in isBlackoutHelper for long-lived tours.
+		const blackouts = await ctx.db
+			.query("tourBlackoutDates")
+			.withIndex("by_tour_start", (q) => q.eq("tourId", args.tourId))
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.collect();
+
+		let created = 0;
+		let skipped = 0;
+		const MAX_DAYS = 366;
+		let dayCount = 0;
+
+		for (
+			let cursor = args.dateFrom;
+			cursor <= args.dateTo && dayCount < MAX_DAYS;
+			dayCount++
+		) {
+			const date = cursor;
+			cursor = nextIsoDate(cursor);
+
+			const blackedOut = blackouts.some(
+				(b) => b.startDate <= date && b.endDate >= date,
+			);
+			if (blackedOut) {
+				skipped++;
+				continue;
+			}
+
+			const ex = exceptionByDate.get(date);
+			if (ex?.exceptionType === "removed") {
+				skipped++;
+				continue;
+			}
+
+			let startTime: string | undefined;
+			let endTime: string | undefined;
+			let capacity: number | undefined;
+
+			if (ex?.exceptionType === "added" || ex?.exceptionType === "modified") {
+				startTime = ex.startTime ?? pickSeasonalStart(activeSeasonals, date);
+				endTime =
+					ex.endTime ??
+					(startTime
+						? endTimeFromDuration(startTime, tour.durationHours)
+						: undefined);
+				capacity =
+					ex.capacityOverride ??
+					pickSeasonalCapacity(activeSeasonals, date) ??
+					tour.capacity;
+			} else {
+				const rule = pickSeasonalRule(activeSeasonals, date);
+				if (!rule) {
+					skipped++;
+					continue;
+				}
+				startTime = rule.startTime ?? "09:00";
+				endTime = endTimeFromDuration(startTime, tour.durationHours);
+				capacity = rule.capacityOverride ?? tour.capacity;
+			}
+
+			if (!startTime || !endTime || !capacity || capacity <= 0) {
+				skipped++;
+				continue;
+			}
+
+			const key = `${date}|${startTime}`;
+			if (existingKeys.has(key)) {
+				skipped++;
+				continue;
+			}
+
+			// Defense-in-depth: exact-index uniqueness (also covers races
+			// the in-memory set can't see).
+			const clash = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date_start", (q) =>
+					q
+						.eq("tourId", args.tourId)
+						.eq("date", date)
+						.eq("startTime", startTime),
+				)
+				.unique();
+			if (clash) {
+				existingKeys.add(key);
+				skipped++;
+				continue;
+			}
+
+			const now = Date.now();
+			const id = await ctx.db.insert("tourSchedules", {
+				organizationId: args.organizationId,
+				tourId: args.tourId,
+				date,
+				startTime,
+				endTime,
+				capacityTotal: capacity,
+				capacityBooked: 0,
+				status: "available",
+				notes: "Generated from seasonal rules",
+				createdAt: now,
+				updatedAt: now,
+			});
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+				action: "tour_schedule.created",
+				resourceType: "tourSchedule",
+				resourceId: id,
+				oldValues: {},
+				newValues: {
+					tourId: args.tourId,
+					date,
+					startTime,
+					generated: true,
+				},
+			});
+			existingKeys.add(key);
+			created++;
+		}
+
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourSeasonalSchedule.generated",
+			resourceType: "tour",
+			resourceId: args.tourId,
+			oldValues: {},
+			newValues: {
+				dateFrom: args.dateFrom,
+				dateTo: args.dateTo,
+				created,
+				skipped,
+			},
+		});
+
+		return { created, skipped };
+	},
+});
+
+function endTimeFromDuration(startTime: string, durationHours: number): string {
+	const parts = startTime.split(":");
+	const h = Number.parseInt(parts[0] ?? "0", 10);
+	const m = Number.parseInt(parts[1] ?? "0", 10);
+	const total = h * 60 + m + Math.round(durationHours * 60);
+	const wrapped = ((total % 1440) + 1440) % 1440;
+	const nh = Math.floor(wrapped / 60);
+	const nm = wrapped % 60;
+	return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+}
+
+function nextIsoDate(iso: string): string {
+	const [y, m, d] = iso.split("-").map(Number);
+	const dt = new Date(Date.UTC(y!, (m ?? 1) - 1, (d ?? 1) + 1));
+	return dt.toISOString().slice(0, 10);
+}
+
+function dowUtc(iso: string): number {
+	const [y, m, d] = iso.split("-").map(Number);
+	return new Date(Date.UTC(y!, (m ?? 1) - 1, d ?? 1)).getUTCDay();
+}
+
+function pickSeasonalRule(
+	rules: Array<{
+		startDate: string;
+		endDate: string;
+		daysOfWeek: number[];
+		startTime?: string;
+		capacityOverride?: number;
+		priority?: number;
+	}>,
+	date: string,
+) {
+	const dow = dowUtc(date);
+	return (
+		rules.find(
+			(r) =>
+				r.startDate <= date &&
+				r.endDate >= date &&
+				r.daysOfWeek.includes(dow),
+		) ?? null
+	);
+}
+
+function pickSeasonalStart(
+	rules: Array<{
+		startDate: string;
+		endDate: string;
+		daysOfWeek: number[];
+		startTime?: string;
+	}>,
+	date: string,
+): string | undefined {
+	return pickSeasonalRule(rules, date)?.startTime ?? "09:00";
+}
+
+function pickSeasonalCapacity(
+	rules: Array<{
+		startDate: string;
+		endDate: string;
+		daysOfWeek: number[];
+		capacityOverride?: number;
+	}>,
+	date: string,
+): number | undefined {
+	return pickSeasonalRule(rules, date)?.capacityOverride;
+}
+
 export const remove = mutation({
 	args: { scheduleId: v.id("tourSeasonalSchedules") },
 	handler: async (ctx, args) => {

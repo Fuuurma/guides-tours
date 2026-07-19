@@ -46,6 +46,7 @@ test.describe("dashboard route smoke (unauthenticated)", () => {
 
 	const dashboardRoutes = [
 		"/dashboard",
+		"/dashboard/calendar",
 		"/dashboard/tours",
 		"/dashboard/templates",
 		"/dashboard/categories",
@@ -54,6 +55,7 @@ test.describe("dashboard route smoke (unauthenticated)", () => {
 		"/dashboard/customers",
 		"/dashboard/analytics",
 		"/dashboard/assignments",
+		"/dashboard/guides",
 		"/dashboard/vacations",
 		"/dashboard/vehicles",
 		"/dashboard/drivers",

@@ -1,5 +1,6 @@
 import { useMutation } from "convex/react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { MemberSelect } from "@/components/member-select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
@@ -32,6 +33,7 @@ export function NewDriverPage() {
 		},
 		validate: (v) => {
 			const errs: Record<string, string> = {};
+			if (!v.userId.trim()) errs.userId = "Please select a member";
 			const notesErr = validateNotesOptional(v.notes);
 			if (notesErr) errs.notes = notesErr;
 			return Object.keys(errs).length > 0 ? errs : null;
@@ -50,17 +52,16 @@ export function NewDriverPage() {
 			submitLabel="Create driver"
 		>
 			<FormField
-				label="User ID *"
-				hint="Better Auth user ID of the driver"
+				label="Member *"
+				hint="Organization member linked to this driver record"
 				htmlFor="userId"
+				error={form.fieldErrors.userId}
 			>
-				<Input
+				<MemberSelect
 					id="userId"
-					required
-					maxLength={200}
 					value={form.values.userId}
-					onChange={(e) => form.set("userId", e.target.value)}
-					placeholder="user_abc123"
+					onValueChange={(v) => form.set("userId", v)}
+					placeholder="Select a member…"
 				/>
 			</FormField>
 

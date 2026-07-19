@@ -195,6 +195,7 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_tour_date", ["tourId", "date"])
+		.index("by_tour_date_start", ["tourId", "date", "startTime"])
 		.index("by_org_date", ["organizationId", "date"])
 		.index("by_org_status_date", ["organizationId", "status", "date"]),
 
@@ -352,6 +353,8 @@ export default defineSchema({
 	assignments: defineTable({
 		organizationId: orgId,
 		tourId: v.id("tours"),
+		// Optional link to a concrete tourSchedule (staffing a slot).
+		scheduleId: v.optional(v.id("tourSchedules")),
 		// FK -> userProfiles (the guide)
 		guideId: v.string(),
 		vehicleId: v.optional(v.id("vehicles")),
@@ -376,7 +379,8 @@ export default defineSchema({
 		.index("by_tour_date", ["tourId", "date"])
 		.index("by_guide_date", ["guideId", "date"])
 		.index("by_vehicle_date", ["vehicleId", "date"])
-		.index("by_driver_date", ["driverId", "date"]),
+		.index("by_driver_date", ["driverId", "date"])
+		.index("by_schedule", ["scheduleId"]),
 
 	// ----- Bookings -----
 

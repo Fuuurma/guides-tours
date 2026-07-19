@@ -4,6 +4,7 @@ import { authComponent, createAuth } from "./auth";
 import { registerOtaRoutes } from "./ota/router";
 import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 
 const http = httpRouter();
 
@@ -144,6 +145,14 @@ http.route({
 				: undefined;
 		const notes =
 			typeof payload.notes === "string" ? payload.notes : undefined;
+		const scheduleId =
+			typeof payload.scheduleId === "string" ? payload.scheduleId : undefined;
+		const emailConsent =
+			typeof payload.emailConsent === "boolean"
+				? payload.emailConsent
+				: undefined;
+		const smsConsent =
+			typeof payload.smsConsent === "boolean" ? payload.smsConsent : undefined;
 
 		if (
 			!tourId ||
@@ -161,7 +170,7 @@ http.route({
 
 		const { internal } = await import("./_generated/api");
 		try {
-			const bookingId = await ctx.runAction(
+			const result = await ctx.runAction(
 				internal.public_booking.createForSlug,
 				{
 					slug,
@@ -173,10 +182,17 @@ http.route({
 					startTime,
 					guests,
 					notes,
+					scheduleId: scheduleId as Id<"tourSchedules"> | undefined,
+					emailConsent,
+					smsConsent,
 				},
 			);
 			return new Response(
-				JSON.stringify({ bookingId, status: "confirmed" }),
+				JSON.stringify(
+					typeof result === "string"
+						? { bookingId: result, status: "confirmed" }
+						: result,
+				),
 				{
 					status: 200,
 					headers: { "content-type": "application/json" },

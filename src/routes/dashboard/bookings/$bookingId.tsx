@@ -1,8 +1,8 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMutation } from "convex/react";
-import { useState } from "react";
+import { useAction, useMutation } from "convex/react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
@@ -39,7 +39,8 @@ function BookingDetailPage() {
 	const complete = useMutation(api.bookings.complete);
 	const cancelBooking = useMutation(api.bookings.cancel);
 	const recordReview = useMutation(api.bookings.recordReview);
-	const refundPayment = useMutation(api.payments.refund);
+	const refundPayment = useAction(api.payments_stripe_actions.refundViaStripe);
+	const createCheckout = useAction(api.payments_stripe_actions.createHostedCheckout);
 	const [pending, setPending] = useState(false);
 	const [showCancelForm, setShowCancelForm] = useState(false);
 	const [cancelReason, setCancelReason] = useState("");
@@ -48,6 +49,17 @@ function BookingDetailPage() {
 	const [reviewComment, setReviewComment] = useState("");
 	const [showRefundForm, setShowRefundForm] = useState(false);
 	const [refundReason, setRefundReason] = useState("");
+
+	// Toast once after Stripe Checkout redirect (?paid=1).
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const params = new URLSearchParams(window.location.search);
+		if (params.get("paid") !== "1") return;
+		toast.success("Payment received — balance will update when Stripe confirms");
+		params.delete("paid");
+		const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+		window.history.replaceState({}, "", next);
+	}, []);
 
 	const runAction = async (fn: () => Promise<unknown>, msg: string) => {
 		setPending(true);
@@ -101,13 +113,16 @@ function BookingDetailPage() {
 
 	const b = booking as unknown as BookingDetail;
 
-	// Find a succeeded payment for the refund button.
-	const paymentList = payments as unknown as
+	const paymentList = payments.data as
 		| { items: Array<{ _id: string; status: string }> }
+		| Array<{ _id: string; status: string }>
 		| undefined;
-	const succeededPayment = (paymentList?.items ?? []).find(
-		(p: { status: string }) => p.status === "succeeded",
-	) as { _id: string; status: string } | undefined;
+	const paymentItems = Array.isArray(paymentList)
+		? paymentList
+		: (paymentList?.items ?? []);
+	const succeededPayment = paymentItems.find(
+		(p) => p.status === "succeeded",
+	);
 
 	const onRefund = () => {
 		if (!succeededPayment) return;
@@ -122,6 +137,24 @@ function BookingDetailPage() {
 			setShowRefundForm(false);
 			setRefundReason("");
 		});
+	};
+
+	const balanceDue = Number(b.balanceDueCents ?? 0);
+	const onCollectPayment = async () => {
+		if (balanceDue <= 0) {
+			toast.error("Nothing to collect");
+			return;
+		}
+		setPending(true);
+		try {
+			const { url } = await createCheckout({
+				bookingId: bookingId as Id<"bookings">,
+			});
+			window.location.href = url;
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+			setPending(false);
+		}
 	};
 
 	return (
@@ -196,8 +229,8 @@ function BookingDetailPage() {
 			{showRefundForm && succeededPayment && (
 				<div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-4">
 					<p className="text-sm font-medium">
-						Refund {formatCentsCompact(b.totalAmountCents)} — this marks the
-						payment as refunded.
+						Refund via Stripe — money is returned to the customer and the
+						booking balance is restored.
 					</p>
 					<Textarea
 						value={refundReason}
@@ -254,6 +287,22 @@ function BookingDetailPage() {
 					</Button>
 				</div>
 			)}
+
+			{balanceDue > 0 &&
+				["pending", "confirmed", "checked_in"].includes(b.status) && (
+					<div className="mt-2">
+						<Button
+							size="sm"
+							onClick={onCollectPayment}
+							disabled={pending}
+						>
+							{pending ? "Opening Stripe…" : "Collect payment"}
+						</Button>
+						<p className="text-muted-foreground text-xs mt-1">
+							Opens Stripe Checkout for {formatCentsCompact(b.balanceDueCents)}
+						</p>
+					</div>
+				)}
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<DetailSection title="Tour" description="Booked experience">

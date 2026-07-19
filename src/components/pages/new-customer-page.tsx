@@ -1,5 +1,6 @@
 import { useMutation } from "convex/react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -19,6 +20,8 @@ interface FormValues extends Record<string, unknown> {
 	phone: string;
 	preferredLanguage: string;
 	notes: string;
+	emailConsent: boolean;
+	smsConsent: boolean;
 }
 
 const INITIAL: FormValues = {
@@ -27,6 +30,8 @@ const INITIAL: FormValues = {
 	phone: "",
 	preferredLanguage: "en",
 	notes: "",
+	emailConsent: true,
+	smsConsent: false,
 };
 
 export function NewCustomerPage() {
@@ -40,6 +45,8 @@ export function NewCustomerPage() {
 				phone: values.phone.trim() || undefined,
 				preferredLanguage: values.preferredLanguage.trim() || "en",
 				notes: values.notes.trim() || undefined,
+				emailConsent: values.emailConsent,
+				smsConsent: values.smsConsent,
 			});
 		},
 		validate: (values) => {
@@ -124,6 +131,23 @@ export function NewCustomerPage() {
 					{form.values.notes.length} / {MAX_NOTES_LEN}
 				</p>
 			</FormField>
+
+			<div className="space-y-3 rounded-md border p-3">
+				<label className="flex items-center gap-2 text-sm">
+					<Checkbox
+						checked={form.values.emailConsent}
+						onCheckedChange={(c) => form.set("emailConsent", c === true)}
+					/>
+					Email updates & reminders
+				</label>
+				<label className="flex items-center gap-2 text-sm">
+					<Checkbox
+						checked={form.values.smsConsent}
+						onCheckedChange={(c) => form.set("smsConsent", c === true)}
+					/>
+					SMS reminders
+				</label>
+			</div>
 		</EntityFormPage>
 	);
 }

@@ -1,8 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useAction } from "convex/react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { formatCentsCompact } from "@/lib/format";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	EMAIL_REGEX,
@@ -58,7 +60,9 @@ function PublicBookingPage() {
 	const { data: isBlackedOut } = useQuery(
 		convexQuery(
 			api.tourBlackoutDates.publicIsBlackout,
-			blackoutCheck ?? { tourId: "" as Id<"tours">, date: "" },
+			blackoutCheck
+				? { slug, tourId: blackoutCheck.tourId, date: blackoutCheck.date }
+				: "skip",
 		),
 	);
 	const [selectedTourId, setSelectedTourId] = useState<Id<"tours"> | "">("");
@@ -66,10 +70,38 @@ function PublicBookingPage() {
 	const [email, setEmail] = useState("");
 	const [phone, setPhone] = useState("");
 	const [startTime, setStartTime] = useState("");
+	const [scheduleId, setScheduleId] = useState<Id<"tourSchedules"> | "">("");
 	const [guests, setGuests] = useState("1");
 	const [notes, setNotes] = useState("");
+	const [emailConsent, setEmailConsent] = useState(true);
+	const [smsConsent, setSmsConsent] = useState(false);
 	const [submitting, setSubmitting] = useState(false);
-	const [confirmation, setConfirmation] = useState<string | null>(null);
+	const [confirmation, setConfirmation] = useState<{
+		bookingId: string;
+		canPay: boolean;
+		balanceDueCents: string;
+	} | null>(null);
+	const [paying, setPaying] = useState(false);
+	const createPublicCheckout = useAction(
+		api.payments_stripe_actions.createPublicHostedCheckout,
+	);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		const params = new URLSearchParams(window.location.search);
+		if (params.get("paid") === "1") {
+			toast.success("Thanks — payment received. Your balance will update shortly.");
+		} else if (params.get("pay_cancelled") === "1") {
+			toast.message("Payment cancelled — you can pay later from your confirmation email.");
+		} else {
+			return;
+		}
+		params.delete("paid");
+		params.delete("pay_cancelled");
+		const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+		window.history.replaceState({}, "", next);
+	}, []);
+
 	// Inline field-level errors so users see what to fix next to the
 	// input, not buried in a toast that vanishes after a few seconds.
 	const [fieldErr, setFieldErr] = useState<{
@@ -80,8 +112,31 @@ function PublicBookingPage() {
 		phone?: string;
 		notes?: string;
 		date?: string;
+		startTime?: string;
 	}>({});
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
+
+	const slotReady = Boolean(selectedTourId && date);
+	const {
+		data: availableSlots,
+		isFetching: slotsFetching,
+		isPending: slotsPending,
+	} = useQuery(
+		convexQuery(
+			api.public_booking.listAvailableSlots,
+			slotReady
+				? {
+						slug,
+						tourId: selectedTourId as Id<"tours">,
+						date,
+					}
+				: "skip",
+		),
+	);
+	const slotsLoaded =
+		slotReady && availableSlots !== undefined && !slotsFetching && !slotsPending;
+	const hasPublishedSlots = slotsLoaded && (availableSlots?.length ?? 0) > 0;
+	const slotsLoading = slotReady && !slotsLoaded;
 
 	if (isPending) {
 		return (
@@ -145,6 +200,17 @@ function PublicBookingPage() {
 		if (date && isBlackedOut) {
 			errs.date = "This date is not available";
 		}
+		if (slotsLoading) {
+			errs.startTime = "Loading available times…";
+		} else if (hasPublishedSlots && !scheduleId) {
+			errs.startTime = "Please select an available time";
+		} else if (slotsLoaded && !hasPublishedSlots && !startTime) {
+			errs.startTime = "Start time is required";
+		}
+		const selectedSlot = availableSlots?.find((s) => s._id === scheduleId);
+		if (selectedSlot && guestCount > selectedSlot.seatsLeft) {
+			errs.guests = `Only ${selectedSlot.seatsLeft} seats left for this time`;
+		}
 		const nameTrimmed = name.trim();
 		if (nameTrimmed.length < 2) errs.name = "Please enter your full name";
 		else if (nameTrimmed.length > MAX_NAME_LEN)
@@ -184,13 +250,21 @@ function PublicBookingPage() {
 					customerEmail: emailTrimmed,
 					customerPhone: phone.trim() || undefined,
 					date,
-					startTime,
+					startTime: selectedSlot?.startTime ?? startTime,
+					scheduleId: scheduleId || undefined,
 					guests: guestCount,
 					notes: notes.trim() || undefined,
+					emailConsent,
+					smsConsent,
 				}),
 			});
 			const body = (await res.json()) as
-				| { bookingId: string; status: string }
+				| {
+						bookingId: string;
+						status: string;
+						canPay?: boolean;
+						balanceDueCents?: string;
+				  }
 				| { error: string };
 			if (!res.ok) {
 				const msg = ("error" in body && body.error) || "Booking failed";
@@ -199,7 +273,11 @@ function PublicBookingPage() {
 				return;
 			}
 			if ("bookingId" in body) {
-				setConfirmation(body.bookingId);
+				setConfirmation({
+					bookingId: body.bookingId,
+					canPay: Boolean(body.canPay),
+					balanceDueCents: body.balanceDueCents ?? "0",
+				});
 				toast.success("Booking confirmed!");
 			}
 		} catch (err) {
@@ -227,19 +305,56 @@ function PublicBookingPage() {
 						<CardHeader>
 							<CardTitle>Booking confirmed</CardTitle>
 							<CardDescription>
-								Thank you for booking with {data.organizationName}. We've sent a
-								confirmation to {email}.
+								Thank you for booking with {data.organizationName}.
+								{emailConsent
+									? ` We've sent a confirmation to ${email}.`
+									: " Save your reference below — email updates were not opted in."}
 							</CardDescription>
 						</CardHeader>
 						<CardContent className="space-y-4">
 							<p className="text-sm">
 								Reference:{" "}
-								<span className="font-mono text-xs">{confirmation}</span>
+								<span className="font-mono text-xs">
+									{confirmation.bookingId}
+								</span>
 							</p>
 							<p className="text-muted-foreground text-sm">
 								Save this reference if you need to contact the operator about
 								your booking.
 							</p>
+							{confirmation.canPay && Number(confirmation.balanceDueCents) > 0 && (
+								<div className="space-y-2 rounded-md border p-3">
+									<p className="text-sm font-medium">
+										Balance due:{" "}
+										{formatCentsCompact(BigInt(confirmation.balanceDueCents))}
+									</p>
+									<p className="text-muted-foreground text-xs">
+										Pay securely now via Stripe Checkout.
+									</p>
+									<Button
+										className="w-full"
+										disabled={paying}
+										onClick={async () => {
+											setPaying(true);
+											try {
+												const { url } = await createPublicCheckout({
+													bookingId:
+														confirmation.bookingId as Id<"bookings">,
+													customerEmail: email.trim().toLowerCase(),
+													successPath: `/book/${slug}?paid=1`,
+													cancelPath: `/book/${slug}?pay_cancelled=1`,
+												});
+												window.location.href = url;
+											} catch (err) {
+												toast.error(getErrorMessage(err));
+												setPaying(false);
+											}
+										}}
+									>
+										{paying ? "Opening checkout…" : "Pay now"}
+									</Button>
+								</div>
+							)}
 							<Button
 								variant="outline"
 								className="w-full"
@@ -250,8 +365,11 @@ function PublicBookingPage() {
 									setPhone("");
 									setDate("");
 									setStartTime("");
+									setScheduleId("");
 									setGuests("1");
 									setNotes("");
+									setEmailConsent(true);
+									setSmsConsent(false);
 									setSelectedTourId("");
 									setBlackoutCheck(null);
 									setFieldErr({});
@@ -332,6 +450,8 @@ function PublicBookingPage() {
 												checked={selectedTourId === t._id}
 												onChange={(e) => {
 													setSelectedTourId(e.target.value as Id<"tours">);
+													setScheduleId("");
+													setStartTime("");
 													// Re-check blackout for the new tour with the
 													// currently-entered date (if any).
 													if (date && e.target.value) {
@@ -388,6 +508,8 @@ function PublicBookingPage() {
 											value={date}
 											onChange={(e) => {
 												setDate(e.target.value);
+												setScheduleId("");
+												setStartTime("");
 												// Trigger the blackout check for this tour+date.
 												if (selectedTourId && e.target.value) {
 													setBlackoutCheck({
@@ -431,13 +553,57 @@ function PublicBookingPage() {
 										<label htmlFor="time" className="text-sm font-medium">
 											Start time *
 										</label>
-										<Input
-											id="time"
-											type="time"
-											required
-											value={startTime}
-											onChange={(e) => setStartTime(e.target.value)}
-										/>
+										{slotsLoading ? (
+											<p className="text-muted-foreground text-sm py-2">
+												Loading available times…
+											</p>
+										) : hasPublishedSlots ? (
+											<select
+												id="time"
+												required
+												className="border-input bg-background flex h-9 w-full rounded-md border px-3 text-sm"
+												value={scheduleId}
+												onChange={(e) => {
+													const id = e.target.value as Id<"tourSchedules">;
+													setScheduleId(id);
+													const slot = availableSlots?.find((s) => s._id === id);
+													setStartTime(slot?.startTime ?? "");
+												}}
+												aria-invalid={Boolean(fieldErr.startTime)}
+											>
+												<option value="">Select a time…</option>
+												{(availableSlots ?? []).map((s) => (
+													<option key={s._id} value={s._id}>
+														{s.startTime}
+														{s.endTime ? `–${s.endTime}` : ""} · {s.seatsLeft}{" "}
+														left
+													</option>
+												))}
+											</select>
+										) : (
+											<Input
+												id="time"
+												type="time"
+												required
+												value={startTime}
+												onChange={(e) => {
+													setStartTime(e.target.value);
+													setScheduleId("");
+												}}
+												disabled={Boolean(isBlackedOut) || !slotReady}
+											/>
+										)}
+										{slotsLoaded && !hasPublishedSlots && !isBlackedOut && (
+											<p className="text-muted-foreground text-xs">
+												No published times for this date — enter a preferred
+												start time.
+											</p>
+										)}
+										{fieldErr.startTime && (
+											<p role="alert" className="text-destructive text-xs">
+												{fieldErr.startTime}
+											</p>
+										)}
 									</div>
 								</div>
 								<div className="space-y-1">
@@ -589,14 +755,55 @@ function PublicBookingPage() {
 										</p>
 									)}
 								</div>
+								<div className="space-y-3 rounded-md border p-3">
+									<label className="flex items-start gap-2 text-sm">
+										<input
+											type="checkbox"
+											className="mt-1"
+											checked={emailConsent}
+											onChange={(e) => setEmailConsent(e.target.checked)}
+										/>
+										<span>
+											Email me booking updates and reminders
+											<span className="text-muted-foreground block text-xs">
+												Recommended so we can send your confirmation.
+											</span>
+										</span>
+									</label>
+									<label className="flex items-start gap-2 text-sm">
+										<input
+											type="checkbox"
+											className="mt-1"
+											checked={smsConsent}
+											onChange={(e) => setSmsConsent(e.target.checked)}
+										/>
+										<span>
+											Text me reminders (optional)
+											<span className="text-muted-foreground block text-xs">
+												Only if you provide a phone number.
+											</span>
+										</span>
+									</label>
+								</div>
 							</CardContent>
 							<CardFooter className="flex flex-col gap-3">
 								{submitErr && <ErrorBanner message={submitErr} />}
-								<Button type="submit" disabled={submitting} className="w-full">
-									{submitting ? "Booking…" : "Confirm booking"}
+								<Button
+									type="submit"
+									disabled={submitting || slotsLoading}
+									className="w-full"
+								>
+									{submitting
+										? "Booking…"
+										: slotsLoading
+											? "Loading times…"
+											: "Confirm booking"}
 								</Button>
 								<p className="text-muted-foreground text-xs text-center">
 									By booking you agree to the operator's cancellation policy.
+									{emailConsent
+										? " We'll email your confirmation."
+										: " You opted out of email updates."}
 								</p>
 							</CardFooter>
 						</Card>

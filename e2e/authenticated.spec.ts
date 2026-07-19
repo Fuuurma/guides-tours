@@ -23,30 +23,12 @@
 //   pnpm dev           # in one terminal
 //   pnpm test:e2e      # in another
 
-import { expect, test, type Page } from "@playwright/test";
-
-// Per-test unique email so multiple runs don't collide against the same
-// Convex dev deployment (each sign-up creates a Better Auth user + an org).
-function uniqueEmail(prefix: string): string {
-	const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-	return `${prefix}-${stamp}@e2e.local`;
-}
-
-// 6-character random org slug for the onboarding step.
-function uniqueSlug(prefix: string): string {
-	const stamp = Math.random().toString(36).slice(2, 8);
-	return `${prefix}-${stamp}`;
-}
-
-// Wait until React has hydrated the page (RootDocument sets
-// `body[data-hydrated="true"]` on mount). This is the signal that
-// `onSubmit` handlers are attached to the SSR-rendered form.
-async function waitForHydration(page: Page): Promise<void> {
-	await page.locator("body[data-hydrated='true']").waitFor({
-		state: "attached",
-		timeout: 15_000,
-	});
-}
+import { expect, test } from "@playwright/test";
+import {
+	signUpAndOnboard,
+	uniqueEmail,
+	waitForHydration,
+} from "./helpers/auth";
 
 test.describe("authenticated smoke", () => {
 	// Cold Vite compilation + sign-up + onboarding can take >90s on
@@ -75,38 +57,7 @@ test.describe("authenticated smoke", () => {
 	test("sign up a fresh user, complete onboarding, land on dashboard", async ({
 		page,
 	}) => {
-		const email = uniqueEmail("owner");
-		const orgName = `E2E Org ${Date.now()}`;
-		const orgSlug = uniqueSlug("e2e");
-
-		// 1. Sign up
-		await page.goto("/sign-up");
-		await page.locator("#name").waitFor({ state: "visible" });
-		await waitForHydration(page);
-		await page.locator("#name").fill("E2E Owner");
-		await page.locator("#email").fill(email);
-		await page.locator("#password").fill("test1234test");
-		await page.getByRole("button", { name: "Create account" }).click();
-
-		// After sign-up, the route navigates to /onboarding.
-		// Cold Vite compilation can take >30s on first hit, so we
-		// give the sign-up step a longer timeout.
-		await page.waitForURL(/\/onboarding/, { timeout: 60_000 });
-		await page.locator("#slug").waitFor({ state: "visible" });
-		await waitForHydration(page);
-
-		// 2. Onboarding: create the org
-		await page.locator("#name").fill(orgName);
-		await page.locator("#slug").fill(orgSlug);
-		await page.getByRole("button", { name: "Create organization" }).click();
-
-		// 3. Land on dashboard — cold Vite compilation can take >60s
-		// on the first dashboard hit, so we give this the full
-		// remaining test budget.
-		await page.waitForURL(/\/dashboard$/, { timeout: 120_000 });
-		await page
-			.getByRole("heading", { name: /today/i })
-			.waitFor({ state: "visible", timeout: 15_000 });
+		const { orgName } = await signUpAndOnboard(page, { namePrefix: "owner" });
 		await expect(page.getByText(orgName).first()).toBeVisible({
 			timeout: 15_000,
 		});
@@ -134,11 +85,9 @@ test.describe("authenticated smoke", () => {
 		await page.goto("/sign-up");
 		await page.locator("#name").waitFor({ state: "visible" });
 		await waitForHydration(page);
-		// Fill fields one by one, allowing hydration to settle between
 		await page.locator("#name").fill("E2E Signin");
 		await page.locator("#email").fill(email);
 		await page.locator("#password").fill("test1234test");
-		// Small delay to ensure all event handlers are wired
 		await page.waitForTimeout(500);
 		await page.getByRole("button", { name: "Create account" }).click();
 		await page.waitForURL(/\/onboarding/, { timeout: 45_000 });
@@ -166,33 +115,14 @@ test.describe("authenticated smoke", () => {
 	test("public booking page renders for a real org slug", async ({
 		page,
 	}) => {
-		const email = uniqueEmail("public");
-		const orgName = `E2E Public Org ${Date.now()}`;
-		const orgSlug = uniqueSlug("pb");
+		const { orgSlug } = await signUpAndOnboard(page, {
+			namePrefix: "public",
+		});
 
-		// 1. Sign up + onboard (creates a real org with a known slug)
-		// Cold Vite compilation can take >30s on first hit.
-		await page.goto("/sign-up");
-		await page.locator("#name").waitFor({ state: "visible" });
-		await waitForHydration(page);
-		await page.locator("#name").fill("E2E Public");
-		await page.locator("#email").fill(email);
-		await page.locator("#password").fill("test1234test");
-		await page.getByRole("button", { name: "Create account" }).click();
-		await page.waitForURL(/\/onboarding/, { timeout: 60_000 });
-		await page.locator("#slug").waitFor({ state: "visible" });
-		await waitForHydration(page);
-		await page.locator("#name").fill(orgName);
-		await page.locator("#slug").fill(orgSlug);
-		await page.getByRole("button", { name: "Create organization" }).click();
-		// Cold Vite compilation can take >60s on the first dashboard
-		// hit. Give this the full remaining test budget.
-		await page.waitForURL(/\/dashboard$/, { timeout: 120_000 });
-
-		// 2. Sign out so we can hit the public booking page anonymously
+		// Sign out so we can hit the public booking page anonymously
 		await page.context().clearCookies();
 
-		// 3. Visit the public booking page for the real org slug.
+		// Visit the public booking page for the real org slug.
 		// This proves the route renders <500 for a real (signed-up) org
 		// — the existing /book/nonexistent-org-slug smoke only covers
 		// the 404 path. We don't wait for the convexQuery to resolve

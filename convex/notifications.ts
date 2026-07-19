@@ -27,11 +27,13 @@ import { ConvexError, v } from "convex/values";
 import {
 	internalQuery,
 	internalMutation,
+	query,
 	type MutationCtx,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { logAudit } from "./lib/audit";
+import { requireMembership } from "./lib/authz";
 
 const BATCH_SIZE = 100;
 const NOTIFICATION_CUTOFF_MINUTES = 10;
@@ -72,8 +74,14 @@ export const getScheduledForDispatch = internalQuery({
 				name: template.name,
 				templateType: template.templateType,
 				channel: template.channel,
+				isActive: template.isActive,
+				emailSubject: template.emailSubject,
+				emailBodyText: template.emailBodyText,
+				emailBodyHtml: template.emailBodyHtml,
+				smsBody: template.smsBody,
 			},
 			booking: {
+				_id: booking._id,
 				date: booking.date,
 				startTime: booking.startTime,
 				tourName,
@@ -282,8 +290,13 @@ export const getBookingForImmediateDispatch = internalQuery({
 				templateType: template.templateType,
 				channel: template.channel,
 				isActive: template.isActive,
+				emailSubject: template.emailSubject,
+				emailBodyText: template.emailBodyText,
+				emailBodyHtml: template.emailBodyHtml,
+				smsBody: template.smsBody,
 			},
 			booking: {
+				_id: booking._id,
 				organizationId: booking.organizationId,
 				date: booking.date,
 				startTime: booking.startTime,
@@ -427,5 +440,34 @@ export const cleanupOldNotifications = internalMutation({
 			scheduledDeleted: oldScheduled.length,
 			cutoff,
 		};
+	},
+});
+
+/** Recent delivery attempts for the active org (email/SMS). */
+export const listRecentLogs = query({
+	args: { limit: v.optional(v.number()) },
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const limit = Math.min(Math.max(args.limit ?? 40, 1), 100);
+		const rows = await ctx.db
+			.query("notificationLogs")
+			.withIndex("by_org", (q) =>
+				q.eq("organizationId", member.organizationId),
+			)
+			.take(Math.min(limit * 3, 200));
+		return rows
+			.sort((a, b) => b.createdAt - a.createdAt)
+			.slice(0, limit)
+			.map((r) => ({
+				_id: r._id,
+				channel: r.channel,
+				recipient: r.recipient,
+				status: r.status,
+				templateName: r.templateName,
+				errorMessage: r.errorMessage,
+				bookingId: r.bookingId,
+				sentAt: r.sentAt,
+				createdAt: r.createdAt,
+			}));
 	},
 });

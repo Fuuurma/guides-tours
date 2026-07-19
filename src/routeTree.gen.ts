@@ -23,9 +23,11 @@ import { Route as DashboardTemplatesRouteImport } from './routes/dashboard/templ
 import { Route as DashboardSchedulesRouteImport } from './routes/dashboard/schedules'
 import { Route as DashboardOtaRouteImport } from './routes/dashboard/ota'
 import { Route as DashboardNotificationsRouteImport } from './routes/dashboard/notifications'
+import { Route as DashboardGuidesRouteImport } from './routes/dashboard/guides'
 import { Route as DashboardDriversRouteImport } from './routes/dashboard/drivers'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard/customers'
 import { Route as DashboardCategoriesRouteImport } from './routes/dashboard/categories'
+import { Route as DashboardCalendarRouteImport } from './routes/dashboard/calendar'
 import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
 import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
 import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
@@ -45,6 +47,7 @@ import { Route as DashboardSchedulesScheduleIdRouteImport } from './routes/dashb
 import { Route as DashboardNotificationsSettingsRouteImport } from './routes/dashboard/notifications/settings'
 import { Route as DashboardNotificationsNewRouteImport } from './routes/dashboard/notifications/new'
 import { Route as DashboardNotificationsTemplateIdRouteImport } from './routes/dashboard/notifications/$templateId'
+import { Route as DashboardGuidesUserIdRouteImport } from './routes/dashboard/guides/$userId'
 import { Route as DashboardDriversNewRouteImport } from './routes/dashboard/drivers/new'
 import { Route as DashboardDriversDriverIdRouteImport } from './routes/dashboard/drivers/$driverId'
 import { Route as DashboardCustomersNewRouteImport } from './routes/dashboard/customers/new'
@@ -128,6 +131,11 @@ const DashboardNotificationsRoute = DashboardNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardGuidesRoute = DashboardGuidesRouteImport.update({
+  id: '/guides',
+  path: '/guides',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardDriversRoute = DashboardDriversRouteImport.update({
   id: '/drivers',
   path: '/drivers',
@@ -141,6 +149,11 @@ const DashboardCustomersRoute = DashboardCustomersRouteImport.update({
 const DashboardCategoriesRoute = DashboardCategoriesRouteImport.update({
   id: '/categories',
   path: '/categories',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardCalendarRoute = DashboardCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardBookingsRoute = DashboardBookingsRouteImport.update({
@@ -246,6 +259,11 @@ const DashboardNotificationsTemplateIdRoute =
     path: '/$templateId',
     getParentRoute: () => DashboardNotificationsRoute,
   } as any)
+const DashboardGuidesUserIdRoute = DashboardGuidesUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => DashboardGuidesRoute,
+} as any)
 const DashboardDriversNewRoute = DashboardDriversNewRouteImport.update({
   id: '/new',
   path: '/new',
@@ -325,9 +343,11 @@ export interface FileRoutesByFullPath {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
+  '/dashboard/calendar': typeof DashboardCalendarRoute
   '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
+  '/dashboard/guides': typeof DashboardGuidesRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
   '/dashboard/ota': typeof DashboardOtaRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
@@ -346,6 +366,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/drivers/$driverId': typeof DashboardDriversDriverIdRoute
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
+  '/dashboard/guides/$userId': typeof DashboardGuidesUserIdRoute
   '/dashboard/notifications/$templateId': typeof DashboardNotificationsTemplateIdRoute
   '/dashboard/notifications/new': typeof DashboardNotificationsNewRoute
   '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
@@ -374,9 +395,11 @@ export interface FileRoutesByTo {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
+  '/dashboard/calendar': typeof DashboardCalendarRoute
   '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
+  '/dashboard/guides': typeof DashboardGuidesRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
   '/dashboard/ota': typeof DashboardOtaRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
@@ -395,6 +418,7 @@ export interface FileRoutesByTo {
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/drivers/$driverId': typeof DashboardDriversDriverIdRoute
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
+  '/dashboard/guides/$userId': typeof DashboardGuidesUserIdRoute
   '/dashboard/notifications/$templateId': typeof DashboardNotificationsTemplateIdRoute
   '/dashboard/notifications/new': typeof DashboardNotificationsNewRoute
   '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
@@ -425,9 +449,11 @@ export interface FileRoutesById {
   '/dashboard/analytics': typeof DashboardAnalyticsRoute
   '/dashboard/assignments': typeof DashboardAssignmentsRouteWithChildren
   '/dashboard/bookings': typeof DashboardBookingsRouteWithChildren
+  '/dashboard/calendar': typeof DashboardCalendarRoute
   '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
+  '/dashboard/guides': typeof DashboardGuidesRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
   '/dashboard/ota': typeof DashboardOtaRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
@@ -446,6 +472,7 @@ export interface FileRoutesById {
   '/dashboard/customers/new': typeof DashboardCustomersNewRoute
   '/dashboard/drivers/$driverId': typeof DashboardDriversDriverIdRoute
   '/dashboard/drivers/new': typeof DashboardDriversNewRoute
+  '/dashboard/guides/$userId': typeof DashboardGuidesUserIdRoute
   '/dashboard/notifications/$templateId': typeof DashboardNotificationsTemplateIdRoute
   '/dashboard/notifications/new': typeof DashboardNotificationsNewRoute
   '/dashboard/notifications/settings': typeof DashboardNotificationsSettingsRoute
@@ -477,9 +504,11 @@ export interface FileRouteTypes {
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
+    | '/dashboard/calendar'
     | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
+    | '/dashboard/guides'
     | '/dashboard/notifications'
     | '/dashboard/ota'
     | '/dashboard/schedules'
@@ -498,6 +527,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers/new'
     | '/dashboard/drivers/$driverId'
     | '/dashboard/drivers/new'
+    | '/dashboard/guides/$userId'
     | '/dashboard/notifications/$templateId'
     | '/dashboard/notifications/new'
     | '/dashboard/notifications/settings'
@@ -526,9 +556,11 @@ export interface FileRouteTypes {
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
+    | '/dashboard/calendar'
     | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
+    | '/dashboard/guides'
     | '/dashboard/notifications'
     | '/dashboard/ota'
     | '/dashboard/schedules'
@@ -547,6 +579,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers/new'
     | '/dashboard/drivers/$driverId'
     | '/dashboard/drivers/new'
+    | '/dashboard/guides/$userId'
     | '/dashboard/notifications/$templateId'
     | '/dashboard/notifications/new'
     | '/dashboard/notifications/settings'
@@ -576,9 +609,11 @@ export interface FileRouteTypes {
     | '/dashboard/analytics'
     | '/dashboard/assignments'
     | '/dashboard/bookings'
+    | '/dashboard/calendar'
     | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
+    | '/dashboard/guides'
     | '/dashboard/notifications'
     | '/dashboard/ota'
     | '/dashboard/schedules'
@@ -597,6 +632,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers/new'
     | '/dashboard/drivers/$driverId'
     | '/dashboard/drivers/new'
+    | '/dashboard/guides/$userId'
     | '/dashboard/notifications/$templateId'
     | '/dashboard/notifications/new'
     | '/dashboard/notifications/settings'
@@ -728,6 +764,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardNotificationsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/guides': {
+      id: '/dashboard/guides'
+      path: '/guides'
+      fullPath: '/dashboard/guides'
+      preLoaderRoute: typeof DashboardGuidesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/drivers': {
       id: '/dashboard/drivers'
       path: '/drivers'
@@ -747,6 +790,13 @@ declare module '@tanstack/react-router' {
       path: '/categories'
       fullPath: '/dashboard/categories'
       preLoaderRoute: typeof DashboardCategoriesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/calendar': {
+      id: '/dashboard/calendar'
+      path: '/calendar'
+      fullPath: '/dashboard/calendar'
+      preLoaderRoute: typeof DashboardCalendarRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/bookings': {
@@ -881,6 +931,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/notifications/$templateId'
       preLoaderRoute: typeof DashboardNotificationsTemplateIdRouteImport
       parentRoute: typeof DashboardNotificationsRoute
+    }
+    '/dashboard/guides/$userId': {
+      id: '/dashboard/guides/$userId'
+      path: '/$userId'
+      fullPath: '/dashboard/guides/$userId'
+      preLoaderRoute: typeof DashboardGuidesUserIdRouteImport
+      parentRoute: typeof DashboardGuidesRoute
     }
     '/dashboard/drivers/new': {
       id: '/dashboard/drivers/new'
@@ -1051,6 +1108,18 @@ const DashboardDriversRouteChildren: DashboardDriversRouteChildren = {
 const DashboardDriversRouteWithChildren =
   DashboardDriversRoute._addFileChildren(DashboardDriversRouteChildren)
 
+interface DashboardGuidesRouteChildren {
+  DashboardGuidesUserIdRoute: typeof DashboardGuidesUserIdRoute
+}
+
+const DashboardGuidesRouteChildren: DashboardGuidesRouteChildren = {
+  DashboardGuidesUserIdRoute: DashboardGuidesUserIdRoute,
+}
+
+const DashboardGuidesRouteWithChildren = DashboardGuidesRoute._addFileChildren(
+  DashboardGuidesRouteChildren,
+)
+
 interface DashboardNotificationsRouteChildren {
   DashboardNotificationsTemplateIdRoute: typeof DashboardNotificationsTemplateIdRoute
   DashboardNotificationsNewRoute: typeof DashboardNotificationsNewRoute
@@ -1151,9 +1220,11 @@ interface DashboardRouteChildren {
   DashboardAnalyticsRoute: typeof DashboardAnalyticsRoute
   DashboardAssignmentsRoute: typeof DashboardAssignmentsRouteWithChildren
   DashboardBookingsRoute: typeof DashboardBookingsRouteWithChildren
+  DashboardCalendarRoute: typeof DashboardCalendarRoute
   DashboardCategoriesRoute: typeof DashboardCategoriesRoute
   DashboardCustomersRoute: typeof DashboardCustomersRouteWithChildren
   DashboardDriversRoute: typeof DashboardDriversRouteWithChildren
+  DashboardGuidesRoute: typeof DashboardGuidesRouteWithChildren
   DashboardNotificationsRoute: typeof DashboardNotificationsRouteWithChildren
   DashboardOtaRoute: typeof DashboardOtaRoute
   DashboardSchedulesRoute: typeof DashboardSchedulesRouteWithChildren
@@ -1169,9 +1240,11 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAnalyticsRoute: DashboardAnalyticsRoute,
   DashboardAssignmentsRoute: DashboardAssignmentsRouteWithChildren,
   DashboardBookingsRoute: DashboardBookingsRouteWithChildren,
+  DashboardCalendarRoute: DashboardCalendarRoute,
   DashboardCategoriesRoute: DashboardCategoriesRoute,
   DashboardCustomersRoute: DashboardCustomersRouteWithChildren,
   DashboardDriversRoute: DashboardDriversRouteWithChildren,
+  DashboardGuidesRoute: DashboardGuidesRouteWithChildren,
   DashboardNotificationsRoute: DashboardNotificationsRouteWithChildren,
   DashboardOtaRoute: DashboardOtaRoute,
   DashboardSchedulesRoute: DashboardSchedulesRouteWithChildren,

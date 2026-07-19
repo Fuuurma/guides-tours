@@ -33,18 +33,25 @@ export const list = query({
 		const MAX_AVAILABILITIES = 1000;
 		let all;
 		if (args.userId) {
-			// SECURITY: scope to org even when filtering by userId.
+			// Prefer org-scoped compound index and push date bounds into
+			// the index range so historical rows don't starve the window.
 			all = await ctx.db
 				.query("availabilities")
-				.withIndex("by_user_date", (q) =>
-					q.eq("userId", args.userId!),
-				)
-				.filter((q) => q.eq(q.field("organizationId"), orgId))
+				.withIndex("by_org_user_date", (q) => {
+					const base = q
+						.eq("organizationId", orgId)
+						.eq("userId", args.userId!);
+					if (args.date) return base.eq("date", args.date);
+					if (args.dateFrom && args.dateTo) {
+						return base.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return base.gte("date", args.dateFrom);
+					if (args.dateTo) return base.lte("date", args.dateTo);
+					return base;
+				})
 				.take(MAX_AVAILABILITIES);
 		} else {
 			// No userId — fetch by org then filter date in JS.
-			// (by_org_user_date leads with userId so we can't range-scan
-			// by date at the index level without that field.)
 			all = await ctx.db
 				.query("availabilities")
 				.withIndex("by_org_user_date", (q) =>
@@ -54,6 +61,7 @@ export const list = query({
 		}
 		return all
 			.filter((a) => {
+				if (args.userId) return true; // date bounds already applied
 				if (args.date && a.date !== args.date) return false;
 				if (args.dateFrom && a.date < args.dateFrom) return false;
 				if (args.dateTo && a.date > args.dateTo) return false;

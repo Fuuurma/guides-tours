@@ -31,6 +31,8 @@ import {
 	normalizeEmail,
 } from "./lib/validation";
 
+const COLLECTIBLE_PUBLIC = new Set(["pending", "confirmed", "checked_in"]);
+
 // ----- Public query: org + active tours by slug -----
 //
 // Used by the public booking page (no auth required) to render the
@@ -79,6 +81,66 @@ export const getOrgAndToursBySlug = query({
 	},
 });
 
+/**
+ * Public slot picker: available schedules for a tour on a date,
+ * with remaining capacity. No auth — slug scopes to the org.
+ */
+export const listAvailableSlots = query({
+	args: {
+		slug: v.string(),
+		tourId: v.id("tours"),
+		date: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const org = (await ctx.runQuery(
+			components.betterAuth.adapter.findOne as never,
+			{
+				model: "organization" as never,
+				where: [{ field: "slug", value: args.slug }] as never,
+			},
+		)) as { id?: string } | null;
+		if (!org?.id) return [];
+
+		const tour = await ctx.db.get(args.tourId);
+		if (!tour || tour.organizationId !== org.id || !tour.isActive) {
+			return [];
+		}
+
+		const blackedOut = await isBlackoutHelper(ctx, args.tourId, args.date);
+		if (blackedOut) return [];
+
+		const schedules = await ctx.db
+			.query("tourSchedules")
+			.withIndex("by_tour_date", (q) =>
+				q.eq("tourId", args.tourId).eq("date", args.date),
+			)
+			.collect();
+
+		const nowMs = Date.now();
+		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
+
+		return schedules
+			.filter((s) => {
+				if (s.organizationId !== org.id) return false;
+				if (s.status !== "available") return false;
+				if (s.capacityBooked >= s.capacityTotal) return false;
+				const tourTs = parseBookingTime(s.date, s.startTime);
+				if (tourTs === null || tourTs <= nowMs) return false;
+				if (cutoffMs > 0 && tourTs - nowMs < cutoffMs) return false;
+				return true;
+			})
+			.map((s) => ({
+				_id: s._id,
+				startTime: s.startTime,
+				endTime: s.endTime,
+				capacityTotal: s.capacityTotal,
+				capacityBooked: s.capacityBooked,
+				seatsLeft: s.capacityTotal - s.capacityBooked,
+			}))
+			.sort((a, b) => a.startTime.localeCompare(b.startTime));
+	},
+});
+
 // ----- Action: slug → orgId, then create booking -----
 //
 // We use an action (not httpAction) so we can call the Better Auth
@@ -97,6 +159,9 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		startTime: v.string(),
 		guests: v.number(),
 		notes: v.optional(v.string()),
+		scheduleId: v.optional(v.id("tourSchedules")),
+		emailConsent: v.optional(v.boolean()),
+		smsConsent: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		// Rate-limit check (per-email). Recorded BEFORE the slug
@@ -183,6 +248,9 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 					startTime: args.startTime,
 					guests: args.guests,
 					notes: args.notes,
+					scheduleId: args.scheduleId,
+					emailConsent: args.emailConsent,
+					smsConsent: args.smsConsent,
 				},
 			);
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
@@ -190,7 +258,27 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 				outcome: "success",
 				organizationId,
 			});
-			return bookingId;
+
+			const checkout = await ctx.runQuery(
+				internal.payments.getBookingForCheckout,
+				{ bookingId },
+			);
+			const settings = await ctx.runQuery(
+				internal.payments.getStripeSecrets,
+				{ organizationId },
+			);
+			const balanceDueCents = checkout?.balanceDueCents ?? 0n;
+			const canPay =
+				Boolean(settings?.stripeEnabled && settings.stripeSecretKey) &&
+				balanceDueCents > 0n &&
+				COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
+
+			return {
+				bookingId,
+				status: "confirmed" as const,
+				balanceDueCents: balanceDueCents.toString(),
+				canPay,
+			};
 		} catch (err) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
@@ -219,6 +307,9 @@ export const internalCreate = internalMutation({
 		startTime: v.string(),
 		guests: v.number(),
 		notes: v.optional(v.string()),
+		scheduleId: v.optional(v.id("tourSchedules")),
+		emailConsent: v.optional(v.boolean()),
+		smsConsent: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		// Normalize + validate email via the shared helper. Rejects
@@ -243,24 +334,62 @@ export const internalCreate = internalMutation({
 
 		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
-		if (
-			(tour as { organizationId: string }).organizationId !==
-			args.organizationId
-		) {
+		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError("Tour not found");
 		}
-		if (!(tour as { isActive: boolean }).isActive) {
+		if (!tour.isActive) {
 			throw new ConvexError("Tour is not active");
 		}
+		if (args.guests <= 0) {
+			throw new ConvexError("guests must be > 0");
+		}
+		if (tour.maxGuests && args.guests > tour.maxGuests) {
+			throw new ConvexError(
+				`Guest count exceeds tour maximum of ${tour.maxGuests}`,
+			);
+		}
+
+		// Resolve schedule: explicit id, else (tour, date, startTime).
+		// When a concrete schedule exists we always attach + capacity.
+		let scheduleId = args.scheduleId;
+		let date = args.date;
+		let startTime = args.startTime;
+		if (scheduleId) {
+			const schedule = await ctx.db.get(scheduleId);
+			if (!schedule || schedule.organizationId !== args.organizationId) {
+				throw new ConvexError("Schedule not found");
+			}
+			if (schedule.tourId !== args.tourId) {
+				throw new ConvexError("Schedule does not belong to the specified tour");
+			}
+			if (schedule.status === "cancelled") {
+				throw new ConvexError("Cannot book a cancelled schedule");
+			}
+			date = schedule.date;
+			startTime = schedule.startTime;
+		} else {
+			const match = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date_start", (q) =>
+					q
+						.eq("tourId", args.tourId)
+						.eq("date", args.date)
+						.eq("startTime", args.startTime),
+				)
+				.unique();
+			if (match && match.organizationId === args.organizationId) {
+				if (match.status === "cancelled") {
+					throw new ConvexError("Cannot book a cancelled schedule");
+				}
+				scheduleId = match._id;
+			}
+		}
+
 		// Reject past dates and dates that fall inside the
 		// bookingCutoffHours window (operator-defined lead time).
-		// parseBookingTime returns a UTC timestamp for the tour start,
-		// or null if the date/time is malformed.
-		const tourTs = parseBookingTime(args.date, args.startTime);
+		const tourTs = parseBookingTime(date, startTime);
 		if (tourTs === null) {
-			throw new ConvexError(
-				`Invalid date or time: "${args.date} ${args.startTime}"`,
-			);
+			throw new ConvexError(`Invalid date or time: "${date} ${startTime}"`);
 		}
 		const nowMs = Date.now();
 		if (tourTs <= nowMs) {
@@ -268,32 +397,23 @@ export const internalCreate = internalMutation({
 				"Cannot book a tour in the past or starting within the next minute",
 			);
 		}
-		const cutoffMs =
-			(tour as { bookingCutoffHours?: number }).bookingCutoffHours ?? 0;
+		const cutoffMs = tour.bookingCutoffHours ?? 0;
 		if (cutoffMs > 0 && tourTs - nowMs < cutoffMs * 3_600_000) {
 			throw new ConvexError(
 				`Bookings must be made at least ${cutoffMs}h before the tour`,
 			);
 		}
-		if (args.guests <= 0) {
-			throw new ConvexError("guests must be > 0");
-		}
-		const max = (tour as { maxGuests?: number }).maxGuests;
-		if (max && args.guests > max) {
-			throw new ConvexError(
-				`Guest count exceeds tour maximum of ${max}`,
-			);
-		}
 
 		// Reject if the operator has marked this tour/date as blacked out.
-		// isBlackoutHelper is exported from tourBlackoutDates and is
-		// safe to call from internal mutations (no auth required).
-		const blackedOut = await isBlackoutHelper(ctx, args.tourId, args.date);
+		const blackedOut = await isBlackoutHelper(ctx, args.tourId, date);
 		if (blackedOut) {
 			throw new ConvexError(
 				"This date is not available for booking. Please pick another date.",
 			);
 		}
+
+		const emailConsent = args.emailConsent === true;
+		const smsConsent = args.smsConsent === true;
 
 		const existing = await ctx.db
 			.query("customers")
@@ -305,19 +425,42 @@ export const internalCreate = internalMutation({
 			.unique();
 
 		const now = Date.now();
-		const customerId =
-			existing?._id ??
-			(await ctx.db.insert("customers", {
+		let customerId = existing?._id;
+		if (customerId && existing) {
+			const patch: {
+				updatedAt: number;
+				smsConsent?: boolean;
+				emailConsent?: boolean;
+				smsConsentDate?: number;
+				emailConsentDate?: number;
+				phone?: string;
+				name?: string;
+			} = { updatedAt: now };
+			if (emailConsent && !existing.emailConsent) {
+				patch.emailConsent = true;
+				patch.emailConsentDate = now;
+			}
+			if (smsConsent && !existing.smsConsent) {
+				patch.smsConsent = true;
+				patch.smsConsentDate = now;
+			}
+			if (validInput.phone && !existing.phone) {
+				patch.phone = validInput.phone;
+			}
+			if (Object.keys(patch).length > 1) {
+				await ctx.db.patch(customerId, patch);
+			}
+		} else {
+			customerId = await ctx.db.insert("customers", {
 				organizationId: args.organizationId,
 				name: validInput.name,
 				email: normalizedEmail,
 				phone: validInput.phone,
 				notes: validInput.notes,
-				// Source default: False for both consent fields
-				// (models.py:891-892). The public booking form should
-				// collect explicit consent before flipping these on.
-				smsConsent: false,
-				emailConsent: false,
+				smsConsent,
+				emailConsent,
+				smsConsentDate: smsConsent ? now : undefined,
+				emailConsentDate: emailConsent ? now : undefined,
 				preferredLanguage: "en",
 				tags: [],
 				source: "public_booking",
@@ -329,33 +472,55 @@ export const internalCreate = internalMutation({
 				totalRevenueCents: 0n,
 				createdAt: now,
 				updatedAt: now,
-			}));
+			});
+		}
+
+		const unitPrice = tour.basePriceCents ?? 0n;
+		const totalAmountCents = unitPrice * BigInt(args.guests);
+
+		if (!customerId) {
+			throw new ConvexError("Failed to resolve customer");
+		}
 
 		const bookingId = await ctx.db.insert("bookings", {
 			organizationId: args.organizationId,
 			tourId: args.tourId,
+			scheduleId,
 			customerId,
-			date: args.date,
-			startTime: args.startTime,
+			date,
+			startTime,
 			guests: args.guests,
 			guestNames: "",
 			languageRequired: "",
 			notes: validInput.notes,
 			status: "confirmed",
 			depositAmountCents: 0n,
-			totalAmountCents: 0n,
-			balanceDueCents: 0n,
+			totalAmountCents,
+			balanceDueCents: totalAmountCents,
 			paymentMethod: "",
 			checkedInAt: undefined,
 			checkedInBy: "",
 			completedAt: undefined,
-			netRevenueCents: 0n,
+			netRevenueCents: totalAmountCents,
 			source: "public_booking",
 			reviewRating: undefined,
 			reviewComment: "",
 			createdAt: now,
 			updatedAt: now,
 		});
+
+		if (scheduleId) {
+			await ctx.runMutation(
+				internal.tourSchedules.incrementBooked as unknown as Parameters<
+					typeof ctx.runMutation
+				>[0],
+				{
+					organizationId: args.organizationId,
+					scheduleId,
+					guests: args.guests,
+				},
+			);
+		}
 
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
@@ -367,7 +532,9 @@ export const internalCreate = internalMutation({
 			newValues: {
 				tourId: args.tourId,
 				customerEmail: args.customerEmail,
-				date: args.date,
+				date,
+				startTime,
+				scheduleId,
 				guests: args.guests,
 				source: "public_booking",
 			},

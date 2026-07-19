@@ -25,6 +25,8 @@ interface FormValues extends Record<string, unknown> {
 	preferredLanguage: string;
 	notes: string;
 	vipStatus: boolean;
+	emailConsent: boolean;
+	smsConsent: boolean;
 }
 
 interface EditCustomerPageProps {
@@ -48,6 +50,8 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				preferredLanguage: v.preferredLanguage.trim() || "en",
 				notes: v.notes.trim() || undefined,
 				vipStatus: v.vipStatus,
+				emailConsent: v.emailConsent,
+				smsConsent: v.smsConsent,
 			});
 			return customerId;
 		},
@@ -70,6 +74,8 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 			preferredLanguage: "en",
 			notes: "",
 			vipStatus: false,
+			emailConsent: true,
+			smsConsent: false,
 		},
 		redirectTo: (id) => `/dashboard/customers/${id}`,
 		successMessage: "Customer updated",
@@ -84,6 +90,8 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				preferredLanguage: string;
 				notes: string;
 				vipStatus: boolean;
+				emailConsent: boolean;
+				smsConsent: boolean;
 			};
 			form.set("name", c.name);
 			form.set("email", c.email);
@@ -91,6 +99,8 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 			form.set("preferredLanguage", c.preferredLanguage ?? "en");
 			form.set("notes", c.notes ?? "");
 			form.set("vipStatus", !!c.vipStatus);
+			form.set("emailConsent", c.emailConsent !== false);
+			form.set("smsConsent", !!c.smsConsent);
 			setLoaded(true);
 		}
 	}, [customer, loaded, form]);
@@ -190,6 +200,23 @@ export function EditCustomerPage({ customerId }: EditCustomerPageProps) {
 				/>
 				VIP customer
 			</label>
+
+			<div className="space-y-3 rounded-md border p-3">
+				<label className="flex items-center gap-2 text-sm">
+					<Checkbox
+						checked={form.values.emailConsent}
+						onCheckedChange={(c) => form.set("emailConsent", c === true)}
+					/>
+					Email updates & reminders
+				</label>
+				<label className="flex items-center gap-2 text-sm">
+					<Checkbox
+						checked={form.values.smsConsent}
+						onCheckedChange={(c) => form.set("smsConsent", c === true)}
+					/>
+					SMS reminders
+				</label>
+			</div>
 		</EntityFormPage>
 	);
 }

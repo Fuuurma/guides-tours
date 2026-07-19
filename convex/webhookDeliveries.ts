@@ -13,7 +13,12 @@
 // doesn't block the actual webhook dispatch.
 
 import { v, ConvexError } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import {
+	internalMutation,
+	internalQuery,
+	query,
+} from "./_generated/server";
+import { requireMembership } from "./lib/authz";
 
 /**
  * Record a webhook delivery. Idempotent on (source, eventId) — if a
@@ -148,5 +153,41 @@ export const listByOrg = internalQuery({
 		return all
 			.sort((a, b) => b.receivedAt - a.receivedAt)
 			.slice(0, limit);
+	},
+});
+
+/**
+ * Dashboard: recent webhook deliveries (OTA + Stripe) for the active org.
+ * Omits full payloads — operators need status/health, not raw JSON.
+ */
+export const listRecent = query({
+	args: {
+		limit: v.optional(v.number()),
+		source: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const limit = Math.min(args.limit ?? 40, 100);
+		const all = await ctx.db
+			.query("webhookDeliveries")
+			.withIndex("by_org", (q) =>
+				q.eq("organizationId", member.organizationId),
+			)
+			.collect();
+		return all
+			.filter((d) => (args.source ? d.source === args.source : true))
+			.sort((a, b) => b.receivedAt - a.receivedAt)
+			.slice(0, limit)
+			.map((d) => ({
+				_id: d._id,
+				source: d.source,
+				eventId: d.eventId,
+				eventType: d.eventType,
+				status: d.status,
+				errorMessage: d.errorMessage,
+				skipReason: d.skipReason,
+				receivedAt: d.receivedAt,
+				processedAt: d.processedAt,
+			}));
 	},
 });

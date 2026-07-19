@@ -23,6 +23,56 @@ import {
 } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
+
+/** Apply a succeeded charge against booking.balanceDueCents. */
+async function applyPaymentToBooking(
+	ctx: MutationCtx,
+	args: {
+		organizationId: string;
+		bookingId: Id<"bookings">;
+		amountCents: bigint;
+		now: number;
+	},
+): Promise<void> {
+	const booking = await ctx.db.get(args.bookingId);
+	if (!booking || booking.organizationId !== args.organizationId) return;
+	const paid = args.amountCents;
+	const prevBalance = booking.balanceDueCents;
+	const nextBalance = prevBalance > paid ? prevBalance - paid : 0n;
+	const applied = prevBalance - nextBalance;
+	await ctx.db.patch(args.bookingId, {
+		balanceDueCents: nextBalance,
+		depositAmountCents: booking.depositAmountCents + applied,
+		updatedAt: args.now,
+	});
+}
+
+/** Reverse a refunded charge back onto booking.balanceDueCents. */
+async function reversePaymentOnBooking(
+	ctx: MutationCtx,
+	args: {
+		organizationId: string;
+		bookingId: Id<"bookings">;
+		amountCents: bigint;
+		now: number;
+	},
+): Promise<void> {
+	const booking = await ctx.db.get(args.bookingId);
+	if (!booking || booking.organizationId !== args.organizationId) return;
+	const refunded = args.amountCents;
+	const nextDeposit =
+		booking.depositAmountCents > refunded
+			? booking.depositAmountCents - refunded
+			: 0n;
+	const removed = booking.depositAmountCents - nextDeposit;
+	await ctx.db.patch(args.bookingId, {
+		depositAmountCents: nextDeposit,
+		balanceDueCents: booking.balanceDueCents + removed,
+		updatedAt: args.now,
+	});
+}
 import {
 	CURRENCY_REGEX,
 	MAX_STRIPE_INTENT_ID_LEN,
@@ -201,6 +251,16 @@ export const markSucceeded = internalMutation({
 			processedAt: now,
 			updatedAt: now,
 		});
+
+		if (p.bookingId) {
+			await applyPaymentToBooking(ctx, {
+				organizationId: p.organizationId,
+				bookingId: p.bookingId,
+				amountCents: p.amountCents,
+				now,
+			});
+		}
+
 		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",
@@ -257,11 +317,12 @@ export const markFailed = internalMutation({
 });
 
 /**
- * @internal
- * No FE caller as of 2026-06-29. Stripe webhook handles automatic refunds
- * via charge.refunded events. Kept as a public mutation so it can be
- * wired to a "refund" button in the bookings detail page when needed.
- * See docs/DATA_LAYER_STATUS.md for the current dead-surface list.
+ * Local-only refund marker for non-Stripe / already-refunded-in-dashboard
+ * edge cases. Dashboard "Refund" must call
+ * `payments_stripe_actions.refundViaStripe` so Stripe is refunded first;
+ * that action then calls `markRefunded`. Do not use this mutation when a
+ * real `pi_` PaymentIntent exists — it would restore balance without
+ * returning money in Stripe.
  */
 export const refund = mutation({
 	args: {
@@ -280,10 +341,11 @@ export const refund = mutation({
 				`Only succeeded payments can be refunded (was ${p.status})`,
 			);
 		}
-		// We just mark refunded here. The actual Stripe refund call
-		// happens in payments_stripe_actions.ts (server action) before
-		// this mutation runs. If the Stripe call fails, the row stays
-		// at 'succeeded' and no refund is recorded.
+		if (p.stripePaymentIntentId.startsWith("pi_")) {
+			throw new ConvexError(
+				"Use Stripe refund (refundViaStripe) for payments with a PaymentIntent",
+			);
+		}
 		const now = Date.now();
 		await ctx.db.patch(args.paymentId, {
 			status: "refunded",
@@ -309,6 +371,16 @@ export const refund = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+
+		if (p.bookingId) {
+			await reversePaymentOnBooking(ctx, {
+				organizationId: p.organizationId,
+				bookingId: p.bookingId,
+				amountCents: p.amountCents,
+				now,
+			});
+		}
+
 		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: member.userId,
@@ -493,6 +565,7 @@ export const getStripeSecrets = internalQuery({
 			.unique();
 		if (!s) return null;
 		return {
+			stripeEnabled: s.stripeEnabled,
 			stripeSecretKey: s.stripeSecretKey,
 			stripeWebhookSecret: s.stripeWebhookSecret,
 			stripeIsSandbox: s.stripeIsSandbox,
@@ -507,11 +580,14 @@ export const getBookingForCheckout = internalQuery({
 	handler: async (ctx, args) => {
 		const b = await ctx.db.get(args.bookingId);
 		if (!b) return null;
+		const customer = await ctx.db.get(b.customerId);
 		return {
 			organizationId: b.organizationId,
 			status: b.status,
 			totalAmountCents: b.totalAmountCents,
+			balanceDueCents: b.balanceDueCents,
 			customerId: b.customerId,
+			customerEmail: customer?.email,
 		};
 	},
 });
@@ -537,6 +613,45 @@ export const getPaymentByIntent = internalQuery({
 		// replay attack with re-routed metadata, etc.).
 		if (p.organizationId !== args.organizationId) return null;
 		return p._id;
+	},
+});
+
+/**
+ * Internal: resolve org from a PaymentIntent id when charge events
+ * lack metadata.organizationId. Intent ids are globally unique.
+ */
+export const getPaymentRowByIntent = internalQuery({
+	args: { stripePaymentIntentId: v.string() },
+	handler: async (ctx, args) => {
+		const p = await ctx.db
+			.query("payments")
+			.withIndex("by_stripe_intent", (q) =>
+				q.eq("stripePaymentIntentId", args.stripePaymentIntentId),
+			)
+			.unique();
+		if (!p) return null;
+		return {
+			paymentId: p._id,
+			organizationId: p.organizationId,
+			status: p.status,
+		};
+	},
+});
+
+/** Internal: load payment fields needed for Stripe refund action. */
+export const getPaymentForRefund = internalQuery({
+	args: { paymentId: v.id("payments") },
+	handler: async (ctx, args) => {
+		const p = await ctx.db.get(args.paymentId);
+		if (!p) return null;
+		return {
+			organizationId: p.organizationId,
+			status: p.status,
+			amountCents: p.amountCents,
+			currency: p.currency,
+			stripePaymentIntentId: p.stripePaymentIntentId,
+			bookingId: p.bookingId,
+		};
 	},
 });
 
@@ -669,6 +784,16 @@ export const markRefunded = internalMutation({
 				updatedAt: now,
 			});
 		}
+
+		if (p.bookingId) {
+			await reversePaymentOnBooking(ctx, {
+				organizationId: p.organizationId,
+				bookingId: p.bookingId,
+				amountCents: args.refund?.amountCents ?? p.amountCents,
+				now,
+			});
+		}
+
 		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",

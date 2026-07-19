@@ -7,8 +7,10 @@
 // Source: /api/auth/me equivalent + /api/staff/company settings from
 // reservations-automation (combined into one helper).
 
+import { v, ConvexError } from "convex/values";
 import { query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
+import { requireMembership } from "./lib/authz";
 
 export const activeOrganization = query({
 	args: {},
@@ -74,5 +76,64 @@ export const listMyOrganizations = query({
 			logo: org.logo ?? null,
 			isActive: org.id === activeOrgId,
 		}));
+	},
+});
+
+export type OrgMember = {
+	userId: string;
+	name: string;
+	email: string;
+	role: string;
+	image: string | null;
+};
+
+/**
+ * List members of the caller's active organization.
+ * Optional `roles` filter (e.g. ["guide","owner","admin"] for assignment pickers).
+ */
+export const listMembers = query({
+	args: {
+		roles: v.optional(v.array(v.string())),
+	},
+	handler: async (ctx, args): Promise<OrgMember[]> => {
+		const member = await requireMembership(ctx);
+		const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+		let members: Array<{
+			userId: string;
+			role: string;
+			user?: {
+				id?: string;
+				name?: string | null;
+				email?: string | null;
+				image?: string | null;
+			};
+		}> = [];
+		try {
+			const memberList = await auth.api.listMembers({
+				headers,
+				query: { organizationId: member.organizationId },
+			});
+			members = memberList.members ?? [];
+		} catch (err) {
+			// Surface auth/API failures so the FE error UI can show them
+			// instead of an empty roster that looks like "no members".
+			throw new ConvexError(
+				`Failed to list organization members: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+
+		const roleFilter =
+			args.roles && args.roles.length > 0 ? new Set(args.roles) : null;
+
+		return members
+			.filter((m) => (roleFilter ? roleFilter.has(m.role) : true))
+			.map((m) => ({
+				userId: m.userId,
+				name: m.user?.name?.trim() || m.user?.email || m.userId,
+				email: m.user?.email ?? "",
+				role: m.role,
+				image: m.user?.image ?? null,
+			}))
+			.sort((a, b) => a.name.localeCompare(b.name));
 	},
 });

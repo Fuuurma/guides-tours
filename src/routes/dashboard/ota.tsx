@@ -26,6 +26,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/status-badge";
 import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -192,6 +193,10 @@ function OtaIntegrationsPage() {
 				<NewIntegrationForm available={available.map((p) => p.id)} />
 			)}
 
+			<OtaProductsSection integrations={items} />
+
+			<WebhookDeliveriesSection />
+
 			<Card>
 				<CardHeader>
 					<CardTitle>Webhook URLs</CardTitle>
@@ -220,6 +225,306 @@ function OtaIntegrationsPage() {
 				</Button>
 			</footer>
 		</div>
+	);
+}
+
+function OtaProductsSection({
+	integrations,
+}: {
+	integrations: Array<{ _id: string; provider: string }>;
+}) {
+	const { data: products, isPending } = useQuery(
+		convexQuery(api.otaProducts.list, {}),
+	);
+	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
+	const createProduct = useMutation(api.otaProducts.create);
+	const updateProduct = useMutation(api.otaProducts.update);
+	const removeProduct = useMutation(api.otaProducts.remove);
+
+	const [open, setOpen] = useState(false);
+	const [editId, setEditId] = useState<Id<"otaProducts"> | null>(null);
+	const [tourId, setTourId] = useState("");
+	const [integrationId, setIntegrationId] = useState("");
+	const [otaProductId, setOtaProductId] = useState("");
+	const [otaProductCode, setOtaProductCode] = useState("");
+	const [commissionRate, setCommissionRate] = useState("0.2");
+	const [syncStatus, setSyncStatus] = useState("synced");
+	const [pending, setPending] = useState(false);
+
+	const tourName = (id: string) =>
+		(tours ?? []).find((t) => t._id === id)?.name ?? id;
+	const providerLabel = (id: string) => {
+		const integ = integrations.find((i) => i._id === id);
+		return (
+			ALL_PROVIDERS.find((p) => p.id === integ?.provider)?.label ??
+			integ?.provider ??
+			id
+		);
+	};
+
+	const onCreate = async (e: React.FormEvent) => {
+		e.preventDefault();
+		setPending(true);
+		try {
+			const rate = Number(commissionRate);
+			if (!tourId || !integrationId || !otaProductId.trim()) {
+				throw new Error("Tour, integration, and OTA product ID are required");
+			}
+			if (!Number.isFinite(rate) || rate < 0 || rate > 1) {
+				throw new Error("Commission rate must be between 0 and 1");
+			}
+			if (editId) {
+				await updateProduct({
+					productId: editId,
+					otaProductCode: otaProductCode.trim() || undefined,
+					commissionRate: rate,
+					syncStatus: syncStatus || undefined,
+				});
+				toast.success("OTA product updated");
+			} else {
+				await createProduct({
+					tourId: tourId as Id<"tours">,
+					integrationId: integrationId as Id<"otaIntegrations">,
+					otaProductId: otaProductId.trim(),
+					otaProductCode: otaProductCode.trim() || undefined,
+					commissionRate: rate,
+				});
+				toast.success("OTA product linked");
+			}
+			setOpen(false);
+			setEditId(null);
+			setOtaProductId("");
+			setOtaProductCode("");
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setPending(false);
+		}
+	};
+
+	const openEdit = (p: {
+		_id: Id<"otaProducts">;
+		tourId: string;
+		integrationId: string;
+		otaProductId: string;
+		otaProductCode?: string;
+		commissionRate: number;
+		syncStatus: string;
+	}) => {
+		setEditId(p._id);
+		setTourId(p.tourId);
+		setIntegrationId(p.integrationId);
+		setOtaProductId(p.otaProductId);
+		setOtaProductCode(p.otaProductCode ?? "");
+		setCommissionRate(String(p.commissionRate));
+		setSyncStatus(p.syncStatus || "synced");
+		setOpen(true);
+	};
+
+	return (
+		<Card>
+			<CardHeader className="flex flex-row items-center justify-between space-y-0">
+				<div>
+					<CardTitle>OTA products</CardTitle>
+					<CardDescription>
+						Link external listings to your tours for webhook matching
+					</CardDescription>
+				</div>
+				<Button
+					type="button"
+					size="sm"
+					disabled={integrations.length === 0}
+					onClick={() => {
+						setEditId(null);
+						setIntegrationId(integrations[0]?._id ?? "");
+						setTourId((tours ?? [])[0]?._id ?? "");
+						setOtaProductId("");
+						setOtaProductCode("");
+						setCommissionRate("0.2");
+						setSyncStatus("synced");
+						setOpen(true);
+					}}
+				>
+					+ Product
+				</Button>
+			</CardHeader>
+			<CardContent>
+				{isPending ? (
+					<Skeleton className="h-12 w-full" />
+				) : (products?.length ?? 0) === 0 ? (
+					<p className="text-muted-foreground text-sm">
+						No OTA products linked yet.
+					</p>
+				) : (
+					<ul className="flex flex-col gap-2">
+						{(products ?? []).map((p) => (
+							<li
+								key={p._id}
+								className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
+							>
+								<div className="text-sm min-w-0">
+									<p className="font-medium truncate">
+										{p.otaTitle || p.otaProductId}
+									</p>
+									<p className="text-muted-foreground text-xs">
+										{providerLabel(p.integrationId)} · {tourName(p.tourId)} ·{" "}
+										{p.syncStatus}
+										{p.otaProductCode ? ` · ${p.otaProductCode}` : ""}
+									</p>
+								</div>
+								<div className="flex items-center gap-2">
+									<Badge variant="secondary">
+										{(p.commissionRate * 100).toFixed(0)}%
+									</Badge>
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										onClick={() => openEdit(p)}
+									>
+										Edit
+									</Button>
+									<Button
+										type="button"
+										size="sm"
+										variant="destructive"
+										onClick={async () => {
+											if (!window.confirm("Delete this OTA product link?")) {
+												return;
+											}
+											try {
+												await removeProduct({ productId: p._id });
+												toast.success("Product deleted");
+											} catch (err) {
+												toast.error(getErrorMessage(err));
+											}
+										}}
+									>
+										Delete
+									</Button>
+								</div>
+							</li>
+						))}
+					</ul>
+				)}
+
+				{open && (
+					<form
+						onSubmit={onCreate}
+						className="mt-4 flex flex-col gap-3 border-t pt-4"
+					>
+						<p className="text-sm font-medium">
+							{editId ? "Edit OTA product" : "Link OTA product"}
+						</p>
+						<div className="grid gap-3 md:grid-cols-2">
+							<FormField label="Tour *" htmlFor="ota-tour">
+								<Select
+									value={tourId}
+									onValueChange={setTourId}
+									disabled={Boolean(editId)}
+								>
+									<SelectTrigger id="ota-tour">
+										<SelectValue placeholder="Select tour" />
+									</SelectTrigger>
+									<SelectContent>
+										{(tours ?? []).map((t) => (
+											<SelectItem key={t._id} value={t._id}>
+												{t.name}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</FormField>
+							<FormField label="Integration *" htmlFor="ota-integ">
+								<Select
+									value={integrationId}
+									onValueChange={setIntegrationId}
+									disabled={Boolean(editId)}
+								>
+									<SelectTrigger id="ota-integ">
+										<SelectValue placeholder="Select integration" />
+									</SelectTrigger>
+									<SelectContent>
+										{integrations.map((i) => (
+											<SelectItem key={i._id} value={i._id}>
+												{providerLabel(i._id)}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</FormField>
+						</div>
+						<FormField label="OTA product ID *" htmlFor="ota-pid">
+							<Input
+								id="ota-pid"
+								value={otaProductId}
+								onChange={(e) => setOtaProductId(e.target.value)}
+								placeholder="Provider product / activity ID"
+								disabled={Boolean(editId)}
+							/>
+						</FormField>
+						<div className="grid gap-3 md:grid-cols-3">
+							<FormField label="Product code" htmlFor="ota-code">
+								<Input
+									id="ota-code"
+									value={otaProductCode}
+									onChange={(e) => setOtaProductCode(e.target.value)}
+								/>
+							</FormField>
+							<FormField
+								label="Commission rate"
+								hint="0–1 (e.g. 0.2 = 20%)"
+								htmlFor="ota-comm"
+							>
+								<Input
+									id="ota-comm"
+									type="number"
+									min={0}
+									max={1}
+									step={0.01}
+									value={commissionRate}
+									onChange={(e) => setCommissionRate(e.target.value)}
+								/>
+							</FormField>
+							{editId ? (
+								<FormField label="Sync status" htmlFor="ota-sync">
+									<Select value={syncStatus} onValueChange={setSyncStatus}>
+										<SelectTrigger id="ota-sync">
+											<SelectValue />
+										</SelectTrigger>
+										<SelectContent>
+											<SelectItem value="synced">synced</SelectItem>
+											<SelectItem value="pending">pending</SelectItem>
+											<SelectItem value="error">error</SelectItem>
+											<SelectItem value="disabled">disabled</SelectItem>
+										</SelectContent>
+									</Select>
+								</FormField>
+							) : null}
+						</div>
+						<div className="flex gap-2 justify-end">
+							<Button
+								type="button"
+								variant="outline"
+								onClick={() => {
+									setOpen(false);
+									setEditId(null);
+								}}
+							>
+								Cancel
+							</Button>
+							<Button type="submit" disabled={pending}>
+								{pending
+									? "Saving…"
+									: editId
+										? "Save changes"
+										: "Create product"}
+							</Button>
+						</div>
+					</form>
+				)}
+			</CardContent>
+		</Card>
 	);
 }
 
@@ -349,6 +654,58 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 
 					<FormActions pending={pending} submitLabel="Create integration" />
 				</form>
+			</CardContent>
+		</Card>
+	);
+}
+
+function WebhookDeliveriesSection() {
+	const { data: deliveries, isPending } = useQuery(
+		convexQuery(api.webhookDeliveries.listRecent, { limit: 40 }),
+	);
+
+	return (
+		<Card>
+			<CardHeader>
+				<CardTitle>Recent webhook deliveries</CardTitle>
+				<CardDescription>
+					OTA and Stripe webhook attempts for this organization
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				{isPending ? (
+					<p className="text-muted-foreground text-sm">Loading…</p>
+				) : !deliveries || deliveries.length === 0 ? (
+					<p className="text-muted-foreground text-sm">
+						No webhook deliveries recorded yet.
+					</p>
+				) : (
+					<ul className="divide-y rounded-md border">
+						{deliveries.map((d) => (
+							<li
+								key={d._id}
+								className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+							>
+								<div className="min-w-0">
+									<p className="font-medium truncate">
+										{d.source} · {d.eventType}
+									</p>
+									<p className="text-muted-foreground text-xs truncate font-mono">
+										{d.eventId}
+										{d.errorMessage ? ` — ${d.errorMessage}` : ""}
+										{d.skipReason ? ` — ${d.skipReason}` : ""}
+									</p>
+								</div>
+								<div className="flex items-center gap-2 shrink-0">
+									<StatusBadge status={d.status} />
+									<span className="text-muted-foreground text-xs font-mono">
+										{new Date(d.receivedAt).toLocaleString()}
+									</span>
+								</div>
+							</li>
+						))}
+					</ul>
+				)}
 			</CardContent>
 		</Card>
 	);

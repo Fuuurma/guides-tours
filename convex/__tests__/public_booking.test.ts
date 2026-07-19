@@ -720,3 +720,144 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		).rejects.toThrow(/not available/i);
 	});
 });
+describe("convex/public_booking — schedule capacity", () => {
+	async function seedSchedule(
+		ctx: TestCtx,
+		orgId: string,
+		tourId: Id<"tours">,
+		capacityTotal: number,
+		date = "2026-09-10",
+		startTime = "10:00",
+	): Promise<Id<"tourSchedules">> {
+		return await ctx.db.insert("tourSchedules", {
+			organizationId: orgId,
+			tourId,
+			date,
+			startTime,
+			endTime: "12:00",
+			capacityTotal,
+			capacityBooked: 0,
+			status: "available",
+			notes: "",
+			createdAt: 0,
+			updatedAt: 0,
+		});
+	}
+
+	it("attaches scheduleId and increments capacityBooked", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_cap_a";
+		const { tourId, scheduleId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, orgId, 20);
+			const scheduleId = await seedSchedule(c, orgId, tourId, 10);
+			return { tourId, scheduleId };
+		});
+
+		const bookingId = await t.mutation(
+			internal.public_booking.internalCreate,
+			{
+				organizationId: orgId,
+				tourId,
+				scheduleId,
+				customerName: "Cap Alice",
+				customerEmail: "cap-alice@example.com",
+				date: "2026-09-10",
+				startTime: "10:00",
+				guests: 3,
+			},
+		);
+
+		const booking = await t.run(async (ctx) => ctx.db.get(bookingId));
+		expect(booking?.scheduleId).toBe(scheduleId);
+		expect(booking?.guests).toBe(3);
+
+		const schedule = await t.run(async (ctx) => ctx.db.get(scheduleId));
+		expect(schedule?.capacityBooked).toBe(3);
+	});
+
+	it("rejects when schedule is over capacity", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_cap_b";
+		const { tourId, scheduleId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, orgId, 20);
+			const scheduleId = await seedSchedule(c, orgId, tourId, 4);
+			await c.db.patch(scheduleId, { capacityBooked: 3 });
+			return { tourId, scheduleId };
+		});
+
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				scheduleId,
+				customerName: "Cap Bob",
+				customerEmail: "cap-bob@example.com",
+				date: "2026-09-10",
+				startTime: "10:00",
+				guests: 2,
+			}),
+		).rejects.toThrow(/over capacity/i);
+	});
+
+	it("auto-attaches matching schedule when scheduleId omitted", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_cap_c";
+		const { tourId, scheduleId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, orgId, 20);
+			const scheduleId = await seedSchedule(c, orgId, tourId, 8);
+			return { tourId, scheduleId };
+		});
+
+		const bookingId = await t.mutation(
+			internal.public_booking.internalCreate,
+			{
+				organizationId: orgId,
+				tourId,
+				customerName: "Cap Carol",
+				customerEmail: "cap-carol@example.com",
+				date: "2026-09-10",
+				startTime: "10:00",
+				guests: 2,
+			},
+		);
+
+		const booking = await t.run(async (ctx) => ctx.db.get(bookingId));
+		expect(booking?.scheduleId).toBe(scheduleId);
+		const schedule = await t.run(async (ctx) => ctx.db.get(scheduleId));
+		expect(schedule?.capacityBooked).toBe(2);
+	});
+
+	it("stores email/sms consent when provided", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_cap_d";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+
+		await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: orgId,
+			tourId,
+			customerName: "Cap Dana",
+			customerEmail: "cap-dana@example.com",
+			date: "2026-09-12",
+			startTime: "11:00",
+			guests: 1,
+			emailConsent: true,
+			smsConsent: true,
+		});
+
+		const customer = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("customers")
+				.withIndex("by_org_email", (q) =>
+					q.eq("organizationId", orgId).eq("email", "cap-dana@example.com"),
+				)
+				.unique();
+		});
+		expect(customer?.emailConsent).toBe(true);
+		expect(customer?.smsConsent).toBe(true);
+	});
+});

@@ -4,11 +4,9 @@ This document tracks which backend modules are wired to the frontend
 dashboard and which are data-layer only. Useful for planning future
 UI work and for understanding what's safe to call from the FE today.
 
-**Status of the migration as of 2026-06-29:** all 47 dashboard routes
-ship, all critical workflows (auth, booking, public booking, OTA,
-payments) work end-to-end. The gaps below are "nice to have" features
-where the data model and Convex queries exist but no UI exposes them
-yet.
+**Status as of 2026-07-19:** local calendar date math, `"skip"` query
+patterns, slug-scoped public blackouts, schedule cancel, assignment
+date validation, and expanded ops e2e smokes.
 
 ## Fully wired (FE calls + tests + production-ready)
 
@@ -19,42 +17,41 @@ by integration tests:
 | Module           | What works in the FE                                  |
 |------------------|--------------------------------------------------------|
 | `auth.ts`        | sign-up, sign-in, OAuth (Better Auth catch-all)        |
-| `organizations.ts` | active org query, slug lookup, org switcher (listMyOrganizations) |
+| `organizations.ts` | active org, slug lookup, org switcher, **listMembers** |
 | `tours.ts`       | list/get/create/update + Categories filter             |
 | `tourCategories.ts` | list/create/update/remove + enable/disable buttons  |
-| `tourSchedules.ts` | create + capacity tracking on book/cancel            |
+| `tourSchedules.ts` | create/update + **(tourId, date, startTime) uniqueness** + capacity on book/cancel |
 | `tourTemplates.ts` | list/create/update/remove + enable/disable + Use Template (instantiate) |
-| `tourBlackoutDates.ts` | `isBlackout` query (auth-gated — needs public variant for booking page) |
+| `tourBlackoutDates.ts` | list/create/remove on tour detail + **slug-scoped** `publicIsBlackout` |
+| `tourSeasonalSchedules.ts` | CRUD + **generate** (materialize schedules) on tour detail |
+| `tourExceptionDates.ts` | CRUD on tour detail                               |
+| `tourImages.ts`   | list (with URLs) + add/update/remove/**reorder** gallery on tour detail |
+| `files.ts`       | `generateUploadUrl` for tour image uploads             |
+| `availabilities.ts` | guide availability month grid on `/dashboard/guides/$userId` |
 | `customers.ts`   | list (search + VIP filter) + get + create/update + history |
-| `assignments.ts` | list + create + complete + cancel + remove + conflict checker |
+| `assignments.ts` | list + create + complete + cancel + remove + conflict checker + **calendar** |
 | `bookings.ts`    | list + create + edit + check-in + complete + cancel + record review + refund |
-| `drivers.ts`     | list + create/update + activate/deactivate + remove    |
+| `drivers.ts`     | list + create (org-member check) / update + activate/deactivate + remove |
 | `vehicles.ts`    | list + create + status changer + remove                |
 | `vacationRequests.ts` | list + create + approve + reject                   |
 | `notifications.ts` | list + create/update + enable/disable + remove       |
-| `notificationSettings.ts` | get + upsert (Twilio/SES credentials)         |
-| `notificationTemplates.ts` | list + create/update + enable/disable + remove |
+| `notificationSettings.ts` | get + upsert (Twilio/SES + Messaging Service SID) |
+| `notificationTemplates.ts` | list/create/update + preview + test send + **edit UI** |
+| `notification_sms.ts` / `notification_dispatch.ts` | Twilio SMS via fetch + shared `renderNotification` (email + SMS bodies) |
 | `ota/integrations.ts` + `ota/integrations_mutations.ts` | list + create + enable/disable + remove + secret masking |
+| `otaProducts.ts` | list + create + remove on OTA dashboard                |
 | `ota/router.ts`  | 7 webhook routes registered (Viator, GetYourGuide, Airbnb, TripAdvisor, Klook, Booking.com, Expedia) |
-| `payments.ts`    | public settings (Stripe + Twilio masked) + upsert + webhook handler |
-| `public_booking.ts` | `getOrgAndToursBySlug` + `createForSlug` action     |
+| `payments.ts` + `payments_stripe_actions.ts` | settings + **hosted Checkout** + **refundViaStripe** + webhook create-on-success + balance sync |
+| `public_booking.ts` | slots + create + **canPay** for post-book Stripe Checkout |
+| `webhookDeliveries.ts` | **listRecent** on OTA dashboard (OTA + Stripe) |
 | `analytics.ts`   | overview KPIs + revenue summary (used by dashboard)    |
 
 ## Data-layer only (no FE wiring yet, but Convex + tests ready)
 
-These modules have working Convex schemas, queries, mutations, and
-test coverage. The FE doesn't call them today — they're reserved for
-upcoming UI work. Safe to call from new dashboard routes.
-
 | Module                  | Status                                              |
 |-------------------------|-----------------------------------------------------|
-| `files.ts`              | Storage upload URL + track metadata. Use case: customer documents, tour images. |
-| `tourImages.ts`         | Per-tour image gallery. Use case: marketing site tour photos. |
-| `otaProducts.ts`        | OTA product cache (linked from otaBookings). Use case: cross-reference Viator/Klook products. |
 | `tourAnalytics.ts`      | Aggregated tour stats table. Use case: longer-range trends (90d+). |
-| `tourExceptionDates.ts` | Per-tour date overrides. Use case: "this tour doesn't run on holidays". |
-| `tourSeasonalSchedules.ts` | Recurring weekly schedule generator. Use case: "every Saturday at 9am". |
-| `tourBlackoutDates.ts`  | Blackout window table (the `isBlackout` query is exported but no FE caller). Use case: closure calendar. |
+| `files.ts` (full CRUD)  | Track/list generic files beyond tour-image uploads. |
 
 ## Internals (called by Convex, not exposed to FE)
 
@@ -63,47 +60,12 @@ Convex. They have FE-facing `public*` counterparts in most cases.
 
 | Function              | Wraps                                              |
 |-----------------------|----------------------------------------------------|
-| `internalCreate` / `internalUpdate` / `internalRemove` | public `create` / `update` / `remove` (auth + validation lives in public) |
-| `internalListBySchedule` | `bookings.listBySchedule` (bypasses auth — used by tests + cross-table calls) |
-| `internalGetStats`    | `vacationRequests.getStats`                        |
-| `internalSetStatus`   | `vehicles.setStatus`                               |
-| `internalSetActive`   | `drivers.setActive`                                |
-| `internalUpsert`      | `notificationSettings.upsert`                      |
-| `internalComplete` / `internalCancel` | `bookings.complete` / `bookings.cancel` |
-| `internalTrack`       | `files.internalTrack` (public `track` removed — internal-only now) |
-| `internalApprove` / `internalReject` | `vacationRequests.approve/reject` |
-| `internalAdd`         | `tourImages.internalAdd` (public `add` removed — internal-only now) |
-| `internalCancel`      | `assignments.cancel`                                |
-| `internalComplete`    | `assignments.complete`                             |
-| `internalRecord`      | `tourAnalytics.record`                             |
-| `internalUpdate`      | (per-resource)                                      |
-| `analytics.ts`        | `getDailyStatsInternal` / `getGuideStatsInternal` / `getTourStatsInternal` / `getTopToursInternal` — used by tests only |
-
-## Dead public surface (called by nothing, intentional or stale)
-
-Public functions with no FE caller AND no internal caller. The plan
-is to either wire them up or remove them in a future cleanup pass.
-None of these block the deploy.
-
-- `tourBlackoutDates.isBlackout` (auth-gated query — needs public variant for unauthenticated booking page)
-
-## Unused indexes (declared in schema, no query uses them)
-
-Convex doesn't auto-prune unused indexes; they're just extra storage.
-Left in place to avoid a schema migration. Safe to remove in a future
-cleanup if size becomes a concern.
-
-- `bookings.by_org_status` (bookings.list uses by_org_date + JS filter)
-- `customers.by_org_next_booking` (`nextBookingDate` field is set by
-  bookings.create but never queried)
-- `customers.by_org_name` (no name-based queries today)
+| `internalCreate` / `internalUpdate` / `internalRemove` | public `create` / `update` / `remove` |
+| `internalGenerate`    | `tourSeasonalSchedules.generate`                   |
+| `internalAdd`         | `tourImages.add`                                   |
+| `getTwilioConfig` / `recordSmsMessage` | SMS dispatch path                    |
 
 ## Test coverage
 
-All wired modules are covered by `convex/__tests__/**.test.ts` and
-the `e2e/smoke.spec.ts` Playwright suite. The data-layer-only modules
-are covered by their own unit tests — they're working code, they just
-lack a UI consumer.
-
-To run the full suite: `pnpm test` (647 tests) and
-`pnpm test:e2e` (Playwright smoke).
+Run the full suite: `pnpm test` (689+) and `pnpm test:e2e` (Playwright: smoke + authenticated + ops).
+Ops e2e covers calendar deep-link, guides availability, and gallery upload surface (`e2e/ops.spec.ts`).

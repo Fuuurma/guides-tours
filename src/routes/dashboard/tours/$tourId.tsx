@@ -4,6 +4,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import {
+	TourGallerySection,
+	TourScheduleRulesSection,
+} from "@/components/tour-ops-sections";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
@@ -115,6 +119,9 @@ function TourDetailPage() {
 					</div>
 				))}
 			</DetailSection>
+
+			<TourGallerySection tourId={tour._id} />
+			<TourScheduleRulesSection tourId={tour._id} />
 
 			<DetailSection
 				title="Capacity utilization"

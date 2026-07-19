@@ -502,6 +502,38 @@ describe("convex/assignments — lifecycle", () => {
 		expect(created).toBeDefined();
 	});
 
+	it("update rejects rescheduling into an already-staffed slot", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_slot_upd";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-10-01",
+			startTime: "09:00",
+		});
+		const otherId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-b",
+			date: "2026-10-01",
+			startTime: "14:00",
+		});
+		await expect(
+			t.mutation(internal.assignments.internalUpdate, {
+				organizationId: orgId,
+				userId: "u1",
+				assignmentId: otherId,
+				startTime: "09:00",
+			}),
+		).rejects.toThrow(/already has a guide assigned/);
+	});
+
 	it("update rejects modifying cancelled assignment", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_upd";

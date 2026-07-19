@@ -181,4 +181,54 @@ describe("tour images", () => {
 		const img = await t.run((ctx) => ctx.db.get(id));
 		expect(img).toBeNull();
 	});
+
+	it("reorder: normalizes displayOrder to 0..n-1", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ti7";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const [s1, s2, s3] = await t.run(async (ctx) => [
+			(await ctx.storage.store(new Blob(["a"]))) as unknown as string,
+			(await ctx.storage.store(new Blob(["b"]))) as unknown as string,
+			(await ctx.storage.store(new Blob(["c"]))) as unknown as string,
+		]);
+		const id1 = await t.mutation(internal.tourImages.internalAdd, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			storageId: s1 as never,
+			displayOrder: 0,
+		});
+		const id2 = await t.mutation(internal.tourImages.internalAdd, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			storageId: s2 as never,
+			displayOrder: 1,
+		});
+		const id3 = await t.mutation(internal.tourImages.internalAdd, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			storageId: s3 as never,
+			displayOrder: 2,
+		});
+
+		await t.mutation(internal.tourImages.internalReorder, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			orderedImageIds: [id3, id1, id2],
+		});
+
+		const rows = await t.run(async (ctx) =>
+			(
+				await ctx.db
+					.query("tourImages")
+					.withIndex("by_tour", (q) => q.eq("tourId", tourId))
+					.collect()
+			).sort((a, b) => a.displayOrder - b.displayOrder),
+		);
+		expect(rows.map((r) => r._id)).toEqual([id3, id1, id2]);
+		expect(rows.map((r) => r.displayOrder)).toEqual([0, 1, 2]);
+	});
 });

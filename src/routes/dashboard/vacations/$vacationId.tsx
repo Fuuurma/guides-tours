@@ -52,15 +52,16 @@ function VacationDetailPage() {
 			1,
 	);
 
-	const onApprove = async () => {
+	const onApprove = async (force = false) => {
 		setPending(true);
 		setErrorMsg(null);
 		try {
-			await approve({ requestId: vacation._id });
+			await approve({ requestId: vacation._id, force: force || undefined });
 			toast.success("Vacation approved");
 		} catch (err) {
-			setErrorMsg(getErrorMessage(err));
-			toast.error(getErrorMessage(err));
+			const msg = getErrorMessage(err);
+			setErrorMsg(msg);
+			toast.error(msg);
 		} finally {
 			setPending(false);
 		}
@@ -106,12 +107,32 @@ function VacationDetailPage() {
 					title="Review"
 					description="Approve or reject this request"
 				>
-					{errorMsg && <ErrorBanner message={errorMsg} />}
-					<div className="flex gap-2">
-						<Button onClick={onApprove} disabled={pending}>
+					{errorMsg && (
+						<ErrorBanner
+							message={errorMsg.replace(
+								/^VACATION_ASSIGNMENT_CONFLICT:\s*/,
+								"",
+							)}
+						/>
+					)}
+					<div className="flex flex-wrap gap-2">
+						<Button onClick={() => onApprove(false)} disabled={pending}>
 							{pending ? "Working…" : "Approve"}
 						</Button>
-						<Button onClick={onReject} disabled={pending} variant="destructive">
+						{errorMsg?.includes("VACATION_ASSIGNMENT_CONFLICT") && (
+							<Button
+								variant="outline"
+								onClick={() => onApprove(true)}
+								disabled={pending}
+							>
+								Approve anyway
+							</Button>
+						)}
+						<Button
+							onClick={onReject}
+							disabled={pending}
+							variant="destructive"
+						>
 							{pending ? "Working…" : "Reject"}
 						</Button>
 					</div>

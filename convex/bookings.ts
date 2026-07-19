@@ -36,6 +36,7 @@ import {
 	MAX_SHORT_FIELD_LEN,
 	assertFieldWithinLimit,
 } from "./lib/validation";
+import { isBlackoutHelper } from "./tourBlackoutDates";
 
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
 // minus currency/conversion noise (we are cents-only).
@@ -399,26 +400,6 @@ export const create = mutation({
 		if (customer.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: customer belongs to a different organization");
 		}
-		// Reject past dates and dates inside the bookingCutoffHours
-		// window. parseBookingTime returns null on malformed input.
-		const tourTs = parseBookingTime(args.date, args.startTime);
-		if (tourTs === null) {
-			throw new ConvexError(
-				`Invalid date or time: "${args.date} ${args.startTime}"`,
-			);
-		}
-		const nowMs = Date.now();
-		if (tourTs <= nowMs) {
-			throw new ConvexError(
-				"Cannot book a tour in the past or starting within the next minute",
-			);
-		}
-		const cutoffMs = tour.bookingCutoffHours ?? 0;
-		if (cutoffMs > 0 && tourTs - nowMs < cutoffMs * 3_600_000) {
-			throw new ConvexError(
-				`Bookings must be made at least ${tour.bookingCutoffHours}h before the tour`,
-			);
-		}
 		if (args.guests <= 0) {
 			throw new ConvexError("guests must be > 0");
 		}
@@ -457,10 +438,13 @@ export const create = mutation({
 			);
 		}
 
-		// If a scheduleId was provided, validate it belongs to the
-		// same tour + org before we attempt to increment its counter.
-		if (args.scheduleId) {
-			const schedule = await ctx.db.get(args.scheduleId);
+		// Resolve schedule first so date/startTime (and capacity) come
+		// from the concrete slot when one is linked.
+		let scheduleId = args.scheduleId;
+		let date = args.date;
+		let startTime = args.startTime;
+		if (scheduleId) {
+			const schedule = await ctx.db.get(scheduleId);
 			if (!schedule) throw new ConvexError("Schedule not found");
 			if (schedule.organizationId !== member.organizationId) {
 				throw new ConvexError(
@@ -472,6 +456,53 @@ export const create = mutation({
 					"Schedule does not belong to the specified tour",
 				);
 			}
+			if (schedule.status === "cancelled") {
+				throw new ConvexError("Cannot book a cancelled schedule");
+			}
+			date = schedule.date;
+			startTime = schedule.startTime;
+		} else {
+			const match = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date_start", (q) =>
+					q
+						.eq("tourId", args.tourId)
+						.eq("date", args.date)
+						.eq("startTime", args.startTime),
+				)
+				.unique();
+			if (match && match.organizationId === member.organizationId) {
+				if (match.status === "cancelled") {
+					throw new ConvexError("Cannot book a cancelled schedule");
+				}
+				scheduleId = match._id;
+			}
+		}
+
+		// Reject past dates and dates inside the bookingCutoffHours
+		// window. parseBookingTime returns null on malformed input.
+		const tourTs = parseBookingTime(date, startTime);
+		if (tourTs === null) {
+			throw new ConvexError(`Invalid date or time: "${date} ${startTime}"`);
+		}
+		const nowMs = Date.now();
+		if (tourTs <= nowMs) {
+			throw new ConvexError(
+				"Cannot book a tour in the past or starting within the next minute",
+			);
+		}
+		const cutoffMs = tour.bookingCutoffHours ?? 0;
+		if (cutoffMs > 0 && tourTs - nowMs < cutoffMs * 3_600_000) {
+			throw new ConvexError(
+				`Bookings must be made at least ${tour.bookingCutoffHours}h before the tour`,
+			);
+		}
+
+		const blackedOut = await isBlackoutHelper(ctx, args.tourId, date);
+		if (blackedOut) {
+			throw new ConvexError(
+				"This date is not available for booking. Please pick another date.",
+			);
 		}
 
 		const deposit = args.depositAmountCents ?? 0n;
@@ -482,10 +513,10 @@ export const create = mutation({
 		const bookingId = await ctx.db.insert("bookings", {
 			organizationId: member.organizationId,
 			tourId: args.tourId,
-			scheduleId: args.scheduleId,
+			scheduleId,
 			customerId: args.customerId,
-			date: args.date,
-			startTime: args.startTime,
+			date,
+			startTime,
 			guests: args.guests,
 			guestNames: args.guestNames ?? "",
 			languageRequired: args.languageRequired ?? "",
@@ -513,14 +544,14 @@ export const create = mutation({
 		// Atomically increment the schedule's booked counter. Throws
 		// "Schedule over capacity" if there's no room — Convex will
 		// roll back the insert above.
-		if (args.scheduleId) {
+		if (scheduleId) {
 			await ctx.runMutation(
 				internal.tourSchedules.incrementBooked as unknown as Parameters<
 					typeof ctx.runMutation
 				>[0],
 				{
 					organizationId: member.organizationId,
-					scheduleId: args.scheduleId,
+					scheduleId,
 					guests: args.guests,
 				},
 			);
@@ -531,9 +562,9 @@ export const create = mutation({
 		// it overwrites. We follow source.
 		// See backend/tours/services/booking_service.py:148-151.
 		const today = new Date().toISOString().slice(0, 10);
-		if (args.date >= today) {
+		if (date >= today) {
 			await ctx.db.patch(args.customerId, {
-				nextBookingDate: args.date,
+				nextBookingDate: date,
 				updatedAt: now,
 			});
 		}

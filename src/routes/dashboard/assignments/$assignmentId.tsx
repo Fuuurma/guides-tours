@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -30,20 +31,30 @@ function AssignmentDetailPage() {
 		}),
 	);
 	const { data: tour } = useQuery(
-		convexQuery(api.tours.get, {
-			tourId: assignment?.tourId as Id<"tours">,
-		}),
+		convexQuery(
+			api.tours.get,
+			assignment?.tourId
+				? { tourId: assignment.tourId }
+				: "skip",
+		),
 	);
-	const { data: vehicle, error: vehicleError } = useQuery(
-		convexQuery(api.vehicles.get, {
-			vehicleId: assignment?.vehicleId as Id<"vehicles">,
-		}),
+	const { data: vehicle } = useQuery(
+		convexQuery(
+			api.vehicles.get,
+			assignment?.vehicleId
+				? { vehicleId: assignment.vehicleId }
+				: "skip",
+		),
 	);
-	const { data: driver, error: driverError } = useQuery(
-		convexQuery(api.drivers.get, {
-			driverId: assignment?.driverId as Id<"drivers">,
-		}),
+	const { data: driver } = useQuery(
+		convexQuery(
+			api.drivers.get,
+			assignment?.driverId
+				? { driverId: assignment.driverId }
+				: "skip",
+		),
 	);
+	const { displayName } = useOrgMembers(["guide", "owner", "admin"]);
 	const complete = useMutation(api.assignments.complete);
 	const cancel = useMutation(api.assignments.cancel);
 	const remove = useMutation(api.assignments.remove);
@@ -145,7 +156,10 @@ function AssignmentDetailPage() {
 					label="Time"
 					value={`${assignment.startTime}–${endTimeDisplay}`}
 				/>
-				<MetricCard label="Guide ID" value={assignment.guideId} />
+				<MetricCard
+					label="Guide"
+					value={displayName(assignment.guideId)}
+				/>
 				<MetricCard label="Status" value={assignment.status}>
 					<StatusBadge status={assignment.status} />
 				</MetricCard>
@@ -166,10 +180,6 @@ function AssignmentDetailPage() {
 							>
 								{vehicle.name}
 							</Link>
-						) : vehicleError ? (
-							<span className="italic text-muted-foreground">
-								(failed to load)
-							</span>
 						) : (
 							<span className="italic text-muted-foreground">Not assigned</span>
 						)
@@ -184,12 +194,8 @@ function AssignmentDetailPage() {
 								params={{ driverId: driver._id }}
 								className="font-mono text-xs text-link hover:underline"
 							>
-								{driver.userId}
+								{displayName(driver.userId)}
 							</Link>
-						) : driverError ? (
-							<span className="italic text-muted-foreground">
-								(failed to load)
-							</span>
 						) : (
 							<span className="italic text-muted-foreground">Not assigned</span>
 						)

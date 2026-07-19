@@ -1,8 +1,10 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { getRouteApi } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { MemberSelect } from "@/components/member-select";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -15,6 +17,8 @@ import { addHours } from "@/lib/time";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
+
+const assignmentNewRoute = getRouteApi("/dashboard/assignments/new");
 
 interface Tour {
 	_id: string;
@@ -49,11 +53,25 @@ const INITIAL: FormValues = {
 };
 
 export function NewAssignmentPage() {
+	const { date: searchDate, scheduleId: searchScheduleId } =
+		assignmentNewRoute.useSearch();
 	const create = useMutation(api.assignments.create);
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 	const { data: vehicles } = useQuery(convexQuery(api.vehicles.list, {}));
 	const { data: drivers } = useQuery(convexQuery(api.drivers.list, {}));
+	const { data: members } = useQuery(
+		convexQuery(api.organizations.listMembers, {}),
+	);
+	const { data: prefillSchedule } = useQuery(
+		convexQuery(
+			api.tourSchedules.get,
+			searchScheduleId
+				? { scheduleId: searchScheduleId as Id<"tourSchedules"> }
+				: "skip",
+		),
+	);
 	const [conflicts, setConflicts] = useState<string[]>([]);
+	const [scheduleId, setScheduleId] = useState(searchScheduleId ?? "");
 
 	const form = useEntityForm<FormValues, string>({
 		mutation: async (v) => {
@@ -69,21 +87,37 @@ export function NewAssignmentPage() {
 				startTime: v.startTime,
 				vehicleId: v.vehicleId ? (v.vehicleId as Id<"vehicles">) : undefined,
 				driverId: v.driverId ? (v.driverId as Id<"drivers">) : undefined,
+				scheduleId: scheduleId
+					? (scheduleId as Id<"tourSchedules">)
+					: undefined,
 			});
 			return id;
 		},
 		validate: (v) => {
 			const errs: Record<string, string> = {};
 			if (!v.tourId) errs.tourId = "Please select a tour";
-			if (!v.guideId.trim()) errs.guideId = "Guide user ID is required";
+			if (!v.guideId.trim()) errs.guideId = "Please select a guide";
 			if (!v.date) errs.date = "Date is required";
 			if (!v.startTime) errs.startTime = "Start time is required";
 			return Object.keys(errs).length > 0 ? errs : null;
 		},
-		initialValues: INITIAL,
+		initialValues: { ...INITIAL, date: searchDate ?? "" },
 		redirectTo: (id) => `/dashboard/assignments/${id}`,
 		successMessage: "Assignment created",
 	});
+
+	// Prefill from ?scheduleId=
+	useEffect(() => {
+		if (!prefillSchedule) return;
+		setScheduleId(String(prefillSchedule._id));
+		form.set("tourId", String(prefillSchedule.tourId));
+		form.set("date", prefillSchedule.date);
+		form.set("startTime", prefillSchedule.startTime);
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot prefill
+	}, [prefillSchedule?._id]);
+
+	const memberName = (userId: string) =>
+		members?.find((m) => m.userId === userId)?.name ?? userId;
 
 	// Check conflicts when date/time/guide/vehicle/driver change.
 	const tour = ((tours ?? []) as Tour[]).find(
@@ -96,14 +130,24 @@ export function NewAssignmentPage() {
 		<EntityFormPage
 			form={form}
 			title="New assignment"
-			description="Assign a guide to a tour on a specific date"
+			description={
+				scheduleId
+					? "Assign a guide to this published schedule slot"
+					: "Assign a guide to a tour on a specific date"
+			}
 			backTo="/dashboard/assignments"
 			submitLabel="Create assignment"
 		>
+			{scheduleId ? (
+				<p className="text-muted-foreground text-sm -mt-2">
+					Linked to schedule · tour/date/time are locked from the slot.
+				</p>
+			) : null}
 			<FormField label="Tour *" htmlFor="tour" error={form.fieldErrors.tourId}>
 				<Select
 					value={form.values.tourId}
 					onValueChange={(v) => form.set("tourId", v)}
+					disabled={Boolean(scheduleId)}
 				>
 					<SelectTrigger id="tour">
 						<SelectValue placeholder="Select a tour…" />
@@ -119,18 +163,17 @@ export function NewAssignmentPage() {
 			</FormField>
 
 			<FormField
-				label="Guide user ID *"
-				hint="Better Auth user ID of the guide (must have 'guide' role)"
+				label="Guide *"
+				hint="Members with guide, owner, or admin role"
 				htmlFor="guide"
 				error={form.fieldErrors.guideId}
 			>
-				<Input
+				<MemberSelect
 					id="guide"
-					required
-					maxLength={200}
 					value={form.values.guideId}
-					onChange={(e) => form.set("guideId", e.target.value)}
-					placeholder="user_abc123"
+					onValueChange={(v) => form.set("guideId", v)}
+					roles={["guide", "owner", "admin"]}
+					placeholder="Select a guide…"
 				/>
 			</FormField>
 
@@ -140,6 +183,7 @@ export function NewAssignmentPage() {
 						id="date"
 						type="date"
 						required
+						disabled={Boolean(scheduleId)}
 						value={form.values.date}
 						onChange={(e) => form.set("date", e.target.value)}
 					/>
@@ -153,6 +197,7 @@ export function NewAssignmentPage() {
 						id="start"
 						type="time"
 						required
+						disabled={Boolean(scheduleId)}
 						value={form.values.startTime}
 						onChange={(e) => form.set("startTime", e.target.value)}
 					/>
@@ -210,7 +255,7 @@ export function NewAssignmentPage() {
 							<SelectItem value="">None</SelectItem>
 							{(drivers as Driver[] | undefined)?.map((d) => (
 								<SelectItem key={d._id} value={d._id}>
-									{d.userId}
+									{memberName(d.userId)}
 								</SelectItem>
 							))}
 						</SelectContent>
@@ -250,7 +295,7 @@ function ConflictChecker({
 						vehicleId,
 						driverId,
 					}
-				: { date: "", startTime: "", endTime: "" },
+				: "skip",
 		),
 	);
 
@@ -262,7 +307,7 @@ function ConflictChecker({
 	}>;
 	const messages = conflictList.map((c) => c.message);
 
-	const prevRef = React.useRef<string>("");
+	const prevRef = useRef<string>("");
 	const key = JSON.stringify(messages);
 	if (key !== prevRef.current) {
 		prevRef.current = key;
@@ -282,6 +327,3 @@ function ConflictChecker({
 		</div>
 	);
 }
-
-// Need React import for useRef.
-import React from "react";

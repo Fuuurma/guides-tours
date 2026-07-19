@@ -146,26 +146,77 @@ function NotificationTemplatesPage() {
 	const itemCount = templates?.length ?? 0;
 
 	return (
-		<ListPage
-			title="Notification templates"
-			description={`${itemCount} template${itemCount === 1 ? "" : "s"} — these control which messages go out for booking events.`}
-			newTo="/dashboard/notifications/new"
-			newLabel="+ New template"
-			actions={
-				<Button asChild variant="outline">
-					<Link to="/dashboard/notifications/settings">Settings</Link>
-				</Button>
-			}
-		>
-			<DataTable
-				data={templates as NotificationTemplate[] | undefined}
-				columns={columns}
-				rowKey={(t) => t._id}
-				isPending={isPending}
-				error={error}
-				emptyMessage="No notification templates yet."
-				searchPlaceholder="Search by name, type, subject, or status…"
-			/>
-		</ListPage>
+		<>
+			<ListPage
+				title="Notification templates"
+				description={`${itemCount} template${itemCount === 1 ? "" : "s"} — these control which messages go out for booking events.`}
+				newTo="/dashboard/notifications/new"
+				newLabel="+ New template"
+				actions={
+					<Button asChild variant="outline">
+						<Link to="/dashboard/notifications/settings">Settings</Link>
+					</Button>
+				}
+			>
+				<DataTable
+					data={templates as NotificationTemplate[] | undefined}
+					columns={columns}
+					rowKey={(t) => t._id}
+					isPending={isPending}
+					error={error}
+					emptyMessage="No notification templates yet."
+					searchPlaceholder="Search by name, type, subject, or status…"
+				/>
+			</ListPage>
+
+			<DeliveryLogsSection />
+		</>
+	);
+}
+
+function DeliveryLogsSection() {
+	const { data: logs, isPending } = useQuery(
+		convexQuery(api.notifications.listRecentLogs, { limit: 30 }),
+	);
+
+	return (
+		<section className="mt-10 space-y-3">
+			<div>
+				<h2 className="text-lg font-semibold">Recent deliveries</h2>
+				<p className="text-muted-foreground text-sm">
+					Email and SMS attempts for this organization
+				</p>
+			</div>
+			{isPending ? (
+				<p className="text-muted-foreground text-sm">Loading…</p>
+			) : !logs || logs.length === 0 ? (
+				<p className="text-muted-foreground text-sm">No deliveries yet.</p>
+			) : (
+				<ul className="divide-y rounded-md border">
+					{logs.map((log) => (
+						<li
+							key={log._id}
+							className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+						>
+							<div className="min-w-0">
+								<p className="font-medium truncate">
+									{log.templateName} · {log.channel}
+								</p>
+								<p className="text-muted-foreground text-xs truncate">
+									{log.recipient}
+									{log.errorMessage ? ` — ${log.errorMessage}` : ""}
+								</p>
+							</div>
+							<div className="flex items-center gap-2 shrink-0">
+								<StatusBadge status={log.status} />
+								<span className="text-muted-foreground text-xs font-mono">
+									{new Date(log.sentAt ?? log.createdAt).toLocaleString()}
+								</span>
+							</div>
+						</li>
+					))}
+				</ul>
+			)}
+		</section>
 	);
 }

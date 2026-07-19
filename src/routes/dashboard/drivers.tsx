@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { getErrorMessage } from "@/lib/utils";
 import type { Driver } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -23,6 +24,7 @@ function DriversPage() {
 		isPending,
 		error,
 	} = useQuery(convexQuery(api.drivers.list, {}));
+	const { displayName } = useOrgMembers();
 	const setActive = useMutation(api.drivers.setActive);
 	const removeDriver = useMutation(api.drivers.remove);
 	const [pendingId, setPendingId] = useState<string | null>(null);
@@ -63,17 +65,17 @@ function DriversPage() {
 	const columns: DataTableColumn<Driver>[] = [
 		{
 			key: "userId",
-			header: "User ID",
+			header: "Driver",
 			render: (d) => (
 				<Link
 					to="/dashboard/drivers/$driverId"
 					params={{ driverId: d._id }}
-					className="font-mono text-xs text-link hover:underline"
+					className="text-link hover:underline font-medium"
 				>
-					{d.userId}
+					{displayName(d.userId)}
 				</Link>
 			),
-			searchValue: (d) => d.userId,
+			searchValue: (d) => displayName(d.userId),
 		},
 		{
 			key: "license",
@@ -94,6 +96,7 @@ function DriversPage() {
 			header: "",
 			render: (d) => {
 				const isBusy = pendingId === d._id;
+				const label = displayName(d.userId);
 				return (
 					<div className="flex items-center gap-1 justify-end">
 						<Button
@@ -107,7 +110,7 @@ function DriversPage() {
 						<Button
 							size="sm"
 							variant="destructive"
-							onClick={() => onDelete(d._id, d.userId)}
+							onClick={() => onDelete(d._id, label)}
 							disabled={isBusy}
 						>
 							Delete
@@ -134,7 +137,7 @@ function DriversPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage="No drivers yet."
-				searchPlaceholder="Search by user ID, license, or status…"
+				searchPlaceholder="Search by name, license, or status…"
 			/>
 		</ListPage>
 	);

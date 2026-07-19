@@ -150,8 +150,8 @@ describe("tour blackout dates", () => {
 	});
 });
 
-describe("publicIsBlackout (no auth required)", () => {
-	it("returns true for date inside range via public query", async () => {
+describe("publicIsBlackout (active-tour gate, no auth)", () => {
+	it("returns true for date inside range on an active tour", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub1";
 		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
@@ -162,15 +162,15 @@ describe("publicIsBlackout (no auth required)", () => {
 			startDate: "2026-12-24",
 			endDate: "2026-12-26",
 		});
-		// Call the PUBLIC query — no auth context, no requireMembership.
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
+			slug: "demo-org",
 			tourId,
 			date: "2026-12-25",
 		});
 		expect(result).toBe(true);
 	});
 
-	it("returns false for date outside range via public query", async () => {
+	it("returns false for date outside range", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub2";
 		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
@@ -182,8 +182,32 @@ describe("publicIsBlackout (no auth required)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
+			slug: "demo-org",
 			tourId,
 			date: "2026-12-27",
+		});
+		expect(result).toBe(false);
+	});
+
+	it("returns false for inactive tour even if a blackout exists", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub3";
+		const tourId = await t.run(async (ctx) => {
+			const id = await seedTour(ctx, orgId);
+			await ctx.db.patch(id, { isActive: false });
+			return id;
+		});
+		await t.mutation(internal.tourBlackoutDates.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			startDate: "2026-12-24",
+			endDate: "2026-12-26",
+		});
+		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
+			slug: "demo-org",
+			tourId,
+			date: "2026-12-25",
 		});
 		expect(result).toBe(false);
 	});

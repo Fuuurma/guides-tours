@@ -2,6 +2,11 @@
 //
 // bookings, assignments, schedules use { from, to }.
 // analytics uses { startDate, endDate } (matching the Convex API).
+//
+// Uses local calendar days (not UTC) so "last 30 days" matches what
+// operators see on the ops calendar near midnight.
+
+import { addDaysLocal, localYmd } from "./calendar-date";
 
 export interface DateRange {
 	startDate: string;
@@ -9,15 +14,15 @@ export interface DateRange {
 }
 
 /**
- * Return the last N days as ISO date strings.
+ * Return the last N days as ISO date strings (local calendar).
  * Default is 30 days.
  */
 export function lastNDays(n = 30): DateRange {
 	const end = new Date();
-	const start = new Date(end.getTime() - n * 86_400_000);
+	const start = addDaysLocal(end, -(n - 1));
 	return {
-		startDate: start.toISOString().slice(0, 10),
-		endDate: end.toISOString().slice(0, 10),
+		startDate: localYmd(start),
+		endDate: localYmd(end),
 	};
 }
 

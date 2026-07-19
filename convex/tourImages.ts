@@ -38,7 +38,14 @@ export const list = query({
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
 		const rows = await q.take(MAX_IMAGES);
-		return rows.sort((a, b) => a.displayOrder - b.displayOrder);
+		const sorted = rows.sort((a, b) => a.displayOrder - b.displayOrder);
+		// Attach signed URLs for the gallery UI.
+		return await Promise.all(
+			sorted.map(async (img) => ({
+				...img,
+				url: await ctx.storage.getUrl(img.storageId),
+			})),
+		);
 	},
 });
 
@@ -77,6 +84,31 @@ export const getUrl = query({
 });
 
 // ---- mutations ----
+
+export const add = mutation({
+	args: {
+		tourId: v.id("tours"),
+		storageId: v.id("_storage"),
+		altText: v.optional(v.string()),
+		isPrimary: v.optional(v.boolean()),
+		displayOrder: v.optional(v.number()),
+		width: v.optional(v.number()),
+		height: v.optional(v.number()),
+		fileSize: v.optional(v.number()),
+		format: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		return await ctx.runMutation(
+			internalAdd as unknown as FunctionReference<"mutation", "public" | "internal">,
+			{
+				organizationId: member.organizationId,
+				userId: member.userId,
+				...args,
+			},
+		);
+	},
+});
 
 export const internalAdd = internalMutation({
 	args: {
@@ -225,6 +257,94 @@ export const internalUpdate = internalMutation({
 			newValues: { changes },
 		});
 		return args.imageId;
+	},
+});
+
+/**
+ * Atomically set displayOrder for a tour's gallery to match the
+ * given ordered id list (0..n-1). Rejects unknown/foreign ids.
+ */
+export const reorder = mutation({
+	args: {
+		tourId: v.id("tours"),
+		orderedImageIds: v.array(v.id("tourImages")),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		return await ctx.runMutation(
+			internalReorder as unknown as FunctionReference<
+				"mutation",
+				"public" | "internal"
+			>,
+			{
+				organizationId: member.organizationId,
+				userId: member.userId,
+				tourId: args.tourId,
+				orderedImageIds: args.orderedImageIds,
+			},
+		);
+	},
+});
+
+export const internalReorder = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		tourId: v.id("tours"),
+		orderedImageIds: v.array(v.id("tourImages")),
+	},
+	handler: async (ctx, args) => {
+		const tour = await ctx.db.get(args.tourId);
+		if (!tour) throw new ConvexError("Tour not found");
+		if (tour.organizationId !== args.organizationId) {
+			throw new ConvexError("Forbidden: wrong organization");
+		}
+
+		const existing = await ctx.db
+			.query("tourImages")
+			.withIndex("by_tour", (q) => q.eq("tourId", args.tourId))
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.collect();
+
+		if (existing.length !== args.orderedImageIds.length) {
+			throw new ConvexError(
+				"orderedImageIds must include every image for this tour exactly once",
+			);
+		}
+
+		const byId = new Map(existing.map((img) => [img._id, img]));
+		const seen = new Set<string>();
+		for (const id of args.orderedImageIds) {
+			if (seen.has(id)) {
+				throw new ConvexError("orderedImageIds contains duplicates");
+			}
+			seen.add(id);
+			const img = byId.get(id);
+			if (!img) {
+				throw new ConvexError("Image does not belong to this tour");
+			}
+		}
+
+		const now = Date.now();
+		for (let i = 0; i < args.orderedImageIds.length; i++) {
+			const id = args.orderedImageIds[i]!;
+			const img = byId.get(id)!;
+			if (img.displayOrder !== i) {
+				await ctx.db.patch(id, { displayOrder: i, updatedAt: now });
+			}
+		}
+
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "tourImage.reordered",
+			resourceType: "tour",
+			resourceId: args.tourId,
+			oldValues: {},
+			newValues: { orderedImageIds: args.orderedImageIds },
+		});
+
+		return args.tourId;
 	},
 });
 

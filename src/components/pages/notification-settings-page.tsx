@@ -53,6 +53,8 @@ export function NotificationSettingsPage() {
 	const [twilioAccountSid, setTwilioAccountSid] = useState("");
 	const [twilioAuthToken, setTwilioAuthToken] = useState("");
 	const [twilioPhoneNumber, setTwilioPhoneNumber] = useState("");
+	const [twilioMessagingServiceSid, setTwilioMessagingServiceSid] =
+		useState("");
 	const [whatsappEnabled, setWhatsappEnabled] = useState(false);
 	const [emailEnabled, setEmailEnabled] = useState(true);
 	const [emailFromName, setEmailFromName] = useState("");
@@ -68,6 +70,7 @@ export function NotificationSettingsPage() {
 			setTwilioEnabled(s.twilioEnabled);
 			setTwilioAccountSid(s.twilioAccountSid);
 			setTwilioPhoneNumber(s.twilioPhoneNumber);
+			setTwilioMessagingServiceSid(s.twilioMessagingServiceSid ?? "");
 			setWhatsappEnabled(s.whatsappEnabled);
 			setEmailEnabled(s.emailEnabled);
 			setEmailFromName(s.emailFromName);
@@ -96,6 +99,9 @@ export function NotificationSettingsPage() {
 				twilioAccountSid: twilioAccountSid || undefined,
 				twilioAuthToken: twilioAuthToken || undefined,
 				twilioPhoneNumber: twilioPhoneNumber || undefined,
+				// Empty string clears a previously saved SID (backend
+				// normalizes "" → undefined on the stored field).
+				twilioMessagingServiceSid: twilioMessagingServiceSid,
 				whatsappEnabled,
 				emailEnabled,
 				emailFromName: emailFromName || undefined,
@@ -226,7 +232,7 @@ export function NotificationSettingsPage() {
 						</FormField>
 						<FormField
 							label="Phone number"
-							hint="E.164 format, e.g. +15551234567"
+							hint="E.164 format, e.g. +15551234567 (used when Messaging Service SID is empty)"
 							htmlFor="phone"
 						>
 							<Input
@@ -234,6 +240,18 @@ export function NotificationSettingsPage() {
 								value={twilioPhoneNumber}
 								onChange={(e) => setTwilioPhoneNumber(e.target.value)}
 								placeholder="+15551234567"
+							/>
+						</FormField>
+						<FormField
+							label="Messaging Service SID"
+							hint="Optional — preferred over From phone when set (starts with MG…)"
+							htmlFor="msgSid"
+						>
+							<Input
+								id="msgSid"
+								value={twilioMessagingServiceSid}
+								onChange={(e) => setTwilioMessagingServiceSid(e.target.value)}
+								placeholder="MG..."
 							/>
 						</FormField>
 					</CardContent>

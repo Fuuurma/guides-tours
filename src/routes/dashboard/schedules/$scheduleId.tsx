@@ -1,6 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { MetricCard } from "@/components/metric-card";
@@ -8,6 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -37,15 +41,18 @@ function ScheduleDetailPage() {
 		}),
 	);
 	const { data: tour } = useQuery(
-		convexQuery(api.tours.get, {
-			tourId: schedule?.tourId as Id<"tours">,
-		}),
+		convexQuery(
+			api.tours.get,
+			schedule?.tourId ? { tourId: schedule.tourId } : "skip",
+		),
 	);
 	const { data: bookings, error: bookingsError } = useQuery(
 		convexQuery(api.bookings.listBySchedule, {
 			scheduleId: scheduleId as Id<"tourSchedules">,
 		}),
 	);
+	const updateSchedule = useMutation(api.tourSchedules.update);
+	const [pending, setPending] = useState(false);
 
 	if (isPending) {
 		return <DetailSkeleton />;
@@ -66,6 +73,28 @@ function ScheduleDetailPage() {
 			<span className="italic text-muted-foreground">(failed to load)</span>
 		</p>
 	) : null;
+
+	const onCancelSchedule = async () => {
+		if (
+			!window.confirm(
+				"Cancel this schedule? New bookings will be blocked; existing bookings stay linked.",
+			)
+		) {
+			return;
+		}
+		setPending(true);
+		try {
+			await updateSchedule({
+				scheduleId: schedule._id,
+				status: "cancelled",
+			});
+			toast.success("Schedule cancelled");
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setPending(false);
+		}
+	};
 
 	const columns: DataTableColumn<ScheduleBooking>[] = [
 		{
@@ -95,13 +124,42 @@ function ScheduleDetailPage() {
 			subtitle={`${schedule.date} · ${schedule.startTime}–${schedule.endTime}`}
 			backTo="/dashboard/schedules"
 			actions={
-				tour ? (
-					<Button asChild variant="outline">
-						<Link to="/dashboard/tours/$tourId" params={{ tourId: tour._id }}>
-							View tour
-						</Link>
-					</Button>
-				) : undefined
+				<div className="flex flex-wrap gap-2">
+					{schedule.status !== "cancelled" && (
+						<>
+							<Button asChild>
+								<Link
+									to="/dashboard/bookings/new"
+									search={{ scheduleId }}
+								>
+									+ Book guests
+								</Link>
+							</Button>
+							<Button asChild variant="outline">
+								<Link
+									to="/dashboard/assignments/new"
+									search={{ scheduleId, date: schedule.date }}
+								>
+									Assign guide
+								</Link>
+							</Button>
+							<Button
+								variant="destructive"
+								disabled={pending}
+								onClick={() => void onCancelSchedule()}
+							>
+								{pending ? "Cancelling…" : "Cancel schedule"}
+							</Button>
+						</>
+					)}
+					{tour ? (
+						<Button asChild variant="ghost">
+							<Link to="/dashboard/tours/$tourId" params={{ tourId: tour._id }}>
+								View tour
+							</Link>
+						</Button>
+					) : null}
+				</div>
 			}
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
