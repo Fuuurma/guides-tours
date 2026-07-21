@@ -1,5 +1,6 @@
 import { useMutation } from "convex/react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { StaffingFormSection } from "@/components/staffing-form-section";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -9,6 +10,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { TOUR_TYPES } from "@/lib/staffing";
 import {
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
@@ -18,15 +20,6 @@ import {
 } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import { FormField } from "../form";
-
-const TOUR_TYPES = [
-	"walking",
-	"car",
-	"minivan",
-	"bus",
-	"boat",
-	"other",
-] as const;
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -40,6 +33,11 @@ interface FormValues extends Record<string, unknown> {
 	inclusions: string;
 	exclusions: string;
 	highlights: string;
+	requiredGuides: string;
+	requiresVehicle: boolean;
+	requiresDriver: boolean;
+	requiredVehicleType: string;
+	staffingOverride: boolean;
 }
 
 const INITIAL: FormValues = {
@@ -54,6 +52,11 @@ const INITIAL: FormValues = {
 	inclusions: "",
 	exclusions: "",
 	highlights: "",
+	requiredGuides: "1",
+	requiresVehicle: false,
+	requiresDriver: false,
+	requiredVehicleType: "",
+	staffingOverride: false,
 };
 
 export function NewTemplatePage() {
@@ -88,6 +91,13 @@ export function NewTemplatePage() {
 				inclusions: split(v.inclusions),
 				exclusions: split(v.exclusions),
 				highlights: split(v.highlights),
+				requiredGuides: Number(v.requiredGuides) || 1,
+				requiresVehicle: v.staffingOverride ? v.requiresVehicle : undefined,
+				requiresDriver: v.staffingOverride ? v.requiresDriver : undefined,
+				requiredVehicleType:
+					v.staffingOverride && v.requiresVehicle
+						? v.requiredVehicleType || undefined
+						: undefined,
 			});
 			return id;
 		},
@@ -225,6 +235,20 @@ export function NewTemplatePage() {
 					/>
 				</FormField>
 			</div>
+
+			<StaffingFormSection
+				values={{
+					tourType: form.values.tourType,
+					requiredGuides: form.values.requiredGuides,
+					requiresVehicle: form.values.requiresVehicle,
+					requiresDriver: form.values.requiresDriver,
+					requiredVehicleType: form.values.requiredVehicleType,
+					staffingOverride: form.values.staffingOverride,
+				}}
+				set={(key, value) => {
+					form.set(key, value as never);
+				}}
+			/>
 
 			<FormField label="Languages" hint="Comma-separated codes" htmlFor="langs">
 				<Input

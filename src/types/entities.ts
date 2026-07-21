@@ -106,6 +106,8 @@ export interface Assignment {
 	endTime?: string;
 	guideId: string;
 	tourId: string;
+	vehicleId?: string;
+	driverId?: string;
 	status: "scheduled" | "completed" | "cancelled";
 }
 

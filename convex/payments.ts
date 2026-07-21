@@ -569,6 +569,7 @@ export const getStripeSecrets = internalQuery({
 			stripeSecretKey: s.stripeSecretKey,
 			stripeWebhookSecret: s.stripeWebhookSecret,
 			stripeIsSandbox: s.stripeIsSandbox,
+			stripePublishableKey: s.stripePublishableKey,
 			defaultCurrency: s.defaultCurrency,
 		};
 	},

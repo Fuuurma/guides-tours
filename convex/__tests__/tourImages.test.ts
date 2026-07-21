@@ -55,6 +55,16 @@ describe("tour images", () => {
 		const img = (await t.run((ctx) => ctx.db.get(id))) as any;
 		expect(img?.altText).toBe("Front of cathedral");
 		expect(img?.isPrimary).toBe(true);
+		const files = await t.run((ctx) =>
+			ctx.db
+				.query("files")
+				.withIndex("by_org_purpose", (q) =>
+					q.eq("organizationId", orgId).eq("purpose", "tour-image"),
+				)
+				.collect(),
+		);
+		expect(files.length).toBe(1);
+		expect(files[0]!.storageId).toBe(storageId);
 	});
 
 	it("add: rejects cross-org tour", async () => {

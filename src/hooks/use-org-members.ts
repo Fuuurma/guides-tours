@@ -9,6 +9,7 @@ export type OrgMemberRow = {
 	email: string;
 	role: string;
 	image: string | null;
+	phone: string;
 };
 
 /**

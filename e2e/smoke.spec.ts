@@ -55,12 +55,14 @@ test.describe("dashboard route smoke (unauthenticated)", () => {
 		"/dashboard/customers",
 		"/dashboard/analytics",
 		"/dashboard/assignments",
+		"/dashboard/staffing",
 		"/dashboard/guides",
 		"/dashboard/vacations",
 		"/dashboard/vehicles",
 		"/dashboard/drivers",
 		"/dashboard/ota",
 		"/dashboard/notifications",
+		"/dashboard/files",
 		"/dashboard/settings/payments",
 	];
 

@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
+import { FormField } from "@/components/form";
 import { ListPage } from "@/components/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { FormField } from "@/components/form";
 import { organization } from "@/lib/auth-client";
 import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
@@ -182,7 +182,7 @@ function GuidesPage() {
 					searchPlaceholder="Search by name, email, or role…"
 				/>
 			</ListPage>
-			<PendingInvitesSection refreshKey={inviteTick} />
+			<PendingInvitesSection key={inviteTick} />
 		</>
 	);
 }
@@ -195,10 +195,34 @@ type InviteRow = {
 	expiresAt?: Date | string | number;
 };
 
-function PendingInvitesSection({ refreshKey }: { refreshKey: number }) {
+function PendingInvitesSection() {
 	const [invites, setInvites] = useState<InviteRow[] | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [busyId, setBusyId] = useState<string | null>(null);
+
+	useEffect(() => {
+		let cancelled = false;
+		const load = async () => {
+			setLoading(true);
+			try {
+				const { data, error } = await organization.listInvitations();
+				if (error) throw new Error(error.message ?? "Failed to load invites");
+				if (cancelled) return;
+				const rows = (data ?? []) as InviteRow[];
+				setInvites(rows.filter((i) => i.status === "pending"));
+			} catch (err) {
+				if (cancelled) return;
+				toast.error(getErrorMessage(err));
+				setInvites([]);
+			} finally {
+				if (!cancelled) setLoading(false);
+			}
+		};
+		void load();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const refresh = async () => {
 		setLoading(true);
@@ -214,10 +238,6 @@ function PendingInvitesSection({ refreshKey }: { refreshKey: number }) {
 			setLoading(false);
 		}
 	};
-
-	useEffect(() => {
-		void refresh();
-	}, [refreshKey]);
 
 	const onCancel = async (invitationId: string) => {
 		setBusyId(invitationId);

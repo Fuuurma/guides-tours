@@ -18,7 +18,7 @@
 
 import { v } from "convex/values";
 import type { GenericQueryCtx } from "convex/server";
-import type { DataModel, Doc } from "./_generated/dataModel";
+import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalQuery, query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { requireMembership } from "./lib/authz";
@@ -383,6 +383,93 @@ async function buildTopTours(
 		.slice(0, limit);
 }
 
+/**
+ * Live period stats for a single tour (bookings + assignments).
+ * Used by tour detail; complements the org-wide getTourStats list.
+ */
+async function buildForTour(
+	ctx: QCtx,
+	orgId: string,
+	tourId: string,
+	startDate: string,
+	endDate: string,
+) {
+	const MAX_ANALYTICS_SCAN = 10_000;
+	const tour = await ctx.db.get(tourId as Id<"tours">);
+	if (!tour || tour.organizationId !== orgId || tour.deletedAt !== undefined) {
+		return null;
+	}
+
+	const [bookings, assignments] = await Promise.all([
+		ctx.db
+			.query("bookings")
+			.withIndex("by_tour_date", (q) =>
+				q
+					.eq("tourId", tour._id)
+					.gte("date", startDate)
+					.lte("date", endDate),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("assignments")
+			.withIndex("by_org_date", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", startDate)
+					.lte("date", endDate),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+	]);
+
+	const tourAssignments = assignments.filter(
+		(a) => a.tourId === tour._id && !a.deletedAt,
+	);
+	const activeBookings = bookings.filter((b) => b.status !== "cancelled");
+	const cancelled = bookings.filter((b) => b.status === "cancelled").length;
+	const totalBookings = activeBookings.length;
+	const totalGuests = activeBookings.reduce((s, b) => s + b.guests, 0);
+	const totalRevenueCents = activeBookings.reduce(
+		(s, b) => s + Number(b.totalAmountCents),
+		0,
+	);
+	const netRevenueCents = activeBookings.reduce(
+		(s, b) => s + Number(b.netRevenueCents),
+		0,
+	);
+	const avgGroupSize =
+		totalBookings > 0 ? round1(totalGuests / totalBookings) : 0;
+	// Capacity × distinct departure days with bookings (simple utilization).
+	const departureDays = new Set(activeBookings.map((b) => b.date)).size;
+	const totalCapacity = tour.capacity * Math.max(1, departureDays);
+	const utilizationRate =
+		totalCapacity > 0
+			? Math.min(1, round1(totalGuests / totalCapacity))
+			: 0;
+
+	return {
+		tourId: tour._id,
+		tourName: tour.name,
+		periodStart: startDate,
+		periodEnd: endDate,
+		capacity: tour.capacity,
+		totalBookings,
+		totalGuests,
+		totalRevenueCents,
+		netRevenueCents,
+		cancellations: cancelled,
+		avgGroupSize,
+		utilizationRate,
+		totalCapacity,
+		totalAssignments: tourAssignments.length,
+		completedAssignments: tourAssignments.filter(
+			(a) => a.status === "completed",
+		).length,
+		cancelledAssignments: tourAssignments.filter(
+			(a) => a.status === "cancelled",
+		).length,
+	};
+}
+
 async function buildBookingSources(
 	ctx: QCtx,
 	orgId: string,
@@ -442,6 +529,25 @@ export const getTourStats = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		return await buildTourStats(ctx, member.organizationId, args.startDate, args.endDate);
+	},
+});
+
+/** Period stats for one tour (tour detail "Recent performance"). */
+export const getForTour = query({
+	args: {
+		tourId: v.id("tours"),
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		return await buildForTour(
+			ctx,
+			member.organizationId,
+			args.tourId,
+			args.startDate,
+			args.endDate,
+		);
 	},
 });
 
@@ -536,6 +642,23 @@ export const getTourStatsInternal = internalQuery({
 	},
 	handler: async (ctx, args) =>
 		buildTourStats(ctx, args.organizationId, args.startDate, args.endDate),
+});
+
+export const getForTourInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		tourId: v.id("tours"),
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) =>
+		buildForTour(
+			ctx,
+			args.organizationId,
+			args.tourId,
+			args.startDate,
+			args.endDate,
+		),
 });
 
 export const getGuideStatsInternal = internalQuery({

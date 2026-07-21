@@ -41,6 +41,14 @@ interface Settings {
 	requireEmailConsent: boolean;
 	maxRetries: number;
 	retryDelayMinutes: number;
+	staffingDigestEnabled?: boolean;
+	staffingDigestEmail?: string;
+	staffingDigestPhone?: string;
+	staffingDigestDaysAhead?: number;
+	availabilityReminderEnabled?: boolean;
+	availabilityReminderDaysAhead?: number;
+	assignmentNotifyEnabled?: boolean;
+	phoneRemindWithDigest?: boolean;
 }
 
 export function NotificationSettingsPage() {
@@ -48,6 +56,9 @@ export function NotificationSettingsPage() {
 		convexQuery(api.notificationSettings.get, {}),
 	);
 	const upsert = useMutation(api.notificationSettings.upsert);
+	const sendDigestNow = useMutation(api.staffingDigest.sendNow);
+	const sendAvailNow = useMutation(api.availabilityReminders.sendNow);
+	const sendAssignTest = useMutation(api.assignmentNotifications.sendTest);
 
 	const [twilioEnabled, setTwilioEnabled] = useState(false);
 	const [twilioAccountSid, setTwilioAccountSid] = useState("");
@@ -61,7 +72,20 @@ export function NotificationSettingsPage() {
 	const [emailFromEmail, setEmailFromEmail] = useState("");
 	const [maxRetries, setMaxRetries] = useState("3");
 	const [retryDelayMinutes, setRetryDelayMinutes] = useState("15");
+	const [staffingDigestEnabled, setStaffingDigestEnabled] = useState(false);
+	const [staffingDigestEmail, setStaffingDigestEmail] = useState("");
+	const [staffingDigestPhone, setStaffingDigestPhone] = useState("");
+	const [staffingDigestDaysAhead, setStaffingDigestDaysAhead] = useState("3");
+	const [availabilityReminderEnabled, setAvailabilityReminderEnabled] =
+		useState(false);
+	const [availabilityReminderDaysAhead, setAvailabilityReminderDaysAhead] =
+		useState("7");
+	const [assignmentNotifyEnabled, setAssignmentNotifyEnabled] = useState(true);
+	const [phoneRemindWithDigest, setPhoneRemindWithDigest] = useState(false);
 	const [pending, setPending] = useState(false);
+	const [digestPending, setDigestPending] = useState(false);
+	const [availPending, setAvailPending] = useState(false);
+	const [assignTestPending, setAssignTestPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -77,6 +101,20 @@ export function NotificationSettingsPage() {
 			setEmailFromEmail(s.emailFromEmail);
 			setMaxRetries(s.maxRetries.toString());
 			setRetryDelayMinutes(s.retryDelayMinutes.toString());
+			setStaffingDigestEnabled(s.staffingDigestEnabled === true);
+			setStaffingDigestEmail(s.staffingDigestEmail ?? "");
+			setStaffingDigestPhone(s.staffingDigestPhone ?? "");
+			setStaffingDigestDaysAhead(
+				String(s.staffingDigestDaysAhead ?? 3),
+			);
+			setAvailabilityReminderEnabled(
+				s.availabilityReminderEnabled === true,
+			);
+			setAvailabilityReminderDaysAhead(
+				String(s.availabilityReminderDaysAhead ?? 7),
+			);
+			setAssignmentNotifyEnabled(s.assignmentNotifyEnabled !== false);
+			setPhoneRemindWithDigest(s.phoneRemindWithDigest === true);
 		}
 	}, [settings]);
 
@@ -87,8 +125,20 @@ export function NotificationSettingsPage() {
 
 		const retries = Number(maxRetries);
 		const delay = Number(retryDelayMinutes);
+		const daysAhead = Number(staffingDigestDaysAhead);
+		const availDays = Number(availabilityReminderDaysAhead);
 		if (retries < 0 || delay < 0) {
 			setError("Retries and delay must be non-negative");
+			setPending(false);
+			return;
+		}
+		if (daysAhead < 1 || daysAhead > 14) {
+			setError("Digest days ahead must be between 1 and 14");
+			setPending(false);
+			return;
+		}
+		if (availDays < 1 || availDays > 14) {
+			setError("Availability reminder days ahead must be between 1 and 14");
 			setPending(false);
 			return;
 		}
@@ -108,6 +158,14 @@ export function NotificationSettingsPage() {
 				emailFromEmail: emailFromEmail || undefined,
 				maxRetries: retries,
 				retryDelayMinutes: delay,
+				staffingDigestEnabled,
+				staffingDigestEmail: staffingDigestEmail,
+				staffingDigestPhone: staffingDigestPhone,
+				staffingDigestDaysAhead: daysAhead,
+				availabilityReminderEnabled,
+				availabilityReminderDaysAhead: availDays,
+				assignmentNotifyEnabled,
+				phoneRemindWithDigest,
 			});
 			setTwilioAuthToken("");
 			toast.success("Settings saved");
@@ -116,6 +174,44 @@ export function NotificationSettingsPage() {
 			toast.error(getErrorMessage(err));
 		} finally {
 			setPending(false);
+		}
+	};
+
+	const onSendDigest = async () => {
+		setDigestPending(true);
+		try {
+			await sendDigestNow({ force: true });
+			toast.success("Digest queued — check email/SMS shortly");
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setDigestPending(false);
+		}
+	};
+
+	const onSendAvail = async () => {
+		setAvailPending(true);
+		try {
+			await sendAvailNow({ force: false });
+			toast.success("Availability reminders queued for guides");
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setAvailPending(false);
+		}
+	};
+
+	const onSendAssignTest = async (role: "guide" | "driver") => {
+		setAssignTestPending(true);
+		try {
+			await sendAssignTest({ role });
+			toast.success(
+				`Test ${role} notification queued — check your email/SMS`,
+			);
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setAssignTestPending(false);
 		}
 	};
 
@@ -276,6 +372,204 @@ export function NotificationSettingsPage() {
 							/>
 							WhatsApp channel enabled
 						</label>
+					</CardContent>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle>Staffing digest</CardTitle>
+						<CardDescription>
+							Daily email/SMS when departures need guides or fleet (07:00 UTC).
+							Also link from Home → Needs staffing.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<label
+							htmlFor="digest-enabled"
+							className="flex items-center gap-2 text-sm"
+						>
+							<Checkbox
+								id="digest-enabled"
+								checked={staffingDigestEnabled}
+								onCheckedChange={(checked) =>
+									setStaffingDigestEnabled(checked === true)
+								}
+							/>
+							Enable daily staffing digest
+						</label>
+						<div className="grid gap-4 md:grid-cols-2">
+							<FormField label="Digest email" htmlFor="digestEmail">
+								<Input
+									id="digestEmail"
+									type="email"
+									value={staffingDigestEmail}
+									onChange={(e) => setStaffingDigestEmail(e.target.value)}
+									placeholder="ops@tours.co"
+								/>
+							</FormField>
+							<FormField
+								label="Digest phone"
+								hint="E.164 — requires Twilio enabled"
+								htmlFor="digestPhone"
+							>
+								<Input
+									id="digestPhone"
+									value={staffingDigestPhone}
+									onChange={(e) => setStaffingDigestPhone(e.target.value)}
+									placeholder="+15551234567"
+								/>
+							</FormField>
+						</div>
+						<FormField
+							label="Days ahead"
+							hint="Include gaps from today through this many days (1–14)"
+							htmlFor="digestDays"
+						>
+							<Input
+								id="digestDays"
+								type="number"
+								min="1"
+								max="14"
+								value={staffingDigestDaysAhead}
+								onChange={(e) => setStaffingDigestDaysAhead(e.target.value)}
+								className="w-24"
+							/>
+						</FormField>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							disabled={digestPending || pending}
+							onClick={() => void onSendDigest()}
+						>
+							{digestPending ? "Sending…" : "Send digest now"}
+						</Button>
+						<label
+							htmlFor="phone-remind-digest"
+							className="flex items-start gap-2 text-sm"
+						>
+							<Checkbox
+								id="phone-remind-digest"
+								checked={phoneRemindWithDigest}
+								onCheckedChange={(checked) =>
+									setPhoneRemindWithDigest(checked === true)
+								}
+								className="mt-0.5"
+							/>
+							<span>
+								Also email assigned staff who are missing a phone
+								<span className="text-muted-foreground block text-xs">
+									Runs with the daily digest. Each person at most once per 7
+									days. Ops digest still lists them either way.
+								</span>
+							</span>
+						</label>
+					</CardContent>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle>Guide availability reminders</CardTitle>
+						<CardDescription>
+							Daily email (08:00 UTC) to guides with unmarked days. Deep-links
+							to their availability calendar. SMS if the guide has a phone on
+							their profile and Twilio is enabled.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<label
+							htmlFor="avail-enabled"
+							className="flex items-center gap-2 text-sm"
+						>
+							<Checkbox
+								id="avail-enabled"
+								checked={availabilityReminderEnabled}
+								onCheckedChange={(checked) =>
+									setAvailabilityReminderEnabled(checked === true)
+								}
+							/>
+							Enable guide availability reminders
+						</label>
+						<FormField
+							label="Days ahead"
+							hint="Ask guides to confirm this many upcoming days (1–14)"
+							htmlFor="availDays"
+						>
+							<Input
+								id="availDays"
+								type="number"
+								min="1"
+								max="14"
+								value={availabilityReminderDaysAhead}
+								onChange={(e) =>
+									setAvailabilityReminderDaysAhead(e.target.value)
+								}
+								className="w-24"
+							/>
+						</FormField>
+						<Button
+							type="button"
+							variant="outline"
+							size="sm"
+							disabled={
+								availPending || pending || !availabilityReminderEnabled
+							}
+							onClick={() => void onSendAvail()}
+						>
+							{availPending ? "Sending…" : "Send reminders now"}
+						</Button>
+					</CardContent>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle>Assignment notifications</CardTitle>
+						<CardDescription>
+							Email guides and drivers when assigned, cancelled, or
+							reassigned. SMS uses the phone on their profile when Twilio is
+							enabled. On by default — uncheck to opt out. Test sends go to
+							your own account (works even if the toggle is off).
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<label
+							htmlFor="assign-notify-enabled"
+							className="flex items-center gap-2 text-sm"
+						>
+							<Checkbox
+								id="assign-notify-enabled"
+								checked={assignmentNotifyEnabled}
+								onCheckedChange={(checked) =>
+									setAssignmentNotifyEnabled(checked === true)
+								}
+							/>
+							Notify guides and drivers on assignment changes
+						</label>
+						<div className="flex flex-wrap gap-2">
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={assignTestPending || pending}
+								onClick={() => void onSendAssignTest("guide")}
+							>
+								{assignTestPending ? "Sending…" : "Send test (guide)"}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={assignTestPending || pending}
+								onClick={() => void onSendAssignTest("driver")}
+							>
+								{assignTestPending ? "Sending…" : "Send test (driver)"}
+							</Button>
+						</div>
+						<p className="text-muted-foreground text-xs">
+							Manual reminds: Home → Remind all / Staffing → Email reminders
+							(24h org cooldown, 7d per person). Digest auto-remind is opt-in
+							above under Staffing digest.
+						</p>
 					</CardContent>
 				</Card>
 

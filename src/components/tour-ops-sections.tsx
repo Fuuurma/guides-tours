@@ -61,9 +61,11 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 		const next = index + direction;
 		if (next < 0 || next >= ordered.length) return;
 		const ids = ordered.map((img) => img._id);
-		const tmp = ids[index]!;
-		ids[index] = ids[next]!;
-		ids[next] = tmp;
+		const current = ids[index];
+		const swap = ids[next];
+		if (current === undefined || swap === undefined) return;
+		ids[index] = swap;
+		ids[next] = current;
 		setReorderPending(true);
 		try {
 			await reorderImages({ tourId, orderedImageIds: ids });
@@ -187,9 +189,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 									type="button"
 									size="sm"
 									variant="outline"
-									disabled={
-										reorderPending || index === ordered.length - 1
-									}
+									disabled={reorderPending || index === ordered.length - 1}
 									onClick={() => void moveImage(index, 1)}
 								>
 									Down
@@ -560,15 +560,23 @@ function SeasonalDialog({
 						/>
 					</FormField>
 					<div className="flex flex-wrap gap-3">
-						{DOW_LABELS.map((label, i) => (
-							<label key={label} className="flex items-center gap-1.5 text-sm">
-								<Checkbox
-									checked={days.includes(i)}
-									onCheckedChange={() => toggleDay(i)}
-								/>
-								{label}
-							</label>
-						))}
+						{DOW_LABELS.map((label, i) => {
+							const id = `schedule-dow-${i}`;
+							return (
+								<label
+									key={label}
+									htmlFor={id}
+									className="flex items-center gap-1.5 text-sm"
+								>
+									<Checkbox
+										id={id}
+										checked={days.includes(i)}
+										onCheckedChange={() => toggleDay(i)}
+									/>
+									{label}
+								</label>
+							);
+						})}
 					</div>
 					<FormField label="Capacity override" htmlFor="s-cap">
 						<Input

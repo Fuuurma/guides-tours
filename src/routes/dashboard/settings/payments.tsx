@@ -42,6 +42,13 @@ function PaymentSettingsPage() {
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	const stripeWebhookUrl =
+		typeof window !== "undefined"
+			? `${(
+					(import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ?? ""
+				).replace(/\/$/, "") || window.location.origin}/api/payments/stripe/webhook`
+			: "/api/payments/stripe/webhook";
+
 	useEffect(() => {
 		if (settings) {
 			const s = settings as {
@@ -147,7 +154,11 @@ function PaymentSettingsPage() {
 								Use sandbox/test mode
 							</label>
 						</div>
-						<FormField label="Publishable key" htmlFor="pubKey">
+						<FormField
+							label="Publishable key"
+							hint="Required for in-page Payment Element (pk_…)"
+							htmlFor="pubKey"
+						>
 							<Input
 								id="pubKey"
 								value={stripePublishableKey}
@@ -183,6 +194,20 @@ function PaymentSettingsPage() {
 								placeholder={settings ? "•••••••" : "whsec_…"}
 							/>
 						</FormField>
+						<div className="rounded-md border bg-muted/40 p-3 text-sm">
+							<p className="mb-1 font-medium">Webhook endpoint</p>
+							<p className="text-muted-foreground text-xs mb-2">
+								Point Stripe at this URL (Convex HTTP action).
+							</p>
+							<code className="block break-all font-mono text-xs">
+								{stripeWebhookUrl}
+							</code>
+							<p className="text-muted-foreground text-xs mt-2">
+								Uses{" "}
+								<code className="font-mono">VITE_CONVEX_SITE_URL</code> when
+								set; otherwise falls back to the app origin.
+							</p>
+						</div>
 					</CardContent>
 				</Card>
 

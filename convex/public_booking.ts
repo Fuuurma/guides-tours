@@ -278,6 +278,10 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 				status: "confirmed" as const,
 				balanceDueCents: balanceDueCents.toString(),
 				canPay,
+				stripePublishableKey:
+					canPay && settings?.stripePublishableKey
+						? settings.stripePublishableKey
+						: undefined,
 			};
 		} catch (err) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {

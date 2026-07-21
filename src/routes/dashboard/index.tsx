@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +17,8 @@ import {
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { formatCentsWhole } from "@/lib/format";
+import { addDaysLocal, localYmd } from "@/lib/calendar-date";
+import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -23,12 +26,9 @@ export const Route = createFileRoute("/dashboard/")({
 	component: DashboardIndex,
 });
 
-function todayIso(): string {
-	return new Date().toISOString().slice(0, 10);
-}
-
 function DashboardIndex() {
-	const today = todayIso();
+	const today = localYmd();
+	const weekTo = localYmd(addDaysLocal(new Date(), 6));
 	const { data: org } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
@@ -47,6 +47,24 @@ function DashboardIndex() {
 	const { data: tours, error: toursError } = useQuery(
 		convexQuery(api.tours.list, {}),
 	);
+	const { data: staffingGaps, error: staffingError } = useQuery(
+		convexQuery(api.assignments.staffingGaps, {
+			dateFrom: today,
+			dateTo: weekTo,
+		}),
+	);
+	const { data: missingPhones, error: missingPhoneError } = useQuery(
+		convexQuery(api.userProfiles.missingStaffPhones, {
+			dateFrom: today,
+			dateTo: weekTo,
+		}),
+	);
+	const { data: remindStatus } = useQuery(
+		convexQuery(api.phoneReminders.cooldownStatus, {
+			dateFrom: today,
+			dateTo: weekTo,
+		}),
+	);
 
 	const { data: overview, error: overviewError } = useQuery(
 		convexQuery(api.analytics.getOverview, {
@@ -55,12 +73,17 @@ function DashboardIndex() {
 		}),
 	);
 
+	const sendPhoneReminders = useMutation(api.phoneReminders.sendReminders);
+	const [remindPending, setRemindPending] = useState(false);
+
 	const firstError =
 		bookingsError ??
 		assignmentsError ??
 		vacationsError ??
 		customersError ??
 		toursError ??
+		staffingError ??
+		missingPhoneError ??
 		overviewError;
 
 	const tourNameById = new Map<string, string>(
@@ -79,6 +102,34 @@ function DashboardIndex() {
 	).length;
 	const totalCustomers = customers?.items?.length ?? 0;
 	const totalTours = (tours ?? []).filter((t) => t.isActive).length;
+	const gaps = staffingGaps ?? [];
+	const gapsToday = gaps.filter((g) => g.date === today).length;
+	const topGaps = gaps.slice(0, 5);
+	const missing = missingPhones ?? [];
+	const topMissing = missing.slice(0, 5);
+
+	const onRemindPhones = async () => {
+		setRemindPending(true);
+		try {
+			const result = await sendPhoneReminders({
+				dateFrom: today,
+				dateTo: weekTo,
+			});
+			toast.success(
+				`Reminders queued for ${result.eligible} staff${
+					result.capped ? " (capped at 50)" : ""
+				}${
+					result.coolingDown
+						? ` · ${result.coolingDown} still in 7-day cooldown`
+						: ""
+				}`,
+			);
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setRemindPending(false);
+		}
+	};
 
 	return (
 		<div className="space-y-6">
@@ -117,14 +168,37 @@ function DashboardIndex() {
 					link="/dashboard/bookings"
 				/>
 				<StatCard
+					label="Staffing gaps (7d)"
+					value={gaps.length}
+					link="/dashboard/staffing"
+				/>
+				<StatCard
+					label="Gaps today"
+					value={gapsToday}
+					link="/dashboard/staffing"
+				/>
+				<StatCard
+					label="Missing phones (7d)"
+					value={missing.length}
+					link="/dashboard/staffing"
+				/>
+			</div>
+
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+				<StatCard
+					label="Pending vacations"
+					value={pendingVacations}
+					link="/dashboard/vacations"
+				/>
+				<StatCard
 					label="Upcoming assignments"
 					value={upcomingAssignments.length}
 					link="/dashboard/assignments"
 				/>
 				<StatCard
-					label="Pending vacations"
-					value={pendingVacations}
-					link="/dashboard/vacations"
+					label="Active tours"
+					value={totalTours}
+					link="/dashboard/tours"
 				/>
 				<StatCard
 					label="Total customers"
@@ -133,12 +207,7 @@ function DashboardIndex() {
 				/>
 			</div>
 
-			<div className="grid gap-4 md:grid-cols-3">
-				<StatCard
-					label="Active tours"
-					value={totalTours}
-					link="/dashboard/tours"
-				/>
+			<div className="grid gap-4 md:grid-cols-2">
 				<StatCard
 					label="Completion rate (today)"
 					value={overview ? `${overview.completionRate.toFixed(1)}%` : "—"}
@@ -152,6 +221,132 @@ function DashboardIndex() {
 			</div>
 
 			{org?.slug && <PublicBookingLinkCard slug={org.slug} />}
+
+			<Card>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Needs staffing</CardTitle>
+						<CardDescription>
+							{gaps.length === 0
+								? "No open gaps in the next 7 days"
+								: `${gaps.length} departure${gaps.length === 1 ? "" : "s"} need guides or fleet`}
+						</CardDescription>
+					</div>
+					<Button asChild variant="outline" size="sm">
+						<Link to="/dashboard/staffing">View all</Link>
+					</Button>
+				</CardHeader>
+				<CardContent>
+					{topGaps.length === 0 ? (
+						<p className="text-muted-foreground text-sm">
+							All set — departures look fully staffed.
+						</p>
+					) : (
+						<ul className="space-y-2">
+							{topGaps.map((g) => (
+								<li
+									key={g.key}
+									className="flex items-center justify-between border-b pb-2 last:border-0"
+								>
+									<div className="min-w-0 flex-1">
+										<p className="font-medium truncate">{g.tourName}</p>
+										<p className="text-muted-foreground text-xs">
+											{g.date} · {g.startTime}
+											{" · "}
+											{g.gaps.join(", ")}
+											{" · "}
+											guides {g.guideCount}/{g.requiredGuides}
+										</p>
+									</div>
+									<Button asChild size="sm" variant="outline">
+										<Link
+											to="/dashboard/assignments/new"
+											search={{
+												date: g.date,
+												...(g.scheduleId
+													? { scheduleId: g.scheduleId }
+													: {}),
+											}}
+										>
+											Assign
+										</Link>
+									</Button>
+								</li>
+							))}
+						</ul>
+					)}
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Missing phones</CardTitle>
+						<CardDescription>
+							{missing.length === 0
+								? "Assigned staff in the next 7 days have phones on file"
+								: `${missing.length} assigned staff won't get SMS until they add a phone`}
+						</CardDescription>
+					</div>
+					<div className="flex flex-wrap gap-2">
+						{missing.length > 0 ? (
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								disabled={
+									remindPending || remindStatus?.canSendManual === false
+								}
+								onClick={() => void onRemindPhones()}
+								title={
+									remindStatus && !remindStatus.orgBulkClear
+										? "Org bulk cooldown — try again later"
+										: remindStatus && remindStatus.eligibleCount === 0
+											? "Everyone eligible was reminded in the last 7 days"
+											: undefined
+								}
+							>
+								{remindPending ? "Sending…" : "Remind all"}
+							</Button>
+						) : null}
+						<Button asChild variant="outline" size="sm">
+							<Link to="/dashboard/staffing">Staffing</Link>
+						</Button>
+					</div>
+				</CardHeader>
+				<CardContent>
+					{topMissing.length === 0 ? (
+						<p className="text-muted-foreground text-sm">
+							No action needed — phones look complete for upcoming assignments.
+						</p>
+					) : (
+						<ul className="space-y-2">
+							{topMissing.map((p) => (
+								<li
+									key={p.userId}
+									className="flex items-center justify-between border-b pb-2 last:border-0"
+								>
+									<div className="min-w-0 flex-1">
+										<p className="font-medium truncate">{p.name}</p>
+										<p className="text-muted-foreground text-xs">
+											{p.roles.join(" · ")} · {p.assignmentCount} assignment
+											{p.assignmentCount === 1 ? "" : "s"}
+										</p>
+									</div>
+									<Button asChild size="sm" variant="outline">
+										<Link
+											to="/dashboard/guides/$userId"
+											params={{ userId: p.userId }}
+										>
+											Add phone
+										</Link>
+									</Button>
+								</li>
+							))}
+						</ul>
+					)}
+				</CardContent>
+			</Card>
 
 			<Card>
 				<CardHeader>
@@ -291,10 +486,6 @@ function StatCard({
 	value: number | string;
 	link: string;
 }) {
-	// `whileHover` lifts the card 2px and dims the shadow so the
-	// existing hover:bg-muted background still reads as the primary
-	// affordance. `transition.tween` keeps the lift short and
-	// snappy — no spring overshoot.
 	return (
 		<motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }}>
 			<Link

@@ -27,6 +27,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
 	{ to: "/dashboard", label: "Home", exact: true },
 	{ to: "/dashboard/calendar", label: "Calendar" },
+	{ to: "/dashboard/staffing", label: "Staffing" },
 	{ to: "/dashboard/tours", label: "Tours" },
 	{ to: "/dashboard/templates", label: "Templates" },
 	{ to: "/dashboard/categories", label: "Categories" },
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
 	{ to: "/dashboard/drivers", label: "Drivers" },
 	{ to: "/dashboard/ota", label: "OTA" },
 	{ to: "/dashboard/notifications", label: "Notifications" },
+	{ to: "/dashboard/files", label: "Files" },
 	{ to: "/dashboard/settings/payments", label: "Payments" },
 ];
 

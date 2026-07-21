@@ -5,8 +5,9 @@
 //         backend/tours/models.py::Assignment
 //         backend/tours/utils.py::parse_time + calculate_end_time
 //
-// Core CRUD + conflict detection. Assignment notification emails
-// are handled via the scheduled notifications system.
+// Core CRUD + conflict detection. Guide + driver assignment emails/SMS
+// are scheduled via assignmentNotifications (create / cancel / reassign).
+// Honors notificationSettings.assignmentNotifyEnabled (default on).
 //
 // Time handling: we store HH:MM as strings (matching schema).
 // Conflict math converts to integer minutes and compares with
@@ -23,10 +24,13 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { authComponent, createAuth } from "./auth";
 import { parseBookingTime } from "./lib/time";
+import { resolveTourStaffing, evaluateSlotStaffing } from "./lib/staffing";
+import { computeStaffingGaps } from "./lib/staffingGaps";
 
 // ----- Time helpers (string "HH:MM" ↔ minutes-since-midnight) -----
 
@@ -193,6 +197,153 @@ export const get = query({
 		if (a.organizationId !== member.organizationId) return null;
 		const tour = await ctx.db.get(a.tourId);
 		return { ...a, tour: tour ? { _id: tour._id, name: tour.name } : null };
+	},
+});
+
+/**
+ * Sibling assignments on the same tour+date+startTime slot, plus
+ * remaining staffing gaps. Powers assignment-detail co-guide UI.
+ */
+export const slotCompanions = query({
+	args: { assignmentId: v.id("assignments") },
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const a = await ctx.db.get(args.assignmentId);
+		if (!a || a.deletedAt) return null;
+		if (a.organizationId !== member.organizationId) return null;
+
+		const tour = await ctx.db.get(a.tourId);
+		if (!tour) return null;
+		const rules = resolveTourStaffing(tour);
+
+		const sameDay = await ctx.db
+			.query("assignments")
+			.withIndex("by_tour_date", (q) =>
+				q.eq("tourId", a.tourId).eq("date", a.date),
+			)
+			.take(100);
+		const siblings = sameDay.filter(
+			(x) =>
+				x.organizationId === member.organizationId &&
+				x.deletedAt === undefined &&
+				x.status !== "cancelled" &&
+				x.startTime === a.startTime,
+		);
+
+		const guideCount = siblings.length;
+		const hasVehicle = siblings.some((s) => s.vehicleId !== undefined);
+		const hasDriver = siblings.some((s) => s.driverId !== undefined);
+		const evaled = evaluateSlotStaffing({
+			requiredGuides: rules.requiredGuides,
+			requiresVehicle: rules.requiresVehicle,
+			requiresDriver: rules.requiresDriver,
+			guideCount,
+			hasVehicle,
+			hasDriver,
+		});
+
+		return {
+			tourId: a.tourId,
+			tourName: tour.name,
+			date: a.date,
+			startTime: a.startTime,
+			endTime: a.endTime,
+			scheduleId: a.scheduleId,
+			requiredGuides: rules.requiredGuides,
+			requiresVehicle: rules.requiresVehicle,
+			requiresDriver: rules.requiresDriver,
+			requiredVehicleType: rules.requiredVehicleType,
+			guideCount,
+			guidesNeeded: evaled.guidesNeeded,
+			hasVehicle,
+			hasDriver,
+			gaps: evaled.gaps,
+			ready: evaled.ready,
+			siblings: siblings.map((s) => ({
+				_id: s._id,
+				guideId: s.guideId,
+				vehicleId: s.vehicleId,
+				driverId: s.driverId,
+				status: s.status,
+				isCurrent: s._id === args.assignmentId,
+			})),
+		};
+	},
+});
+
+/**
+ * Departures in a date range that still need guides and/or fleet.
+ * Used by the Staffing readiness page and calendar gap cues.
+ */
+export const staffingGaps = query({
+	args: {
+		dateFrom: v.string(),
+		dateTo: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const orgId = member.organizationId;
+		const MAX = 500;
+
+		const schedules = await ctx.db
+			.query("tourSchedules")
+			.withIndex("by_org_date", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", args.dateFrom)
+					.lte("date", args.dateTo),
+			)
+			.take(MAX);
+
+		const assignments = await ctx.db
+			.query("assignments")
+			.withIndex("by_org_date", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", args.dateFrom)
+					.lte("date", args.dateTo),
+			)
+			.take(MAX);
+
+		const tourIds = new Set<string>();
+		for (const s of schedules) tourIds.add(String(s.tourId));
+		for (const a of assignments) {
+			if (!a.deletedAt && a.status !== "cancelled") {
+				tourIds.add(String(a.tourId));
+			}
+		}
+		const toursById = new Map<
+			string,
+			{
+				_id: Id<"tours">;
+				name: string;
+				tourType: string;
+				requiredGuides: number;
+				requiresVehicle?: boolean;
+				requiresDriver?: boolean;
+				requiredVehicleType?: string;
+			}
+		>();
+		for (const id of tourIds) {
+			const t = await ctx.db.get(id as Id<"tours">);
+			if (t) {
+				toursById.set(String(t._id), {
+					_id: t._id,
+					name: t.name,
+					tourType: t.tourType,
+					requiredGuides: t.requiredGuides,
+					requiresVehicle: t.requiresVehicle,
+					requiresDriver: t.requiresDriver,
+					requiredVehicleType: t.requiredVehicleType,
+				});
+			}
+		}
+
+		return computeStaffingGaps({
+			schedules,
+			assignments,
+			toursById,
+		});
 	},
 });
 
@@ -445,24 +596,10 @@ export const internalCreate = internalMutation({
 		if (schedule.status === "cancelled") {
 			throw new ConvexError("Cannot assign a guide to a cancelled schedule");
 		}
+		// Multi-guide: count against tour.requiredGuides below.
 		tourId = schedule.tourId;
 		date = schedule.date;
 		startTime = schedule.startTime;
-
-		// One active assignment per schedule.
-		const existingForSlot = await ctx.db
-			.query("assignments")
-			.withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId!))
-			.take(100);
-		const active = existingForSlot.find(
-			(a) =>
-				a.organizationId === args.organizationId &&
-				a.status !== "cancelled" &&
-				a.deletedAt === undefined,
-		);
-		if (active) {
-			throw new ConvexError("This schedule already has a guide assigned");
-		}
 	}
 
 	if (parseBookingTime(date, startTime) === null) {
@@ -482,6 +619,8 @@ export const internalCreate = internalMutation({
 	if (!args.guideId.trim()) {
 		throw new ConvexError("guideId is required");
 	}
+
+	const staffing = resolveTourStaffing(tour);
 
 	// Check guide vacation overlap (source: 270-277).
 	// Defense-in-depth: scope by orgId too. A guide belonging to
@@ -522,25 +661,29 @@ export const internalCreate = internalMutation({
 
 	const endTime = calculateEndTime(startTime, tour.durationHours);
 
-	// Prevent double-staffing the same tour slot (with or without
-	// an explicit scheduleId). Conflict checks cover guide/vehicle/
-	// driver overlap — this covers "two guides on one departure".
+	// Slot staffing: up to requiredGuides active guides.
 	const sameDay = await ctx.db
 		.query("assignments")
 		.withIndex("by_tour_date", (q) => q.eq("tourId", tourId).eq("date", date))
 		.take(100);
-	const slotTaken = sameDay.find(
+	const activeOnSlot = sameDay.filter(
 		(a) =>
 			a.organizationId === args.organizationId &&
 			a.status !== "cancelled" &&
 			a.deletedAt === undefined &&
 			a.startTime === startTime,
 	);
-	if (slotTaken) {
+	if (activeOnSlot.length >= staffing.requiredGuides) {
 		throw new ConvexError(
-			`This tour already has a guide assigned on ${date} at ${startTime}`,
+			`This tour already has ${activeOnSlot.length} guide(s) on ${date} at ${startTime} (needs ${staffing.requiredGuides})`,
 		);
 	}
+	if (activeOnSlot.some((a) => a.guideId === args.guideId)) {
+		throw new ConvexError("This guide is already assigned to this departure");
+	}
+
+	const slotHasVehicle = activeOnSlot.some((a) => a.vehicleId);
+	const slotHasDriver = activeOnSlot.some((a) => a.driverId);
 
 	// Validate vehicle.
 	if (args.vehicleId) {
@@ -556,6 +699,34 @@ export const internalCreate = internalMutation({
 				`Vehicle is not available (status: ${vehicle.status})`,
 			);
 		}
+		if (
+			staffing.requiredVehicleType &&
+			vehicle.vehicleType !== staffing.requiredVehicleType
+		) {
+			throw new ConvexError(
+				`This tour requires a ${staffing.requiredVehicleType} (selected ${vehicle.vehicleType})`,
+			);
+		}
+		if (scheduleId) {
+			const scheduleRow = await ctx.db.get(scheduleId);
+			if (scheduleRow && vehicle.capacity < scheduleRow.capacityBooked) {
+				throw new ConvexError(
+					`Vehicle seats (${vehicle.capacity}) are below booked guests (${scheduleRow.capacityBooked})`,
+				);
+			}
+		}
+		const otherVehicle = activeOnSlot.find(
+			(a) => a.vehicleId && a.vehicleId !== args.vehicleId,
+		);
+		if (otherVehicle) {
+			throw new ConvexError(
+				"This departure already has a different vehicle assigned",
+			);
+		}
+	} else if (staffing.requiresVehicle && !slotHasVehicle) {
+		throw new ConvexError(
+			"This tour requires a vehicle — select one before assigning",
+		);
 	}
 
 	// Validate driver.
@@ -570,6 +741,23 @@ export const internalCreate = internalMutation({
 		if (!driver.isActive) {
 			throw new ConvexError("Driver is not active");
 		}
+		if (driver.userId === args.guideId) {
+			throw new ConvexError(
+				"The same person cannot be both guide and driver on one assignment",
+			);
+		}
+		const otherDriver = activeOnSlot.find(
+			(a) => a.driverId && a.driverId !== args.driverId,
+		);
+		if (otherDriver) {
+			throw new ConvexError(
+				"This departure already has a different driver assigned",
+			);
+		}
+	} else if (staffing.requiresDriver && !slotHasDriver) {
+		throw new ConvexError(
+			"This tour requires a driver — select one before assigning",
+		);
 	}
 
 	// Conflict detection.
@@ -585,6 +773,25 @@ export const internalCreate = internalMutation({
 	if (conflicts.length > 0) {
 		const first = conflicts[0];
 		throw new ConvexError(first?.message ?? "Schedule conflict");
+	}
+
+	// Dual-role: driver must not already be guiding an overlapping slot.
+	if (args.driverId) {
+		const driverRow = await ctx.db.get(args.driverId);
+		if (driverRow) {
+			const dual = await checkConflictsHelper(ctx, {
+				organizationId: args.organizationId,
+				date,
+				startTime,
+				endTime,
+				guideId: driverRow.userId,
+			});
+			if (dual.length > 0) {
+				throw new ConvexError(
+					"This driver is already assigned as a guide during this time",
+				);
+			}
+		}
 	}
 
 	const now = Date.now();
@@ -620,6 +827,42 @@ export const internalCreate = internalMutation({
 		},
 	});
 
+	await ctx.scheduler.runAfter(
+		0,
+		internal.assignmentNotifications.notifyGuide as unknown as Parameters<
+			typeof ctx.scheduler.runAfter
+		>[1],
+		{
+			organizationId: args.organizationId,
+			assignmentId,
+			guideId: args.guideId,
+			event: "created" as const,
+			tourName: tour.name,
+			date,
+			startTime,
+			endTime,
+		},
+	);
+
+	if (args.driverId) {
+		await ctx.scheduler.runAfter(
+			0,
+			internal.assignmentNotifications.notifyDriver as unknown as Parameters<
+				typeof ctx.scheduler.runAfter
+			>[1],
+			{
+				organizationId: args.organizationId,
+				assignmentId,
+				driverId: args.driverId,
+				event: "created" as const,
+				tourName: tour.name,
+				date,
+				startTime,
+				endTime,
+			},
+		);
+	}
+
 	return assignmentId;
 	},
 });
@@ -632,6 +875,8 @@ export const update = mutation({
 		guideId: v.optional(v.string()),
 		vehicleId: v.optional(v.id("vehicles")),
 		driverId: v.optional(v.id("drivers")),
+		clearVehicle: v.optional(v.boolean()),
+		clearDriver: v.optional(v.boolean()),
 		date: v.optional(v.string()),
 		startTime: v.optional(v.string()),
 	},
@@ -654,6 +899,8 @@ export const internalUpdate = internalMutation({
 		guideId: v.optional(v.string()),
 		vehicleId: v.optional(v.id("vehicles")),
 		driverId: v.optional(v.id("drivers")),
+		clearVehicle: v.optional(v.boolean()),
+		clearDriver: v.optional(v.boolean()),
 		date: v.optional(v.string()),
 		startTime: v.optional(v.string()),
 		organizationId: v.string(),
@@ -677,10 +924,16 @@ export const internalUpdate = internalMutation({
 		const tour = await ctx.db.get(existing.tourId);
 		if (!tour) throw new ConvexError("Tour no longer exists");
 
+		const nextVehicleId = args.clearVehicle
+			? undefined
+			: (args.vehicleId ?? existing.vehicleId);
+		const nextDriverId = args.clearDriver
+			? undefined
+			: (args.driverId ?? existing.driverId);
 		const next = {
 			guideId: args.guideId ?? existing.guideId,
-			vehicleId: args.vehicleId ?? existing.vehicleId,
-			driverId: args.driverId ?? existing.driverId,
+			vehicleId: nextVehicleId,
+			driverId: nextDriverId,
 			date: args.date ?? existing.date,
 			startTime: args.startTime ?? existing.startTime,
 		};
@@ -689,13 +942,14 @@ export const internalUpdate = internalMutation({
 				"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
 			);
 		}
+		const staffing = resolveTourStaffing(tour);
 		const endTime = calculateEndTime(next.startTime, tour.durationHours);
 
-		// Same tour+date+startTime uniqueness as create — prevent
-		// rescheduling into an already-staffed departure.
+		// Same tour+date+startTime staffing cap as create.
 		if (
 			next.date !== existing.date ||
-			next.startTime !== existing.startTime
+			next.startTime !== existing.startTime ||
+			next.guideId !== existing.guideId
 		) {
 			const sameDay = await ctx.db
 				.query("assignments")
@@ -703,7 +957,7 @@ export const internalUpdate = internalMutation({
 					q.eq("tourId", existing.tourId).eq("date", next.date),
 				)
 				.take(100);
-			const slotTaken = sameDay.find(
+			const activeOnSlot = sameDay.filter(
 				(a) =>
 					a._id !== args.assignmentId &&
 					a.organizationId === args.organizationId &&
@@ -711,11 +965,74 @@ export const internalUpdate = internalMutation({
 					a.deletedAt === undefined &&
 					a.startTime === next.startTime,
 			);
-			if (slotTaken) {
+			if (activeOnSlot.length >= staffing.requiredGuides) {
 				throw new ConvexError(
-					`This tour already has a guide assigned on ${next.date} at ${next.startTime}`,
+					`This tour already has ${activeOnSlot.length} guide(s) on ${next.date} at ${next.startTime} (needs ${staffing.requiredGuides})`,
 				);
 			}
+			if (activeOnSlot.some((a) => a.guideId === next.guideId)) {
+				throw new ConvexError(
+					"This guide is already assigned to this departure",
+				);
+			}
+		}
+
+		const sameDayForFleet = await ctx.db
+			.query("assignments")
+			.withIndex("by_tour_date", (q) =>
+				q.eq("tourId", existing.tourId).eq("date", next.date),
+			)
+			.take(100);
+		const activeOnSlot = sameDayForFleet.filter(
+			(a) =>
+				a._id !== args.assignmentId &&
+				a.organizationId === args.organizationId &&
+				a.status !== "cancelled" &&
+				a.deletedAt === undefined &&
+				a.startTime === next.startTime,
+		);
+		const slotHasVehicle = activeOnSlot.some((a) => a.vehicleId);
+		const slotHasDriver = activeOnSlot.some((a) => a.driverId);
+
+		if (next.vehicleId) {
+			const vehicle = await ctx.db.get(next.vehicleId);
+			if (!vehicle) throw new ConvexError("Vehicle not found");
+			if (vehicle.organizationId !== args.organizationId) {
+				throw new ConvexError(
+					"Forbidden: vehicle belongs to a different organization",
+				);
+			}
+			if (
+				staffing.requiredVehicleType &&
+				vehicle.vehicleType !== staffing.requiredVehicleType
+			) {
+				throw new ConvexError(
+					`This tour requires a ${staffing.requiredVehicleType} (selected ${vehicle.vehicleType})`,
+				);
+			}
+		} else if (staffing.requiresVehicle && !slotHasVehicle) {
+			throw new ConvexError(
+				"This tour requires a vehicle — select one before assigning",
+			);
+		}
+
+		if (next.driverId) {
+			const driver = await ctx.db.get(next.driverId);
+			if (!driver) throw new ConvexError("Driver not found");
+			if (driver.organizationId !== args.organizationId) {
+				throw new ConvexError(
+					"Forbidden: driver belongs to a different organization",
+				);
+			}
+			if (driver.userId === next.guideId) {
+				throw new ConvexError(
+					"The same person cannot be both guide and driver on one assignment",
+				);
+			}
+		} else if (staffing.requiresDriver && !slotHasDriver) {
+			throw new ConvexError(
+				"This tour requires a driver — select one before assigning",
+			);
 		}
 
 		const conflicts = await checkConflictsHelper(ctx, {
@@ -756,6 +1073,77 @@ export const internalUpdate = internalMutation({
 			},
 			newValues: next,
 		});
+
+		if (next.guideId !== existing.guideId) {
+			const notifyArgs = {
+				organizationId: args.organizationId,
+				assignmentId: args.assignmentId,
+				tourName: tour.name,
+				date: next.date,
+				startTime: next.startTime,
+				endTime,
+			};
+			await ctx.scheduler.runAfter(
+				0,
+				internal.assignmentNotifications.notifyGuide as unknown as Parameters<
+					typeof ctx.scheduler.runAfter
+				>[1],
+				{
+					...notifyArgs,
+					guideId: next.guideId,
+					event: "created" as const,
+				},
+			);
+			await ctx.scheduler.runAfter(
+				0,
+				internal.assignmentNotifications.notifyGuide as unknown as Parameters<
+					typeof ctx.scheduler.runAfter
+				>[1],
+				{
+					...notifyArgs,
+					guideId: existing.guideId,
+					event: "reassigned_away" as const,
+				},
+			);
+		}
+
+		if (next.driverId !== existing.driverId) {
+			const notifyArgs = {
+				organizationId: args.organizationId,
+				assignmentId: args.assignmentId,
+				tourName: tour.name,
+				date: next.date,
+				startTime: next.startTime,
+				endTime,
+			};
+			if (next.driverId) {
+				await ctx.scheduler.runAfter(
+					0,
+					internal.assignmentNotifications.notifyDriver as unknown as Parameters<
+						typeof ctx.scheduler.runAfter
+					>[1],
+					{
+						...notifyArgs,
+						driverId: next.driverId,
+						event: "created" as const,
+					},
+				);
+			}
+			if (existing.driverId) {
+				await ctx.scheduler.runAfter(
+					0,
+					internal.assignmentNotifications.notifyDriver as unknown as Parameters<
+						typeof ctx.scheduler.runAfter
+					>[1],
+					{
+						...notifyArgs,
+						driverId: existing.driverId,
+						event: "reassigned_away" as const,
+					},
+				);
+			}
+		}
+
 		return args.assignmentId;
 	},
 });
@@ -821,6 +1209,44 @@ export const internalCancel = internalMutation({
 			oldValues: { status: a.status },
 			newValues: { status: "cancelled", reason: args.reason ?? "" },
 		});
+
+		const tour = await ctx.db.get(a.tourId);
+		await ctx.scheduler.runAfter(
+			0,
+			internal.assignmentNotifications.notifyGuide as unknown as Parameters<
+				typeof ctx.scheduler.runAfter
+			>[1],
+			{
+				organizationId: a.organizationId,
+				assignmentId: args.assignmentId,
+				guideId: a.guideId,
+				event: "cancelled" as const,
+				tourName: tour?.name ?? "Tour",
+				date: a.date,
+				startTime: a.startTime,
+				endTime: a.endTime,
+			},
+		);
+
+		if (a.driverId) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.assignmentNotifications.notifyDriver as unknown as Parameters<
+					typeof ctx.scheduler.runAfter
+				>[1],
+				{
+					organizationId: a.organizationId,
+					assignmentId: args.assignmentId,
+					driverId: a.driverId,
+					event: "cancelled" as const,
+					tourName: tour?.name ?? "Tour",
+					date: a.date,
+					startTime: a.startTime,
+					endTime: a.endTime,
+				},
+			);
+		}
+
 		return args.assignmentId;
 	},
 });

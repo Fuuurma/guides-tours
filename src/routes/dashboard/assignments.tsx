@@ -33,6 +33,8 @@ function AssignmentsPage() {
 	if (range.to) args.dateTo = range.to;
 
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
+	const { data: vehicles } = useQuery(convexQuery(api.vehicles.list, {}));
+	const { data: drivers } = useQuery(convexQuery(api.drivers.list, {}));
 	const { displayName } = useOrgMembers();
 	const {
 		data: assignments,
@@ -42,6 +44,12 @@ function AssignmentsPage() {
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
+	);
+	const vehicleNameById = new Map<string, string>(
+		(vehicles ?? []).map((v) => [String(v._id), v.name]),
+	);
+	const driverUserById = new Map<string, string>(
+		(drivers ?? []).map((d) => [String(d._id), d.userId]),
 	);
 	const items = (assignments ?? []) as Assignment[];
 	const itemCount = items.length;
@@ -84,6 +92,26 @@ function AssignmentsPage() {
 			header: "Tour",
 			render: (a) => <TourCell tourId={a.tourId} tourNameById={tourNameById} />,
 			searchValue: (a) => tourNameById.get(a.tourId) ?? a.tourId,
+		},
+		{
+			key: "vehicle",
+			header: "Vehicle",
+			render: (a) =>
+				a.vehicleId ? (vehicleNameById.get(a.vehicleId) ?? "—") : "—",
+			searchValue: (a) =>
+				a.vehicleId ? (vehicleNameById.get(a.vehicleId) ?? "") : "",
+		},
+		{
+			key: "driver",
+			header: "Driver",
+			render: (a) => {
+				const userId = a.driverId ? driverUserById.get(a.driverId) : undefined;
+				return userId ? displayName(userId) : "—";
+			},
+			searchValue: (a) => {
+				const userId = a.driverId ? driverUserById.get(a.driverId) : undefined;
+				return userId ? displayName(userId) : "";
+			},
 		},
 		{
 			key: "status",

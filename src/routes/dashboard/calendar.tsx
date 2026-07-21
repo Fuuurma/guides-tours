@@ -30,6 +30,10 @@ import {
 	startOfMonthLocal,
 	startOfWeekLocal,
 } from "@/lib/calendar-date";
+import {
+	evaluateSlotStaffing,
+	resolveTourStaffing,
+} from "@/lib/staffing";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -48,6 +52,24 @@ type AssignmentRow = {
 	startTime: string;
 	endTime?: string;
 	status: string;
+	vehicleId?: string;
+	driverId?: string;
+};
+
+type TourLite = {
+	_id: string;
+	name: string;
+	tourType: string;
+	requiredGuides?: number;
+	requiresVehicle?: boolean;
+	requiresDriver?: boolean;
+	requiredVehicleType?: string;
+};
+
+type SlotFleet = {
+	guideCount: number;
+	hasVehicle: boolean;
+	hasDriver: boolean;
 };
 
 function CalendarPage() {
@@ -100,6 +122,13 @@ function CalendarPage() {
 		() => new Map((tours ?? []).map((t) => [String(t._id), t.name])),
 		[tours],
 	);
+	const tourById = useMemo(() => {
+		const map = new Map<string, TourLite>();
+		for (const t of (tours ?? []) as TourLite[]) {
+			map.set(String(t._id), t);
+		}
+		return map;
+	}, [tours]);
 
 	const byDate = useMemo(() => {
 		const map = new Map<string, AssignmentRow[]>();
@@ -114,6 +143,24 @@ function CalendarPage() {
 		return map;
 	}, [assignments]);
 
+	const slotFleetByKey = useMemo(() => {
+		const map = new Map<string, SlotFleet>();
+		for (const a of (assignments ?? []) as AssignmentRow[]) {
+			if (a.status === "cancelled") continue;
+			const key = `${a.tourId}|${a.date}|${a.startTime}`;
+			const agg = map.get(key) ?? {
+				guideCount: 0,
+				hasVehicle: false,
+				hasDriver: false,
+			};
+			agg.guideCount += 1;
+			if (a.vehicleId) agg.hasVehicle = true;
+			if (a.driverId) agg.hasDriver = true;
+			map.set(key, agg);
+		}
+		return map;
+	}, [assignments]);
+
 	const scheduleCountByDate = useMemo(() => {
 		const map = new Map<string, number>();
 		for (const s of schedules ?? []) {
@@ -122,22 +169,59 @@ function CalendarPage() {
 		return map;
 	}, [schedules]);
 
-	/** Schedules with no non-cancelled assignment for the same tour+date+startTime. */
-	const unstaffedCountByDate = useMemo(() => {
-		const staffed = new Set<string>();
-		for (const a of (assignments ?? []) as AssignmentRow[]) {
-			if (a.status === "cancelled") continue;
-			staffed.add(`${a.tourId}|${a.date}|${a.startTime}`);
-		}
+	/** Schedules (or assignment slots) with staffing gaps for the day. */
+	const gapCountByDate = useMemo(() => {
 		const map = new Map<string, number>();
+		const seen = new Set<string>();
 		for (const s of schedules ?? []) {
 			if (s.status === "cancelled") continue;
 			const key = `${s.tourId}|${s.date}|${s.startTime}`;
-			if (staffed.has(key)) continue;
-			map.set(s.date, (map.get(s.date) ?? 0) + 1);
+			seen.add(key);
+			const tour = tourById.get(String(s.tourId));
+			if (!tour) continue;
+			const rules = resolveTourStaffing({
+				tourType: tour.tourType,
+				requiredGuides: tour.requiredGuides,
+				requiresVehicle: tour.requiresVehicle,
+				requiresDriver: tour.requiresDriver,
+				requiredVehicleType: tour.requiredVehicleType,
+			});
+			const fleet = slotFleetByKey.get(key);
+			const { ready } = evaluateSlotStaffing({
+				requiredGuides: rules.requiredGuides,
+				requiresVehicle: rules.requiresVehicle,
+				requiresDriver: rules.requiresDriver,
+				guideCount: fleet?.guideCount ?? 0,
+				hasVehicle: fleet?.hasVehicle ?? false,
+				hasDriver: fleet?.hasDriver ?? false,
+			});
+			if (!ready) map.set(s.date, (map.get(s.date) ?? 0) + 1);
+		}
+		for (const [key, fleet] of slotFleetByKey) {
+			if (seen.has(key)) continue;
+			const [tourId, date] = key.split("|");
+			if (!tourId || !date) continue;
+			const tour = tourById.get(tourId);
+			if (!tour) continue;
+			const rules = resolveTourStaffing({
+				tourType: tour.tourType,
+				requiredGuides: tour.requiredGuides,
+				requiresVehicle: tour.requiresVehicle,
+				requiresDriver: tour.requiresDriver,
+				requiredVehicleType: tour.requiredVehicleType,
+			});
+			const { ready } = evaluateSlotStaffing({
+				requiredGuides: rules.requiredGuides,
+				requiresVehicle: rules.requiresVehicle,
+				requiresDriver: rules.requiresDriver,
+				guideCount: fleet.guideCount,
+				hasVehicle: fleet.hasVehicle,
+				hasDriver: fleet.hasDriver,
+			});
+			if (!ready) map.set(date, (map.get(date) ?? 0) + 1);
 		}
 		return map;
-	}, [assignments, schedules]);
+	}, [schedules, slotFleetByKey, tourById]);
 
 	const year = cursor.getFullYear();
 	const month = cursor.getMonth();
@@ -184,7 +268,13 @@ function CalendarPage() {
 				<div>
 					<h1 className="text-2xl font-semibold">Calendar</h1>
 					<p className="text-muted-foreground text-sm">
-						Ops view of guide assignments
+						Ops view of guide assignments ·{" "}
+						<Link
+							to="/dashboard/staffing"
+							className="text-link hover:underline"
+						>
+							Staffing gaps
+						</Link>
 					</p>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
@@ -275,7 +365,9 @@ function CalendarPage() {
 									month={month}
 									byDate={byDate}
 									scheduleCountByDate={scheduleCountByDate}
-									unstaffedCountByDate={unstaffedCountByDate}
+									gapCountByDate={gapCountByDate}
+									slotFleetByKey={slotFleetByKey}
+									tourById={tourById}
 									tourNameById={tourNameById}
 									displayName={displayName}
 								/>
@@ -292,7 +384,9 @@ function CalendarPage() {
 							weekStart={range.weekStart ?? startOfWeekLocal(cursor)}
 							byDate={byDate}
 							scheduleCountByDate={scheduleCountByDate}
-							unstaffedCountByDate={unstaffedCountByDate}
+							gapCountByDate={gapCountByDate}
+							slotFleetByKey={slotFleetByKey}
+							tourById={tourById}
 							tourNameById={tourNameById}
 							displayName={displayName}
 						/>
@@ -307,11 +401,45 @@ function AssignmentChip({
 	a,
 	tourName,
 	guideName,
+	slotFleet,
+	tour,
 }: {
 	a: AssignmentRow;
 	tourName: string;
 	guideName: string;
+	slotFleet?: SlotFleet;
+	tour?: TourLite;
 }) {
+	const rules = tour
+		? resolveTourStaffing({
+				tourType: tour.tourType,
+				requiredGuides: tour.requiredGuides,
+				requiresVehicle: tour.requiresVehicle,
+				requiresDriver: tour.requiresDriver,
+				requiredVehicleType: tour.requiredVehicleType,
+			})
+		: null;
+	const fleetGap =
+		rules &&
+		!evaluateSlotStaffing({
+			requiredGuides: rules.requiredGuides,
+			requiresVehicle: rules.requiresVehicle,
+			requiresDriver: rules.requiresDriver,
+			guideCount: slotFleet?.guideCount ?? 1,
+			hasVehicle: slotFleet?.hasVehicle ?? Boolean(a.vehicleId),
+			hasDriver: slotFleet?.hasDriver ?? Boolean(a.driverId),
+		}).ready;
+
+	const markers: string[] = [];
+	if (a.vehicleId || slotFleet?.hasVehicle) markers.push("V");
+	if (a.driverId || slotFleet?.hasDriver) markers.push("D");
+	if (rules?.requiresVehicle && !(a.vehicleId || slotFleet?.hasVehicle)) {
+		markers.push("!V");
+	}
+	if (rules?.requiresDriver && !(a.driverId || slotFleet?.hasDriver)) {
+		markers.push("!D");
+	}
+
 	return (
 		<Link
 			to="/dashboard/assignments/$assignmentId"
@@ -320,11 +448,21 @@ function AssignmentChip({
 				"block rounded-sm border px-1.5 py-0.5 text-[11px] leading-tight hover:bg-muted truncate",
 				a.status === "cancelled" && "opacity-50 line-through",
 				a.status === "completed" && "border-primary/30 bg-primary/5",
+				fleetGap &&
+					a.status === "scheduled" &&
+					"border-amber-400/70 bg-amber-50/60 dark:bg-amber-950/30",
+				!fleetGap &&
+					a.status === "scheduled" &&
+					(a.vehicleId || a.driverId) &&
+					"border-emerald-400/50 bg-emerald-50/40 dark:bg-emerald-950/20",
 			)}
-			title={`${a.startTime} ${tourName} · ${guideName}`}
+			title={`${a.startTime} ${tourName} · ${guideName}${markers.length ? ` · ${markers.join(" ")}` : ""}`}
 			onClick={(e) => e.stopPropagation()}
 		>
 			<span className="font-medium">{a.startTime}</span> {tourName}
+			{markers.length > 0 ? (
+				<span className="text-muted-foreground"> · {markers.join("")}</span>
+			) : null}
 		</Link>
 	);
 }
@@ -334,7 +472,9 @@ function MonthGrid({
 	month,
 	byDate,
 	scheduleCountByDate,
-	unstaffedCountByDate,
+	gapCountByDate,
+	slotFleetByKey,
+	tourById,
 	tourNameById,
 	displayName,
 }: {
@@ -342,7 +482,9 @@ function MonthGrid({
 	month: number;
 	byDate: Map<string, AssignmentRow[]>;
 	scheduleCountByDate: Map<string, number>;
-	unstaffedCountByDate: Map<string, number>;
+	gapCountByDate: Map<string, number>;
+	slotFleetByKey: Map<string, SlotFleet>;
+	tourById: Map<string, TourLite>;
 	tourNameById: Map<string, string>;
 	displayName: (userId: string) => string;
 }) {
@@ -371,7 +513,7 @@ function MonthGrid({
 					const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 					const items = byDate.get(date) ?? [];
 					const scheduleCount = scheduleCountByDate.get(date) ?? 0;
-					const unstaffed = unstaffedCountByDate.get(date) ?? 0;
+					const gaps = gapCountByDate.get(date) ?? 0;
 					const isToday = date === today;
 					return (
 						<div
@@ -379,7 +521,7 @@ function MonthGrid({
 							className={cn(
 								"bg-background min-h-24 p-1 flex flex-col gap-0.5",
 								isToday && "ring-1 ring-inset ring-primary",
-								unstaffed > 0 && "bg-amber-50/40 dark:bg-amber-950/20",
+								gaps > 0 && "bg-amber-50/40 dark:bg-amber-950/20",
 							)}
 						>
 							<div className="flex items-center justify-between gap-1 px-0.5">
@@ -395,12 +537,12 @@ function MonthGrid({
 									{day}
 								</Link>
 								<div className="flex items-center gap-1">
-									{unstaffed > 0 && (
+									{gaps > 0 && (
 										<span
 											className="text-[10px] font-medium text-amber-700 dark:text-amber-400"
-											title={`${unstaffed} schedule(s) need a guide`}
+											title={`${gaps} departure(s) need staffing`}
 										>
-											{unstaffed}!
+											{gaps}!
 										</span>
 									)}
 									{scheduleCount > 0 && (
@@ -414,14 +556,19 @@ function MonthGrid({
 								</div>
 							</div>
 							<div className="flex flex-col gap-0.5 overflow-hidden">
-								{items.slice(0, 3).map((a) => (
-									<AssignmentChip
-										key={a._id}
-										a={a}
-										tourName={tourNameById.get(a.tourId) ?? "Tour"}
-										guideName={displayName(a.guideId)}
-									/>
-								))}
+								{items.slice(0, 3).map((a) => {
+									const slotKey = `${a.tourId}|${a.date}|${a.startTime}`;
+									return (
+										<AssignmentChip
+											key={a._id}
+											a={a}
+											tourName={tourNameById.get(a.tourId) ?? "Tour"}
+											guideName={displayName(a.guideId)}
+											slotFleet={slotFleetByKey.get(slotKey)}
+											tour={tourById.get(a.tourId)}
+										/>
+									);
+								})}
 								{items.length > 3 && (
 									<span className="text-[10px] text-muted-foreground px-1">
 										+{items.length - 3} more
@@ -440,14 +587,18 @@ function WeekAgenda({
 	weekStart,
 	byDate,
 	scheduleCountByDate,
-	unstaffedCountByDate,
+	gapCountByDate,
+	slotFleetByKey,
+	tourById,
 	tourNameById,
 	displayName,
 }: {
 	weekStart: Date;
 	byDate: Map<string, AssignmentRow[]>;
 	scheduleCountByDate: Map<string, number>;
-	unstaffedCountByDate: Map<string, number>;
+	gapCountByDate: Map<string, number>;
+	slotFleetByKey: Map<string, SlotFleet>;
+	tourById: Map<string, TourLite>;
 	tourNameById: Map<string, string>;
 	displayName: (userId: string) => string;
 }) {
@@ -462,7 +613,7 @@ function WeekAgenda({
 				const date = localYmd(d);
 				const items = byDate.get(date) ?? [];
 				const scheduleCount = scheduleCountByDate.get(date) ?? 0;
-				const unstaffed = unstaffedCountByDate.get(date) ?? 0;
+				const gaps = gapCountByDate.get(date) ?? 0;
 				const label = d.toLocaleDateString("en-US", {
 					weekday: "short",
 					month: "short",
@@ -478,44 +629,84 @@ function WeekAgenda({
 									{scheduleCount > 0
 										? ` · ${scheduleCount} schedule${scheduleCount === 1 ? "" : "s"}`
 										: ""}
-									{unstaffed > 0
-										? ` · ${unstaffed} need guide${unstaffed === 1 ? "" : "s"}`
+									{gaps > 0
+										? ` · ${gaps} need staffing`
 										: ""}
 								</CardDescription>
 							</div>
-							<Button asChild size="sm" variant="outline">
-								<Link to="/dashboard/assignments/new" search={{ date }}>
-									+ Assign
-								</Link>
-							</Button>
+							<div className="flex gap-2">
+								{gaps > 0 && (
+									<Button asChild size="sm" variant="secondary">
+										<Link to="/dashboard/staffing">Gaps</Link>
+									</Button>
+								)}
+								<Button asChild size="sm" variant="outline">
+									<Link to="/dashboard/assignments/new" search={{ date }}>
+										+ Assign
+									</Link>
+								</Button>
+							</div>
 						</CardHeader>
 						<CardContent className="pb-3">
 							{items.length === 0 ? (
 								<p className="text-muted-foreground text-sm">
-									{unstaffed > 0
-										? `${unstaffed} schedule(s) still need a guide`
+									{gaps > 0
+										? `${gaps} departure(s) still need staffing`
 										: "No assignments"}
 								</p>
 							) : (
 								<ul className="flex flex-col gap-2">
-									{items.map((a) => (
-										<li
-											key={a._id}
-											className="flex flex-wrap items-center justify-between gap-2"
-										>
-											<Link
-												to="/dashboard/assignments/$assignmentId"
-												params={{ assignmentId: a._id }}
-												className="text-sm text-link hover:underline"
+									{items.map((a) => {
+										const slotKey = `${a.tourId}|${a.date}|${a.startTime}`;
+										const tour = tourById.get(a.tourId);
+										const fleet = slotFleetByKey.get(slotKey);
+										const rules = tour
+											? resolveTourStaffing({
+													tourType: tour.tourType,
+													requiredGuides: tour.requiredGuides,
+													requiresVehicle: tour.requiresVehicle,
+													requiresDriver: tour.requiresDriver,
+													requiredVehicleType: tour.requiredVehicleType,
+												})
+											: null;
+										const incomplete =
+											rules &&
+											!evaluateSlotStaffing({
+												requiredGuides: rules.requiredGuides,
+												requiresVehicle: rules.requiresVehicle,
+												requiresDriver: rules.requiresDriver,
+												guideCount: fleet?.guideCount ?? 1,
+												hasVehicle: fleet?.hasVehicle ?? false,
+												hasDriver: fleet?.hasDriver ?? false,
+											}).ready;
+										return (
+											<li
+												key={a._id}
+												className="flex flex-wrap items-center justify-between gap-2"
 											>
-												{a.startTime}
-												{a.endTime ? `–${a.endTime}` : ""} ·{" "}
-												{tourNameById.get(a.tourId) ?? "Tour"} ·{" "}
-												{displayName(a.guideId)}
-											</Link>
-											<Badge variant="secondary">{a.status}</Badge>
-										</li>
-									))}
+												<Link
+													to="/dashboard/assignments/$assignmentId"
+													params={{ assignmentId: a._id }}
+													className="text-sm text-link hover:underline"
+												>
+													{a.startTime}
+													{a.endTime ? `–${a.endTime}` : ""} ·{" "}
+													{tourNameById.get(a.tourId) ?? "Tour"} ·{" "}
+													{displayName(a.guideId)}
+													{a.vehicleId ? " · V" : ""}
+													{a.driverId ? " · D" : ""}
+												</Link>
+												<div className="flex items-center gap-2">
+													{incomplete ? (
+														<Badge variant="outline" className="text-amber-700">
+															Incomplete
+														</Badge>
+													) : null}
+													<Badge variant="secondary">{a.status}</Badge>
+												</div>
+											</li>
+										);
+									})}
 								</ul>
 							)}
 						</CardContent>

@@ -133,15 +133,23 @@ export function NewCustomerPage() {
 			</FormField>
 
 			<div className="space-y-3 rounded-md border p-3">
-				<label className="flex items-center gap-2 text-sm">
+				<label
+					htmlFor="new-customer-email-consent"
+					className="flex items-center gap-2 text-sm"
+				>
 					<Checkbox
+						id="new-customer-email-consent"
 						checked={form.values.emailConsent}
 						onCheckedChange={(c) => form.set("emailConsent", c === true)}
 					/>
 					Email updates & reminders
 				</label>
-				<label className="flex items-center gap-2 text-sm">
+				<label
+					htmlFor="new-customer-sms-consent"
+					className="flex items-center gap-2 text-sm"
+				>
 					<Checkbox
+						id="new-customer-sms-consent"
 						checked={form.values.smsConsent}
 						onCheckedChange={(c) => form.set("smsConsent", c === true)}
 					/>

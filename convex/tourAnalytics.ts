@@ -1,10 +1,10 @@
 // Tour analytics cache: pre-computed (period × tour) metrics stored
-// for fast dashboard reads. Source's TourAnalyticsService computes on
-// demand; we cache the result keyed by (periodType, periodDate, tour).
+// for fast dashboard reads. Live period stats live in analytics.ts
+// (getForTour / getTopTours); this table stores daily snapshots for
+// longer-range trends.
 //
-// See backend/tours/services/tour_analytics_service.py for the
-// reference math. Cache refresh is the caller's responsibility
-// (typically a nightly cron — see convex/crons.ts).
+// Nightly cron `refresh_tour_analytics` (05:00 UTC) recomputes
+// yesterday's daily rows per org that has tours.
 
 import { v, ConvexError } from "convex/values";
 import {
@@ -13,8 +13,15 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { utcYmd, addDaysYmd } from "./lib/staffingGaps";
+
+const MAX_TOURS = 500;
+const MAX_BOOKINGS = 5_000;
+const MAX_ORGS = 100;
+const MAX_TOURS_SCAN = 5_000;
 
 // ---- queries ----
 
@@ -246,5 +253,110 @@ export const internalRemove = internalMutation({
 			newValues: {},
 		});
 		return args.analyticsId;
+	},
+});
+/**
+ * Recompute daily cache rows for one org + calendar day from bookings.
+ * Skips tours with no bookings that day (avoids empty-row bloat).
+ */
+export const computeForOrgDay = internalMutation({
+	args: {
+		organizationId: v.string(),
+		periodDate: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const tours = await ctx.db
+			.query("tours")
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.take(MAX_TOURS);
+		const bookings = await ctx.db
+			.query("bookings")
+			.withIndex("by_org_date", (q) =>
+				q
+					.eq("organizationId", args.organizationId)
+					.eq("date", args.periodDate),
+			)
+			.take(MAX_BOOKINGS);
+
+		const byTour = new Map<string, typeof bookings>();
+		for (const b of bookings) {
+			const key = String(b.tourId);
+			const list = byTour.get(key) ?? [];
+			list.push(b);
+			byTour.set(key, list);
+		}
+
+		let upserted = 0;
+		for (const tour of tours) {
+			if (tour.deletedAt !== undefined) continue;
+			const dayBookings = byTour.get(String(tour._id));
+			if (!dayBookings || dayBookings.length === 0) continue;
+
+			const active = dayBookings.filter((b) => b.status !== "cancelled");
+			const cancellations = dayBookings.length - active.length;
+			const totalBookings = active.length;
+			const totalGuests = active.reduce((s, b) => s + b.guests, 0);
+			const grossRevenueCents = BigInt(
+				active.reduce((s, b) => s + Number(b.totalAmountCents), 0),
+			);
+			const netRevenueCents = BigInt(
+				active.reduce((s, b) => s + Number(b.netRevenueCents), 0),
+			);
+			const avgGroupSize =
+				totalBookings > 0
+					? Math.round((totalGuests / totalBookings) * 10) / 10
+					: 0;
+			const totalCapacity = tour.capacity;
+			const utilizationRate =
+				totalCapacity > 0
+					? Math.min(
+							1,
+							Math.round((totalGuests / totalCapacity) * 1000) / 1000,
+						)
+					: 0;
+
+			await ctx.runMutation(internal.tourAnalytics.internalUpsert, {
+				organizationId: args.organizationId,
+				userId: "system:cron",
+				tourId: tour._id,
+				periodDate: args.periodDate,
+				periodType: "daily",
+				totalBookings,
+				totalGuests,
+				grossRevenueCents,
+				netRevenueCents,
+				cancellations,
+				noShows: 0,
+				avgGroupSize,
+				utilizationRate,
+				totalCapacity,
+			});
+			upserted += 1;
+		}
+		return { upserted };
+	},
+});
+
+/** Nightly: schedule yesterday's daily refresh for each org with tours. */
+export const runDaily = internalMutation({
+	args: {},
+	handler: async (ctx) => {
+		const yesterday = addDaysYmd(utcYmd(), -1);
+		const tours = await ctx.db.query("tours").take(MAX_TOURS_SCAN);
+		const orgIds = [
+			...new Set(
+				tours
+					.filter((t) => t.deletedAt === undefined)
+					.map((t) => t.organizationId),
+			),
+		].slice(0, MAX_ORGS);
+
+		for (const organizationId of orgIds) {
+			await ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
+				organizationId,
+				periodDate: yesterday,
+			});
+		}
+		return { orgs: orgIds.length, periodDate: yesterday };
 	},
 });

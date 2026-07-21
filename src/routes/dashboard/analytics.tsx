@@ -2,8 +2,9 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
+import { TourRevenueBars, aggregateDailyTourMetrics } from "@/components/tour-revenue-bars";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -15,9 +16,9 @@ import {
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { type DateRange, lastNDays } from "@/lib/date-range";
 import { formatCents, formatCentsWhole } from "@/lib/format";
-import { useOrgMembers } from "@/hooks/use-org-members";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -101,6 +102,9 @@ function AnalyticsPage() {
 	const { data: topTours } = useQuery(
 		convexQuery(api.analytics.getTopTours, { ...rangeArgs, limit: 5 }),
 	);
+	const { data: tourStats } = useQuery(
+		convexQuery(api.analytics.getTourStats, rangeArgs),
+	);
 	const { data: sources } = useQuery(
 		convexQuery(api.analytics.getBookingSources, rangeArgs),
 	);
@@ -109,6 +113,17 @@ function AnalyticsPage() {
 	);
 	const { data: dailyStats } = useQuery(
 		convexQuery(api.analytics.getDailyStats, rangeArgs),
+	);
+	const { data: cachedTourDays } = useQuery(
+		convexQuery(api.tourAnalytics.list, {
+			periodType: "daily",
+			dateFrom: range.startDate,
+			dateTo: range.endDate,
+		}),
+	);
+	const cachedDailySeries = useMemo(
+		() => aggregateDailyTourMetrics(cachedTourDays ?? []),
+		[cachedTourDays],
 	);
 	const { displayName } = useOrgMembers(["guide", "owner", "admin"]);
 
@@ -357,24 +372,33 @@ function AnalyticsPage() {
 
 				<Card>
 					<CardHeader>
-						<CardTitle>Bookings by source</CardTitle>
-						<CardDescription>Where your bookings come from</CardDescription>
+						<CardTitle>Tour assignments</CardTitle>
+						<CardDescription>
+							Guides scheduled per tour in this window
+						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						{!sources || sources.length === 0 ? (
+						{!tourStats || tourStats.length === 0 ? (
 							<p className="text-muted-foreground text-sm">
-								No bookings in this window.
+								No assignments in this window.
 							</p>
 						) : (
 							<ul className="space-y-2 text-sm">
-								{sources.map((s) => (
+								{tourStats.map((t) => (
 									<li
-										key={s.source}
+										key={t.tourId}
 										className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0"
 									>
-										<span className="truncate">{s.source}</span>
+										<Link
+											to="/dashboard/tours/$tourId"
+											params={{ tourId: t.tourId }}
+											className="text-link hover:underline truncate"
+										>
+											{t.tourName}
+										</Link>
 										<div className="text-right text-xs whitespace-nowrap text-muted-foreground">
-											{s.totalBookings} bookings · {s.totalGuests} guests
+											{t.completed}/{t.totalAssignments} done
+											{t.cancelled > 0 ? ` · ${t.cancelled} cancelled` : ""}
 										</div>
 									</li>
 								))}
@@ -383,6 +407,46 @@ function AnalyticsPage() {
 					</CardContent>
 				</Card>
 			</div>
+
+			<Card>
+				<CardHeader>
+					<CardTitle>Bookings by source</CardTitle>
+					<CardDescription>Where your bookings come from</CardDescription>
+				</CardHeader>
+				<CardContent>
+					{!sources || sources.length === 0 ? (
+						<p className="text-muted-foreground text-sm">
+							No bookings in this window.
+						</p>
+					) : (
+						<ul className="space-y-2 text-sm md:columns-2 md:gap-8">
+							{sources.map((s) => (
+								<li
+									key={s.source}
+									className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0 break-inside-avoid"
+								>
+									<span className="truncate">{s.source}</span>
+									<div className="text-right text-xs whitespace-nowrap text-muted-foreground">
+										{s.totalBookings} bookings · {s.totalGuests} guests
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+				</CardContent>
+			</Card>
+
+			<Card>
+				<CardHeader>
+					<CardTitle>Tour revenue (cached)</CardTitle>
+					<CardDescription>
+						Daily gross from the tourAnalytics snapshot (nightly cron)
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<TourRevenueBars days={cachedDailySeries} />
+				</CardContent>
+			</Card>
 
 			<div className="grid gap-4 lg:grid-cols-2">
 				<Card>

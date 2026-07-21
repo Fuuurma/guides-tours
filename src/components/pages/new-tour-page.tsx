@@ -12,18 +12,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { parseUsdToCents, validatePositiveInteger } from "@/lib/validation";
+import { TOUR_TYPES, VEHICLE_TYPES, resolveTourStaffing } from "@/lib/staffing";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
-
-const TOUR_TYPES = [
-	"walking",
-	"car",
-	"minivan",
-	"bus",
-	"boat",
-	"other",
-] as const;
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -36,6 +29,11 @@ interface FormValues extends Record<string, unknown> {
 	maxGuests: string;
 	priceUsd: string;
 	languages: string;
+	requiredGuides: string;
+	requiresVehicle: boolean;
+	requiresDriver: boolean;
+	requiredVehicleType: string;
+	staffingOverride: boolean;
 }
 
 const INITIAL: FormValues = {
@@ -49,6 +47,11 @@ const INITIAL: FormValues = {
 	maxGuests: "10",
 	priceUsd: "",
 	languages: "en",
+	requiredGuides: "1",
+	requiresVehicle: false,
+	requiresDriver: false,
+	requiredVehicleType: "",
+	staffingOverride: false,
 };
 
 export function NewTourPage() {
@@ -63,6 +66,15 @@ export function NewTourPage() {
 			if (v.priceUsd && priceCents === null) {
 				throw new Error("Invalid price amount");
 			}
+			const inferred = resolveTourStaffing({
+				tourType: v.tourType,
+				requiredGuides: Number(v.requiredGuides) || 1,
+				requiresVehicle: v.staffingOverride ? v.requiresVehicle : undefined,
+				requiresDriver: v.staffingOverride ? v.requiresDriver : undefined,
+				requiredVehicleType: v.staffingOverride
+					? v.requiredVehicleType || undefined
+					: undefined,
+			});
 			const id = await create({
 				name: v.name,
 				description: v.description || undefined,
@@ -79,6 +91,13 @@ export function NewTourPage() {
 					.split(",")
 					.map((s) => s.trim())
 					.filter(Boolean),
+				requiredGuides: Number(v.requiredGuides) || 1,
+				requiresVehicle: v.staffingOverride ? v.requiresVehicle : undefined,
+				requiresDriver: v.staffingOverride ? v.requiresDriver : undefined,
+				requiredVehicleType:
+					v.staffingOverride && inferred.requiresVehicle
+						? v.requiredVehicleType || undefined
+						: undefined,
 			});
 			return id;
 		},
@@ -268,6 +287,107 @@ export function NewTourPage() {
 						placeholder="en, es"
 					/>
 				</FormField>
+			</div>
+
+			<div className="space-y-4 rounded-md border p-4">
+				<div>
+					<p className="text-sm font-medium">Staffing</p>
+					<p className="text-muted-foreground text-xs">
+						How many guides and whether this tour needs a vehicle/driver.
+						Transport types default to requiring both.
+					</p>
+				</div>
+				<div className="grid gap-4 md:grid-cols-2">
+					<FormField label="Required guides" htmlFor="req-guides">
+						<Input
+							id="req-guides"
+							type="number"
+							min="1"
+							max="10"
+							value={form.values.requiredGuides}
+							onChange={(e) => form.set("requiredGuides", e.target.value)}
+						/>
+					</FormField>
+					<label htmlFor="staffing-override" className="flex items-center gap-2 text-sm pt-6">
+						<Checkbox
+							id="staffing-override"
+							checked={form.values.staffingOverride}
+							onCheckedChange={(c) => {
+								const on = c === true;
+								form.set("staffingOverride", on);
+								if (!on) return;
+								const inferred = resolveTourStaffing({
+									tourType: form.values.tourType,
+								});
+								form.set("requiresVehicle", inferred.requiresVehicle);
+								form.set("requiresDriver", inferred.requiresDriver);
+								form.set(
+									"requiredVehicleType",
+									inferred.requiredVehicleType ?? "",
+								);
+							}}
+						/>
+						Customize vehicle/driver rules
+					</label>
+				</div>
+				{form.values.staffingOverride ? (
+					<div className="grid gap-4 md:grid-cols-3">
+						<label htmlFor="requires-vehicle" className="flex items-center gap-2 text-sm">
+							<Checkbox
+								id="requires-vehicle"
+								checked={form.values.requiresVehicle}
+								onCheckedChange={(c) =>
+									form.set("requiresVehicle", c === true)
+								}
+							/>
+							Requires vehicle
+						</label>
+						<label htmlFor="requires-driver" className="flex items-center gap-2 text-sm">
+							<Checkbox
+								id="requires-driver"
+								checked={form.values.requiresDriver}
+								onCheckedChange={(c) =>
+									form.set("requiresDriver", c === true)
+								}
+							/>
+							Requires driver
+						</label>
+						<FormField label="Required vehicle type" htmlFor="req-vtype">
+							<Select
+								value={form.values.requiredVehicleType || "__any__"}
+								onValueChange={(v) =>
+									form.set(
+										"requiredVehicleType",
+										v === "__any__" ? "" : v,
+									)
+								}
+							>
+								<SelectTrigger id="req-vtype">
+									<SelectValue placeholder="Any" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="__any__">Any</SelectItem>
+									{VEHICLE_TYPES.map((t) => (
+										<SelectItem key={t} value={t}>
+											{t}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</FormField>
+					</div>
+				) : (
+					<p className="text-muted-foreground text-xs">
+						{(() => {
+							const r = resolveTourStaffing({
+								tourType: form.values.tourType,
+							});
+							return r.requiresVehicle
+								? `Inferred: needs ${r.requiredVehicleType ?? "a vehicle"} + driver`
+								: "Inferred: walking / no fleet required";
+						})()}
+					</p>
+				)}
 			</div>
 		</EntityFormPage>
 	);

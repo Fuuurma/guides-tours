@@ -14,6 +14,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { addHours } from "@/lib/time";
+import { resolveTourStaffing } from "@/lib/staffing";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
@@ -24,14 +25,23 @@ interface Tour {
 	_id: string;
 	name: string;
 	durationHours: number;
+	tourType?: string;
+	requiredGuides?: number;
+	requiresVehicle?: boolean;
+	requiresDriver?: boolean;
+	requiredVehicleType?: string;
 }
 interface Vehicle {
 	_id: string;
 	name: string;
+	vehicleType?: string;
+	capacity?: number;
+	status?: string;
 }
 interface Driver {
 	_id: string;
 	userId: string;
+	isActive?: boolean;
 }
 
 interface FormValues extends Record<string, unknown> {
@@ -99,6 +109,24 @@ export function NewAssignmentPage() {
 			if (!v.guideId.trim()) errs.guideId = "Please select a guide";
 			if (!v.date) errs.date = "Date is required";
 			if (!v.startTime) errs.startTime = "Start time is required";
+			const selectedTour = ((tours ?? []) as Tour[]).find(
+				(t) => t._id === v.tourId,
+			);
+			if (selectedTour) {
+				const rules = resolveTourStaffing({
+					tourType: selectedTour.tourType ?? "walking",
+					requiredGuides: selectedTour.requiredGuides,
+					requiresVehicle: selectedTour.requiresVehicle,
+					requiresDriver: selectedTour.requiresDriver,
+					requiredVehicleType: selectedTour.requiredVehicleType,
+				});
+				if (rules.requiresVehicle && !v.vehicleId) {
+					errs.vehicleId = "This tour requires a vehicle";
+				}
+				if (rules.requiresDriver && !v.driverId) {
+					errs.driverId = "This tour requires a driver";
+				}
+			}
 			return Object.keys(errs).length > 0 ? errs : null;
 		},
 		initialValues: { ...INITIAL, date: searchDate ?? "" },
@@ -114,7 +142,7 @@ export function NewAssignmentPage() {
 		form.set("date", prefillSchedule.date);
 		form.set("startTime", prefillSchedule.startTime);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot prefill
-	}, [prefillSchedule?._id]);
+	}, [prefillSchedule, form.set]);
 
 	const memberName = (userId: string) =>
 		members?.find((m) => m.userId === userId)?.name ?? userId;
@@ -122,6 +150,28 @@ export function NewAssignmentPage() {
 	// Check conflicts when date/time/guide/vehicle/driver change.
 	const tour = ((tours ?? []) as Tour[]).find(
 		(t) => t._id === form.values.tourId,
+	);
+	const staffing = tour
+		? resolveTourStaffing({
+				tourType: tour.tourType ?? "walking",
+				requiredGuides: tour.requiredGuides,
+				requiresVehicle: tour.requiresVehicle,
+				requiresDriver: tour.requiresDriver,
+				requiredVehicleType: tour.requiredVehicleType,
+			})
+		: null;
+	const eligibleVehicles = ((vehicles ?? []) as Vehicle[]).filter((v) => {
+		if (v.status && v.status !== "available") return false;
+		if (
+			staffing?.requiredVehicleType &&
+			v.vehicleType !== staffing.requiredVehicleType
+		) {
+			return false;
+		}
+		return true;
+	});
+	const eligibleDrivers = ((drivers ?? []) as Driver[]).filter(
+		(d) => d.isActive !== false,
 	);
 	const hasConflictData =
 		form.values.date && form.values.startTime && tour?.durationHours;
@@ -141,6 +191,16 @@ export function NewAssignmentPage() {
 			{scheduleId ? (
 				<p className="text-muted-foreground text-sm -mt-2">
 					Linked to schedule · tour/date/time are locked from the slot.
+				</p>
+			) : null}
+			{staffing ? (
+				<p className="text-muted-foreground text-xs -mt-1">
+					Needs {staffing.requiredGuides} guide
+					{staffing.requiredGuides === 1 ? "" : "s"}
+					{staffing.requiresVehicle
+						? ` · vehicle${staffing.requiredVehicleType ? ` (${staffing.requiredVehicleType})` : ""}`
+						: ""}
+					{staffing.requiresDriver ? " · driver" : ""}
 				</p>
 			) : null}
 			<FormField label="Tour *" htmlFor="tour" error={form.fieldErrors.tourId}>
@@ -225,35 +285,55 @@ export function NewAssignmentPage() {
 			)}
 
 			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Vehicle (optional)" htmlFor="vehicle">
+				<FormField
+					label={
+						staffing?.requiresVehicle ? "Vehicle *" : "Vehicle (optional)"
+					}
+					htmlFor="vehicle"
+					error={form.fieldErrors.vehicleId}
+				>
 					<Select
-						value={form.values.vehicleId}
-						onValueChange={(v) => form.set("vehicleId", v)}
+						value={form.values.vehicleId || "__none__"}
+						onValueChange={(v) =>
+							form.set("vehicleId", v === "__none__" ? "" : v)
+						}
 					>
 						<SelectTrigger id="vehicle">
 							<SelectValue placeholder="None" />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="">None</SelectItem>
-							{(vehicles as Vehicle[] | undefined)?.map((v) => (
+							{!staffing?.requiresVehicle && (
+								<SelectItem value="__none__">None</SelectItem>
+							)}
+							{eligibleVehicles.map((v) => (
 								<SelectItem key={v._id} value={v._id}>
 									{v.name}
+									{v.vehicleType ? ` · ${v.vehicleType}` : ""}
+									{v.capacity != null ? ` (${v.capacity} seats)` : ""}
 								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>
 				</FormField>
-				<FormField label="Driver (optional)" htmlFor="driver">
+				<FormField
+					label={staffing?.requiresDriver ? "Driver *" : "Driver (optional)"}
+					htmlFor="driver"
+					error={form.fieldErrors.driverId}
+				>
 					<Select
-						value={form.values.driverId}
-						onValueChange={(v) => form.set("driverId", v)}
+						value={form.values.driverId || "__none__"}
+						onValueChange={(v) =>
+							form.set("driverId", v === "__none__" ? "" : v)
+						}
 					>
 						<SelectTrigger id="driver">
 							<SelectValue placeholder="None" />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="">None</SelectItem>
-							{(drivers as Driver[] | undefined)?.map((d) => (
+							{!staffing?.requiresDriver && (
+								<SelectItem value="__none__">None</SelectItem>
+							)}
+							{eligibleDrivers.map((d) => (
 								<SelectItem key={d._id} value={d._id}>
 									{memberName(d.userId)}
 								</SelectItem>

@@ -9,71 +9,65 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SignUpRouteImport } from './routes/sign-up'
-import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
-import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
-import { Route as DashboardVehiclesRouteImport } from './routes/dashboard/vehicles'
-import { Route as DashboardVacationsRouteImport } from './routes/dashboard/vacations'
-import { Route as DashboardToursRouteImport } from './routes/dashboard/tours'
-import { Route as DashboardTemplatesRouteImport } from './routes/dashboard/templates'
-import { Route as DashboardSchedulesRouteImport } from './routes/dashboard/schedules'
-import { Route as DashboardOtaRouteImport } from './routes/dashboard/ota'
-import { Route as DashboardNotificationsRouteImport } from './routes/dashboard/notifications'
-import { Route as DashboardGuidesRouteImport } from './routes/dashboard/guides'
-import { Route as DashboardDriversRouteImport } from './routes/dashboard/drivers'
-import { Route as DashboardCustomersRouteImport } from './routes/dashboard/customers'
-import { Route as DashboardCategoriesRouteImport } from './routes/dashboard/categories'
-import { Route as DashboardCalendarRouteImport } from './routes/dashboard/calendar'
-import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
-import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
-import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
-import { Route as BookSlugRouteImport } from './routes/book/$slug'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as SignUpRouteImport } from './routes/sign-up'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
-import { Route as DashboardVehiclesNewRouteImport } from './routes/dashboard/vehicles/new'
-import { Route as DashboardVehiclesVehicleIdRouteImport } from './routes/dashboard/vehicles/$vehicleId'
-import { Route as DashboardVacationsNewRouteImport } from './routes/dashboard/vacations/new'
-import { Route as DashboardVacationsVacationIdRouteImport } from './routes/dashboard/vacations/$vacationId'
-import { Route as DashboardToursNewRouteImport } from './routes/dashboard/tours/new'
-import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
-import { Route as DashboardTemplatesNewRouteImport } from './routes/dashboard/templates/new'
-import { Route as DashboardTemplatesTemplateIdRouteImport } from './routes/dashboard/templates/$templateId'
-import { Route as DashboardSettingsPaymentsRouteImport } from './routes/dashboard/settings/payments'
-import { Route as DashboardSchedulesNewRouteImport } from './routes/dashboard/schedules/new'
-import { Route as DashboardSchedulesScheduleIdRouteImport } from './routes/dashboard/schedules/$scheduleId'
-import { Route as DashboardNotificationsSettingsRouteImport } from './routes/dashboard/notifications/settings'
-import { Route as DashboardNotificationsNewRouteImport } from './routes/dashboard/notifications/new'
-import { Route as DashboardNotificationsTemplateIdRouteImport } from './routes/dashboard/notifications/$templateId'
-import { Route as DashboardGuidesUserIdRouteImport } from './routes/dashboard/guides/$userId'
-import { Route as DashboardDriversNewRouteImport } from './routes/dashboard/drivers/new'
-import { Route as DashboardDriversDriverIdRouteImport } from './routes/dashboard/drivers/$driverId'
-import { Route as DashboardCustomersNewRouteImport } from './routes/dashboard/customers/new'
-import { Route as DashboardCustomersCustomerIdRouteImport } from './routes/dashboard/customers/$customerId'
-import { Route as DashboardBookingsNewRouteImport } from './routes/dashboard/bookings/new'
-import { Route as DashboardBookingsBookingIdRouteImport } from './routes/dashboard/bookings/$bookingId'
-import { Route as DashboardAssignmentsNewRouteImport } from './routes/dashboard/assignments/new'
-import { Route as DashboardAssignmentsAssignmentIdRouteImport } from './routes/dashboard/assignments/$assignmentId'
+import { Route as BookSlugRouteImport } from './routes/book/$slug'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as DashboardAnalyticsRouteImport } from './routes/dashboard/analytics'
+import { Route as DashboardAssignmentsRouteImport } from './routes/dashboard/assignments'
+import { Route as DashboardBookingsRouteImport } from './routes/dashboard/bookings'
+import { Route as DashboardCalendarRouteImport } from './routes/dashboard/calendar'
+import { Route as DashboardCategoriesRouteImport } from './routes/dashboard/categories'
+import { Route as DashboardCustomersRouteImport } from './routes/dashboard/customers'
+import { Route as DashboardDriversRouteImport } from './routes/dashboard/drivers'
+import { Route as DashboardFilesRouteImport } from './routes/dashboard/files'
+import { Route as DashboardGuidesRouteImport } from './routes/dashboard/guides'
+import { Route as DashboardNotificationsRouteImport } from './routes/dashboard/notifications'
+import { Route as DashboardOtaRouteImport } from './routes/dashboard/ota'
+import { Route as DashboardSchedulesRouteImport } from './routes/dashboard/schedules'
+import { Route as DashboardStaffingRouteImport } from './routes/dashboard/staffing'
+import { Route as DashboardTemplatesRouteImport } from './routes/dashboard/templates'
+import { Route as DashboardToursRouteImport } from './routes/dashboard/tours'
+import { Route as DashboardVacationsRouteImport } from './routes/dashboard/vacations'
+import { Route as DashboardVehiclesRouteImport } from './routes/dashboard/vehicles'
+import { Route as InviteInvitationIdRouteImport } from './routes/invite/$invitationId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
-import { Route as DashboardToursTourIdEditRouteImport } from './routes/dashboard/tours/$tourId/edit'
-import { Route as DashboardCustomersCustomerIdEditRouteImport } from './routes/dashboard/customers/$customerId/edit'
+import { Route as DashboardAssignmentsAssignmentIdRouteImport } from './routes/dashboard/assignments/$assignmentId'
+import { Route as DashboardAssignmentsNewRouteImport } from './routes/dashboard/assignments/new'
+import { Route as DashboardBookingsBookingIdRouteImport } from './routes/dashboard/bookings/$bookingId'
+import { Route as DashboardBookingsNewRouteImport } from './routes/dashboard/bookings/new'
+import { Route as DashboardCustomersCustomerIdRouteImport } from './routes/dashboard/customers/$customerId'
+import { Route as DashboardCustomersNewRouteImport } from './routes/dashboard/customers/new'
+import { Route as DashboardDriversDriverIdRouteImport } from './routes/dashboard/drivers/$driverId'
+import { Route as DashboardDriversNewRouteImport } from './routes/dashboard/drivers/new'
+import { Route as DashboardGuidesUserIdRouteImport } from './routes/dashboard/guides/$userId'
+import { Route as DashboardNotificationsTemplateIdRouteImport } from './routes/dashboard/notifications/$templateId'
+import { Route as DashboardNotificationsNewRouteImport } from './routes/dashboard/notifications/new'
+import { Route as DashboardNotificationsSettingsRouteImport } from './routes/dashboard/notifications/settings'
+import { Route as DashboardSchedulesScheduleIdRouteImport } from './routes/dashboard/schedules/$scheduleId'
+import { Route as DashboardSchedulesNewRouteImport } from './routes/dashboard/schedules/new'
+import { Route as DashboardSettingsPaymentsRouteImport } from './routes/dashboard/settings/payments'
+import { Route as DashboardTemplatesTemplateIdRouteImport } from './routes/dashboard/templates/$templateId'
+import { Route as DashboardTemplatesNewRouteImport } from './routes/dashboard/templates/new'
+import { Route as DashboardToursTourIdRouteImport } from './routes/dashboard/tours/$tourId'
+import { Route as DashboardToursNewRouteImport } from './routes/dashboard/tours/new'
+import { Route as DashboardVacationsVacationIdRouteImport } from './routes/dashboard/vacations/$vacationId'
+import { Route as DashboardVacationsNewRouteImport } from './routes/dashboard/vacations/new'
+import { Route as DashboardVehiclesVehicleIdRouteImport } from './routes/dashboard/vehicles/$vehicleId'
+import { Route as DashboardVehiclesNewRouteImport } from './routes/dashboard/vehicles/new'
 import { Route as DashboardBookingsBookingIdEditRouteImport } from './routes/dashboard/bookings/$bookingId/edit'
+import { Route as DashboardCustomersCustomerIdEditRouteImport } from './routes/dashboard/customers/$customerId/edit'
+import { Route as DashboardTemplatesTemplateIdEditRouteImport } from './routes/dashboard/templates/$templateId/edit'
+import { Route as DashboardToursTourIdEditRouteImport } from './routes/dashboard/tours/$tourId/edit'
+import { Route as DashboardVehiclesVehicleIdEditRouteImport } from './routes/dashboard/vehicles/$vehicleId/edit'
 
-const SignUpRoute = SignUpRouteImport.update({
-  id: '/sign-up',
-  path: '/sign-up',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -81,99 +75,19 @@ const DashboardRoute = DashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardIndexRoute = DashboardIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const InviteInvitationIdRoute = InviteInvitationIdRouteImport.update({
-  id: '/invite/$invitationId',
-  path: '/invite/$invitationId',
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardVehiclesRoute = DashboardVehiclesRouteImport.update({
-  id: '/vehicles',
-  path: '/vehicles',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardVacationsRoute = DashboardVacationsRouteImport.update({
-  id: '/vacations',
-  path: '/vacations',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardToursRoute = DashboardToursRouteImport.update({
-  id: '/tours',
-  path: '/tours',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardTemplatesRoute = DashboardTemplatesRouteImport.update({
-  id: '/templates',
-  path: '/templates',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardSchedulesRoute = DashboardSchedulesRouteImport.update({
-  id: '/schedules',
-  path: '/schedules',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardOtaRoute = DashboardOtaRouteImport.update({
-  id: '/ota',
-  path: '/ota',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardNotificationsRoute = DashboardNotificationsRouteImport.update({
-  id: '/notifications',
-  path: '/notifications',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardGuidesRoute = DashboardGuidesRouteImport.update({
-  id: '/guides',
-  path: '/guides',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardDriversRoute = DashboardDriversRouteImport.update({
-  id: '/drivers',
-  path: '/drivers',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardCustomersRoute = DashboardCustomersRouteImport.update({
-  id: '/customers',
-  path: '/customers',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardCategoriesRoute = DashboardCategoriesRouteImport.update({
-  id: '/categories',
-  path: '/categories',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardCalendarRoute = DashboardCalendarRouteImport.update({
-  id: '/calendar',
-  path: '/calendar',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardBookingsRoute = DashboardBookingsRouteImport.update({
-  id: '/bookings',
-  path: '/bookings',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardAssignmentsRoute = DashboardAssignmentsRouteImport.update({
-  id: '/assignments',
-  path: '/assignments',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const BookSlugRoute = BookSlugRouteImport.update({
-  id: '/book/$slug',
-  path: '/book/$slug',
+const SignUpRoute = SignUpRouteImport.update({
+  id: '/sign-up',
+  path: '/sign-up',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -181,70 +95,164 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardVehiclesNewRoute = DashboardVehiclesNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => DashboardVehiclesRoute,
+const BookSlugRoute = BookSlugRouteImport.update({
+  id: '/book/$slug',
+  path: '/book/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardVehiclesVehicleIdRoute =
-  DashboardVehiclesVehicleIdRouteImport.update({
-    id: '/$vehicleId',
-    path: '/$vehicleId',
-    getParentRoute: () => DashboardVehiclesRoute,
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardAnalyticsRoute = DashboardAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardAssignmentsRoute = DashboardAssignmentsRouteImport.update({
+  id: '/assignments',
+  path: '/assignments',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardBookingsRoute = DashboardBookingsRouteImport.update({
+  id: '/bookings',
+  path: '/bookings',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardCalendarRoute = DashboardCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardCategoriesRoute = DashboardCategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardCustomersRoute = DashboardCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardDriversRoute = DashboardDriversRouteImport.update({
+  id: '/drivers',
+  path: '/drivers',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardFilesRoute = DashboardFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardGuidesRoute = DashboardGuidesRouteImport.update({
+  id: '/guides',
+  path: '/guides',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardNotificationsRoute = DashboardNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardOtaRoute = DashboardOtaRouteImport.update({
+  id: '/ota',
+  path: '/ota',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardSchedulesRoute = DashboardSchedulesRouteImport.update({
+  id: '/schedules',
+  path: '/schedules',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardStaffingRoute = DashboardStaffingRouteImport.update({
+  id: '/staffing',
+  path: '/staffing',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardTemplatesRoute = DashboardTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardToursRoute = DashboardToursRouteImport.update({
+  id: '/tours',
+  path: '/tours',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardVacationsRoute = DashboardVacationsRouteImport.update({
+  id: '/vacations',
+  path: '/vacations',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardVehiclesRoute = DashboardVehiclesRouteImport.update({
+  id: '/vehicles',
+  path: '/vehicles',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const InviteInvitationIdRoute = InviteInvitationIdRouteImport.update({
+  id: '/invite/$invitationId',
+  path: '/invite/$invitationId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardAssignmentsAssignmentIdRoute =
+  DashboardAssignmentsAssignmentIdRouteImport.update({
+    id: '/$assignmentId',
+    path: '/$assignmentId',
+    getParentRoute: () => DashboardAssignmentsRoute,
   } as any)
-const DashboardVacationsNewRoute = DashboardVacationsNewRouteImport.update({
+const DashboardAssignmentsNewRoute = DashboardAssignmentsNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => DashboardVacationsRoute,
+  getParentRoute: () => DashboardAssignmentsRoute,
 } as any)
-const DashboardVacationsVacationIdRoute =
-  DashboardVacationsVacationIdRouteImport.update({
-    id: '/$vacationId',
-    path: '/$vacationId',
-    getParentRoute: () => DashboardVacationsRoute,
+const DashboardBookingsBookingIdRoute =
+  DashboardBookingsBookingIdRouteImport.update({
+    id: '/$bookingId',
+    path: '/$bookingId',
+    getParentRoute: () => DashboardBookingsRoute,
   } as any)
-const DashboardToursNewRoute = DashboardToursNewRouteImport.update({
+const DashboardBookingsNewRoute = DashboardBookingsNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => DashboardToursRoute,
+  getParentRoute: () => DashboardBookingsRoute,
 } as any)
-const DashboardToursTourIdRoute = DashboardToursTourIdRouteImport.update({
-  id: '/$tourId',
-  path: '/$tourId',
-  getParentRoute: () => DashboardToursRoute,
-} as any)
-const DashboardTemplatesNewRoute = DashboardTemplatesNewRouteImport.update({
+const DashboardCustomersCustomerIdRoute =
+  DashboardCustomersCustomerIdRouteImport.update({
+    id: '/$customerId',
+    path: '/$customerId',
+    getParentRoute: () => DashboardCustomersRoute,
+  } as any)
+const DashboardCustomersNewRoute = DashboardCustomersNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => DashboardTemplatesRoute,
+  getParentRoute: () => DashboardCustomersRoute,
 } as any)
-const DashboardTemplatesTemplateIdRoute =
-  DashboardTemplatesTemplateIdRouteImport.update({
+const DashboardDriversDriverIdRoute =
+  DashboardDriversDriverIdRouteImport.update({
+    id: '/$driverId',
+    path: '/$driverId',
+    getParentRoute: () => DashboardDriversRoute,
+  } as any)
+const DashboardDriversNewRoute = DashboardDriversNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => DashboardDriversRoute,
+} as any)
+const DashboardGuidesUserIdRoute = DashboardGuidesUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => DashboardGuidesRoute,
+} as any)
+const DashboardNotificationsTemplateIdRoute =
+  DashboardNotificationsTemplateIdRouteImport.update({
     id: '/$templateId',
     path: '/$templateId',
-    getParentRoute: () => DashboardTemplatesRoute,
-  } as any)
-const DashboardSettingsPaymentsRoute =
-  DashboardSettingsPaymentsRouteImport.update({
-    id: '/settings/payments',
-    path: '/settings/payments',
-    getParentRoute: () => DashboardRoute,
-  } as any)
-const DashboardSchedulesNewRoute = DashboardSchedulesNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => DashboardSchedulesRoute,
-} as any)
-const DashboardSchedulesScheduleIdRoute =
-  DashboardSchedulesScheduleIdRouteImport.update({
-    id: '/$scheduleId',
-    path: '/$scheduleId',
-    getParentRoute: () => DashboardSchedulesRoute,
-  } as any)
-const DashboardNotificationsSettingsRoute =
-  DashboardNotificationsSettingsRouteImport.update({
-    id: '/settings',
-    path: '/settings',
     getParentRoute: () => DashboardNotificationsRoute,
   } as any)
 const DashboardNotificationsNewRoute =
@@ -253,71 +261,77 @@ const DashboardNotificationsNewRoute =
     path: '/new',
     getParentRoute: () => DashboardNotificationsRoute,
   } as any)
-const DashboardNotificationsTemplateIdRoute =
-  DashboardNotificationsTemplateIdRouteImport.update({
-    id: '/$templateId',
-    path: '/$templateId',
+const DashboardNotificationsSettingsRoute =
+  DashboardNotificationsSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
     getParentRoute: () => DashboardNotificationsRoute,
   } as any)
-const DashboardGuidesUserIdRoute = DashboardGuidesUserIdRouteImport.update({
-  id: '/$userId',
-  path: '/$userId',
-  getParentRoute: () => DashboardGuidesRoute,
-} as any)
-const DashboardDriversNewRoute = DashboardDriversNewRouteImport.update({
+const DashboardSchedulesScheduleIdRoute =
+  DashboardSchedulesScheduleIdRouteImport.update({
+    id: '/$scheduleId',
+    path: '/$scheduleId',
+    getParentRoute: () => DashboardSchedulesRoute,
+  } as any)
+const DashboardSchedulesNewRoute = DashboardSchedulesNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => DashboardDriversRoute,
+  getParentRoute: () => DashboardSchedulesRoute,
 } as any)
-const DashboardDriversDriverIdRoute =
-  DashboardDriversDriverIdRouteImport.update({
-    id: '/$driverId',
-    path: '/$driverId',
-    getParentRoute: () => DashboardDriversRoute,
+const DashboardSettingsPaymentsRoute =
+  DashboardSettingsPaymentsRouteImport.update({
+    id: '/settings/payments',
+    path: '/settings/payments',
+    getParentRoute: () => DashboardRoute,
   } as any)
-const DashboardCustomersNewRoute = DashboardCustomersNewRouteImport.update({
+const DashboardTemplatesTemplateIdRoute =
+  DashboardTemplatesTemplateIdRouteImport.update({
+    id: '/$templateId',
+    path: '/$templateId',
+    getParentRoute: () => DashboardTemplatesRoute,
+  } as any)
+const DashboardTemplatesNewRoute = DashboardTemplatesNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => DashboardCustomersRoute,
+  getParentRoute: () => DashboardTemplatesRoute,
 } as any)
-const DashboardCustomersCustomerIdRoute =
-  DashboardCustomersCustomerIdRouteImport.update({
-    id: '/$customerId',
-    path: '/$customerId',
-    getParentRoute: () => DashboardCustomersRoute,
-  } as any)
-const DashboardBookingsNewRoute = DashboardBookingsNewRouteImport.update({
+const DashboardToursTourIdRoute = DashboardToursTourIdRouteImport.update({
+  id: '/$tourId',
+  path: '/$tourId',
+  getParentRoute: () => DashboardToursRoute,
+} as any)
+const DashboardToursNewRoute = DashboardToursNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => DashboardBookingsRoute,
+  getParentRoute: () => DashboardToursRoute,
 } as any)
-const DashboardBookingsBookingIdRoute =
-  DashboardBookingsBookingIdRouteImport.update({
-    id: '/$bookingId',
-    path: '/$bookingId',
-    getParentRoute: () => DashboardBookingsRoute,
+const DashboardVacationsVacationIdRoute =
+  DashboardVacationsVacationIdRouteImport.update({
+    id: '/$vacationId',
+    path: '/$vacationId',
+    getParentRoute: () => DashboardVacationsRoute,
   } as any)
-const DashboardAssignmentsNewRoute = DashboardAssignmentsNewRouteImport.update({
+const DashboardVacationsNewRoute = DashboardVacationsNewRouteImport.update({
   id: '/new',
   path: '/new',
-  getParentRoute: () => DashboardAssignmentsRoute,
+  getParentRoute: () => DashboardVacationsRoute,
 } as any)
-const DashboardAssignmentsAssignmentIdRoute =
-  DashboardAssignmentsAssignmentIdRouteImport.update({
-    id: '/$assignmentId',
-    path: '/$assignmentId',
-    getParentRoute: () => DashboardAssignmentsRoute,
+const DashboardVehiclesVehicleIdRoute =
+  DashboardVehiclesVehicleIdRouteImport.update({
+    id: '/$vehicleId',
+    path: '/$vehicleId',
+    getParentRoute: () => DashboardVehiclesRoute,
   } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
+const DashboardVehiclesNewRoute = DashboardVehiclesNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => DashboardVehiclesRoute,
 } as any)
-const DashboardToursTourIdEditRoute =
-  DashboardToursTourIdEditRouteImport.update({
+const DashboardBookingsBookingIdEditRoute =
+  DashboardBookingsBookingIdEditRouteImport.update({
     id: '/edit',
     path: '/edit',
-    getParentRoute: () => DashboardToursTourIdRoute,
+    getParentRoute: () => DashboardBookingsBookingIdRoute,
   } as any)
 const DashboardCustomersCustomerIdEditRoute =
   DashboardCustomersCustomerIdEditRouteImport.update({
@@ -325,11 +339,23 @@ const DashboardCustomersCustomerIdEditRoute =
     path: '/edit',
     getParentRoute: () => DashboardCustomersCustomerIdRoute,
   } as any)
-const DashboardBookingsBookingIdEditRoute =
-  DashboardBookingsBookingIdEditRouteImport.update({
+const DashboardTemplatesTemplateIdEditRoute =
+  DashboardTemplatesTemplateIdEditRouteImport.update({
     id: '/edit',
     path: '/edit',
-    getParentRoute: () => DashboardBookingsBookingIdRoute,
+    getParentRoute: () => DashboardTemplatesTemplateIdRoute,
+  } as any)
+const DashboardToursTourIdEditRoute =
+  DashboardToursTourIdEditRouteImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => DashboardToursTourIdRoute,
+  } as any)
+const DashboardVehiclesVehicleIdEditRoute =
+  DashboardVehiclesVehicleIdEditRouteImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => DashboardVehiclesVehicleIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -347,10 +373,12 @@ export interface FileRoutesByFullPath {
   '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
+  '/dashboard/files': typeof DashboardFilesRoute
   '/dashboard/guides': typeof DashboardGuidesRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
   '/dashboard/ota': typeof DashboardOtaRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
+  '/dashboard/staffing': typeof DashboardStaffingRoute
   '/dashboard/templates': typeof DashboardTemplatesRouteWithChildren
   '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRouteWithChildren
@@ -373,17 +401,19 @@ export interface FileRoutesByFullPath {
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
   '/dashboard/settings/payments': typeof DashboardSettingsPaymentsRoute
-  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
+  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRouteWithChildren
   '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/vacations/$vacationId': typeof DashboardVacationsVacationIdRoute
   '/dashboard/vacations/new': typeof DashboardVacationsNewRoute
-  '/dashboard/vehicles/$vehicleId': typeof DashboardVehiclesVehicleIdRoute
+  '/dashboard/vehicles/$vehicleId': typeof DashboardVehiclesVehicleIdRouteWithChildren
   '/dashboard/vehicles/new': typeof DashboardVehiclesNewRoute
   '/dashboard/bookings/$bookingId/edit': typeof DashboardBookingsBookingIdEditRoute
   '/dashboard/customers/$customerId/edit': typeof DashboardCustomersCustomerIdEditRoute
+  '/dashboard/templates/$templateId/edit': typeof DashboardTemplatesTemplateIdEditRoute
   '/dashboard/tours/$tourId/edit': typeof DashboardToursTourIdEditRoute
+  '/dashboard/vehicles/$vehicleId/edit': typeof DashboardVehiclesVehicleIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -399,10 +429,12 @@ export interface FileRoutesByTo {
   '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
+  '/dashboard/files': typeof DashboardFilesRoute
   '/dashboard/guides': typeof DashboardGuidesRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
   '/dashboard/ota': typeof DashboardOtaRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
+  '/dashboard/staffing': typeof DashboardStaffingRoute
   '/dashboard/templates': typeof DashboardTemplatesRouteWithChildren
   '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRouteWithChildren
@@ -425,17 +457,19 @@ export interface FileRoutesByTo {
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
   '/dashboard/settings/payments': typeof DashboardSettingsPaymentsRoute
-  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
+  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRouteWithChildren
   '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/vacations/$vacationId': typeof DashboardVacationsVacationIdRoute
   '/dashboard/vacations/new': typeof DashboardVacationsNewRoute
-  '/dashboard/vehicles/$vehicleId': typeof DashboardVehiclesVehicleIdRoute
+  '/dashboard/vehicles/$vehicleId': typeof DashboardVehiclesVehicleIdRouteWithChildren
   '/dashboard/vehicles/new': typeof DashboardVehiclesNewRoute
   '/dashboard/bookings/$bookingId/edit': typeof DashboardBookingsBookingIdEditRoute
   '/dashboard/customers/$customerId/edit': typeof DashboardCustomersCustomerIdEditRoute
+  '/dashboard/templates/$templateId/edit': typeof DashboardTemplatesTemplateIdEditRoute
   '/dashboard/tours/$tourId/edit': typeof DashboardToursTourIdEditRoute
+  '/dashboard/vehicles/$vehicleId/edit': typeof DashboardVehiclesVehicleIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -453,10 +487,12 @@ export interface FileRoutesById {
   '/dashboard/categories': typeof DashboardCategoriesRoute
   '/dashboard/customers': typeof DashboardCustomersRouteWithChildren
   '/dashboard/drivers': typeof DashboardDriversRouteWithChildren
+  '/dashboard/files': typeof DashboardFilesRoute
   '/dashboard/guides': typeof DashboardGuidesRouteWithChildren
   '/dashboard/notifications': typeof DashboardNotificationsRouteWithChildren
   '/dashboard/ota': typeof DashboardOtaRoute
   '/dashboard/schedules': typeof DashboardSchedulesRouteWithChildren
+  '/dashboard/staffing': typeof DashboardStaffingRoute
   '/dashboard/templates': typeof DashboardTemplatesRouteWithChildren
   '/dashboard/tours': typeof DashboardToursRouteWithChildren
   '/dashboard/vacations': typeof DashboardVacationsRouteWithChildren
@@ -479,17 +515,19 @@ export interface FileRoutesById {
   '/dashboard/schedules/$scheduleId': typeof DashboardSchedulesScheduleIdRoute
   '/dashboard/schedules/new': typeof DashboardSchedulesNewRoute
   '/dashboard/settings/payments': typeof DashboardSettingsPaymentsRoute
-  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRoute
+  '/dashboard/templates/$templateId': typeof DashboardTemplatesTemplateIdRouteWithChildren
   '/dashboard/templates/new': typeof DashboardTemplatesNewRoute
   '/dashboard/tours/$tourId': typeof DashboardToursTourIdRouteWithChildren
   '/dashboard/tours/new': typeof DashboardToursNewRoute
   '/dashboard/vacations/$vacationId': typeof DashboardVacationsVacationIdRoute
   '/dashboard/vacations/new': typeof DashboardVacationsNewRoute
-  '/dashboard/vehicles/$vehicleId': typeof DashboardVehiclesVehicleIdRoute
+  '/dashboard/vehicles/$vehicleId': typeof DashboardVehiclesVehicleIdRouteWithChildren
   '/dashboard/vehicles/new': typeof DashboardVehiclesNewRoute
   '/dashboard/bookings/$bookingId/edit': typeof DashboardBookingsBookingIdEditRoute
   '/dashboard/customers/$customerId/edit': typeof DashboardCustomersCustomerIdEditRoute
+  '/dashboard/templates/$templateId/edit': typeof DashboardTemplatesTemplateIdEditRoute
   '/dashboard/tours/$tourId/edit': typeof DashboardToursTourIdEditRoute
+  '/dashboard/vehicles/$vehicleId/edit': typeof DashboardVehiclesVehicleIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -508,10 +546,12 @@ export interface FileRouteTypes {
     | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
+    | '/dashboard/files'
     | '/dashboard/guides'
     | '/dashboard/notifications'
     | '/dashboard/ota'
     | '/dashboard/schedules'
+    | '/dashboard/staffing'
     | '/dashboard/templates'
     | '/dashboard/tours'
     | '/dashboard/vacations'
@@ -544,7 +584,9 @@ export interface FileRouteTypes {
     | '/dashboard/vehicles/new'
     | '/dashboard/bookings/$bookingId/edit'
     | '/dashboard/customers/$customerId/edit'
+    | '/dashboard/templates/$templateId/edit'
     | '/dashboard/tours/$tourId/edit'
+    | '/dashboard/vehicles/$vehicleId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -560,10 +602,12 @@ export interface FileRouteTypes {
     | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
+    | '/dashboard/files'
     | '/dashboard/guides'
     | '/dashboard/notifications'
     | '/dashboard/ota'
     | '/dashboard/schedules'
+    | '/dashboard/staffing'
     | '/dashboard/templates'
     | '/dashboard/tours'
     | '/dashboard/vacations'
@@ -596,7 +640,9 @@ export interface FileRouteTypes {
     | '/dashboard/vehicles/new'
     | '/dashboard/bookings/$bookingId/edit'
     | '/dashboard/customers/$customerId/edit'
+    | '/dashboard/templates/$templateId/edit'
     | '/dashboard/tours/$tourId/edit'
+    | '/dashboard/vehicles/$vehicleId/edit'
   id:
     | '__root__'
     | '/'
@@ -613,10 +659,12 @@ export interface FileRouteTypes {
     | '/dashboard/categories'
     | '/dashboard/customers'
     | '/dashboard/drivers'
+    | '/dashboard/files'
     | '/dashboard/guides'
     | '/dashboard/notifications'
     | '/dashboard/ota'
     | '/dashboard/schedules'
+    | '/dashboard/staffing'
     | '/dashboard/templates'
     | '/dashboard/tours'
     | '/dashboard/vacations'
@@ -649,7 +697,9 @@ export interface FileRouteTypes {
     | '/dashboard/vehicles/new'
     | '/dashboard/bookings/$bookingId/edit'
     | '/dashboard/customers/$customerId/edit'
+    | '/dashboard/templates/$templateId/edit'
     | '/dashboard/tours/$tourId/edit'
+    | '/dashboard/vehicles/$vehicleId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -666,25 +716,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/sign-up': {
-      id: '/sign-up'
-      path: '/sign-up'
-      fullPath: '/sign-up'
-      preLoaderRoute: typeof SignUpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -694,137 +730,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/': {
-      id: '/dashboard/'
-      path: '/'
-      fullPath: '/dashboard/'
-      preLoaderRoute: typeof DashboardIndexRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/invite/$invitationId': {
-      id: '/invite/$invitationId'
-      path: '/invite/$invitationId'
-      fullPath: '/invite/$invitationId'
-      preLoaderRoute: typeof InviteInvitationIdRouteImport
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/vehicles': {
-      id: '/dashboard/vehicles'
-      path: '/vehicles'
-      fullPath: '/dashboard/vehicles'
-      preLoaderRoute: typeof DashboardVehiclesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/vacations': {
-      id: '/dashboard/vacations'
-      path: '/vacations'
-      fullPath: '/dashboard/vacations'
-      preLoaderRoute: typeof DashboardVacationsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/tours': {
-      id: '/dashboard/tours'
-      path: '/tours'
-      fullPath: '/dashboard/tours'
-      preLoaderRoute: typeof DashboardToursRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/templates': {
-      id: '/dashboard/templates'
-      path: '/templates'
-      fullPath: '/dashboard/templates'
-      preLoaderRoute: typeof DashboardTemplatesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/schedules': {
-      id: '/dashboard/schedules'
-      path: '/schedules'
-      fullPath: '/dashboard/schedules'
-      preLoaderRoute: typeof DashboardSchedulesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/ota': {
-      id: '/dashboard/ota'
-      path: '/ota'
-      fullPath: '/dashboard/ota'
-      preLoaderRoute: typeof DashboardOtaRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/notifications': {
-      id: '/dashboard/notifications'
-      path: '/notifications'
-      fullPath: '/dashboard/notifications'
-      preLoaderRoute: typeof DashboardNotificationsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/guides': {
-      id: '/dashboard/guides'
-      path: '/guides'
-      fullPath: '/dashboard/guides'
-      preLoaderRoute: typeof DashboardGuidesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/drivers': {
-      id: '/dashboard/drivers'
-      path: '/drivers'
-      fullPath: '/dashboard/drivers'
-      preLoaderRoute: typeof DashboardDriversRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/customers': {
-      id: '/dashboard/customers'
-      path: '/customers'
-      fullPath: '/dashboard/customers'
-      preLoaderRoute: typeof DashboardCustomersRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/categories': {
-      id: '/dashboard/categories'
-      path: '/categories'
-      fullPath: '/dashboard/categories'
-      preLoaderRoute: typeof DashboardCategoriesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/calendar': {
-      id: '/dashboard/calendar'
-      path: '/calendar'
-      fullPath: '/dashboard/calendar'
-      preLoaderRoute: typeof DashboardCalendarRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/bookings': {
-      id: '/dashboard/bookings'
-      path: '/bookings'
-      fullPath: '/dashboard/bookings'
-      preLoaderRoute: typeof DashboardBookingsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/assignments': {
-      id: '/dashboard/assignments'
-      path: '/assignments'
-      fullPath: '/dashboard/assignments'
-      preLoaderRoute: typeof DashboardAssignmentsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/analytics': {
-      id: '/dashboard/analytics'
-      path: '/analytics'
-      fullPath: '/dashboard/analytics'
-      preLoaderRoute: typeof DashboardAnalyticsRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/book/$slug': {
-      id: '/book/$slug'
-      path: '/book/$slug'
-      fullPath: '/book/$slug'
-      preLoaderRoute: typeof BookSlugRouteImport
+    '/sign-up': {
+      id: '/sign-up'
+      path: '/sign-up'
+      fullPath: '/sign-up'
+      preLoaderRoute: typeof SignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/callback': {
@@ -834,88 +758,221 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/vehicles/new': {
-      id: '/dashboard/vehicles/new'
-      path: '/new'
-      fullPath: '/dashboard/vehicles/new'
-      preLoaderRoute: typeof DashboardVehiclesNewRouteImport
-      parentRoute: typeof DashboardVehiclesRoute
+    '/book/$slug': {
+      id: '/book/$slug'
+      path: '/book/$slug'
+      fullPath: '/book/$slug'
+      preLoaderRoute: typeof BookSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/dashboard/vehicles/$vehicleId': {
-      id: '/dashboard/vehicles/$vehicleId'
-      path: '/$vehicleId'
-      fullPath: '/dashboard/vehicles/$vehicleId'
-      preLoaderRoute: typeof DashboardVehiclesVehicleIdRouteImport
-      parentRoute: typeof DashboardVehiclesRoute
-    }
-    '/dashboard/vacations/new': {
-      id: '/dashboard/vacations/new'
-      path: '/new'
-      fullPath: '/dashboard/vacations/new'
-      preLoaderRoute: typeof DashboardVacationsNewRouteImport
-      parentRoute: typeof DashboardVacationsRoute
-    }
-    '/dashboard/vacations/$vacationId': {
-      id: '/dashboard/vacations/$vacationId'
-      path: '/$vacationId'
-      fullPath: '/dashboard/vacations/$vacationId'
-      preLoaderRoute: typeof DashboardVacationsVacationIdRouteImport
-      parentRoute: typeof DashboardVacationsRoute
-    }
-    '/dashboard/tours/new': {
-      id: '/dashboard/tours/new'
-      path: '/new'
-      fullPath: '/dashboard/tours/new'
-      preLoaderRoute: typeof DashboardToursNewRouteImport
-      parentRoute: typeof DashboardToursRoute
-    }
-    '/dashboard/tours/$tourId': {
-      id: '/dashboard/tours/$tourId'
-      path: '/$tourId'
-      fullPath: '/dashboard/tours/$tourId'
-      preLoaderRoute: typeof DashboardToursTourIdRouteImport
-      parentRoute: typeof DashboardToursRoute
-    }
-    '/dashboard/templates/new': {
-      id: '/dashboard/templates/new'
-      path: '/new'
-      fullPath: '/dashboard/templates/new'
-      preLoaderRoute: typeof DashboardTemplatesNewRouteImport
-      parentRoute: typeof DashboardTemplatesRoute
-    }
-    '/dashboard/templates/$templateId': {
-      id: '/dashboard/templates/$templateId'
-      path: '/$templateId'
-      fullPath: '/dashboard/templates/$templateId'
-      preLoaderRoute: typeof DashboardTemplatesTemplateIdRouteImport
-      parentRoute: typeof DashboardTemplatesRoute
-    }
-    '/dashboard/settings/payments': {
-      id: '/dashboard/settings/payments'
-      path: '/settings/payments'
-      fullPath: '/dashboard/settings/payments'
-      preLoaderRoute: typeof DashboardSettingsPaymentsRouteImport
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/schedules/new': {
-      id: '/dashboard/schedules/new'
+    '/dashboard/analytics': {
+      id: '/dashboard/analytics'
+      path: '/analytics'
+      fullPath: '/dashboard/analytics'
+      preLoaderRoute: typeof DashboardAnalyticsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/assignments': {
+      id: '/dashboard/assignments'
+      path: '/assignments'
+      fullPath: '/dashboard/assignments'
+      preLoaderRoute: typeof DashboardAssignmentsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/bookings': {
+      id: '/dashboard/bookings'
+      path: '/bookings'
+      fullPath: '/dashboard/bookings'
+      preLoaderRoute: typeof DashboardBookingsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/calendar': {
+      id: '/dashboard/calendar'
+      path: '/calendar'
+      fullPath: '/dashboard/calendar'
+      preLoaderRoute: typeof DashboardCalendarRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/categories': {
+      id: '/dashboard/categories'
+      path: '/categories'
+      fullPath: '/dashboard/categories'
+      preLoaderRoute: typeof DashboardCategoriesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/customers': {
+      id: '/dashboard/customers'
+      path: '/customers'
+      fullPath: '/dashboard/customers'
+      preLoaderRoute: typeof DashboardCustomersRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/drivers': {
+      id: '/dashboard/drivers'
+      path: '/drivers'
+      fullPath: '/dashboard/drivers'
+      preLoaderRoute: typeof DashboardDriversRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/files': {
+      id: '/dashboard/files'
+      path: '/files'
+      fullPath: '/dashboard/files'
+      preLoaderRoute: typeof DashboardFilesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/guides': {
+      id: '/dashboard/guides'
+      path: '/guides'
+      fullPath: '/dashboard/guides'
+      preLoaderRoute: typeof DashboardGuidesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/notifications': {
+      id: '/dashboard/notifications'
+      path: '/notifications'
+      fullPath: '/dashboard/notifications'
+      preLoaderRoute: typeof DashboardNotificationsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/ota': {
+      id: '/dashboard/ota'
+      path: '/ota'
+      fullPath: '/dashboard/ota'
+      preLoaderRoute: typeof DashboardOtaRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/schedules': {
+      id: '/dashboard/schedules'
+      path: '/schedules'
+      fullPath: '/dashboard/schedules'
+      preLoaderRoute: typeof DashboardSchedulesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/staffing': {
+      id: '/dashboard/staffing'
+      path: '/staffing'
+      fullPath: '/dashboard/staffing'
+      preLoaderRoute: typeof DashboardStaffingRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/templates': {
+      id: '/dashboard/templates'
+      path: '/templates'
+      fullPath: '/dashboard/templates'
+      preLoaderRoute: typeof DashboardTemplatesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/tours': {
+      id: '/dashboard/tours'
+      path: '/tours'
+      fullPath: '/dashboard/tours'
+      preLoaderRoute: typeof DashboardToursRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/vacations': {
+      id: '/dashboard/vacations'
+      path: '/vacations'
+      fullPath: '/dashboard/vacations'
+      preLoaderRoute: typeof DashboardVacationsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/vehicles': {
+      id: '/dashboard/vehicles'
+      path: '/vehicles'
+      fullPath: '/dashboard/vehicles'
+      preLoaderRoute: typeof DashboardVehiclesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/invite/$invitationId': {
+      id: '/invite/$invitationId'
+      path: '/invite/$invitationId'
+      fullPath: '/invite/$invitationId'
+      preLoaderRoute: typeof InviteInvitationIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/assignments/$assignmentId': {
+      id: '/dashboard/assignments/$assignmentId'
+      path: '/$assignmentId'
+      fullPath: '/dashboard/assignments/$assignmentId'
+      preLoaderRoute: typeof DashboardAssignmentsAssignmentIdRouteImport
+      parentRoute: typeof DashboardAssignmentsRoute
+    }
+    '/dashboard/assignments/new': {
+      id: '/dashboard/assignments/new'
       path: '/new'
-      fullPath: '/dashboard/schedules/new'
-      preLoaderRoute: typeof DashboardSchedulesNewRouteImport
-      parentRoute: typeof DashboardSchedulesRoute
+      fullPath: '/dashboard/assignments/new'
+      preLoaderRoute: typeof DashboardAssignmentsNewRouteImport
+      parentRoute: typeof DashboardAssignmentsRoute
     }
-    '/dashboard/schedules/$scheduleId': {
-      id: '/dashboard/schedules/$scheduleId'
-      path: '/$scheduleId'
-      fullPath: '/dashboard/schedules/$scheduleId'
-      preLoaderRoute: typeof DashboardSchedulesScheduleIdRouteImport
-      parentRoute: typeof DashboardSchedulesRoute
+    '/dashboard/bookings/$bookingId': {
+      id: '/dashboard/bookings/$bookingId'
+      path: '/$bookingId'
+      fullPath: '/dashboard/bookings/$bookingId'
+      preLoaderRoute: typeof DashboardBookingsBookingIdRouteImport
+      parentRoute: typeof DashboardBookingsRoute
     }
-    '/dashboard/notifications/settings': {
-      id: '/dashboard/notifications/settings'
-      path: '/settings'
-      fullPath: '/dashboard/notifications/settings'
-      preLoaderRoute: typeof DashboardNotificationsSettingsRouteImport
+    '/dashboard/bookings/new': {
+      id: '/dashboard/bookings/new'
+      path: '/new'
+      fullPath: '/dashboard/bookings/new'
+      preLoaderRoute: typeof DashboardBookingsNewRouteImport
+      parentRoute: typeof DashboardBookingsRoute
+    }
+    '/dashboard/customers/$customerId': {
+      id: '/dashboard/customers/$customerId'
+      path: '/$customerId'
+      fullPath: '/dashboard/customers/$customerId'
+      preLoaderRoute: typeof DashboardCustomersCustomerIdRouteImport
+      parentRoute: typeof DashboardCustomersRoute
+    }
+    '/dashboard/customers/new': {
+      id: '/dashboard/customers/new'
+      path: '/new'
+      fullPath: '/dashboard/customers/new'
+      preLoaderRoute: typeof DashboardCustomersNewRouteImport
+      parentRoute: typeof DashboardCustomersRoute
+    }
+    '/dashboard/drivers/$driverId': {
+      id: '/dashboard/drivers/$driverId'
+      path: '/$driverId'
+      fullPath: '/dashboard/drivers/$driverId'
+      preLoaderRoute: typeof DashboardDriversDriverIdRouteImport
+      parentRoute: typeof DashboardDriversRoute
+    }
+    '/dashboard/drivers/new': {
+      id: '/dashboard/drivers/new'
+      path: '/new'
+      fullPath: '/dashboard/drivers/new'
+      preLoaderRoute: typeof DashboardDriversNewRouteImport
+      parentRoute: typeof DashboardDriversRoute
+    }
+    '/dashboard/guides/$userId': {
+      id: '/dashboard/guides/$userId'
+      path: '/$userId'
+      fullPath: '/dashboard/guides/$userId'
+      preLoaderRoute: typeof DashboardGuidesUserIdRouteImport
+      parentRoute: typeof DashboardGuidesRoute
+    }
+    '/dashboard/notifications/$templateId': {
+      id: '/dashboard/notifications/$templateId'
+      path: '/$templateId'
+      fullPath: '/dashboard/notifications/$templateId'
+      preLoaderRoute: typeof DashboardNotificationsTemplateIdRouteImport
       parentRoute: typeof DashboardNotificationsRoute
     }
     '/dashboard/notifications/new': {
@@ -925,89 +982,96 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardNotificationsNewRouteImport
       parentRoute: typeof DashboardNotificationsRoute
     }
-    '/dashboard/notifications/$templateId': {
-      id: '/dashboard/notifications/$templateId'
-      path: '/$templateId'
-      fullPath: '/dashboard/notifications/$templateId'
-      preLoaderRoute: typeof DashboardNotificationsTemplateIdRouteImport
+    '/dashboard/notifications/settings': {
+      id: '/dashboard/notifications/settings'
+      path: '/settings'
+      fullPath: '/dashboard/notifications/settings'
+      preLoaderRoute: typeof DashboardNotificationsSettingsRouteImport
       parentRoute: typeof DashboardNotificationsRoute
     }
-    '/dashboard/guides/$userId': {
-      id: '/dashboard/guides/$userId'
-      path: '/$userId'
-      fullPath: '/dashboard/guides/$userId'
-      preLoaderRoute: typeof DashboardGuidesUserIdRouteImport
-      parentRoute: typeof DashboardGuidesRoute
+    '/dashboard/schedules/$scheduleId': {
+      id: '/dashboard/schedules/$scheduleId'
+      path: '/$scheduleId'
+      fullPath: '/dashboard/schedules/$scheduleId'
+      preLoaderRoute: typeof DashboardSchedulesScheduleIdRouteImport
+      parentRoute: typeof DashboardSchedulesRoute
     }
-    '/dashboard/drivers/new': {
-      id: '/dashboard/drivers/new'
+    '/dashboard/schedules/new': {
+      id: '/dashboard/schedules/new'
       path: '/new'
-      fullPath: '/dashboard/drivers/new'
-      preLoaderRoute: typeof DashboardDriversNewRouteImport
-      parentRoute: typeof DashboardDriversRoute
+      fullPath: '/dashboard/schedules/new'
+      preLoaderRoute: typeof DashboardSchedulesNewRouteImport
+      parentRoute: typeof DashboardSchedulesRoute
     }
-    '/dashboard/drivers/$driverId': {
-      id: '/dashboard/drivers/$driverId'
-      path: '/$driverId'
-      fullPath: '/dashboard/drivers/$driverId'
-      preLoaderRoute: typeof DashboardDriversDriverIdRouteImport
-      parentRoute: typeof DashboardDriversRoute
+    '/dashboard/settings/payments': {
+      id: '/dashboard/settings/payments'
+      path: '/settings/payments'
+      fullPath: '/dashboard/settings/payments'
+      preLoaderRoute: typeof DashboardSettingsPaymentsRouteImport
+      parentRoute: typeof DashboardRoute
     }
-    '/dashboard/customers/new': {
-      id: '/dashboard/customers/new'
+    '/dashboard/templates/$templateId': {
+      id: '/dashboard/templates/$templateId'
+      path: '/$templateId'
+      fullPath: '/dashboard/templates/$templateId'
+      preLoaderRoute: typeof DashboardTemplatesTemplateIdRouteImport
+      parentRoute: typeof DashboardTemplatesRoute
+    }
+    '/dashboard/templates/new': {
+      id: '/dashboard/templates/new'
       path: '/new'
-      fullPath: '/dashboard/customers/new'
-      preLoaderRoute: typeof DashboardCustomersNewRouteImport
-      parentRoute: typeof DashboardCustomersRoute
+      fullPath: '/dashboard/templates/new'
+      preLoaderRoute: typeof DashboardTemplatesNewRouteImport
+      parentRoute: typeof DashboardTemplatesRoute
     }
-    '/dashboard/customers/$customerId': {
-      id: '/dashboard/customers/$customerId'
-      path: '/$customerId'
-      fullPath: '/dashboard/customers/$customerId'
-      preLoaderRoute: typeof DashboardCustomersCustomerIdRouteImport
-      parentRoute: typeof DashboardCustomersRoute
+    '/dashboard/tours/$tourId': {
+      id: '/dashboard/tours/$tourId'
+      path: '/$tourId'
+      fullPath: '/dashboard/tours/$tourId'
+      preLoaderRoute: typeof DashboardToursTourIdRouteImport
+      parentRoute: typeof DashboardToursRoute
     }
-    '/dashboard/bookings/new': {
-      id: '/dashboard/bookings/new'
+    '/dashboard/tours/new': {
+      id: '/dashboard/tours/new'
       path: '/new'
-      fullPath: '/dashboard/bookings/new'
-      preLoaderRoute: typeof DashboardBookingsNewRouteImport
-      parentRoute: typeof DashboardBookingsRoute
+      fullPath: '/dashboard/tours/new'
+      preLoaderRoute: typeof DashboardToursNewRouteImport
+      parentRoute: typeof DashboardToursRoute
     }
-    '/dashboard/bookings/$bookingId': {
-      id: '/dashboard/bookings/$bookingId'
-      path: '/$bookingId'
-      fullPath: '/dashboard/bookings/$bookingId'
-      preLoaderRoute: typeof DashboardBookingsBookingIdRouteImport
-      parentRoute: typeof DashboardBookingsRoute
+    '/dashboard/vacations/$vacationId': {
+      id: '/dashboard/vacations/$vacationId'
+      path: '/$vacationId'
+      fullPath: '/dashboard/vacations/$vacationId'
+      preLoaderRoute: typeof DashboardVacationsVacationIdRouteImport
+      parentRoute: typeof DashboardVacationsRoute
     }
-    '/dashboard/assignments/new': {
-      id: '/dashboard/assignments/new'
+    '/dashboard/vacations/new': {
+      id: '/dashboard/vacations/new'
       path: '/new'
-      fullPath: '/dashboard/assignments/new'
-      preLoaderRoute: typeof DashboardAssignmentsNewRouteImport
-      parentRoute: typeof DashboardAssignmentsRoute
+      fullPath: '/dashboard/vacations/new'
+      preLoaderRoute: typeof DashboardVacationsNewRouteImport
+      parentRoute: typeof DashboardVacationsRoute
     }
-    '/dashboard/assignments/$assignmentId': {
-      id: '/dashboard/assignments/$assignmentId'
-      path: '/$assignmentId'
-      fullPath: '/dashboard/assignments/$assignmentId'
-      preLoaderRoute: typeof DashboardAssignmentsAssignmentIdRouteImport
-      parentRoute: typeof DashboardAssignmentsRoute
+    '/dashboard/vehicles/$vehicleId': {
+      id: '/dashboard/vehicles/$vehicleId'
+      path: '/$vehicleId'
+      fullPath: '/dashboard/vehicles/$vehicleId'
+      preLoaderRoute: typeof DashboardVehiclesVehicleIdRouteImport
+      parentRoute: typeof DashboardVehiclesRoute
     }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
+    '/dashboard/vehicles/new': {
+      id: '/dashboard/vehicles/new'
+      path: '/new'
+      fullPath: '/dashboard/vehicles/new'
+      preLoaderRoute: typeof DashboardVehiclesNewRouteImport
+      parentRoute: typeof DashboardVehiclesRoute
     }
-    '/dashboard/tours/$tourId/edit': {
-      id: '/dashboard/tours/$tourId/edit'
+    '/dashboard/bookings/$bookingId/edit': {
+      id: '/dashboard/bookings/$bookingId/edit'
       path: '/edit'
-      fullPath: '/dashboard/tours/$tourId/edit'
-      preLoaderRoute: typeof DashboardToursTourIdEditRouteImport
-      parentRoute: typeof DashboardToursTourIdRoute
+      fullPath: '/dashboard/bookings/$bookingId/edit'
+      preLoaderRoute: typeof DashboardBookingsBookingIdEditRouteImport
+      parentRoute: typeof DashboardBookingsBookingIdRoute
     }
     '/dashboard/customers/$customerId/edit': {
       id: '/dashboard/customers/$customerId/edit'
@@ -1016,12 +1080,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardCustomersCustomerIdEditRouteImport
       parentRoute: typeof DashboardCustomersCustomerIdRoute
     }
-    '/dashboard/bookings/$bookingId/edit': {
-      id: '/dashboard/bookings/$bookingId/edit'
+    '/dashboard/templates/$templateId/edit': {
+      id: '/dashboard/templates/$templateId/edit'
       path: '/edit'
-      fullPath: '/dashboard/bookings/$bookingId/edit'
-      preLoaderRoute: typeof DashboardBookingsBookingIdEditRouteImport
-      parentRoute: typeof DashboardBookingsBookingIdRoute
+      fullPath: '/dashboard/templates/$templateId/edit'
+      preLoaderRoute: typeof DashboardTemplatesTemplateIdEditRouteImport
+      parentRoute: typeof DashboardTemplatesTemplateIdRoute
+    }
+    '/dashboard/tours/$tourId/edit': {
+      id: '/dashboard/tours/$tourId/edit'
+      path: '/edit'
+      fullPath: '/dashboard/tours/$tourId/edit'
+      preLoaderRoute: typeof DashboardToursTourIdEditRouteImport
+      parentRoute: typeof DashboardToursTourIdRoute
+    }
+    '/dashboard/vehicles/$vehicleId/edit': {
+      id: '/dashboard/vehicles/$vehicleId/edit'
+      path: '/edit'
+      fullPath: '/dashboard/vehicles/$vehicleId/edit'
+      preLoaderRoute: typeof DashboardVehiclesVehicleIdEditRouteImport
+      parentRoute: typeof DashboardVehiclesVehicleIdRoute
     }
   }
 }
@@ -1152,13 +1230,29 @@ const DashboardSchedulesRouteChildren: DashboardSchedulesRouteChildren = {
 const DashboardSchedulesRouteWithChildren =
   DashboardSchedulesRoute._addFileChildren(DashboardSchedulesRouteChildren)
 
+interface DashboardTemplatesTemplateIdRouteChildren {
+  DashboardTemplatesTemplateIdEditRoute: typeof DashboardTemplatesTemplateIdEditRoute
+}
+
+const DashboardTemplatesTemplateIdRouteChildren: DashboardTemplatesTemplateIdRouteChildren =
+  {
+    DashboardTemplatesTemplateIdEditRoute:
+      DashboardTemplatesTemplateIdEditRoute,
+  }
+
+const DashboardTemplatesTemplateIdRouteWithChildren =
+  DashboardTemplatesTemplateIdRoute._addFileChildren(
+    DashboardTemplatesTemplateIdRouteChildren,
+  )
+
 interface DashboardTemplatesRouteChildren {
-  DashboardTemplatesTemplateIdRoute: typeof DashboardTemplatesTemplateIdRoute
+  DashboardTemplatesTemplateIdRoute: typeof DashboardTemplatesTemplateIdRouteWithChildren
   DashboardTemplatesNewRoute: typeof DashboardTemplatesNewRoute
 }
 
 const DashboardTemplatesRouteChildren: DashboardTemplatesRouteChildren = {
-  DashboardTemplatesTemplateIdRoute: DashboardTemplatesTemplateIdRoute,
+  DashboardTemplatesTemplateIdRoute:
+    DashboardTemplatesTemplateIdRouteWithChildren,
   DashboardTemplatesNewRoute: DashboardTemplatesNewRoute,
 }
 
@@ -1203,13 +1297,27 @@ const DashboardVacationsRouteChildren: DashboardVacationsRouteChildren = {
 const DashboardVacationsRouteWithChildren =
   DashboardVacationsRoute._addFileChildren(DashboardVacationsRouteChildren)
 
+interface DashboardVehiclesVehicleIdRouteChildren {
+  DashboardVehiclesVehicleIdEditRoute: typeof DashboardVehiclesVehicleIdEditRoute
+}
+
+const DashboardVehiclesVehicleIdRouteChildren: DashboardVehiclesVehicleIdRouteChildren =
+  {
+    DashboardVehiclesVehicleIdEditRoute: DashboardVehiclesVehicleIdEditRoute,
+  }
+
+const DashboardVehiclesVehicleIdRouteWithChildren =
+  DashboardVehiclesVehicleIdRoute._addFileChildren(
+    DashboardVehiclesVehicleIdRouteChildren,
+  )
+
 interface DashboardVehiclesRouteChildren {
-  DashboardVehiclesVehicleIdRoute: typeof DashboardVehiclesVehicleIdRoute
+  DashboardVehiclesVehicleIdRoute: typeof DashboardVehiclesVehicleIdRouteWithChildren
   DashboardVehiclesNewRoute: typeof DashboardVehiclesNewRoute
 }
 
 const DashboardVehiclesRouteChildren: DashboardVehiclesRouteChildren = {
-  DashboardVehiclesVehicleIdRoute: DashboardVehiclesVehicleIdRoute,
+  DashboardVehiclesVehicleIdRoute: DashboardVehiclesVehicleIdRouteWithChildren,
   DashboardVehiclesNewRoute: DashboardVehiclesNewRoute,
 }
 
@@ -1224,10 +1332,12 @@ interface DashboardRouteChildren {
   DashboardCategoriesRoute: typeof DashboardCategoriesRoute
   DashboardCustomersRoute: typeof DashboardCustomersRouteWithChildren
   DashboardDriversRoute: typeof DashboardDriversRouteWithChildren
+  DashboardFilesRoute: typeof DashboardFilesRoute
   DashboardGuidesRoute: typeof DashboardGuidesRouteWithChildren
   DashboardNotificationsRoute: typeof DashboardNotificationsRouteWithChildren
   DashboardOtaRoute: typeof DashboardOtaRoute
   DashboardSchedulesRoute: typeof DashboardSchedulesRouteWithChildren
+  DashboardStaffingRoute: typeof DashboardStaffingRoute
   DashboardTemplatesRoute: typeof DashboardTemplatesRouteWithChildren
   DashboardToursRoute: typeof DashboardToursRouteWithChildren
   DashboardVacationsRoute: typeof DashboardVacationsRouteWithChildren
@@ -1244,10 +1354,12 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardCategoriesRoute: DashboardCategoriesRoute,
   DashboardCustomersRoute: DashboardCustomersRouteWithChildren,
   DashboardDriversRoute: DashboardDriversRouteWithChildren,
+  DashboardFilesRoute: DashboardFilesRoute,
   DashboardGuidesRoute: DashboardGuidesRouteWithChildren,
   DashboardNotificationsRoute: DashboardNotificationsRouteWithChildren,
   DashboardOtaRoute: DashboardOtaRoute,
   DashboardSchedulesRoute: DashboardSchedulesRouteWithChildren,
+  DashboardStaffingRoute: DashboardStaffingRoute,
   DashboardTemplatesRoute: DashboardTemplatesRouteWithChildren,
   DashboardToursRoute: DashboardToursRouteWithChildren,
   DashboardVacationsRoute: DashboardVacationsRouteWithChildren,

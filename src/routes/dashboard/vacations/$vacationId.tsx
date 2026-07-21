@@ -128,11 +128,7 @@ function VacationDetailPage() {
 								Approve anyway
 							</Button>
 						)}
-						<Button
-							onClick={onReject}
-							disabled={pending}
-							variant="destructive"
-						>
+						<Button onClick={onReject} disabled={pending} variant="destructive">
 							{pending ? "Working…" : "Reject"}
 						</Button>
 					</div>

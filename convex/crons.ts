@@ -73,4 +73,34 @@ crons.daily(
 	purgeOldRateLimit,
 );
 
+// Daily at 04:45 UTC — drop stale phone-remind cooldown rows
+// (kept 30 days; longer than the 7d cooldown so recent stamps survive).
+crons.daily(
+	"cleanup_old_phone_reminder_sends",
+	{ hourUTC: 4, minuteUTC: 45 },
+	internal.phoneReminders.purgeOldSends,
+);
+
+// Daily at 05:00 UTC — refresh tourAnalytics daily cache for yesterday.
+crons.daily(
+	"refresh_tour_analytics",
+	{ hourUTC: 5, minuteUTC: 0 },
+	internal.tourAnalytics.runDaily,
+);
+
+// Daily at 07:00 UTC — ops staffing digest (email/SMS) for orgs
+// that opted in via notification settings.
+crons.daily(
+	"staffing_digest",
+	{ hourUTC: 7, minuteUTC: 0 },
+	internal.staffingDigest.runDaily,
+);
+
+// Daily at 08:00 UTC — guide availability reminders for unmarked days.
+crons.daily(
+	"availability_reminders",
+	{ hourUTC: 8, minuteUTC: 0 },
+	internal.availabilityReminders.runDaily,
+);
+
 export default crons;

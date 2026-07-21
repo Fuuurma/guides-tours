@@ -16,6 +16,7 @@ import {
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { centsToInputValue } from "@/lib/format";
+import { TOUR_TYPES, VEHICLE_TYPES, resolveTourStaffing } from "@/lib/staffing";
 import {
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
@@ -27,15 +28,6 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
-
-const TOUR_TYPES = [
-	"walking",
-	"car",
-	"minivan",
-	"bus",
-	"boat",
-	"other",
-] as const;
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -49,6 +41,11 @@ interface FormValues extends Record<string, unknown> {
 	priceUsd: string;
 	languages: string;
 	isActive: boolean;
+	requiredGuides: string;
+	requiresVehicle: boolean;
+	requiresDriver: boolean;
+	requiredVehicleType: string;
+	staffingOverride: boolean;
 }
 
 interface EditTourPageProps {
@@ -92,6 +89,13 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 					.split(",")
 					.map((s) => s.trim())
 					.filter(Boolean),
+				requiredGuides: Number(v.requiredGuides) || 1,
+				requiresVehicle: v.staffingOverride ? v.requiresVehicle : undefined,
+				requiresDriver: v.staffingOverride ? v.requiresDriver : undefined,
+				requiredVehicleType:
+					v.staffingOverride && v.requiresVehicle
+						? v.requiredVehicleType || undefined
+						: undefined,
 			});
 			return tourId;
 		},
@@ -125,6 +129,11 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			priceUsd: "",
 			languages: "en",
 			isActive: true,
+			requiredGuides: "1",
+			requiresVehicle: false,
+			requiresDriver: false,
+			requiredVehicleType: "",
+			staffingOverride: false,
 		},
 		redirectTo: (id) => `/dashboard/tours/${id}`,
 		successMessage: "Tour updated",
@@ -145,10 +154,14 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				isActive: boolean;
 				basePriceCents?: number;
 				languages: string[];
+				requiredGuides?: number;
+				requiresVehicle?: boolean;
+				requiresDriver?: boolean;
+				requiredVehicleType?: string;
 			};
 			form.set("name", t.name);
 			form.set("description", t.description ?? "");
-			form.set("tourType", t.tourType);
+			form.set("tourType", t.tourType === "walkable" ? "walking" : t.tourType);
 			form.set("categoryId", t.categoryId ?? "");
 			form.set("durationHours", String(t.durationHours));
 			form.set("capacity", String(t.capacity));
@@ -157,9 +170,22 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 			form.set("isActive", t.isActive);
 			form.set("priceUsd", centsToInputValue(t.basePriceCents));
 			form.set("languages", (t.languages ?? ["en"]).join(", "));
+			form.set("requiredGuides", String(t.requiredGuides ?? 1));
+			const hasOverride =
+				t.requiresVehicle !== undefined ||
+				t.requiresDriver !== undefined ||
+				Boolean(t.requiredVehicleType);
+			form.set("staffingOverride", hasOverride);
+			const inferred = resolveTourStaffing(t);
+			form.set("requiresVehicle", t.requiresVehicle ?? inferred.requiresVehicle);
+			form.set("requiresDriver", t.requiresDriver ?? inferred.requiresDriver);
+			form.set(
+				"requiredVehicleType",
+				t.requiredVehicleType ?? inferred.requiredVehicleType ?? "",
+			);
 			setLoaded(true);
 		}
-	}, [tour, loaded, form]);
+	}, [tour, loaded, form.set]);
 
 	if (tour === undefined) {
 		return <DetailSkeleton />;
@@ -334,6 +360,90 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 					placeholder="en, es"
 				/>
 			</FormField>
+
+			<div className="space-y-4 rounded-md border p-4">
+				<div>
+					<p className="text-sm font-medium">Staffing</p>
+					<p className="text-muted-foreground text-xs">
+						Guides required per departure, and fleet rules for this tour.
+					</p>
+				</div>
+				<div className="grid gap-4 md:grid-cols-2">
+					<FormField label="Required guides" htmlFor="edit-req-guides">
+						<Input
+							id="edit-req-guides"
+							type="number"
+							min="1"
+							max="10"
+							value={form.values.requiredGuides}
+							onChange={(e) => form.set("requiredGuides", e.target.value)}
+						/>
+					</FormField>
+					<label htmlFor="edit-staffing-override" className="flex items-center gap-2 text-sm pt-6">
+						<Checkbox
+							id="edit-staffing-override"
+							checked={form.values.staffingOverride}
+							onCheckedChange={(c) => form.set("staffingOverride", c === true)}
+						/>
+						Customize vehicle/driver rules
+					</label>
+				</div>
+				{form.values.staffingOverride ? (
+					<div className="grid gap-4 md:grid-cols-3">
+						<label htmlFor="edit-requires-vehicle" className="flex items-center gap-2 text-sm">
+							<Checkbox
+								id="edit-requires-vehicle"
+								checked={form.values.requiresVehicle}
+								onCheckedChange={(c) =>
+									form.set("requiresVehicle", c === true)
+								}
+							/>
+							Requires vehicle
+						</label>
+						<label htmlFor="edit-requires-driver" className="flex items-center gap-2 text-sm">
+							<Checkbox
+								id="edit-requires-driver"
+								checked={form.values.requiresDriver}
+								onCheckedChange={(c) =>
+									form.set("requiresDriver", c === true)
+								}
+							/>
+							Requires driver
+						</label>
+						<FormField label="Required vehicle type" htmlFor="edit-req-vtype">
+							<Select
+								value={form.values.requiredVehicleType || "__any__"}
+								onValueChange={(v) =>
+									form.set("requiredVehicleType", v === "__any__" ? "" : v)
+								}
+							>
+								<SelectTrigger id="edit-req-vtype">
+									<SelectValue placeholder="Any" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="__any__">Any</SelectItem>
+									{VEHICLE_TYPES.map((t) => (
+										<SelectItem key={t} value={t}>
+											{t}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+						</FormField>
+					</div>
+				) : (
+					<p className="text-muted-foreground text-xs">
+						{(() => {
+							const r = resolveTourStaffing({
+								tourType: form.values.tourType,
+							});
+							return r.requiresVehicle
+								? `Inferred: needs ${r.requiredVehicleType ?? "a vehicle"} + driver`
+								: "Inferred: walking / no fleet required";
+						})()}
+					</p>
+				)}
+			</div>
 
 			<label
 				htmlFor="edit-tour-active"

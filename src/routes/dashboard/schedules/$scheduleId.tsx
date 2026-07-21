@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -31,6 +31,7 @@ interface ScheduleBooking {
 
 function ScheduleDetailPage() {
 	const { scheduleId } = Route.useParams();
+	const navigate = useNavigate();
 	const {
 		data: schedule,
 		isPending,
@@ -52,6 +53,7 @@ function ScheduleDetailPage() {
 		}),
 	);
 	const updateSchedule = useMutation(api.tourSchedules.update);
+	const removeSchedule = useMutation(api.tourSchedules.remove);
 	const [pending, setPending] = useState(false);
 
 	if (isPending) {
@@ -96,6 +98,25 @@ function ScheduleDetailPage() {
 		}
 	};
 
+	const onDeleteSchedule = async () => {
+		if (
+			!window.confirm(
+				"Permanently delete this schedule? Only allowed when no bookings are linked.",
+			)
+		) {
+			return;
+		}
+		setPending(true);
+		try {
+			await removeSchedule({ scheduleId: schedule._id });
+			toast.success("Schedule deleted");
+			void navigate({ to: "/dashboard/schedules" });
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+			setPending(false);
+		}
+	};
+
 	const columns: DataTableColumn<ScheduleBooking>[] = [
 		{
 			key: "customer",
@@ -128,10 +149,7 @@ function ScheduleDetailPage() {
 					{schedule.status !== "cancelled" && (
 						<>
 							<Button asChild>
-								<Link
-									to="/dashboard/bookings/new"
-									search={{ scheduleId }}
-								>
+								<Link to="/dashboard/bookings/new" search={{ scheduleId }}>
 									+ Book guests
 								</Link>
 							</Button>
@@ -151,6 +169,15 @@ function ScheduleDetailPage() {
 								{pending ? "Cancelling…" : "Cancel schedule"}
 							</Button>
 						</>
+					)}
+					{schedule.capacityBooked === 0 && (
+						<Button
+							variant="outline"
+							disabled={pending}
+							onClick={() => void onDeleteSchedule()}
+						>
+							{pending ? "Deleting…" : "Delete"}
+						</Button>
 					)}
 					{tour ? (
 						<Button asChild variant="ghost">

@@ -26,18 +26,28 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
-		let q = ctx.db
-			.query("files")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
+		const MAX_FILES = 500;
+		let all;
 		if (args.purpose) {
-			q = ctx.db
+			all = await ctx.db
 				.query("files")
 				.withIndex("by_org_purpose", (q) =>
 					q.eq("organizationId", orgId).eq("purpose", args.purpose!),
-				);
+				)
+				.take(MAX_FILES);
+		} else {
+			all = await ctx.db
+				.query("files")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.take(MAX_FILES);
 		}
-		const all = await q.collect();
-		return all.sort((a, b) => b.createdAt - a.createdAt);
+		const sorted = all.sort((a, b) => b.createdAt - a.createdAt);
+		return await Promise.all(
+			sorted.map(async (f) => ({
+				...f,
+				url: await ctx.storage.getUrl(f.storageId),
+			})),
+		);
 	},
 });
 
@@ -120,6 +130,21 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.fileId);
+		// If this blob backed a tour image, remove the gallery row too
+		// so the tour UI doesn't keep a broken storage reference.
+		if (existing.purpose === "tour-image") {
+			const images = await ctx.db
+				.query("tourImages")
+				.withIndex("by_org", (q) =>
+					q.eq("organizationId", args.organizationId),
+				)
+				.take(500);
+			for (const img of images) {
+				if (img.storageId === existing.storageId) {
+					await ctx.db.delete(img._id);
+				}
+			}
+		}
 		try {
 			await ctx.storage.delete(existing.storageId);
 		} catch {

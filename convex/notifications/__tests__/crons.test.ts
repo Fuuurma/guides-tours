@@ -440,7 +440,7 @@ describe("convex/crons — cleanupOldNotifications", () => {
 });
 
 describe("convex/crons — crons.ts schedule shape", () => {
-	it("declares the 3 expected scheduled functions with the right schedules", async () => {
+	it("declares expected scheduled functions with the right schedules", async () => {
 		// Re-import the file as text and assert the cron schedule calls.
 		// This is a string-level test — cheap regression guard for
 		// schedule shape without needing convex-test to load crons.
@@ -462,5 +462,11 @@ describe("convex/crons — crons.ts schedule shape", () => {
 			/crons\.daily\(\s*"cleanup_old_notifications"/,
 		);
 		expect(cronsSource).toMatch(/hourUTC:\s*4/);
+		expect(cronsSource).toMatch(/crons\.daily\(\s*"staffing_digest"/);
+		expect(cronsSource).toMatch(/hourUTC:\s*7/);
+		expect(cronsSource).toMatch(
+			/crons\.daily\(\s*"availability_reminders"/,
+		);
+		expect(cronsSource).toMatch(/hourUTC:\s*8/);
 	});
 });

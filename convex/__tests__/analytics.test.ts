@@ -172,6 +172,55 @@ describe("analytics", () => {
 		expect(stats[1]!.totalAssignments).toBe(1);
 	});
 
+	it("getForTour: bookings + assignments for one tour", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_a2b";
+		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId, "Solo"));
+		const other = await t.run((ctx: any) => seedTour(ctx, orgId, "Other"));
+		const customerId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, tourId, customerId, {
+				guests: 4,
+				totalAmountCents: 10000n,
+				netRevenueCents: 10000n,
+			}),
+		);
+		await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, tourId, customerId, {
+				date: "2026-07-16",
+				status: "cancelled",
+				guests: 2,
+			}),
+		);
+		await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, other, customerId, {
+				date: "2026-07-17",
+				guests: 8,
+			}),
+		);
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, { status: "completed" }),
+		);
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, other, { date: "2026-07-17" }),
+		);
+
+		const stats = await t.query(internal.analytics.getForTourInternal, {
+			organizationId: orgId,
+			tourId: tourId,
+			startDate: "2026-07-01",
+			endDate: "2026-07-31",
+		});
+		expect(stats).not.toBeNull();
+		expect(stats!.totalBookings).toBe(1);
+		expect(stats!.totalGuests).toBe(4);
+		expect(stats!.totalRevenueCents).toBe(10000);
+		expect(stats!.cancellations).toBe(1);
+		expect(stats!.totalAssignments).toBe(1);
+		expect(stats!.completedAssignments).toBe(1);
+		expect(stats!.avgGroupSize).toBe(4);
+	});
+
 	it("getDailyStats: fills zeros for empty days", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a3";

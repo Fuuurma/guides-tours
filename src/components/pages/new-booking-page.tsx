@@ -65,7 +65,9 @@ export function NewBookingPage() {
 	const create = useMutation(api.bookings.create);
 	const tours = useQuery(convexQuery(api.tours.list, {}));
 	const customers = useQuery(convexQuery(api.customers.list, {}));
-	const prefillScheduleId = search.scheduleId as Id<"tourSchedules"> | undefined;
+	const prefillScheduleId = search.scheduleId as
+		| Id<"tourSchedules">
+		| undefined;
 	const { data: prefillSchedule } = useQuery(
 		convexQuery(
 			api.tourSchedules.get,
@@ -190,7 +192,7 @@ export function NewBookingPage() {
 			form.set("totalUsd", (cents / 100).toFixed(2));
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot prefill
-	}, [prefillSchedule?._id, tours.data]);
+	}, [prefillSchedule, tours.data, form.values.totalUsd, form.set]);
 
 	const daySchedulesQuery = useQuery(
 		convexQuery(

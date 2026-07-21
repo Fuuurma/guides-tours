@@ -349,6 +349,7 @@ describe("convex/payments — getStripeSecrets (returns ciphertext)", () => {
 			organizationId: "org_pay_f",
 		});
 		expect(result?.stripeSecretKey).toBe("iv:ct:tag");
+		expect(result?.stripePublishableKey).toBe("pk_test_xxx");
 		expect(result?.defaultCurrency).toBe("USD");
 		expect(result?.stripeIsSandbox).toBe(true);
 		expect(result?.stripeEnabled).toBe(true);

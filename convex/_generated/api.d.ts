@@ -10,10 +10,12 @@
 
 import type * as __tests___helpers from "../__tests__/helpers.js";
 import type * as analytics from "../analytics.js";
+import type * as assignmentNotifications from "../assignmentNotifications.js";
 import type * as assignments from "../assignments.js";
 import type * as auth from "../auth.js";
 import type * as authz from "../authz.js";
 import type * as availabilities from "../availabilities.js";
+import type * as availabilityReminders from "../availabilityReminders.js";
 import type * as bookings from "../bookings.js";
 import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
@@ -60,8 +62,10 @@ import type * as otaProducts from "../otaProducts.js";
 import type * as payments from "../payments.js";
 import type * as payments_stripe from "../payments_stripe.js";
 import type * as payments_stripe_actions from "../payments_stripe_actions.js";
+import type * as phoneReminders from "../phoneReminders.js";
 import type * as public_booking from "../public_booking.js";
 import type * as scheduledNotifications from "../scheduledNotifications.js";
+import type * as staffingDigest from "../staffingDigest.js";
 import type * as tourAnalytics from "../tourAnalytics.js";
 import type * as tourBlackoutDates from "../tourBlackoutDates.js";
 import type * as tourCategories from "../tourCategories.js";
@@ -71,6 +75,7 @@ import type * as tourSchedules from "../tourSchedules.js";
 import type * as tourSeasonalSchedules from "../tourSeasonalSchedules.js";
 import type * as tourTemplates from "../tourTemplates.js";
 import type * as tours from "../tours.js";
+import type * as userProfiles from "../userProfiles.js";
 import type * as vacationRequests from "../vacationRequests.js";
 import type * as vehicles from "../vehicles.js";
 import type * as webhookDeliveries from "../webhookDeliveries.js";
@@ -84,10 +89,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   "__tests__/helpers": typeof __tests___helpers;
   analytics: typeof analytics;
+  assignmentNotifications: typeof assignmentNotifications;
   assignments: typeof assignments;
   auth: typeof auth;
   authz: typeof authz;
   availabilities: typeof availabilities;
+  availabilityReminders: typeof availabilityReminders;
   bookings: typeof bookings;
   crons: typeof crons;
   customers: typeof customers;
@@ -134,8 +141,10 @@ declare const fullApi: ApiFromModules<{
   payments: typeof payments;
   payments_stripe: typeof payments_stripe;
   payments_stripe_actions: typeof payments_stripe_actions;
+  phoneReminders: typeof phoneReminders;
   public_booking: typeof public_booking;
   scheduledNotifications: typeof scheduledNotifications;
+  staffingDigest: typeof staffingDigest;
   tourAnalytics: typeof tourAnalytics;
   tourBlackoutDates: typeof tourBlackoutDates;
   tourCategories: typeof tourCategories;
@@ -145,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   tourSeasonalSchedules: typeof tourSeasonalSchedules;
   tourTemplates: typeof tourTemplates;
   tours: typeof tours;
+  userProfiles: typeof userProfiles;
   vacationRequests: typeof vacationRequests;
   vehicles: typeof vehicles;
   webhookDeliveries: typeof webhookDeliveries;

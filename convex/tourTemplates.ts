@@ -76,6 +76,10 @@ export const create = mutation({
 		minGuests: v.optional(v.number()),
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
+		requiredGuides: v.optional(v.number()),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -104,6 +108,10 @@ export const internalCreate = internalMutation({
 		minGuests: v.optional(v.number()),
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
+		requiredGuides: v.optional(v.number()),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		if (args.name.length > MAX_NAME_LEN) {
@@ -119,6 +127,10 @@ export const internalCreate = internalMutation({
 			);
 		}
 		if (args.capacity <= 0) throw new ConvexError("Capacity must be positive");
+		const requiredGuides = Math.max(1, Math.floor(args.requiredGuides ?? 1));
+		if (requiredGuides > 10) {
+			throw new ConvexError("requiredGuides cannot exceed 10");
+		}
 		const now = Date.now();
 		const id = await ctx.db.insert("tourTemplates", {
 			organizationId: args.organizationId,
@@ -136,7 +148,10 @@ export const internalCreate = internalMutation({
 			minGuests: args.minGuests ?? 1,
 			maxGuests: args.maxGuests ?? args.capacity,
 			bookingCutoffHours: args.bookingCutoffHours ?? 24,
-			requiredGuides: 1,
+			requiredGuides,
+			requiresVehicle: args.requiresVehicle,
+			requiresDriver: args.requiresDriver,
+			requiredVehicleType: args.requiredVehicleType,
 			isActive: true,
 			createdAt: now,
 			updatedAt: now,
@@ -171,6 +186,10 @@ export const update = mutation({
 		minGuests: v.optional(v.number()),
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
+		requiredGuides: v.optional(v.number()),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		// isActive: operator can archive a template (hidden from
 		// new-tour flow) without deleting it.
 		isActive: v.optional(v.boolean()),
@@ -204,6 +223,10 @@ export const internalUpdate = internalMutation({
 		minGuests: v.optional(v.number()),
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
+		requiredGuides: v.optional(v.number()),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
@@ -225,6 +248,12 @@ export const internalUpdate = internalMutation({
 				MAX_DESCRIPTION_LEN,
 			);
 		}
+		if (args.requiredGuides !== undefined) {
+			const n = Math.floor(args.requiredGuides);
+			if (n < 1 || n > 10) {
+				throw new ConvexError("requiredGuides must be between 1 and 10");
+			}
+		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		for (const field of [
 			"name",
@@ -241,10 +270,17 @@ export const internalUpdate = internalMutation({
 			"minGuests",
 			"maxGuests",
 			"bookingCutoffHours",
+			"requiredGuides",
+			"requiresVehicle",
+			"requiresDriver",
+			"requiredVehicleType",
 			"isActive",
 		]) {
 			const value = (args as Record<string, unknown>)[field];
 			if (value !== undefined) patch[field] = value;
+		}
+		if (typeof patch.requiredGuides === "number") {
+			patch.requiredGuides = Math.floor(patch.requiredGuides);
 		}
 		await ctx.db.patch(args.templateId, patch);
 		await logAudit(ctx, {
@@ -294,7 +330,10 @@ export const instantiate = mutation({
 			categoryId: tmpl.categoryId,
 			templateId: tmpl._id,
 			languages: tmpl.languages,
-			requiredGuides: 1,
+			requiredGuides: tmpl.requiredGuides,
+			requiresVehicle: tmpl.requiresVehicle,
+			requiresDriver: tmpl.requiresDriver,
+			requiredVehicleType: tmpl.requiredVehicleType,
 			inclusions: tmpl.inclusions,
 			exclusions: tmpl.exclusions,
 			highlights: tmpl.highlights,

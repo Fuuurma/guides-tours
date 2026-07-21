@@ -15,6 +15,7 @@ import {
 	assertFieldWithinLimit,
 } from "./lib/validation";
 import { logAudit } from "./lib/audit";
+import { normalizeTourType, resolveTourStaffing } from "./lib/staffing";
 
 // ----- Queries -----
 
@@ -79,6 +80,9 @@ export const create = mutation({
 		bufferMinutes: v.optional(v.number()),
 		tourType: v.optional(v.string()),
 		languages: v.optional(v.array(v.string())),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		inclusions: v.optional(v.array(v.string())),
 		exclusions: v.optional(v.array(v.string())),
 		highlights: v.optional(v.array(v.string())),
@@ -116,6 +120,9 @@ export const internalCreate = internalMutation({
 		bufferMinutes: v.optional(v.number()),
 		tourType: v.optional(v.string()),
 		languages: v.optional(v.array(v.string())),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		inclusions: v.optional(v.array(v.string())),
 		exclusions: v.optional(v.array(v.string())),
 		highlights: v.optional(v.array(v.string())),
@@ -165,6 +172,18 @@ export const internalCreate = internalMutation({
 		}
 
 		const now = Date.now();
+		const tourType = normalizeTourType(args.tourType ?? "walking");
+		const requiredGuides = Math.max(1, Math.floor(args.requiredGuides ?? 1));
+		if (requiredGuides > 10) {
+			throw new ConvexError("requiredGuides cannot exceed 10");
+		}
+		const staffing = resolveTourStaffing({
+			tourType,
+			requiredGuides,
+			requiresVehicle: args.requiresVehicle,
+			requiresDriver: args.requiresDriver,
+			requiredVehicleType: args.requiredVehicleType,
+		});
 		const tourId = await ctx.db.insert("tours", {
 			organizationId: args.organizationId,
 			name: args.name,
@@ -180,9 +199,12 @@ export const internalCreate = internalMutation({
 			minGuests: args.minGuests ?? 1,
 			maxGuests: args.maxGuests ?? args.capacity,
 			bookingCutoffHours: args.bookingCutoffHours ?? 24,
-			tourType: args.tourType ?? "walkable",
+			tourType,
 			languages: args.languages ?? [],
-			requiredGuides: args.requiredGuides ?? 1,
+			requiredGuides: staffing.requiredGuides,
+			requiresVehicle: args.requiresVehicle,
+			requiresDriver: args.requiresDriver,
+			requiredVehicleType: args.requiredVehicleType?.trim() || undefined,
 			categoryId: args.categoryId,
 			templateId: args.templateId,
 			inclusions: args.inclusions ?? [],
@@ -221,6 +243,10 @@ export const update = mutation({
 		basePriceCents: v.optional(v.int64()),
 		tourType: v.optional(v.string()),
 		languages: v.optional(v.array(v.string())),
+		requiredGuides: v.optional(v.number()),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		categoryId: v.optional(v.id("tourCategories")),
 		templateId: v.optional(v.id("tourTemplates")),
 	},
@@ -253,6 +279,10 @@ export const internalUpdate = internalMutation({
 		basePriceCents: v.optional(v.int64()),
 		tourType: v.optional(v.string()),
 		languages: v.optional(v.array(v.string())),
+		requiredGuides: v.optional(v.number()),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		categoryId: v.optional(v.id("tourCategories")),
 		templateId: v.optional(v.id("tourTemplates")),
 	},
@@ -292,10 +322,30 @@ export const internalUpdate = internalMutation({
 				assertFieldWithinLimit("language", lang, 10);
 			}
 		}
+		if (args.requiredGuides !== undefined) {
+			const n = Math.floor(args.requiredGuides);
+			if (n < 1 || n > 10) {
+				throw new ConvexError("requiredGuides must be between 1 and 10");
+			}
+		}
 
 		const now = Date.now();
-		const { tourId, organizationId, userId, ...patch } = args;
-		await ctx.db.patch(args.tourId, { ...patch, updatedAt: now });
+		const { tourId, organizationId, userId, ...rest } = args;
+		const patch: Record<string, unknown> = { updatedAt: now };
+		for (const [key, value] of Object.entries(rest)) {
+			if (value !== undefined) patch[key] = value;
+		}
+		if (typeof patch.tourType === "string") {
+			patch.tourType = normalizeTourType(patch.tourType);
+		}
+		if (typeof patch.requiredGuides === "number") {
+			patch.requiredGuides = Math.floor(patch.requiredGuides);
+		}
+		if (typeof patch.requiredVehicleType === "string") {
+			const trimmed = patch.requiredVehicleType.trim();
+			patch.requiredVehicleType = trimmed || undefined;
+		}
+		await ctx.db.patch(args.tourId, patch);
 		await logAudit(ctx, {
 			organizationId: tour.organizationId,
 			userId: args.userId,

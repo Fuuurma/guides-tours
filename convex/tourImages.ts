@@ -11,6 +11,7 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 
@@ -158,6 +159,18 @@ export const internalAdd = internalMutation({
 			format: args.format ?? "",
 			createdAt: now,
 			updatedAt: now,
+		});
+		// Bookkeep in files table so org uploads are queryable.
+		await ctx.runMutation(internal.files.internalTrack, {
+			organizationId: args.organizationId,
+			uploadedBy: args.userId,
+			storageId: args.storageId,
+			filename: `tour-${args.tourId}-${id}`,
+			contentType: args.format
+				? `image/${args.format}`
+				: "application/octet-stream",
+			size: args.fileSize ?? 0,
+			purpose: "tour-image",
 		});
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
@@ -372,6 +385,18 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Forbidden: wrong organization");
 		}
 		await ctx.db.delete(args.imageId);
+		// Drop matching files metadata row (blob deleted below).
+		const fileRows = await ctx.db
+			.query("files")
+			.withIndex("by_org_purpose", (q) =>
+				q.eq("organizationId", args.organizationId).eq("purpose", "tour-image"),
+			)
+			.take(500);
+		for (const f of fileRows) {
+			if (f.storageId === existing.storageId) {
+				await ctx.db.delete(f._id);
+			}
+		}
 		// Best-effort: also delete the storage blob
 		try {
 			await ctx.storage.delete(existing.storageId);

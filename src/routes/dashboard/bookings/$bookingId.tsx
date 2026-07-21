@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { StripePaymentElement } from "@/components/stripe-payment-element";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
@@ -35,12 +36,20 @@ function BookingDetailPage() {
 			bookingId: bookingId as Id<"bookings">,
 		}),
 	);
+	const { data: paySettings } = useQuery(
+		convexQuery(api.payments.getPublicSettings, {}),
+	);
 	const checkIn = useMutation(api.bookings.checkIn);
 	const complete = useMutation(api.bookings.complete);
 	const cancelBooking = useMutation(api.bookings.cancel);
 	const recordReview = useMutation(api.bookings.recordReview);
 	const refundPayment = useAction(api.payments_stripe_actions.refundViaStripe);
-	const createCheckout = useAction(api.payments_stripe_actions.createHostedCheckout);
+	const createCheckout = useAction(
+		api.payments_stripe_actions.createHostedCheckout,
+	);
+	const createPaymentIntent = useAction(
+		api.payments_stripe_actions.createCheckoutSession,
+	);
 	const [pending, setPending] = useState(false);
 	const [showCancelForm, setShowCancelForm] = useState(false);
 	const [cancelReason, setCancelReason] = useState("");
@@ -49,13 +58,18 @@ function BookingDetailPage() {
 	const [reviewComment, setReviewComment] = useState("");
 	const [showRefundForm, setShowRefundForm] = useState(false);
 	const [refundReason, setRefundReason] = useState("");
+	const [elementsOpen, setElementsOpen] = useState(false);
+	const [clientSecret, setClientSecret] = useState<string | null>(null);
+	const [publishableKey, setPublishableKey] = useState<string | null>(null);
 
 	// Toast once after Stripe Checkout redirect (?paid=1).
 	useEffect(() => {
 		if (typeof window === "undefined") return;
 		const params = new URLSearchParams(window.location.search);
 		if (params.get("paid") !== "1") return;
-		toast.success("Payment received — balance will update when Stripe confirms");
+		toast.success(
+			"Payment received — balance will update when Stripe confirms",
+		);
 		params.delete("paid");
 		const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
 		window.history.replaceState({}, "", next);
@@ -120,9 +134,7 @@ function BookingDetailPage() {
 	const paymentItems = Array.isArray(paymentList)
 		? paymentList
 		: (paymentList?.items ?? []);
-	const succeededPayment = paymentItems.find(
-		(p) => p.status === "succeeded",
-	);
+	const succeededPayment = paymentItems.find((p) => p.status === "succeeded");
 
 	const onRefund = () => {
 		if (!succeededPayment) return;
@@ -140,7 +152,11 @@ function BookingDetailPage() {
 	};
 
 	const balanceDue = Number(b.balanceDueCents ?? 0);
-	const onCollectPayment = async () => {
+	const canCollect =
+		balanceDue > 0 &&
+		["pending", "confirmed", "checked_in"].includes(b.status);
+
+	const onCollectHosted = async () => {
 		if (balanceDue <= 0) {
 			toast.error("Nothing to collect");
 			return;
@@ -155,6 +171,34 @@ function BookingDetailPage() {
 			toast.error(getErrorMessage(err));
 			setPending(false);
 		}
+	};
+
+	const onOpenElements = async () => {
+		if (balanceDue <= 0) {
+			toast.error("Nothing to collect");
+			return;
+		}
+		setPending(true);
+		try {
+			const result = await createPaymentIntent({
+				bookingId: bookingId as Id<"bookings">,
+				amountCents: BigInt(balanceDue),
+			});
+			setClientSecret(result.clientSecret);
+			setPublishableKey(
+				result.publishableKey || paySettings?.stripePublishableKey || null,
+			);
+			setElementsOpen(true);
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setPending(false);
+		}
+	};
+
+	const closeElements = () => {
+		setElementsOpen(false);
+		setClientSecret(null);
 	};
 
 	return (
@@ -288,21 +332,67 @@ function BookingDetailPage() {
 				</div>
 			)}
 
-			{balanceDue > 0 &&
-				["pending", "confirmed", "checked_in"].includes(b.status) && (
-					<div className="mt-2">
-						<Button
-							size="sm"
-							onClick={onCollectPayment}
-							disabled={pending}
-						>
-							{pending ? "Opening Stripe…" : "Collect payment"}
-						</Button>
-						<p className="text-muted-foreground text-xs mt-1">
-							Opens Stripe Checkout for {formatCentsCompact(b.balanceDueCents)}
+			{canCollect && (
+				<div className="mt-4 space-y-3 rounded-md border p-4">
+					<p className="text-sm font-medium">
+						Collect {formatCentsCompact(b.balanceDueCents)}
+					</p>
+					{elementsOpen && clientSecret && publishableKey ? (
+						<StripePaymentElement
+							publishableKey={publishableKey}
+							clientSecret={clientSecret}
+							returnUrl={
+								typeof window !== "undefined"
+									? `${window.location.origin}/dashboard/bookings/${bookingId}?paid=1`
+									: `/dashboard/bookings/${bookingId}?paid=1`
+							}
+							amountLabel={formatCentsCompact(b.balanceDueCents)}
+							onPaid={() => {
+								toast.success(
+									"Payment submitted — balance updates when Stripe confirms",
+								);
+								closeElements();
+							}}
+							onCancel={closeElements}
+						/>
+					) : (
+						<div className="flex flex-wrap gap-2">
+							<Button
+								size="sm"
+								onClick={onOpenElements}
+								disabled={pending || !paySettings?.stripePublishableKey}
+							>
+								{pending ? "Preparing…" : "Pay on this page"}
+							</Button>
+							<Button
+								size="sm"
+								variant="outline"
+								onClick={onCollectHosted}
+								disabled={pending}
+							>
+								{pending ? "Opening…" : "Open Stripe Checkout"}
+							</Button>
+						</div>
+					)}
+					{!paySettings?.stripePublishableKey && !elementsOpen ? (
+						<p className="text-muted-foreground text-xs">
+							Add a Stripe publishable key in{" "}
+							<Link
+								to="/dashboard/settings/payments"
+								className="text-link hover:underline"
+							>
+								Payment settings
+							</Link>{" "}
+							to use in-page Payment Element.
 						</p>
-					</div>
-				)}
+					) : (
+						<p className="text-muted-foreground text-xs">
+							Pay on this page uses Stripe Payment Element. Checkout opens
+							Stripe’s hosted page.
+						</p>
+					)}
+				</div>
+			)}
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<DetailSection title="Tour" description="Booked experience">

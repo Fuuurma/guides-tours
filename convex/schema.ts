@@ -110,11 +110,15 @@ export default defineSchema({
 		minGuests: v.number(),
 		maxGuests: v.number(),
 		bookingCutoffHours: v.number(),
-		// Source: walkable | car | minivan | bus (extensible)
+		// Source: walking | car | minivan | bus | boat | other
 		tourType: v.string(),
 		// JSON: ["en","es",...]
 		languages: v.array(v.string()),
 		requiredGuides: v.number(),
+		// Fleet staffing customizations (optional — inferred from tourType when unset)
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		// FK -> tourCategories
 		categoryId: v.optional(v.id("tourCategories")),
 		// FK -> tourTemplates (optional — template it was created from)
@@ -167,6 +171,9 @@ export default defineSchema({
 		maxGuests: v.number(),
 		bookingCutoffHours: v.number(),
 		requiredGuides: v.number(),
+		requiresVehicle: v.optional(v.boolean()),
+		requiresDriver: v.optional(v.boolean()),
+		requiredVehicleType: v.optional(v.string()),
 		isActive: v.boolean(),
 		createdAt: v.number(),
 		updatedAt: v.number(),
@@ -885,10 +892,39 @@ export default defineSchema({
 		requireEmailConsent: v.boolean(),
 		maxRetries: v.number(),
 		retryDelayMinutes: v.number(),
+		// Ops staffing digest (email/SMS when departures are understaffed)
+		staffingDigestEnabled: v.optional(v.boolean()),
+		staffingDigestEmail: v.optional(v.string()),
+		staffingDigestPhone: v.optional(v.string()),
+		// How many days ahead to include (1–14). Default 3 when unset.
+		staffingDigestDaysAhead: v.optional(v.number()),
+		// Guide availability reminders (email unmarked days in the window)
+		availabilityReminderEnabled: v.optional(v.boolean()),
+		availabilityReminderDaysAhead: v.optional(v.number()),
+		// Guide + driver assignment emails/SMS (default on; set false to opt out)
+		assignmentNotifyEnabled: v.optional(v.boolean()),
+		// When staffing digest runs, also email assigned staff who lack a phone
+		// (per-user 7d cooldown). Opt-in — ops digest ≠ staff spam.
+		phoneRemindWithDigest: v.optional(v.boolean()),
+		// Last manual bulk phone-remind (org-level 24h cooldown)
+		phoneRemindLastBulkAt: v.optional(v.number()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
 		.index("by_org", ["organizationId"]),
+
+	/**
+	 * Per-user phone reminder send markers (cooldown).
+	 * Only written after a successful email send — failed sends may retry.
+	 */
+	phoneReminderSends: defineTable({
+		organizationId: orgId,
+		userId: v.string(),
+		lastSentAt: v.number(),
+	})
+		.index("by_org_user", ["organizationId", "userId"])
+		.index("by_org", ["organizationId"])
+		.index("by_lastSentAt", ["lastSentAt"]),
 
 	// ----- Audit & logs -----
 

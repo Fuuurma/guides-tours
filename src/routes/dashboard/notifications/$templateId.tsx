@@ -236,9 +236,7 @@ function NotificationTemplateDetailPage() {
 						</p>
 						<div>
 							<p className="text-muted-foreground text-sm">Subject</p>
-							<p className="text-sm font-medium">
-								{preview.rendered.subject}
-							</p>
+							<p className="text-sm font-medium">{preview.rendered.subject}</p>
 						</div>
 						<div>
 							<p className="text-muted-foreground text-sm">Email body</p>

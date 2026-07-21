@@ -11,6 +11,7 @@ import { v, ConvexError } from "convex/values";
 import { query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { requireMembership } from "./lib/authz";
+import { loadUserContact } from "./lib/userContact";
 
 export const activeOrganization = query({
 	args: {},
@@ -49,13 +50,7 @@ export const activeOrganization = query({
 
 /**
  * List organizations the current user belongs to. Powers the
- * OrgSwitcher dropdown.
- *
- * @internal
- * No FE caller as of 2026-06-29. The navbar doesn't have an
- * OrgSwitcher yet — single-org users only. When multi-org
- * is fully wired, this will be called by the switcher.
- * See docs/DATA_LAYER_STATUS.md.
+ * OrgSwitcher dropdown in the navbar.
  */
 export const listMyOrganizations = query({
 	args: {},
@@ -85,6 +80,8 @@ export type OrgMember = {
 	email: string;
 	role: string;
 	image: string | null;
+	/** Better Auth user.phone — used for SMS (assignment notify, avail reminders). */
+	phone: string;
 };
 
 /**
@@ -106,6 +103,7 @@ export const listMembers = query({
 				name?: string | null;
 				email?: string | null;
 				image?: string | null;
+				phone?: string | null;
 			};
 		}> = [];
 		try {
@@ -125,15 +123,37 @@ export const listMembers = query({
 		const roleFilter =
 			args.roles && args.roles.length > 0 ? new Set(args.roles) : null;
 
-		return members
-			.filter((m) => (roleFilter ? roleFilter.has(m.role) : true))
-			.map((m) => ({
+		const filtered = members.filter((m) =>
+			roleFilter ? roleFilter.has(m.role) : true,
+		);
+
+		// Cap enrichment so a huge org can't blow the query budget.
+		const MAX_ENRICH = 200;
+		const out: OrgMember[] = [];
+		for (const m of filtered.slice(0, MAX_ENRICH)) {
+			let phone = (m.user?.phone ?? "").trim();
+			let name = m.user?.name?.trim() || m.user?.email || m.userId;
+			let email = m.user?.email ?? "";
+			// Better Auth listMembers often omits additionalFields like phone —
+			// fill from the user row when missing.
+			if (!phone) {
+				const contact = await loadUserContact(ctx, m.userId);
+				if (contact) {
+					phone = contact.phone;
+					if (!email) email = contact.email;
+					if (!m.user?.name?.trim() && contact.name) name = contact.name;
+				}
+			}
+			out.push({
 				userId: m.userId,
-				name: m.user?.name?.trim() || m.user?.email || m.userId,
-				email: m.user?.email ?? "",
+				name,
+				email,
 				role: m.role,
 				image: m.user?.image ?? null,
-			}))
-			.sort((a, b) => a.name.localeCompare(b.name));
+				phone,
+			});
+		}
+
+		return out.sort((a, b) => a.name.localeCompare(b.name));
 	},
 });

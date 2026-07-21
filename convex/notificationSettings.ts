@@ -52,6 +52,14 @@ export const upsert = mutation({
 		requireEmailConsent: v.optional(v.boolean()),
 		maxRetries: v.optional(v.number()),
 		retryDelayMinutes: v.optional(v.number()),
+		staffingDigestEnabled: v.optional(v.boolean()),
+		staffingDigestEmail: v.optional(v.string()),
+		staffingDigestPhone: v.optional(v.string()),
+		staffingDigestDaysAhead: v.optional(v.number()),
+		availabilityReminderEnabled: v.optional(v.boolean()),
+		availabilityReminderDaysAhead: v.optional(v.number()),
+		assignmentNotifyEnabled: v.optional(v.boolean()),
+		phoneRemindWithDigest: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -80,6 +88,14 @@ export const upsert = mutation({
 				requireEmailConsent: args.requireEmailConsent,
 				maxRetries: args.maxRetries,
 				retryDelayMinutes: args.retryDelayMinutes,
+				staffingDigestEnabled: args.staffingDigestEnabled,
+				staffingDigestEmail: args.staffingDigestEmail,
+				staffingDigestPhone: args.staffingDigestPhone,
+				staffingDigestDaysAhead: args.staffingDigestDaysAhead,
+				availabilityReminderEnabled: args.availabilityReminderEnabled,
+				availabilityReminderDaysAhead: args.availabilityReminderDaysAhead,
+				assignmentNotifyEnabled: args.assignmentNotifyEnabled,
+				phoneRemindWithDigest: args.phoneRemindWithDigest,
 			},
 		);
 	},
@@ -106,6 +122,14 @@ export const internalUpsert = internalMutation({
 		requireEmailConsent: v.optional(v.boolean()),
 		maxRetries: v.optional(v.number()),
 		retryDelayMinutes: v.optional(v.number()),
+		staffingDigestEnabled: v.optional(v.boolean()),
+		staffingDigestEmail: v.optional(v.string()),
+		staffingDigestPhone: v.optional(v.string()),
+		staffingDigestDaysAhead: v.optional(v.number()),
+		availabilityReminderEnabled: v.optional(v.boolean()),
+		availabilityReminderDaysAhead: v.optional(v.number()),
+		assignmentNotifyEnabled: v.optional(v.boolean()),
+		phoneRemindWithDigest: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
@@ -147,6 +171,42 @@ export const internalUpsert = internalMutation({
 		if (args.maxRetries !== undefined) patch.maxRetries = args.maxRetries;
 		if (args.retryDelayMinutes !== undefined)
 			patch.retryDelayMinutes = args.retryDelayMinutes;
+		if (args.staffingDigestEnabled !== undefined)
+			patch.staffingDigestEnabled = args.staffingDigestEnabled;
+		if (args.staffingDigestEmail !== undefined) {
+			patch.staffingDigestEmail =
+				args.staffingDigestEmail.trim() === ""
+					? undefined
+					: args.staffingDigestEmail.trim();
+		}
+		if (args.staffingDigestPhone !== undefined) {
+			patch.staffingDigestPhone =
+				args.staffingDigestPhone.trim() === ""
+					? undefined
+					: args.staffingDigestPhone.trim();
+		}
+		if (args.staffingDigestDaysAhead !== undefined) {
+			const n = Math.floor(args.staffingDigestDaysAhead);
+			if (n < 1 || n > 14) {
+				throw new ConvexError("staffingDigestDaysAhead must be between 1 and 14");
+			}
+			patch.staffingDigestDaysAhead = n;
+		}
+		if (args.availabilityReminderEnabled !== undefined)
+			patch.availabilityReminderEnabled = args.availabilityReminderEnabled;
+		if (args.availabilityReminderDaysAhead !== undefined) {
+			const n = Math.floor(args.availabilityReminderDaysAhead);
+			if (n < 1 || n > 14) {
+				throw new ConvexError(
+					"availabilityReminderDaysAhead must be between 1 and 14",
+				);
+			}
+			patch.availabilityReminderDaysAhead = n;
+		}
+		if (args.assignmentNotifyEnabled !== undefined)
+			patch.assignmentNotifyEnabled = args.assignmentNotifyEnabled;
+		if (args.phoneRemindWithDigest !== undefined)
+			patch.phoneRemindWithDigest = args.phoneRemindWithDigest;
 
 		if (existing) {
 			await ctx.db.patch(existing._id, patch);
@@ -164,6 +224,9 @@ export const internalUpsert = internalMutation({
 			requireEmailConsent: args.requireEmailConsent ?? true,
 			maxRetries: args.maxRetries ?? 3,
 			retryDelayMinutes: args.retryDelayMinutes ?? 5,
+			staffingDigestEnabled: args.staffingDigestEnabled ?? false,
+			availabilityReminderEnabled: args.availabilityReminderEnabled ?? false,
+			assignmentNotifyEnabled: args.assignmentNotifyEnabled ?? true,
 			createdAt: now,
 			updatedAt: now,
 			...(patch as Record<string, unknown>),

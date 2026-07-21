@@ -2,15 +2,18 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
+import { FormField } from "@/components/form";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { cn, getErrorMessage } from "@/lib/utils";
+import { validatePhoneOptional } from "@/lib/validation";
 import { api } from "../../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/guides/$userId")({
@@ -49,6 +52,9 @@ function GuideDetailPage() {
 	const { data: members, isPending: membersPending } = useQuery(
 		convexQuery(api.organizations.listMembers, {}),
 	);
+	const { data: contact } = useQuery(
+		convexQuery(api.userProfiles.getContact, { userId }),
+	);
 	const { data: availabilities, isPending: availPending } = useQuery(
 		convexQuery(api.availabilities.list, {
 			userId,
@@ -69,7 +75,15 @@ function GuideDetailPage() {
 
 	const upsert = useMutation(api.availabilities.upsert);
 	const removeAvail = useMutation(api.availabilities.remove);
+	const updatePhone = useMutation(api.userProfiles.updatePhone);
 	const [pendingDate, setPendingDate] = useState<string | null>(null);
+	const [phoneDraft, setPhoneDraft] = useState("");
+	const [phoneError, setPhoneError] = useState<string | null>(null);
+	const [phoneSaving, setPhoneSaving] = useState(false);
+
+	useEffect(() => {
+		if (contact) setPhoneDraft(contact.phone);
+	}, [contact]);
 
 	const member = (members ?? []).find((m) => m.userId === userId);
 	const availByDate = useMemo(() => {
@@ -118,6 +132,24 @@ function GuideDetailPage() {
 		}
 	};
 
+	const savePhone = async () => {
+		const err = validatePhoneOptional(phoneDraft);
+		if (err) {
+			setPhoneError(err);
+			return;
+		}
+		setPhoneError(null);
+		setPhoneSaving(true);
+		try {
+			await updatePhone({ userId, phone: phoneDraft.trim() });
+			toast.success("Phone updated");
+		} catch (e) {
+			toast.error(getErrorMessage(e));
+		} finally {
+			setPhoneSaving(false);
+		}
+	};
+
 	if (membersPending) return <DetailSkeleton />;
 	if (!member) {
 		return <DetailPage title="Guide not found" backTo="/dashboard/guides" />;
@@ -145,6 +177,42 @@ function GuideDetailPage() {
 			</div>
 
 			<DetailSection
+				title="Contact"
+				description="Phone is used for assignment and availability SMS when Twilio is enabled."
+			>
+				<div className="flex max-w-md flex-col gap-3 sm:flex-row sm:items-end">
+					<div className="flex-1">
+						<FormField
+							label="Phone"
+							htmlFor="guide-phone"
+							error={phoneError ?? undefined}
+						>
+							<Input
+								id="guide-phone"
+								type="tel"
+								placeholder="+1 555 0100"
+								value={phoneDraft}
+								onChange={(e) => {
+									setPhoneDraft(e.target.value);
+									if (phoneError) setPhoneError(null);
+								}}
+								autoComplete="tel"
+							/>
+						</FormField>
+					</div>
+					<Button
+						type="button"
+						onClick={() => void savePhone()}
+						disabled={
+							phoneSaving || phoneDraft.trim() === (contact?.phone ?? "")
+						}
+					>
+						{phoneSaving ? "Saving…" : "Save"}
+					</Button>
+				</div>
+			</DetailSection>
+
+			<DetailSection
 				title="Availability"
 				description="Click a day to mark unavailable (or clear). Empty days mean available by default."
 				actions={
@@ -157,7 +225,7 @@ function GuideDetailPage() {
 						>
 							Prev
 						</Button>
-						<span className="text-sm font-medium min-w-[9rem] text-center">
+						<span className="min-w-[9rem] text-center text-sm font-medium">
 							{monthLabel}
 						</span>
 						<Button
@@ -178,7 +246,7 @@ function GuideDetailPage() {
 						{["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
 							<div
 								key={d}
-								className="text-muted-foreground text-center text-xs font-medium py-1"
+								className="text-muted-foreground py-1 text-center text-xs font-medium"
 							>
 								{d}
 							</div>
@@ -216,13 +284,13 @@ function GuideDetailPage() {
 						})}
 					</div>
 				)}
-				<div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+				<div className="text-muted-foreground mt-3 flex flex-wrap gap-3 text-xs">
 					<span className="flex items-center gap-1">
-						<span className="size-3 rounded-sm border bg-background" /> Default
+						<span className="bg-background size-3 rounded-sm border" /> Default
 						available
 					</span>
 					<span className="flex items-center gap-1">
-						<span className="size-3 rounded-sm bg-destructive/15 border border-destructive/40" />{" "}
+						<span className="bg-destructive/15 border-destructive/40 size-3 rounded-sm border" />{" "}
 						Unavailable
 					</span>
 				</div>

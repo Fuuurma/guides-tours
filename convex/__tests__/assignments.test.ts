@@ -476,6 +476,178 @@ describe("convex/assignments — create rejects forbidden states", () => {
 			}),
 		).rejects.toThrow(/Guide already assigned/);
 	});
+
+	it("rejects car tour assign without vehicle", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_car_req";
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("tours", {
+				organizationId: orgId,
+				name: "City Car",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 4,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 4,
+				bookingCutoffHours: 24,
+				tourType: "car",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "guide-1",
+				tourId,
+				guideId: "guide-1",
+				date: "2026-11-01",
+				startTime: "09:00",
+			}),
+		).rejects.toThrow(/requires a vehicle/);
+	});
+
+	it("allows multi-guide up to requiredGuides", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_multi_g";
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("tours", {
+				organizationId: orgId,
+				name: "Big Group Walk",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 20,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 20,
+				bookingCutoffHours: 24,
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 2,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-11-02",
+			startTime: "09:00",
+		});
+		await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-b",
+			date: "2026-11-02",
+			startTime: "09:00",
+		});
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId: "guide-c",
+				date: "2026-11-02",
+				startTime: "09:00",
+			}),
+		).rejects.toThrow(/already has .*guide/);
+	});
+
+	it("rejects guide who is also the driver on same assignment", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_dual";
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("tours", {
+				organizationId: orgId,
+				name: "Van Tour",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 8,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 8,
+				bookingCutoffHours: 24,
+				tourType: "minivan",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		const vehicleId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("vehicles", {
+				organizationId: orgId,
+				name: "Van B",
+				vehicleType: "minivan",
+				capacity: 8,
+				licensePlate: "XYZ",
+				make: "Ford",
+				model: "Transit",
+				color: "white",
+				ownershipType: "owned",
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		const driverId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("drivers", {
+				organizationId: orgId,
+				userId: "same-person",
+				licenseInfo: "x",
+				availability: {},
+				notes: "",
+				isActive: true,
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId: "same-person",
+				date: "2026-11-03",
+				startTime: "09:00",
+				vehicleId,
+				driverId,
+			}),
+		).rejects.toThrow(/both guide and driver/);
+	});
 });
 
 describe("convex/assignments — lifecycle", () => {
@@ -531,7 +703,7 @@ describe("convex/assignments — lifecycle", () => {
 				assignmentId: otherId,
 				startTime: "09:00",
 			}),
-		).rejects.toThrow(/already has a guide assigned/);
+		).rejects.toThrow(/already has .*guide/);
 	});
 
 	it("update rejects modifying cancelled assignment", async () => {

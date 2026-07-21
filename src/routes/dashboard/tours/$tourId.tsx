@@ -1,6 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useMutation } from "convex/react";
+import { useState } from "react";
+import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -11,6 +14,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { lastNDays } from "@/lib/date-range";
+import { formatCents } from "@/lib/format";
+import { resolveTourStaffing } from "@/lib/staffing";
+import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -20,11 +27,41 @@ export const Route = createFileRoute("/dashboard/tours/$tourId")({
 
 function TourDetailPage() {
 	const { tourId } = Route.useParams();
+	const navigate = useNavigate();
+	const removeTour = useMutation(api.tours.remove);
+	const [deleting, setDeleting] = useState(false);
 	const {
 		data: tour,
 		isPending,
 		error,
 	} = useQuery(convexQuery(api.tours.get, { tourId: tourId as Id<"tours"> }));
+	const period = lastNDays(30);
+	const { data: stats } = useQuery(
+		convexQuery(api.analytics.getForTour, {
+			tourId: tourId as Id<"tours">,
+			startDate: period.startDate,
+			endDate: period.endDate,
+		}),
+	);
+
+	const onDelete = async () => {
+		if (
+			!window.confirm(
+				`Delete "${tour?.name ?? "this tour"}"? It will be soft-deleted and hidden from lists.`,
+			)
+		) {
+			return;
+		}
+		setDeleting(true);
+		try {
+			await removeTour({ tourId: tourId as Id<"tours"> });
+			toast.success("Tour deleted");
+			void navigate({ to: "/dashboard/tours" });
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+			setDeleting(false);
+		}
+	};
 
 	if (isPending) {
 		return <DetailSkeleton />;
@@ -39,6 +76,17 @@ function TourDetailPage() {
 	const utilizationPercent = tour.capacity
 		? Math.round((tour.maxGuests / tour.capacity) * 100)
 		: 0;
+	const staffing = resolveTourStaffing({
+		tourType: tour.tourType,
+		requiredGuides: tour.requiredGuides,
+		requiresVehicle: tour.requiresVehicle,
+		requiresDriver: tour.requiresDriver,
+		requiredVehicleType: tour.requiredVehicleType,
+	});
+	const staffingCustomized =
+		tour.requiresVehicle !== undefined ||
+		tour.requiresDriver !== undefined ||
+		Boolean(tour.requiredVehicleType);
 
 	return (
 		<DetailPage
@@ -46,14 +94,23 @@ function TourDetailPage() {
 			subtitle={`${tour.tourType} · ${tour.durationHours}h`}
 			backTo="/dashboard/tours"
 			actions={
-				<Button asChild>
-					<Link
-						to="/dashboard/tours/$tourId/edit"
-						params={{ tourId: tour._id }}
+				<>
+					<Button asChild>
+						<Link
+							to="/dashboard/tours/$tourId/edit"
+							params={{ tourId: tour._id }}
+						>
+							Edit
+						</Link>
+					</Button>
+					<Button
+						variant="destructive"
+						disabled={deleting}
+						onClick={() => void onDelete()}
 					>
-						Edit
-					</Link>
-				</Button>
+						{deleting ? "Deleting…" : "Delete"}
+					</Button>
+				</>
 			}
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -71,6 +128,72 @@ function TourDetailPage() {
 				<MetricCard label="Currency" value={tour.currency} />
 			</div>
 
+			{stats ? (
+				<DetailSection
+					title="Recent performance"
+					description={`${stats.periodStart} → ${stats.periodEnd} (last 30 days)`}
+				>
+					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+						<MetricCard label="Bookings" value={stats.totalBookings} />
+						<MetricCard label="Guests" value={stats.totalGuests} />
+						<MetricCard
+							label="Revenue"
+							value={formatCents(stats.totalRevenueCents)}
+						/>
+						<MetricCard
+							label="Utilization"
+							value={`${Math.round(stats.utilizationRate * 100)}%`}
+						/>
+					</div>
+					<div className="mt-3 grid gap-2 text-sm text-muted-foreground md:grid-cols-3">
+						<p>
+							Avg group {stats.avgGroupSize}
+							{stats.cancellations > 0
+								? ` · ${stats.cancellations} cancelled`
+								: ""}
+						</p>
+						<p>
+							Assignments {stats.completedAssignments}/
+							{stats.totalAssignments} done
+							{stats.cancelledAssignments > 0
+								? ` · ${stats.cancelledAssignments} cancelled`
+								: ""}
+						</p>
+						<p>
+							Capacity used {stats.totalGuests}/{stats.totalCapacity}
+						</p>
+					</div>
+				</DetailSection>
+			) : null}
+
+			<DetailSection
+				title="Staffing"
+				description={
+					staffingCustomized
+						? "Custom fleet rules for assignments"
+						: "Inferred from tour type (override in Edit)"
+				}
+			>
+				<DetailRow
+					label="Required guides"
+					value={staffing.requiredGuides.toString()}
+				/>
+				<DetailRow
+					label="Vehicle"
+					value={
+						staffing.requiresVehicle
+							? staffing.requiredVehicleType
+								? `Required · ${staffing.requiredVehicleType}`
+								: "Required"
+							: "Not required"
+					}
+				/>
+				<DetailRow
+					label="Driver"
+					value={staffing.requiresDriver ? "Required" : "Not required"}
+				/>
+			</DetailSection>
+
 			<DetailSection
 				title="Configuration"
 				description="Operational settings for this tour"
@@ -84,10 +207,6 @@ function TourDetailPage() {
 				<DetailRow
 					label="Booking cutoff"
 					value={`${tour.bookingCutoffHours}h before`}
-				/>
-				<DetailRow
-					label="Required guides"
-					value={tour.requiredGuides.toString()}
 				/>
 				<DetailRow label="Recurrence" value={tour.recurrenceType} />
 				{tour.templateId && (

@@ -140,4 +140,180 @@ test.describe("authenticated ops", () => {
 			timeout: 15_000,
 		});
 	});
+
+	test("staffing page loads readiness and phone-remind settings", async ({
+		page,
+	}) => {
+		await signUpAndOnboard(page, { namePrefix: "staff" });
+
+		await page.goto("/dashboard/staffing");
+		await waitForHydration(page);
+		await expect(
+			page.getByRole("heading", { name: /staffing/i }),
+		).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByText(/date range/i).first()).toBeVisible();
+		await expect(
+			page
+				.getByText(/fully staffed|gap|missing phone|no upcoming/i)
+				.first(),
+		).toBeVisible({ timeout: 30_000 });
+
+		await page.goto("/dashboard/notifications/settings");
+		await waitForHydration(page);
+		await expect(
+			page.getByRole("heading", { name: /notification settings/i }),
+		).toBeVisible({ timeout: 30_000 });
+		await expect(
+			page.getByText(/also email assigned staff who are missing a phone/i),
+		).toBeVisible({ timeout: 15_000 });
+	});
+
+	test("staffing shows multi-guide gap after partial assign", async ({
+		page,
+	}) => {
+		await signUpAndOnboard(page, { namePrefix: "gap" });
+		const tourName = `Gap Tour ${Date.now()}`;
+
+		await page.goto("/dashboard/tours/new");
+		await waitForHydration(page);
+		await page.locator("#name").fill(tourName);
+		const reqGuides = page.locator("#req-guides");
+		await reqGuides.waitFor({ state: "visible" });
+		await reqGuides.fill("2");
+		await page.getByRole("button", { name: /create tour/i }).click();
+		await page.waitForURL(/\/dashboard\/tours\/[^/]+$/, { timeout: 60_000 });
+
+		const today = localYmd(new Date());
+		await page.goto(`/dashboard/assignments/new?date=${today}`);
+		await waitForHydration(page);
+		await page.locator("#tour").waitFor({ state: "visible", timeout: 30_000 });
+		await page.locator("#tour").click();
+		await page.getByRole("option", { name: tourName }).click();
+		await page.locator("#guide").click();
+		await page.getByRole("option").first().click();
+		await page.locator("#start").fill("10:00");
+		await page.getByRole("button", { name: /create assignment/i }).click();
+		await page.waitForURL(/\/dashboard\/assignments\/[^/]+$/, {
+			timeout: 60_000,
+		});
+
+		await page.goto("/dashboard/staffing");
+		await waitForHydration(page);
+		await expect(page.getByText(tourName).first()).toBeVisible({
+			timeout: 30_000,
+		});
+		await expect(page.getByText(/needs guides/i).first()).toBeVisible();
+		await expect(page.getByText(/guides 1\/2/i).first()).toBeVisible();
+	});
+
+	test("analytics page shows KPIs and tour revenue chart", async ({
+		page,
+	}) => {
+		await signUpAndOnboard(page, { namePrefix: "analytics" });
+		await page.goto("/dashboard/analytics");
+		await waitForHydration(page);
+		await expect(
+			page.getByRole("heading", { name: /analytics/i }),
+		).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByText(/total bookings/i).first()).toBeVisible({
+			timeout: 15_000,
+		});
+		await expect(page.getByText(/tour revenue \(cached\)/i).first()).toBeVisible();
+		await expect(page.getByText(/top tours/i).first()).toBeVisible();
+	});
+
+	test("payment settings shows Stripe webhook endpoint", async ({ page }) => {
+		await signUpAndOnboard(page, { namePrefix: "payset" });
+		await page.goto("/dashboard/settings/payments");
+		await waitForHydration(page);
+		await expect(
+			page.getByRole("heading", { name: /payment/i }).first(),
+		).toBeVisible({ timeout: 30_000 });
+		await expect(page.getByText(/webhook endpoint/i).first()).toBeVisible({
+			timeout: 15_000,
+		});
+		await expect(
+			page.getByText(/\/api\/payments\/stripe\/webhook/).first(),
+		).toBeVisible();
+		await expect(page.getByLabel(/publishable key/i)).toBeVisible();
+
+		// Save a sandbox publishable key so booking detail can offer Elements.
+		await page.locator("#pubKey").fill("pk_test_e2e_placeholder");
+		await page.getByLabel(/stripe enabled/i).check();
+		await page.getByRole("button", { name: /save/i }).click();
+		await expect(page.getByText(/payment settings saved/i)).toBeVisible({
+			timeout: 15_000,
+		});
+	});
+
+	test("files admin page loads empty state", async ({ page }) => {
+		await signUpAndOnboard(page, { namePrefix: "files" });
+		await page.goto("/dashboard/files");
+		await waitForHydration(page);
+		await expect(page.getByRole("heading", { name: /files/i })).toBeVisible({
+			timeout: 30_000,
+		});
+		await expect(
+			page.getByText(/no uploaded files yet|uploaded file/i).first(),
+		).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByLabel(/filter by purpose/i)).toBeVisible();
+	});
+
+	test("booking detail offers Elements and Checkout collect actions", async ({
+		page,
+	}) => {
+		await signUpAndOnboard(page, { namePrefix: "paycol" });
+
+		await page.goto("/dashboard/settings/payments");
+		await waitForHydration(page);
+		await page.locator("#pubKey").waitFor({ state: "visible", timeout: 30_000 });
+		await page.locator("#pubKey").fill("pk_test_e2e_placeholder");
+		const enabled = page.getByLabel(/stripe enabled/i);
+		if (!(await enabled.isChecked())) {
+			await enabled.check();
+		}
+		await page.getByRole("button", { name: /save/i }).click();
+		await expect(page.getByText(/payment settings saved/i)).toBeVisible({
+			timeout: 15_000,
+		});
+
+		const tourName = `Pay Tour ${Date.now()}`;
+		await createTourViaUi(page, tourName);
+
+		await page.goto("/dashboard/customers/new");
+		await waitForHydration(page);
+		const custName = `Pay Guest ${Date.now()}`;
+		await page.locator("#name").fill(custName);
+		await page.locator("#email").fill(`pay-${Date.now()}@e2e.local`);
+		await page.getByRole("button", { name: /create customer/i }).click();
+		await page.waitForURL(/\/dashboard\/customers\/[^/]+$/, { timeout: 60_000 });
+
+		const today = localYmd(new Date());
+		await page.goto("/dashboard/bookings/new");
+		await waitForHydration(page);
+		await page.locator("#tour").waitFor({ state: "visible", timeout: 30_000 });
+		await page.locator("#tour").click();
+		await page.getByRole("option", { name: tourName }).click();
+		await page.locator("#customer").click();
+		await page.getByRole("option", { name: new RegExp(custName) }).click();
+		await page.locator("#date").fill(today);
+		await page.locator("#time").fill("11:00");
+		await page.locator("#total").fill("120.00");
+		await page.getByRole("button", { name: /create booking/i }).click();
+		await page.waitForURL(/\/dashboard\/bookings\/[^/]+$/, { timeout: 60_000 });
+		await waitForHydration(page);
+
+		await expect(page.getByText(/collect/i).first()).toBeVisible({
+			timeout: 30_000,
+		});
+		await expect(
+			page.getByRole("button", { name: /pay on this page/i }),
+		).toBeVisible();
+		await expect(
+			page.getByRole("button", { name: /open stripe checkout/i }),
+		).toBeVisible();
+		await expect(
+			page.getByText(/payment element|hosted page/i).first(),
+		).toBeVisible();
+	});
 });

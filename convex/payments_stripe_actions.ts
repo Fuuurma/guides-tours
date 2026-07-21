@@ -8,9 +8,10 @@
 // sends a Uint8Array in webhook raw bodies).
 //
 // Flow:
-//   1. Frontend calls createHostedCheckout / createCheckoutSession
-//      (authenticated) with bookingId.
-//   2. We create a Stripe Checkout Session or PaymentIntent.
+//   1. Frontend calls createHostedCheckout (redirect) or
+//      createCheckoutSession / createPublicPaymentIntent (Payment Element).
+//   2. We create a Stripe Checkout Session or PaymentIntent
+//      (automatic_payment_methods — no hardcoded payment_method_types).
 //   3. We record a pending payment when a PI id is known; otherwise
 //      checkout.session.completed / payment_intent.succeeded creates
 //      the row from metadata, then marks it succeeded.
@@ -114,7 +115,10 @@ async function assertBookingCheckoutAllowed(
 	void bookingId;
 }
 
-// ----- Action: create a PaymentIntent for a booking -----
+// ----- Action: PaymentIntent for Stripe Payment Element -----
+//
+// Prefer hosted Checkout for simple redirects; use this when the
+// dashboard/public book page embeds Payment Element in-app.
 
 export const createCheckoutSession = action({
 	args: {
@@ -132,6 +136,7 @@ export const createCheckoutSession = action({
 		clientSecret: string;
 		amountCents: bigint;
 		currency: string;
+		publishableKey: string;
 	}> => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 
@@ -157,6 +162,9 @@ export const createCheckoutSession = action({
 		if (!settings?.stripeSecretKey) {
 			throw new ConvexError("Stripe is not configured for this org");
 		}
+		if (!settings.stripePublishableKey) {
+			throw new ConvexError("Stripe publishable key is not configured");
+		}
 		const stripeSecret = await decrypt(settings.stripeSecretKey);
 		const currencyDb = currencyForDb(
 			args.currency ?? settings.defaultCurrency,
@@ -166,8 +174,12 @@ export const createCheckoutSession = action({
 		const params = new URLSearchParams();
 		params.append("amount", args.amountCents.toString());
 		params.append("currency", currencyStripe);
+		// Dynamic payment methods — never hardcode payment_method_types.
+		params.append("automatic_payment_methods[enabled]", "true");
 		if (args.customerEmail) {
 			params.append("receipt_email", args.customerEmail);
+		} else if (booking.customerEmail) {
+			params.append("receipt_email", booking.customerEmail);
 		}
 		params.append("metadata[bookingId]", args.bookingId);
 		params.append("metadata[organizationId]", booking.organizationId);
@@ -210,14 +222,113 @@ export const createCheckoutSession = action({
 			clientSecret: intent.client_secret,
 			amountCents: args.amountCents,
 			currency: currencyDb,
+			publishableKey: settings.stripePublishableKey,
 		};
 	},
 });
 
 /**
- * Hosted Stripe Checkout — redirects the operator/customer to Stripe's
- * payment page. Prefer this from the dashboard when Stripe.js Elements
- * are not wired yet.
+ * Public Payment Element intent — authenticated by bookingId + email
+ * (same gate as createPublicHostedCheckout).
+ */
+export const createPublicPaymentIntent = action({
+	args: {
+		bookingId: v.id("bookings"),
+		customerEmail: v.string(),
+	},
+	handler: async (
+		ctx: ActionCtx,
+		args,
+	): Promise<{
+		stripePaymentIntentId: string;
+		clientSecret: string;
+		amountCents: bigint;
+		currency: string;
+		publishableKey: string;
+	}> => {
+		const email = normalizeEmail(args.customerEmail);
+		if (!email) throw new ConvexError("Invalid email address");
+
+		const booking = await ctx.runQuery(
+			internal.payments.getBookingForCheckout,
+			{ bookingId: args.bookingId },
+		);
+		if (!booking) throw new ConvexError("Booking not found");
+		if (!booking.customerEmail || booking.customerEmail !== email) {
+			throw new ConvexError("Email does not match this booking");
+		}
+
+		const balance = booking.balanceDueCents ?? 0n;
+		await assertBookingCheckoutAllowed(ctx, args.bookingId, booking.organizationId, {
+			amountCents: balance,
+			balanceDueCents: balance,
+			status: booking.status,
+		});
+
+		const settings = await ctx.runQuery(
+			internal.payments.getStripeSecrets,
+			{ organizationId: booking.organizationId },
+		);
+		if (!settings?.stripeSecretKey || !settings.stripeEnabled) {
+			throw new ConvexError("Online payment is not available for this operator");
+		}
+		if (!settings.stripePublishableKey) {
+			throw new ConvexError("Stripe publishable key is not configured");
+		}
+		const stripeSecret = await decrypt(settings.stripeSecretKey);
+		const currencyDb = currencyForDb(settings.defaultCurrency);
+		const currencyStripe = currencyForStripe(currencyDb);
+
+		const params = new URLSearchParams();
+		params.append("amount", balance.toString());
+		params.append("currency", currencyStripe);
+		params.append("automatic_payment_methods[enabled]", "true");
+		params.append("receipt_email", email);
+		params.append("metadata[bookingId]", args.bookingId);
+		params.append("metadata[organizationId]", booking.organizationId);
+		params.append("description", `Tour booking ${args.bookingId}`);
+
+		const res = await fetch(`${STRIPE_API_BASE}/payment_intents`, {
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${stripeSecret}`,
+				"Content-Type": "application/x-www-form-urlencoded",
+			},
+			body: params.toString(),
+		});
+		if (!res.ok) {
+			const errText = await res.text();
+			throw new ConvexError(
+				`Stripe error: ${res.status} ${errText.slice(0, 200)}`,
+			);
+		}
+		const intent = (await res.json()) as {
+			id: string;
+			client_secret: string;
+		};
+
+		await ctx.runMutation(internal.payments.recordFromAction, {
+			organizationId: booking.organizationId,
+			bookingId: args.bookingId,
+			amountCents: balance,
+			currency: currencyDb,
+			stripePaymentIntentId: intent.id,
+		});
+
+		return {
+			stripePaymentIntentId: intent.id,
+			clientSecret: intent.client_secret,
+			amountCents: balance,
+			currency: currencyDb,
+			publishableKey: settings.stripePublishableKey,
+		};
+	},
+});
+
+/**
+ * Hosted Stripe Checkout — redirects to Stripe's payment page.
+ * Prefer Payment Element (`createCheckoutSession`) when collecting
+ * in-app; keep hosted Checkout as the fallback redirect path.
  */
 export const createHostedCheckout = action({
 	args: {
