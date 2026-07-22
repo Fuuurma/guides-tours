@@ -114,41 +114,73 @@ const member = await requireMembership(ctx);
 		if (args.tourId) {
 			all = await ctx.db
 				.query("assignments")
-				.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId!))
+				.withIndex("by_tour_date", (q) => {
+					const eq = q.eq("tourId", args.tourId!);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
 				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.guideId) {
 			all = await ctx.db
 				.query("assignments")
-				.withIndex("by_guide_date", (q) =>
-					q.eq("guideId", args.guideId!),
-				)
+				.withIndex("by_guide_date", (q) => {
+					const eq = q.eq("guideId", args.guideId!);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
 				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.vehicleId) {
 			all = await ctx.db
 				.query("assignments")
-				.withIndex("by_vehicle_date", (q) =>
-					q.eq("vehicleId", args.vehicleId!),
-				)
+				.withIndex("by_vehicle_date", (q) => {
+					const eq = q.eq("vehicleId", args.vehicleId!);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
 				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.driverId) {
 			all = await ctx.db
 				.query("assignments")
-				.withIndex("by_driver_date", (q) =>
-					q.eq("driverId", args.driverId!),
-				)
+				.withIndex("by_driver_date", (q) => {
+					const eq = q.eq("driverId", args.driverId!);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
 				.take(MAX_ASSIGNMENTS);
 			all = all.filter((a) => a.organizationId === member.organizationId);
 		} else if (args.status) {
 			all = await ctx.db
 				.query("assignments")
-				.withIndex("by_org_status_date", (q) =>
-					q
+				.withIndex("by_org_status_date", (q) => {
+					const eq = q
 						.eq("organizationId", member.organizationId)
-						.eq("status", args.status!),
-				)
+						.eq("status", args.status!);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
 				.take(MAX_ASSIGNMENTS);
 		} else {
 			all = await ctx.db

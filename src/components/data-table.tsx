@@ -1,5 +1,11 @@
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { type ReactNode, useState } from "react";
+import {
+	Empty,
+	EmptyContent,
+	EmptyHeader,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +37,7 @@ interface DataTableProps<T> {
 	isPending?: boolean;
 	error?: Error | null;
 	emptyMessage?: string;
+	emptyAction?: ReactNode;
 	/** Show a search input that filters rows by case-insensitive substring. */
 	searchPlaceholder?: string;
 }
@@ -53,6 +60,7 @@ export function DataTable<T>({
 	isPending,
 	error,
 	emptyMessage = "No records yet.",
+	emptyAction,
 	searchPlaceholder,
 }: DataTableProps<T>) {
 	const [rawQuery, setRawQuery] = useState("");
@@ -93,7 +101,14 @@ export function DataTable<T>({
 		return <ErrorBanner message={`Error: ${error.message}`} />;
 	}
 	if (!data?.length) {
-		return <p className="text-muted-foreground text-sm">{emptyMessage}</p>;
+		return (
+			<Empty className="border">
+				<EmptyHeader>
+					<EmptyTitle>{emptyMessage}</EmptyTitle>
+				</EmptyHeader>
+				{emptyAction && <EmptyContent>{emptyAction}</EmptyContent>}
+			</Empty>
+		);
 	}
 
 	const showing = filtered ?? [];

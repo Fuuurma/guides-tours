@@ -151,6 +151,44 @@ describe("convex/payments — record (idempotent by stripePaymentIntentId)", () 
 		});
 		expect(second).toBe(first);
 	});
+
+	it("does not reuse an intent or booking across organizations", async () => {
+		const t = convexTest(schema, modules);
+		const ownerOrgId = "org_pay_cross_owner";
+		const otherOrgId = "org_pay_cross_other";
+		const ownerBookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, ownerOrgId),
+		);
+		await t.mutation(internal.payments.recordFromAction, {
+			organizationId: ownerOrgId,
+			bookingId: ownerBookingId,
+			amountCents: 10000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_cross_org",
+		});
+
+		const otherBookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, otherOrgId),
+		);
+		await expect(
+			t.mutation(internal.payments.recordFromAction, {
+				organizationId: otherOrgId,
+				bookingId: otherBookingId,
+				amountCents: 10000n,
+				currency: "USD",
+				stripePaymentIntentId: "pi_cross_org",
+			}),
+		).rejects.toThrow(/another organization/);
+		await expect(
+			t.mutation(internal.payments.recordFromAction, {
+				organizationId: otherOrgId,
+				bookingId: ownerBookingId,
+				amountCents: 10000n,
+				currency: "USD",
+				stripePaymentIntentId: "pi_other_intent",
+			}),
+		).rejects.toThrow(/different organization/);
+	});
 });
 
 describe("convex/payments — markSucceeded / markFailed / markRefunded", () => {

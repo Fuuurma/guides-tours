@@ -14,6 +14,7 @@
 // 'use node' for fetch + Stripe signature). Webhook handling lives
 // in convex/http.ts under /api/payments/stripe/webhook.
 
+import { paginationOptsValidator } from "convex/server";
 import { v, ConvexError } from "convex/values";
 import {
 	internalMutation,
@@ -87,37 +88,45 @@ export const list = query({
 	args: {
 		bookingId: v.optional(v.id("bookings")),
 		status: v.optional(v.string()),
-		page: v.optional(v.number()),
-		pageSize: v.optional(v.number()),
+		paginationOpts: paginationOptsValidator,
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const pageSize = Math.min(args.pageSize ?? 20, 100);
-		const page = Math.max(1, args.page ?? 1);
 
-		const all = await ctx.db
+		if (args.bookingId) {
+			const byBooking = ctx.db
+				.query("payments")
+				.withIndex("by_org_booking_created", (q) =>
+					q
+						.eq("organizationId", member.organizationId)
+						.eq("bookingId", args.bookingId!),
+				)
+				.order("desc");
+			const scoped = args.status
+				? byBooking.filter((q) => q.eq(q.field("status"), args.status!))
+				: byBooking;
+			return await scoped.paginate(args.paginationOpts);
+		}
+
+		if (args.status) {
+			return await ctx.db
+				.query("payments")
+				.withIndex("by_org_status_created", (q) =>
+					q
+						.eq("organizationId", member.organizationId)
+						.eq("status", args.status!),
+				)
+				.order("desc")
+				.paginate(args.paginationOpts);
+		}
+
+		return await ctx.db
 			.query("payments")
-			.withIndex("by_org", (q) =>
+			.withIndex("by_org_created", (q) =>
 				q.eq("organizationId", member.organizationId),
 			)
-			.collect();
-		let filtered = all;
-		if (args.bookingId) {
-			filtered = filtered.filter((p) => p.bookingId === args.bookingId);
-		}
-		if (args.status) {
-			filtered = filtered.filter((p) => p.status === args.status);
-		}
-		filtered.sort((a, b) => b.createdAt - a.createdAt);
-		const total = filtered.length;
-		const offset = (page - 1) * pageSize;
-		return {
-			items: filtered.slice(offset, offset + pageSize),
-			total,
-			page,
-			pageSize,
-			hasNext: offset + pageSize < total,
-		};
+			.order("desc")
+			.paginate(args.paginationOpts);
 	},
 });
 
@@ -175,6 +184,12 @@ export const record = mutation({
 			"admin",
 			"member",
 		]);
+		if (args.bookingId) {
+			const booking = await ctx.db.get(args.bookingId);
+			if (!booking || booking.organizationId !== member.organizationId) {
+				throw new ConvexError("Forbidden: booking belongs to a different organization");
+			}
+		}
 		// Validate currency shape (ISO 4217) and stripe intent id length.
 		// The FE sends validated values, but any Convex client can call
 		// this — defending in depth keeps the table clean.
@@ -195,7 +210,12 @@ export const record = mutation({
 				q.eq("stripePaymentIntentId", args.stripePaymentIntentId),
 			)
 			.unique();
-		if (existing) return existing._id;
+		if (existing) {
+			if (existing.organizationId !== member.organizationId) {
+				throw new ConvexError("Payment intent already belongs to another organization");
+			}
+			return existing._id;
+		}
 
 		const now = Date.now();
 		const paymentId = await ctx.db.insert("payments", {
@@ -236,7 +256,7 @@ export const markSucceeded = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
 	},
-	handler: async (ctx, args) => {
+		handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) throw new ConvexError("Payment not found");
 		if (p.status === "succeeded") return args.paymentId;
@@ -679,6 +699,10 @@ export const recordFromAction = internalMutation({
 			args.stripePaymentIntentId,
 			MAX_STRIPE_INTENT_ID_LEN,
 		);
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking || booking.organizationId !== args.organizationId) {
+			throw new ConvexError("Forbidden: booking belongs to a different organization");
+		}
 
 		const existing = await ctx.db
 			.query("payments")
@@ -686,7 +710,12 @@ export const recordFromAction = internalMutation({
 				q.eq("stripePaymentIntentId", args.stripePaymentIntentId),
 			)
 			.unique();
-		if (existing) return existing._id;
+		if (existing) {
+			if (existing.organizationId !== args.organizationId) {
+				throw new ConvexError("Payment intent already belongs to another organization");
+			}
+			return existing._id;
+		}
 		const now = Date.now();
 		return await ctx.db.insert("payments", {
 			organizationId: args.organizationId,

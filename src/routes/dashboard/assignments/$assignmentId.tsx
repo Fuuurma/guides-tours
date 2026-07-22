@@ -165,9 +165,7 @@ function AssignmentDetailPage() {
 			await update({
 				assignmentId: assignmentId as Id<"assignments">,
 				guideId: guideId.trim(),
-				vehicleId: vehicleId
-					? (vehicleId as Id<"vehicles">)
-					: undefined,
+				vehicleId: vehicleId ? (vehicleId as Id<"vehicles">) : undefined,
 				driverId: driverId ? (driverId as Id<"drivers">) : undefined,
 				clearVehicle: !vehicleId,
 				clearDriver: !driverId,
@@ -314,9 +312,7 @@ function AssignmentDetailPage() {
 									to="/dashboard/assignments/new"
 									search={{
 										date: slot.date,
-										...(slot.scheduleId
-											? { scheduleId: slot.scheduleId }
-											: {}),
+										...(slot.scheduleId ? { scheduleId: slot.scheduleId } : {}),
 									}}
 								>
 									+ Assign
@@ -397,16 +393,12 @@ function AssignmentDetailPage() {
 							/>
 						</FormField>
 						<FormField
-							label={
-								staffing?.requiresVehicle ? "Vehicle *" : "Vehicle"
-							}
+							label={staffing?.requiresVehicle ? "Vehicle *" : "Vehicle"}
 							htmlFor="edit-vehicle"
 						>
 							<Select
 								value={vehicleId || "__none__"}
-								onValueChange={(v) =>
-									setVehicleId(v === "__none__" ? "" : v)
-								}
+								onValueChange={(v) => setVehicleId(v === "__none__" ? "" : v)}
 							>
 								<SelectTrigger id="edit-vehicle">
 									<SelectValue placeholder="None" />
@@ -430,9 +422,7 @@ function AssignmentDetailPage() {
 						>
 							<Select
 								value={driverId || "__none__"}
-								onValueChange={(v) =>
-									setDriverId(v === "__none__" ? "" : v)
-								}
+								onValueChange={(v) => setDriverId(v === "__none__" ? "" : v)}
 							>
 								<SelectTrigger id="edit-driver">
 									<SelectValue placeholder="None" />

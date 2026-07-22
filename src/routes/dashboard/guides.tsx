@@ -155,6 +155,7 @@ function GuidesPage() {
 		data: members,
 		isPending,
 		error,
+		refetch: refetchMembers,
 	} = useQuery(
 		convexQuery(api.organizations.listMembers, { roles: GUIDE_ROLES }),
 	);
@@ -169,7 +170,12 @@ function GuidesPage() {
 				title="Guides"
 				description={`${itemCount} guide-capable member${itemCount === 1 ? "" : "s"}`}
 				actions={
-					<InviteGuideDialog onInvited={() => setInviteTick((n) => n + 1)} />
+					<InviteGuideDialog
+						onInvited={() => {
+							setInviteTick((n) => n + 1);
+							void refetchMembers();
+						}}
+					/>
 				}
 			>
 				<DataTable

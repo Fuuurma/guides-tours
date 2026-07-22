@@ -163,7 +163,7 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
-			slug: "demo-org",
+			organizationId: orgId,
 			tourId,
 			date: "2026-12-25",
 		});
@@ -182,7 +182,7 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
-			slug: "demo-org",
+			organizationId: orgId,
 			tourId,
 			date: "2026-12-27",
 		});
@@ -205,7 +205,27 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
-			slug: "demo-org",
+			organizationId: orgId,
+			tourId,
+			date: "2026-12-25",
+		});
+		expect(result).toBe(false);
+	});
+
+	it("does not expose a tour blackout through another organization's page", async () => {
+		const t = convexTest(schema, modules);
+		const ownerOrgId = "org_pub4_owner";
+		const otherOrgId = "org_pub4_other";
+		const tourId = await t.run((ctx) => seedTour(ctx, ownerOrgId));
+		await t.mutation(internal.tourBlackoutDates.internalCreate, {
+			organizationId: ownerOrgId,
+			userId: "user-1",
+			tourId,
+			startDate: "2026-12-24",
+			endDate: "2026-12-26",
+		});
+		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
+			organizationId: otherOrgId,
 			tourId,
 			date: "2026-12-25",
 		});

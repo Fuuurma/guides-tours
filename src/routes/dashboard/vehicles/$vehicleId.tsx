@@ -148,9 +148,7 @@ function VehicleDetailPage() {
 									</Link>
 									<span className="text-muted-foreground">
 										· {tourNameById.get(a.tourId) ?? "Tour"}
-										{driverUser
-											? ` · ${displayName(driverUser)}`
-											: ""}
+										{driverUser ? ` · ${displayName(driverUser)}` : ""}
 									</span>
 									{driverUser ? (
 										driverPhone ? (

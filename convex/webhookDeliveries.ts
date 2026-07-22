@@ -137,22 +137,22 @@ export const listByOrg = internalQuery({
 	handler: async (ctx, args) => {
 		const limit = Math.min(args.limit ?? 50, 500);
 		const status = args.status;
-		const all = status
-			? await ctx.db
-					.query("webhookDeliveries")
-					.withIndex("by_org_status", (q) =>
-						q.eq("organizationId", args.organizationId).eq("status", status),
-					)
-					.collect()
-			: await ctx.db
-					.query("webhookDeliveries")
-					.withIndex("by_org", (q) =>
-						q.eq("organizationId", args.organizationId),
-					)
-					.collect();
-		return all
-			.sort((a, b) => b.receivedAt - a.receivedAt)
-			.slice(0, limit);
+		if (status) {
+			return await ctx.db
+				.query("webhookDeliveries")
+				.withIndex("by_org_status_received", (q) =>
+					q.eq("organizationId", args.organizationId).eq("status", status),
+				)
+				.order("desc")
+				.take(limit);
+		}
+		return await ctx.db
+			.query("webhookDeliveries")
+			.withIndex("by_org_received", (q) =>
+				q.eq("organizationId", args.organizationId),
+			)
+			.order("desc")
+			.take(limit);
 	},
 });
 
@@ -168,16 +168,22 @@ export const listRecent = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const limit = Math.min(args.limit ?? 40, 100);
-		const all = await ctx.db
-			.query("webhookDeliveries")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.collect();
-		return all
-			.filter((d) => (args.source ? d.source === args.source : true))
-			.sort((a, b) => b.receivedAt - a.receivedAt)
-			.slice(0, limit)
+		const rows = args.source
+			? await ctx.db
+					.query("webhookDeliveries")
+					.withIndex("by_org_source_received", (q) =>
+						q.eq("organizationId", member.organizationId).eq("source", args.source!),
+					)
+					.order("desc")
+					.take(limit)
+			: await ctx.db
+					.query("webhookDeliveries")
+					.withIndex("by_org_received", (q) =>
+						q.eq("organizationId", member.organizationId),
+					)
+					.order("desc")
+					.take(limit);
+		return rows
 			.map((d) => ({
 				_id: d._id,
 				source: d.source,

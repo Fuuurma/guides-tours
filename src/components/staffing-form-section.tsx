@@ -7,7 +7,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { VEHICLE_TYPES, resolveTourStaffing } from "@/lib/staffing";
+import { resolveTourStaffing, VEHICLE_TYPES } from "@/lib/staffing";
 import { FormField } from "./form";
 
 export type StaffingFormValues = {
@@ -53,7 +53,10 @@ export function StaffingFormSection({ values, set, idPrefix = "" }: Props) {
 						onChange={(e) => set("requiredGuides", e.target.value)}
 					/>
 				</FormField>
-				<label htmlFor={staffingOverrideId} className="flex items-center gap-2 text-sm pt-6">
+				<label
+					htmlFor={staffingOverrideId}
+					className="flex items-center gap-2 text-sm pt-6"
+				>
 					<Checkbox
 						id={staffingOverrideId}
 						checked={values.staffingOverride}
@@ -66,10 +69,7 @@ export function StaffingFormSection({ values, set, idPrefix = "" }: Props) {
 							});
 							set("requiresVehicle", inferred.requiresVehicle);
 							set("requiresDriver", inferred.requiresDriver);
-							set(
-								"requiredVehicleType",
-								inferred.requiredVehicleType ?? "",
-							);
+							set("requiredVehicleType", inferred.requiredVehicleType ?? "");
 						}}
 					/>
 					Customize vehicle/driver rules
@@ -77,7 +77,10 @@ export function StaffingFormSection({ values, set, idPrefix = "" }: Props) {
 			</div>
 			{values.staffingOverride ? (
 				<div className="grid gap-4 md:grid-cols-3">
-					<label htmlFor={requiresVehicleId} className="flex items-center gap-2 text-sm">
+					<label
+						htmlFor={requiresVehicleId}
+						className="flex items-center gap-2 text-sm"
+					>
 						<Checkbox
 							id={requiresVehicleId}
 							checked={values.requiresVehicle}
@@ -85,7 +88,10 @@ export function StaffingFormSection({ values, set, idPrefix = "" }: Props) {
 						/>
 						Requires vehicle
 					</label>
-					<label htmlFor={requiresDriverId} className="flex items-center gap-2 text-sm">
+					<label
+						htmlFor={requiresDriverId}
+						className="flex items-center gap-2 text-sm"
+					>
 						<Checkbox
 							id={requiresDriverId}
 							checked={values.requiresDriver}

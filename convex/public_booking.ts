@@ -60,7 +60,7 @@ export const getOrgAndToursBySlug = query({
 					.eq("organizationId", org.id as string)
 					.eq("isActive", true),
 			)
-			.collect();
+			.take(200);
 
 		return {
 			organizationId: org.id,
@@ -114,7 +114,7 @@ export const listAvailableSlots = query({
 			.withIndex("by_tour_date", (q) =>
 				q.eq("tourId", args.tourId).eq("date", args.date),
 			)
-			.collect();
+			.take(200);
 
 		const nowMs = Date.now();
 		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
@@ -569,4 +569,3 @@ export const internalCreate = internalMutation({
 		return bookingId;
 	},
 });
-

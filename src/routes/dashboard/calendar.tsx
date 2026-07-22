@@ -30,10 +30,7 @@ import {
 	startOfMonthLocal,
 	startOfWeekLocal,
 } from "@/lib/calendar-date";
-import {
-	evaluateSlotStaffing,
-	resolveTourStaffing,
-} from "@/lib/staffing";
+import { evaluateSlotStaffing, resolveTourStaffing } from "@/lib/staffing";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -629,9 +626,7 @@ function WeekAgenda({
 									{scheduleCount > 0
 										? ` · ${scheduleCount} schedule${scheduleCount === 1 ? "" : "s"}`
 										: ""}
-									{gaps > 0
-										? ` · ${gaps} need staffing`
-										: ""}
+									{gaps > 0 ? ` · ${gaps} need staffing` : ""}
 								</CardDescription>
 							</div>
 							<div className="flex gap-2">

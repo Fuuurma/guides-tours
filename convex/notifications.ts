@@ -451,13 +451,12 @@ export const listRecentLogs = query({
 		const limit = Math.min(Math.max(args.limit ?? 40, 1), 100);
 		const rows = await ctx.db
 			.query("notificationLogs")
-			.withIndex("by_org", (q) =>
+			.withIndex("by_org_created", (q) =>
 				q.eq("organizationId", member.organizationId),
 			)
-			.take(Math.min(limit * 3, 200));
+			.order("desc")
+			.take(limit);
 		return rows
-			.sort((a, b) => b.createdAt - a.createdAt)
-			.slice(0, limit)
 			.map((r) => ({
 				_id: r._id,
 				channel: r.channel,

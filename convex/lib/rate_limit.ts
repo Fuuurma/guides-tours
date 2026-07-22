@@ -25,9 +25,13 @@ export const WINDOW_MS = 15 * 60 * 1000;
 
 type CountCtx = GenericMutationCtx<DataModel> | GenericQueryCtx<DataModel>;
 
-/** Collect all attempts for this email within the current window.
- *  Shared by recordAttempt and countAttempts so the window math
- *  stays in one place. */
+/** Collect enough attempts for this email to answer the window check.
+ *
+ * Rejected attempts are intentionally retained for audit, so this must stay
+ * bounded even if an attacker repeatedly submits after hitting the limit.
+ * Callers only need to distinguish fewer than five attempts from five or
+ * more; countAttempts therefore reports a capped count.
+ */
 async function collectRecentAttempts(
 	ctx: CountCtx,
 	email: string,
@@ -39,7 +43,7 @@ async function collectRecentAttempts(
 		.withIndex("by_email_created", (q) =>
 			q.eq("email", email).gte("createdAt", windowStart),
 		)
-		.collect();
+		.take(MAX_ATTEMPTS_PER_EMAIL + 1);
 }
 
 /** Records an attempt. Returns the attempt ID + whether it was
@@ -68,7 +72,11 @@ export const recordAttempt = internalMutation({
 			createdAt: now,
 		});
 
-		return { allowed, attempts: recent.length + 1, attemptId };
+		return {
+			allowed,
+			attempts: Math.min(recent.length + 1, MAX_ATTEMPTS_PER_EMAIL + 1),
+			attemptId,
+		};
 	},
 });
 
@@ -79,7 +87,7 @@ export const countAttempts = internalQuery({
 	handler: async (ctx, args) => {
 		const recent = await collectRecentAttempts(ctx, args.email);
 		return {
-			count: recent.length,
+			count: Math.min(recent.length, MAX_ATTEMPTS_PER_EMAIL),
 			limit: MAX_ATTEMPTS_PER_EMAIL,
 			windowMs: WINDOW_MS,
 		};

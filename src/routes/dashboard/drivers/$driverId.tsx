@@ -136,7 +136,10 @@ function DriverDetailPage() {
 					<StatusBadge status={driver.isActive ? "active" : "inactive"} />
 				</MetricCard>
 				<MetricCard label="License" value={driver.licenseInfo || "—"} />
-				<MetricCard label="Assignment SMS" value={smsReady ? "Ready" : "No phone"}>
+				<MetricCard
+					label="Assignment SMS"
+					value={smsReady ? "Ready" : "No phone"}
+				>
 					<Badge variant={smsReady ? "secondary" : "outline"}>
 						{smsReady ? "Phone on file" : "Add phone"}
 					</Badge>

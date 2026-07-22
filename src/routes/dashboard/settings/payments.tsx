@@ -44,9 +44,7 @@ function PaymentSettingsPage() {
 
 	const stripeWebhookUrl =
 		typeof window !== "undefined"
-			? `${(
-					(import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ?? ""
-				).replace(/\/$/, "") || window.location.origin}/api/payments/stripe/webhook`
+			? `${((import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ?? "").replace(/\/$/, "") || window.location.origin}/api/payments/stripe/webhook`
 			: "/api/payments/stripe/webhook";
 
 	useEffect(() => {
@@ -203,9 +201,8 @@ function PaymentSettingsPage() {
 								{stripeWebhookUrl}
 							</code>
 							<p className="text-muted-foreground text-xs mt-2">
-								Uses{" "}
-								<code className="font-mono">VITE_CONVEX_SITE_URL</code> when
-								set; otherwise falls back to the app origin.
+								Uses <code className="font-mono">VITE_CONVEX_SITE_URL</code>{" "}
+								when set; otherwise falls back to the app origin.
 							</p>
 						</div>
 					</CardContent>

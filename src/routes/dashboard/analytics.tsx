@@ -4,7 +4,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { MetricCard } from "@/components/metric-card";
-import { TourRevenueBars, aggregateDailyTourMetrics } from "@/components/tour-revenue-bars";
+import {
+	aggregateDailyTourMetrics,
+	TourRevenueBars,
+} from "@/components/tour-revenue-bars";
 import { Button } from "@/components/ui/button";
 import {
 	Card,

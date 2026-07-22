@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import type { Tour } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 
@@ -68,6 +69,11 @@ function ToursPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage="No tours yet."
+				emptyAction={
+					<Button asChild size="sm">
+						<Link to="/dashboard/tours/new">Create your first tour</Link>
+					</Button>
+				}
 				searchPlaceholder="Search by name or type…"
 			/>
 		</ListPage>

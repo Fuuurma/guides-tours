@@ -13,8 +13,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { addHours } from "@/lib/time";
 import { resolveTourStaffing } from "@/lib/staffing";
+import { addHours } from "@/lib/time";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
@@ -286,9 +286,7 @@ export function NewAssignmentPage() {
 
 			<div className="grid gap-4 md:grid-cols-2">
 				<FormField
-					label={
-						staffing?.requiresVehicle ? "Vehicle *" : "Vehicle (optional)"
-					}
+					label={staffing?.requiresVehicle ? "Vehicle *" : "Vehicle (optional)"}
 					htmlFor="vehicle"
 					error={form.fieldErrors.vehicleId}
 				>

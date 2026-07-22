@@ -83,19 +83,31 @@ export const list = query({
 			// SECURITY: scope to org even when filtering by tourId.
 			all = await ctx.db
 				.query("tourSchedules")
-				.withIndex("by_tour_date", (q) =>
-					q.eq("tourId", args.tourId!),
-				)
+				.withIndex("by_tour_date", (q) => {
+					const eq = q.eq("tourId", args.tourId!);
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
 				.filter((q) => q.eq(q.field("organizationId"), orgId))
 				.take(MAX_SCHEDULES);
 		} else if (args.status) {
 			all = await ctx.db
 				.query("tourSchedules")
-				.withIndex("by_org_status_date", (q) =>
-					q
+				.withIndex("by_org_status_date", (q) => {
+					const eq = q
 						.eq("organizationId", orgId)
-						.eq("status", args.status as "available" | "full" | "cancelled"),
-				)
+						.eq("status", args.status as "available" | "full" | "cancelled");
+					if (args.dateFrom && args.dateTo) {
+						return eq.gte("date", args.dateFrom).lte("date", args.dateTo);
+					}
+					if (args.dateFrom) return eq.gte("date", args.dateFrom);
+					if (args.dateTo) return eq.lte("date", args.dateTo);
+					return eq;
+				})
 				.take(MAX_SCHEDULES);
 		} else {
 			// Apply optional date range at the index level so we don't

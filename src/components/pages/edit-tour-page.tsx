@@ -16,7 +16,7 @@ import {
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { centsToInputValue } from "@/lib/format";
-import { TOUR_TYPES, VEHICLE_TYPES, resolveTourStaffing } from "@/lib/staffing";
+import { resolveTourStaffing, TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
 import {
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
@@ -177,7 +177,10 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				Boolean(t.requiredVehicleType);
 			form.set("staffingOverride", hasOverride);
 			const inferred = resolveTourStaffing(t);
-			form.set("requiresVehicle", t.requiresVehicle ?? inferred.requiresVehicle);
+			form.set(
+				"requiresVehicle",
+				t.requiresVehicle ?? inferred.requiresVehicle,
+			);
 			form.set("requiresDriver", t.requiresDriver ?? inferred.requiresDriver);
 			form.set(
 				"requiredVehicleType",
@@ -379,7 +382,10 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 							onChange={(e) => form.set("requiredGuides", e.target.value)}
 						/>
 					</FormField>
-					<label htmlFor="edit-staffing-override" className="flex items-center gap-2 text-sm pt-6">
+					<label
+						htmlFor="edit-staffing-override"
+						className="flex items-center gap-2 text-sm pt-6"
+					>
 						<Checkbox
 							id="edit-staffing-override"
 							checked={form.values.staffingOverride}
@@ -390,23 +396,25 @@ export function EditTourPage({ tourId }: EditTourPageProps) {
 				</div>
 				{form.values.staffingOverride ? (
 					<div className="grid gap-4 md:grid-cols-3">
-						<label htmlFor="edit-requires-vehicle" className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="edit-requires-vehicle"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
 								id="edit-requires-vehicle"
 								checked={form.values.requiresVehicle}
-								onCheckedChange={(c) =>
-									form.set("requiresVehicle", c === true)
-								}
+								onCheckedChange={(c) => form.set("requiresVehicle", c === true)}
 							/>
 							Requires vehicle
 						</label>
-						<label htmlFor="edit-requires-driver" className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="edit-requires-driver"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
 								id="edit-requires-driver"
 								checked={form.values.requiresDriver}
-								onCheckedChange={(c) =>
-									form.set("requiresDriver", c === true)
-								}
+								onCheckedChange={(c) => form.set("requiresDriver", c === true)}
 							/>
 							Requires driver
 						</label>

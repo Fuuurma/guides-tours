@@ -158,9 +158,7 @@ function StaffingPage() {
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={
-								remindPending || remindStatus?.canSendManual === false
-							}
+							disabled={remindPending || remindStatus?.canSendManual === false}
 							onClick={() => void onRemindPhones()}
 							title={
 								remindStatus && !remindStatus.orgBulkClear
@@ -258,9 +256,7 @@ function StaffingPage() {
 									{g.requiresDriver
 										? ` · driver ${g.hasDriver ? "✓" : "needed"}`
 										: ""}
-									{g.capacityBooked > 0
-										? ` · ${g.capacityBooked} booked`
-										: ""}
+									{g.capacityBooked > 0 ? ` · ${g.capacityBooked} booked` : ""}
 								</p>
 								<div className="flex flex-wrap gap-1">
 									{g.gaps.map((gap) => (
@@ -289,9 +285,7 @@ function StaffingPage() {
 										to="/dashboard/assignments/new"
 										search={{
 											date: g.date,
-											...(g.scheduleId
-												? { scheduleId: g.scheduleId }
-												: {}),
+											...(g.scheduleId ? { scheduleId: g.scheduleId } : {}),
 										}}
 									>
 										+ Assign

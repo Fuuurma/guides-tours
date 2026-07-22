@@ -161,6 +161,11 @@ function VehiclesPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage="No vehicles yet."
+				emptyAction={
+					<Button asChild size="sm">
+						<Link to="/dashboard/vehicles/new">Add your first vehicle</Link>
+					</Button>
+				}
 				searchPlaceholder="Search by name, type, plate, or status…"
 			/>
 		</ListPage>

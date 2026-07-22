@@ -137,6 +137,11 @@ function DriversPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage="No drivers yet."
+				emptyAction={
+					<Button asChild size="sm">
+						<Link to="/dashboard/drivers/new">Add your first driver</Link>
+					</Button>
+				}
 				searchPlaceholder="Search by name, license, or status…"
 			/>
 		</ListPage>

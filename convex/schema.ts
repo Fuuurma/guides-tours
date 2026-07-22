@@ -537,6 +537,8 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_integration", ["integrationId"])
+		.index("by_integration_product", ["integrationId", "otaProductId"])
+		.index("by_integration_tour", ["integrationId", "tourId"])
 		.index("by_tour", ["tourId"]),
 
 	otaBookings: defineTable({
@@ -661,7 +663,17 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_source_event", ["source", "eventId"])
 		.index("by_org_status", ["organizationId", "status"])
-		.index("by_org_received", ["organizationId", "receivedAt"]),
+		.index("by_org_received", ["organizationId", "receivedAt"])
+		.index("by_org_status_received", [
+			"organizationId",
+			"status",
+			"receivedAt",
+		])
+		.index("by_org_source_received", [
+			"organizationId",
+			"source",
+			"receivedAt",
+		]),
 
 	// ----- Payments -----
 
@@ -683,6 +695,17 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_org_status", ["organizationId", "status"])
+		.index("by_org_created", ["organizationId", "createdAt"])
+		.index("by_org_status_created", [
+			"organizationId",
+			"status",
+			"createdAt",
+		])
+		.index("by_org_booking_created", [
+			"organizationId",
+			"bookingId",
+			"createdAt",
+		])
 		.index("by_stripe_intent", ["stripePaymentIntentId"])
 		.index("by_booking", ["bookingId"]),
 
@@ -849,6 +872,7 @@ export default defineSchema({
 		.index("by_org_status", ["organizationId", "status"])
 		.index("by_booking", ["bookingId"])
 		.index("by_org_channel", ["organizationId", "channel"])
+		.index("by_org_created", ["organizationId", "createdAt"])
 		.index("by_created_at", ["createdAt"]),
 
 	// Cron-driven: processPendingNotifications picks sent=false AND

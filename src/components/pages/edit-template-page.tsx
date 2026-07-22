@@ -297,7 +297,11 @@ export function EditTemplatePage({ templateId }: EditTemplatePageProps) {
 				}}
 			/>
 
-			<FormField label="Languages" hint="Comma-separated codes" htmlFor="edit-langs">
+			<FormField
+				label="Languages"
+				hint="Comma-separated codes"
+				htmlFor="edit-langs"
+			>
 				<Input
 					id="edit-langs"
 					maxLength={200}

@@ -16,8 +16,8 @@ import {
 } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
-import { formatCentsWhole } from "@/lib/format";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
+import { formatCentsWhole } from "@/lib/format";
 import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -33,10 +33,14 @@ function DashboardIndex() {
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
 	const { data: bookings, error: bookingsError } = useQuery(
-		convexQuery(api.bookings.list, {}),
+		// The dashboard only renders today's bookings. Keep historical rows
+		// out of this reactive read instead of filtering them client-side.
+		convexQuery(api.bookings.list, { dateFrom: today, dateTo: today }),
 	);
 	const { data: assignments, error: assignmentsError } = useQuery(
-		convexQuery(api.assignments.list, {}),
+		// The dashboard's assignment card only shows upcoming work. The
+		// date-bound index scan avoids walking historical assignments first.
+		convexQuery(api.assignments.list, { dateFrom: today }),
 	);
 	const { data: vacations, error: vacationsError } = useQuery(
 		convexQuery(api.vacationRequests.list, {}),
@@ -263,9 +267,7 @@ function DashboardIndex() {
 											to="/dashboard/assignments/new"
 											search={{
 												date: g.date,
-												...(g.scheduleId
-													? { scheduleId: g.scheduleId }
-													: {}),
+												...(g.scheduleId ? { scheduleId: g.scheduleId } : {}),
 											}}
 										>
 											Assign

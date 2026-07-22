@@ -158,6 +158,15 @@ function BookingsPage() {
 						? `No bookings from ${source} in this date range.`
 						: "No bookings yet."
 				}
+				emptyAction={
+					source ? undefined : (
+						<Button asChild size="sm">
+							<Link to="/dashboard/bookings/new">
+								Create your first booking
+							</Link>
+						</Button>
+					)
+				}
 				searchPlaceholder="Search by date, status, or source…"
 			/>
 		</ListPage>

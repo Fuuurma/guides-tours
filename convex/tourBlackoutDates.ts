@@ -68,7 +68,7 @@ export const isBlackout = query({
  * unauthenticated public booking page to grey out blacked-out dates.
  *
  * Defense in depth:
- * - Requires `slug` (same context as the public book page).
+ * - Requires the resolved organization ID from the public book page.
  * - Only answers for **active** tours (inactive/deleted → false), so
  *   probing random IDs does not leak blackout windows for unpublished
  *   products. Submit-time checks in `public_booking.createForSlug`
@@ -76,14 +76,18 @@ export const isBlackout = query({
  */
 export const publicIsBlackout = query({
 	args: {
-		slug: v.string(),
+		organizationId: v.string(),
 		tourId: v.id("tours"),
 		date: v.string(),
 	},
 	handler: async (ctx, args) => {
-		void args.slug;
 		const tour = await ctx.db.get(args.tourId);
-		if (!tour || !tour.isActive || tour.deletedAt !== undefined) {
+		if (
+			!tour ||
+			tour.organizationId !== args.organizationId ||
+			!tour.isActive ||
+			tour.deletedAt !== undefined
+		) {
 			return false;
 		}
 		return await isBlackoutHelper(ctx, args.tourId, args.date);

@@ -62,13 +62,16 @@ export const upsertOtaBooking = internalMutation({
 		// Find the matching OTA product. If we can't link the reservation
 		// to one of our products, we still store the booking as
 		// "unmatched" — admin can resolve later.
-		const products = await ctx.db
-			.query("otaProducts")
-			.withIndex("by_integration", (q) => q.eq("integrationId", integrationId))
-			.collect();
-		const product = products.find(
-			(p) => p.otaProductId === event.productId,
-		);
+		const product = event.productId
+			? await ctx.db
+					.query("otaProducts")
+					.withIndex("by_integration_product", (q) =>
+						q
+							.eq("integrationId", integrationId)
+							.eq("otaProductId", event.productId!),
+					)
+					.first()
+			: null;
 
 		const existing = await ctx.db
 			.query("otaBookings")
@@ -188,15 +191,14 @@ export const upsertAvailabilityCache = internalMutation({
 		}),
 	},
 	handler: async (ctx, args) => {
-		const products = await ctx.db
+		const product = await ctx.db
 			.query("otaProducts")
-			.withIndex("by_integration", (q) =>
-				q.eq("integrationId", args.integrationId),
+			.withIndex("by_integration_product", (q) =>
+				q
+					.eq("integrationId", args.integrationId)
+					.eq("otaProductId", args.event.productId),
 			)
-			.collect();
-		const product = products.find(
-			(p) => p.otaProductId === args.event.productId,
-		);
+			.first();
 		if (!product) return null;
 
 		const now = Date.now();

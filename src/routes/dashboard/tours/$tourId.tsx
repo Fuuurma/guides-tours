@@ -153,8 +153,8 @@ function TourDetailPage() {
 								: ""}
 						</p>
 						<p>
-							Assignments {stats.completedAssignments}/
-							{stats.totalAssignments} done
+							Assignments {stats.completedAssignments}/{stats.totalAssignments}{" "}
+							done
 							{stats.cancelledAssignments > 0
 								? ` · ${stats.cancelledAssignments} cancelled`
 								: ""}

@@ -286,12 +286,14 @@ export const internalGenerate = internalMutation({
 
 		const seasonals = await ctx.db
 			.query("tourSeasonalSchedules")
-			.withIndex("by_tour_active", (q) => q.eq("tourId", args.tourId))
+			.withIndex("by_tour_active", (q) =>
+				q.eq("tourId", args.tourId).eq("isActive", true),
+			)
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.collect();
-		const activeSeasonals = seasonals
-			.filter((s) => s.isActive)
-			.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+		const activeSeasonals = seasonals.sort(
+			(a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+		);
 
 		const exceptions = await ctx.db
 			.query("tourExceptionDates")

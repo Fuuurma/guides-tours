@@ -27,7 +27,19 @@ export const list = query({
 		let q = ctx.db
 			.query("otaProducts")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
-		if (args.integrationId) {
+		if (args.integrationId && args.tourId) {
+			// Keep both filters active when a caller scopes by integration and
+			// tour together. The compound index avoids scanning unrelated
+			// products before applying the organization guard.
+			q = ctx.db
+				.query("otaProducts")
+				.withIndex("by_integration_tour", (q) =>
+					q
+						.eq("integrationId", args.integrationId!)
+						.eq("tourId", args.tourId!),
+				)
+				.filter((q) => q.eq(q.field("organizationId"), orgId));
+		} else if (args.integrationId) {
 			// SECURITY: scope to org even when filtering by integrationId.
 			q = ctx.db
 				.query("otaProducts")
@@ -35,24 +47,24 @@ export const list = query({
 					q.eq("integrationId", args.integrationId!),
 				)
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
-		}
-		if (args.tourId) {
+		} else if (args.tourId) {
 			// SECURITY: scope to org even when filtering by tourId.
 			q = ctx.db
 				.query("otaProducts")
 				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
+		if (args.syncStatus !== undefined) {
+			q = q.filter((q) =>
+				q.eq(q.field("syncStatus"), args.syncStatus!),
+			);
+		}
 		// Bound the result so an org with thousands of OTA products
-		// doesn't OOM the response. The FE page renders at most a
-		// few hundred.
+		// doesn't OOM the response. Apply filters before the cap so a
+		// sparse status match is not lost behind unrelated rows.
 		const MAX_OTA_PRODUCTS = 1000;
 		const all = await q.take(MAX_OTA_PRODUCTS);
-		return all
-			.filter((p) =>
-				args.syncStatus === undefined || p.syncStatus === args.syncStatus,
-			)
-			.sort((a, b) => a.otaProductId.localeCompare(b.otaProductId));
+		return all.sort((a, b) => a.otaProductId.localeCompare(b.otaProductId));
 	},
 });
 

@@ -52,8 +52,8 @@ export function TourRevenueBars({ days, maxBars = 28 }: Props) {
 	if (slice.length === 0) {
 		return (
 			<p className="text-muted-foreground text-sm">
-				No cached daily tour metrics yet. Rows appear after the nightly
-				refresh when there are bookings.
+				No cached daily tour metrics yet. Rows appear after the nightly refresh
+				when there are bookings.
 			</p>
 		);
 	}

@@ -1,7 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, usePaginatedQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
@@ -31,10 +31,12 @@ function BookingDetailPage() {
 	} = useQuery(
 		convexQuery(api.bookings.get, { bookingId: bookingId as Id<"bookings"> }),
 	);
-	const payments = useQuery(
-		convexQuery(api.payments.list, {
+	const payments = usePaginatedQuery(
+		api.payments.list,
+		{
 			bookingId: bookingId as Id<"bookings">,
-		}),
+		},
+		{ initialNumItems: 20 },
 	);
 	const { data: paySettings } = useQuery(
 		convexQuery(api.payments.getPublicSettings, {}),
@@ -127,13 +129,7 @@ function BookingDetailPage() {
 
 	const b = booking as unknown as BookingDetail;
 
-	const paymentList = payments.data as
-		| { items: Array<{ _id: string; status: string }> }
-		| Array<{ _id: string; status: string }>
-		| undefined;
-	const paymentItems = Array.isArray(paymentList)
-		? paymentList
-		: (paymentList?.items ?? []);
+	const paymentItems = payments.results;
 	const succeededPayment = paymentItems.find((p) => p.status === "succeeded");
 
 	const onRefund = () => {
@@ -153,8 +149,7 @@ function BookingDetailPage() {
 
 	const balanceDue = Number(b.balanceDueCents ?? 0);
 	const canCollect =
-		balanceDue > 0 &&
-		["pending", "confirmed", "checked_in"].includes(b.status);
+		balanceDue > 0 && ["pending", "confirmed", "checked_in"].includes(b.status);
 
 	const onCollectHosted = async () => {
 		if (balanceDue <= 0) {

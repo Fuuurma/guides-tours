@@ -56,8 +56,10 @@ function PublicBookingPage() {
 	const { data, isPending, error } = useQuery(
 		convexQuery(api.public_booking.getOrgAndToursBySlug, { slug }),
 	);
+	const publicOrganizationId = data?.organizationId;
 
 	const [blackoutCheck, setBlackoutCheck] = useState<{
+		organizationId: string;
 		tourId: Id<"tours">;
 		date: string;
 	} | null>(null);
@@ -65,7 +67,11 @@ function PublicBookingPage() {
 		convexQuery(
 			api.tourBlackoutDates.publicIsBlackout,
 			blackoutCheck
-				? { slug, tourId: blackoutCheck.tourId, date: blackoutCheck.date }
+				? {
+						organizationId: blackoutCheck.organizationId,
+						tourId: blackoutCheck.tourId,
+						date: blackoutCheck.date,
+					}
 				: "skip",
 		),
 	);
@@ -262,11 +268,17 @@ function PublicBookingPage() {
 
 	useEffect(() => {
 		if (tourId && date) {
-			setBlackoutCheck({ tourId: tourId as Id<"tours">, date });
+			if (publicOrganizationId) {
+				setBlackoutCheck({
+					organizationId: publicOrganizationId,
+					tourId: tourId as Id<"tours">,
+					date,
+				});
+			}
 		} else {
 			setBlackoutCheck(null);
 		}
-	}, [tourId, date]);
+	}, [tourId, date, publicOrganizationId]);
 
 	if (isPending) {
 		return (

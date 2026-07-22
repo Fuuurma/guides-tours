@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
@@ -11,12 +12,11 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { resolveTourStaffing, TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
 import { parseUsdToCents, validatePositiveInteger } from "@/lib/validation";
-import { TOUR_TYPES, VEHICLE_TYPES, resolveTourStaffing } from "@/lib/staffing";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
-import { Checkbox } from "@/components/ui/checkbox";
 
 interface FormValues extends Record<string, unknown> {
 	name: string;
@@ -308,7 +308,10 @@ export function NewTourPage() {
 							onChange={(e) => form.set("requiredGuides", e.target.value)}
 						/>
 					</FormField>
-					<label htmlFor="staffing-override" className="flex items-center gap-2 text-sm pt-6">
+					<label
+						htmlFor="staffing-override"
+						className="flex items-center gap-2 text-sm pt-6"
+					>
 						<Checkbox
 							id="staffing-override"
 							checked={form.values.staffingOverride}
@@ -332,23 +335,25 @@ export function NewTourPage() {
 				</div>
 				{form.values.staffingOverride ? (
 					<div className="grid gap-4 md:grid-cols-3">
-						<label htmlFor="requires-vehicle" className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="requires-vehicle"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
 								id="requires-vehicle"
 								checked={form.values.requiresVehicle}
-								onCheckedChange={(c) =>
-									form.set("requiresVehicle", c === true)
-								}
+								onCheckedChange={(c) => form.set("requiresVehicle", c === true)}
 							/>
 							Requires vehicle
 						</label>
-						<label htmlFor="requires-driver" className="flex items-center gap-2 text-sm">
+						<label
+							htmlFor="requires-driver"
+							className="flex items-center gap-2 text-sm"
+						>
 							<Checkbox
 								id="requires-driver"
 								checked={form.values.requiresDriver}
-								onCheckedChange={(c) =>
-									form.set("requiresDriver", c === true)
-								}
+								onCheckedChange={(c) => form.set("requiresDriver", c === true)}
 							/>
 							Requires driver
 						</label>
@@ -356,10 +361,7 @@ export function NewTourPage() {
 							<Select
 								value={form.values.requiredVehicleType || "__any__"}
 								onValueChange={(v) =>
-									form.set(
-										"requiredVehicleType",
-										v === "__any__" ? "" : v,
-									)
+									form.set("requiredVehicleType", v === "__any__" ? "" : v)
 								}
 							>
 								<SelectTrigger id="req-vtype">

@@ -175,6 +175,13 @@ function CustomersPage() {
 							? "No regular customers yet."
 							: "No customers yet."
 				}
+				emptyAction={
+					vipOnly === null ? (
+						<Button asChild size="sm">
+							<Link to="/dashboard/customers/new">Add your first customer</Link>
+						</Button>
+					) : undefined
+				}
 				searchPlaceholder="Search by name, email, or status…"
 			/>
 		</ListPage>

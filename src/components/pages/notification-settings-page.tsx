@@ -104,12 +104,8 @@ export function NotificationSettingsPage() {
 			setStaffingDigestEnabled(s.staffingDigestEnabled === true);
 			setStaffingDigestEmail(s.staffingDigestEmail ?? "");
 			setStaffingDigestPhone(s.staffingDigestPhone ?? "");
-			setStaffingDigestDaysAhead(
-				String(s.staffingDigestDaysAhead ?? 3),
-			);
-			setAvailabilityReminderEnabled(
-				s.availabilityReminderEnabled === true,
-			);
+			setStaffingDigestDaysAhead(String(s.staffingDigestDaysAhead ?? 3));
+			setAvailabilityReminderEnabled(s.availabilityReminderEnabled === true);
 			setAvailabilityReminderDaysAhead(
 				String(s.availabilityReminderDaysAhead ?? 7),
 			);
@@ -205,9 +201,7 @@ export function NotificationSettingsPage() {
 		setAssignTestPending(true);
 		try {
 			await sendAssignTest({ role });
-			toast.success(
-				`Test ${role} notification queued — check your email/SMS`,
-			);
+			toast.success(`Test ${role} notification queued — check your email/SMS`);
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
@@ -511,9 +505,7 @@ export function NotificationSettingsPage() {
 							type="button"
 							variant="outline"
 							size="sm"
-							disabled={
-								availPending || pending || !availabilityReminderEnabled
-							}
+							disabled={availPending || pending || !availabilityReminderEnabled}
 							onClick={() => void onSendAvail()}
 						>
 							{availPending ? "Sending…" : "Send reminders now"}
@@ -525,10 +517,10 @@ export function NotificationSettingsPage() {
 					<CardHeader>
 						<CardTitle>Assignment notifications</CardTitle>
 						<CardDescription>
-							Email guides and drivers when assigned, cancelled, or
-							reassigned. SMS uses the phone on their profile when Twilio is
-							enabled. On by default — uncheck to opt out. Test sends go to
-							your own account (works even if the toggle is off).
+							Email guides and drivers when assigned, cancelled, or reassigned.
+							SMS uses the phone on their profile when Twilio is enabled. On by
+							default — uncheck to opt out. Test sends go to your own account
+							(works even if the toggle is off).
 						</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-4">
