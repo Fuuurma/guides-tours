@@ -1,8 +1,11 @@
 // Tests for the public booking flow.
 //
 // We test the internalCreate mutation directly. The httpAction
-// wrapper is intentionally not tested in vitest (Convex action/http
-// testing requires the live runtime — see convex/http.ts).
+// wrapper is covered by public_booking_http.test.ts (routing +
+// body validation) and public_booking_http_cross_tenant.test.ts
+// (cross-tenant hostile tourId / scheduleId at the httpAction
+// boundary, which now runs end-to-end via the Better Auth
+// component mock at test-utils/betterAuthMock).
 
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
@@ -10,7 +13,7 @@ import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { internal } from "../_generated/api";
-import { seedBlackout } from "./helpers";
+import { seedBlackout, seedTour as sharedSeedTour } from "./helpers";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -18,35 +21,21 @@ type TestCtx = GenericMutationCtx<DataModel> & {
 	storage: { getUrl: (id: string) => Promise<string | null> };
 };
 
+// Local wrapper that preserves the historical positional
+// signature `(ctx, orgId, maxGuests, isActive)` so the 23
+// existing call sites in this file don't need to change. The
+// underlying `seedTour` lives in `convex/__tests__/helpers.ts`
+// and is the single source of truth for tour seed shape.
 async function seedTour(
 	ctx: TestCtx,
 	orgId: string,
 	maxGuests = 15,
 	isActive = true,
 ): Promise<Id<"tours">> {
-	return await ctx.db.insert("tours", {
-		organizationId: orgId,
-		name: "Old Town Walk",
-		description: "",
-		durationHours: 2,
-		isActive,
-		recurrenceType: "none",
-		recurrenceDaysOfWeek: [],
-		capacity: maxGuests,
-		bufferMinutes: 15,
-		minGuests: 1,
-		maxGuests,
-		bookingCutoffHours: 24,
-		tourType: "walkable",
-		languages: ["en"],
-		requiredGuides: 1,
-		inclusions: [],
-		exclusions: [],
-		highlights: [],
-		currency: "USD",
-		createdAt: 0,
-		updatedAt: 0,
-	});
+	return await sharedSeedTour(
+		ctx as unknown as Parameters<typeof sharedSeedTour>[0],
+		{ orgId, maxGuests, isActive, name: "Old Town Walk" },
+	);
 }
 
 describe("convex/public_booking — internalCreate mutation", () => {

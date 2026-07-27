@@ -359,3 +359,264 @@ responsible for. The new test file is the only untracked path
 this pass creates, and every behavioural contract it enforces
 already has a corresponding production-code fix in the diff
 above.
+
+---
+
+# guides-tours codebase audit — 2026-07-26 (follow-up)
+
+A follow-up pass that closes the four safe guides-tours audit
+gaps called out in the milestone handoff:
+
+1. local Wrangler preview/build contract is now truthful and
+   executable;
+2. production deploy preflight fails closed when
+   `PUBLIC_BOOKING_ALLOWED_ORIGINS` is absent;
+3. hostile tour and schedule identifiers fail closed at the
+   public HTTP action boundary through a repository-native
+   Better Auth test seam;
+4. the duplicate `seedTour` helper has been folded into the
+   shared `convex/__tests__/helpers.ts` so only one source of
+   truth remains.
+
+Branch / commit: `main` @ `e679659`
+("fix(http): register public booking as pathPrefix so :slug
+no longer breaks") + the follow-up changes.
+
+## Safe Fixes Shipped (this pass, with red/green proof)
+
+### 1. `pnpm preview:worker` reaches a healthy route [P1→resolved]
+
+The previous pass recorded the deploy config (`dist/server/wrangler.json`)
+as "ENOENT" because the dirty `HEAD~1..HEAD` work had not yet
+been built. The follow-up found that:
+
+- `pnpm build` produces `dist/server/wrangler.json` (already
+  committed in `e679659`'s `dist/`).
+- That generated config has `main: "index.js"`,
+  `assets.directory: "../client"`, and `compatibility_flags:
+  ["nodejs_compat"]` — exactly the contract `wrangler dev`
+  needs.
+- A previously undocumented `wrangler dev` invocation against
+  that config now serves `GET /` with **200** and the
+  guides.tours marketing page in 543ms (first response; 170ms
+  warm).
+
+Fix: added two new scripts to `package.json`:
+
+- `pnpm preview:worker` — runs
+  `wrangler dev --config dist/server/wrangler.json --ip 127.0.0.1 --port 3201 --local`
+  against the real generated config. This is the documented
+  "local Worker preview" path.
+- `pnpm preview:worker:dryrun` — runs
+  `wrangler deploy --dry-run --outdir /tmp/wrangler-dryrun --config .wrangler/deploy/config.json`
+  for fast config sanity checks (no deploy, no live calls).
+
+Files: `package.json`
+
+Evidence: `pnpm preview:worker` boots, `curl -sf -m 5 http://127.0.0.1:3201/` returns **200** and `<title>guides.tours | Run the day. Sell the experience.</title>`. No secrets printed.
+
+### 2. `pnpm deploy:check` requires `PUBLIC_BOOKING_ALLOWED_ORIGINS` for production [P2→resolved]
+
+The previous pass noted the dev-friendly "all origins
+allowed" default for the public-booking Origin allowlist
+(`convex/http.ts:75`). The fix:
+
+- Added a new "Convex prod — public-booking origin allowlist
+  (production safety)" group to `scripts/deploy-check.mjs`
+  with `PUBLIC_BOOKING_ALLOWED_ORIGINS` as its sole key.
+- The group uses the same blocking counter as the other
+  production groups (any missing key in this group is added
+  to `missing`; only the OTA group is treated as optional).
+- Output now reads "14 required var(s) missing" (was 13); the
+  new var is labelled "production safety" so the on-call knows
+  the rationale.
+
+Files: `scripts/deploy-check.mjs`
+
+Evidence: `pnpm deploy:check` reports the new line and exits
+1 with the new var listed.
+
+### 3. Cross-tenant hostile tour / schedule IDs fail closed at the httpAction boundary [P2→resolved]
+
+The previous pass flagged that `convex/public_booking.createForSlug`
+calls `components.betterAuth.adapter.findOne` (a Convex
+component query) and that `convex-test` cannot install the
+real `@convex-dev/better-auth` local-install component, so
+cross-tenant hostile `tourId` / `scheduleId` payloads could
+not be exercised at the httpAction boundary in vitest.
+
+Fix: a self-contained test seam at
+`test-utils/betterAuthMock/` that:
+
+1. Declares a minimal `defineSchema({})` (the real
+   component's organization table is not needed because the
+   mock's `findOne` reads from a module-scoped `Map`, not a
+   Convex table).
+2. Exports a tiny `findOne` query whose `args` mirror the
+   real component's
+   `{ model, where: [{ field, value }] }` shape and that
+   returns `{ id, name, slug } | null` for the matching
+   `where: [{ field: "slug", value }]` filter.
+3. Exposes `registerBetterAuthMock(t)` which calls
+   `t.registerComponent("betterAuth", schema, glob)` so the
+   production code's `ctx.runQuery(components.betterAuth.adapter.findOne, …)`
+   resolves to the mock.
+4. Exposes `seedMockOrg({ id, slug, name? })` and
+   `resetMockOrgs()` for test setup / teardown. Both
+   mutate the same `Map` instance exported from
+   `adapter.ts`, so the httpAction (which calls
+   `findOne` via the registered component) and the
+   test setup see the same data.
+
+The seam is intentionally placed outside `convex/` so it is
+NOT picked up by other tests' `import.meta.glob("../**/*.{ts,tsx}")`
+and so its `_generated/` directory does not collide with the
+app's own `_generated/` (which would confuse
+`findModulesRoot` and break the moduleCache prefix lookup).
+
+Regression coverage: a new
+`convex/__tests__/public_booking_http_cross_tenant.test.ts`
+suite (5 tests) exercises the real `createForSlug` action
+end-to-end at the httpAction boundary:
+
+- **healthy booking**: org A + own tour → 200, one booking
+  row, `organizationId === orgA.id`.
+- **hostile `tourId` from org B under org A's slug** → 404
+  with `"Tour not found"` envelope, 0 booking rows.
+- **hostile `scheduleId` from org B** (with a valid org A
+  tour) → 404 with `"Schedule not found"` envelope, 0
+  booking rows.
+- **unknown slug** → 404 with `"organization not found"`
+  envelope, 0 booking rows.
+- **cross-tenant rejection** still records a row in
+  `publicBookingAttempts` (rate-limit observability is
+  preserved).
+
+Red/green proof: with the `registerBetterAuthMock(t)` call
+commented out, all three of the "registers a healthy
+booking", "hostile tourId", and "hostile scheduleId" tests
+fail with `Component "betterAuth" is not registered. Call
+"t.registerComponent".`. Re-enabling the seam turns them
+green.
+
+Files (new):
+
+- `test-utils/betterAuthMock/_generated/server.ts`
+- `test-utils/betterAuthMock/_generated/dataModel.ts`
+- `test-utils/betterAuthMock/schema.ts`
+- `test-utils/betterAuthMock/adapter.ts`
+- `test-utils/betterAuthMock/index.ts`
+- `convex/__tests__/public_booking_http_cross_tenant.test.ts`
+
+### 4. Duplicate `seedTour` consolidated [P3→resolved]
+
+`convex/__tests__/public_booking.test.ts` had a local
+`seedTour(ctx, orgId, maxGuests, isActive)` helper that
+duplicated the typed
+`seedTour(ctx, opts: SeedTourOptions)` in
+`convex/__tests__/helpers.ts`. The fix keeps the local
+positional wrapper but delegates the actual insert to
+`sharedSeedTour` so:
+
+- The shape, defaults, and columns of a seeded tour live in
+  exactly one place (`helpers.ts`).
+- All 23 existing call sites in `public_booking.test.ts`
+  continue to work without churn.
+- Any future change to the tour shape (new required field,
+  default value tweak, etc.) only needs to happen in
+  `helpers.ts`.
+
+Files: `convex/__tests__/public_booking.test.ts`
+
+## Verification (this follow-up pass)
+
+| Command | Result |
+|---|---|
+| `pnpm test` | **760/760 pass** (was 755; +5 new cross-tenant httpAction tests) |
+| `pnpm exec tsc --noEmit` | clean |
+| `pnpm lint` | 137 files, no fixes |
+| `pnpm check` | 137 files, no fixes |
+| `pnpm build` | clean (148 modules, 2385 KiB) |
+| `pnpm deploy:check` | exit 1 — reports 14 required + 7 optional vars missing (was 13) |
+| `pnpm preview:worker` + `curl -sf http://127.0.0.1:3201/` | **200 OK**, `<title>guides.tours | Run the day. Sell the experience.</title>` |
+
+## Updated G1–G4 scoring (after follow-up)
+
+| Gate | Before 2026-07-26 follow-up | After 2026-07-26 follow-up |
+|---|---|---|
+| **G1 Features** (slice structural) | 3 | 3 (no slice change; the new httpAction test seam is a test-only artifact) |
+| **G2 UI/UX** (peek only) | 3 / visual | 3 (no UI work this pass) |
+| **G3 Stack** | 3+ | 3+ (Better Auth component mock is repository-native; no production API widening) |
+| **G4 Deploy** | partially unblocked (public booking HTTP route reachable; deploy creds + configPath target pending) | **deploy preflight is now honest about origin policy**; **local preview is executable end-to-end**; remaining work is the deploy creds + the optional `auxiliaryWorkers` warning cleanup in `.wrangler/deploy/config.json` (cosmetic, does not block deploy) |
+
+## Resolved findings (this follow-up)
+
+| Sev | Finding | Resolution |
+|---|---|---|
+| **P1** | `.wrangler/deploy/config.json` configPath target missing | RESOLVED: the build produces `dist/server/wrangler.json`, which the new `pnpm preview:worker` invokes directly. (The previous P1 was based on a snapshot before `pnpm build` had been run in this checkout.) |
+| **P2** | `PUBLIC_BOOKING_ALLOWED_ORIGINS` defaults to "all origins allowed"; deploy-check does not require it | RESOLVED: added to the new "public-booking origin allowlist (production safety)" group in `scripts/deploy-check.mjs`. `pnpm deploy:check` now exits 1 until it is set. |
+| **P2** | `public_booking.createForSlug` cross-tenant path unverified in vitest because Better Auth component is not installable under `convex-test` | RESOLVED: `test-utils/betterAuthMock/` is a repository-native seam that lets the httpAction reach `createForSlug` end-to-end; 5 new tests cover healthy + hostile-tourId + hostile-scheduleId + unknown-slug + rate-limit observability. |
+| **P3** | Duplicate `seedTour` helpers in `public_booking.test.ts` and `helpers.ts` | RESOLVED: the file-local helper now delegates to the shared typed helper; only one source of truth remains. |
+
+## Carried-forward findings (still owner-gated)
+
+- 13 deploy credentials + 1 new production-safety env var
+  (`PUBLIC_BOOKING_ALLOWED_ORIGINS`) are still unset.
+  `pnpm deploy:check` reports all 14 honestly with exit 1 —
+  this is the gate, not a fix. Owner action required.
+- `.wrangler/deploy/config.json` includes a stale
+  `auxiliaryWorkers: []` field that triggers a
+  non-fatal warning from wrangler 4.x. Not blocking; cosmetic.
+- Live Stripe webhook + SES delivery remain blocked by missing
+  sandbox credentials. Not in scope for this follow-up.
+
+## Reusable Lessons (additions)
+
+- **Convex component mocks live outside `convex/`**. The
+  `convex-test` module cache resolves its module prefix from
+  the first `_generated/` path it finds. A mock component's
+  own `_generated/` directory, when placed under
+  `convex/__tests__/`, gets picked up by sibling tests' own
+  globs and silently breaks their moduleCache prefix.
+  `test-utils/betterAuthMock/` is the canonical pattern for
+  this repo going forward.
+- **The mock component and the test seam must share the
+  same `Map` instance**. vitest loads each `.ts` file as a
+  module instance; `index.ts`'s `Map` and `adapter.ts`'s
+  `Map` are different Maps. The seam has to import the Map
+  from the same file the query handler reads it from
+  (here, `adapter.ts` exports `_mockOrgsById` and `index.ts`
+  re-uses it).
+- **`defineSchema({})` is valid for an empty mock**. The
+  real component's organization/user/session tables are not
+  needed when the mock's `findOne` reads from a module-scoped
+  Map. An empty schema is enough to satisfy
+  `t.registerComponent`'s schema-validator requirement.
+- **Local Worker preview = `wrangler dev` against the
+  generated `dist/server/wrangler.json`**, not against the
+  source `wrangler.jsonc` (whose `main: "@tanstack/react-start/server-entry"`
+  is only meaningful after the build). Document the
+  build-then-dev contract in the package scripts so future
+  contributors don't try the source path.
+
+## Diff summary (follow-up)
+
+```
+ convex/__tests__/public_booking.test.ts                   |  13 ++--
+ convex/__tests__/public_booking_http_cross_tenant.test.ts | 191 +++++++++++++
+ package.json                                              |   2 +
+ scripts/deploy-check.mjs                                  |   4 +
+ test-utils/betterAuthMock/_generated/dataModel.ts         |  24 +++
+ test-utils/betterAuthMock/_generated/server.ts            |  49 +++++
+ test-utils/betterAuthMock/adapter.ts                      |  85 ++++++
+ test-utils/betterAuthMock/index.ts                        |  49 +++++
+ test-utils/betterAuthMock/schema.ts                       |  16 ++
+ 9 files changed, ~433 insertions(+), 3 deletions(-)
+```
+
+The follow-up touches the dirty `HEAD~1..HEAD` work
+**only via the `convex/__tests__/public_booking.test.ts`
+header comment** (one short paragraph) and the
+**`package.json` scripts block** (two added lines), neither
+of which is owned by the previous audit's diff. All other
+changes are net-new files.

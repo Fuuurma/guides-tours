@@ -90,6 +90,11 @@ const groups = [
     check: (key) => (convexProdHas(key) ? "set" : ""),
   },
   {
+    label: "Convex prod — public-booking origin allowlist (production safety)",
+    keys: ["PUBLIC_BOOKING_ALLOWED_ORIGINS"],
+    check: (key) => (convexProdHas(key) ? "set" : ""),
+  },
+  {
     label: "Convex prod — OTA (optional, only needed if integrating)",
     keys: [
       "OTA_VIATOR_API_KEY",
