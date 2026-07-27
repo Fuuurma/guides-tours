@@ -185,6 +185,14 @@ function GuidesPage() {
 					isPending={isPending}
 					error={error}
 					emptyMessage="No guides yet. Invite members with the guide role."
+					emptyAction={
+						<InviteGuideDialog
+							onInvited={() => {
+								setInviteTick((n) => n + 1);
+								void refetchMembers();
+							}}
+						/>
+					}
 					searchPlaceholder="Search by name, email, or role…"
 				/>
 			</ListPage>

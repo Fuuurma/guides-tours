@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import type { Vacation } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -87,6 +88,11 @@ function VacationsPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage="No vacation requests yet."
+				emptyAction={
+					<Button asChild size="sm">
+						<Link to="/dashboard/vacations/new">Create a request</Link>
+					</Button>
+				}
 				searchPlaceholder="Search by guide, dates, reason, or status…"
 			/>
 		</ListPage>

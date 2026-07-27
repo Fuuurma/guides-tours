@@ -37,6 +37,14 @@ function DashboardIndex() {
 		// out of this reactive read instead of filtering them client-side.
 		convexQuery(api.bookings.list, { dateFrom: today, dateTo: today }),
 	);
+	const { data: pendingBookingPage, error: pendingBookingsError } = useQuery(
+		convexQuery(api.bookings.list, {
+			status: "pending",
+			sortBy: "createdAt",
+			sortOrder: "asc",
+			pageSize: 5,
+		}),
+	);
 	const { data: assignments, error: assignmentsError } = useQuery(
 		// The dashboard's assignment card only shows upcoming work. The
 		// date-bound index scan avoids walking historical assignments first.
@@ -82,6 +90,7 @@ function DashboardIndex() {
 
 	const firstError =
 		bookingsError ??
+		pendingBookingsError ??
 		assignmentsError ??
 		vacationsError ??
 		customersError ??
@@ -93,10 +102,14 @@ function DashboardIndex() {
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
 	);
+	const customerNameById = new Map<string, string>(
+		(customers?.items ?? []).map((c) => [String(c._id), c.name]),
+	);
 
 	const todaysBookings = (bookings?.items ?? []).filter(
 		(b) => b.date === today,
 	);
+	const pendingBookings = pendingBookingPage?.items ?? [];
 	const upcomingAssignments = (assignments ?? [])
 		.filter((a) => a.status === "scheduled" && a.date >= today)
 		.sort((a, b) => a.date.localeCompare(b.date))
@@ -225,6 +238,73 @@ function DashboardIndex() {
 			</div>
 
 			{org?.slug && <PublicBookingLinkCard slug={org.slug} />}
+
+			<Card
+				className={pendingBookings.length > 0 ? "border-amber-300" : undefined}
+			>
+				<CardHeader className="flex flex-row items-center justify-between space-y-0">
+					<div>
+						<CardTitle>Pending booking requests</CardTitle>
+						<CardDescription>
+							{pendingBookings.length === 0
+								? "New public requests will wait here until you confirm them."
+								: `${pendingBookingPage?.total ?? pendingBookings.length} request${(pendingBookingPage?.total ?? pendingBookings.length) === 1 ? "" : "s"} waiting for review`}
+						</CardDescription>
+					</div>
+					<Button asChild variant="outline" size="sm">
+						<Link to="/dashboard/bookings">View bookings</Link>
+					</Button>
+				</CardHeader>
+				<CardContent>
+					{pendingBookings.length === 0 ? (
+						<div className="flex flex-wrap items-center justify-between gap-3">
+							<p className="text-muted-foreground text-sm">
+								Nothing needs confirmation right now.
+							</p>
+							{org?.slug && (
+								<Button asChild size="sm" variant="outline">
+									<Link to="/book/$slug" params={{ slug: org.slug }}>
+										Open public page
+									</Link>
+								</Button>
+							)}
+						</div>
+					) : (
+						<ul className="space-y-2">
+							{pendingBookings.map((booking) => (
+								<li
+									key={booking._id}
+									className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"
+								>
+									<div className="min-w-0 flex-1">
+										<p className="font-medium truncate">
+											{customerNameById.get(String(booking.customerId)) ??
+												"Customer request"}
+										</p>
+										<p className="text-muted-foreground text-xs">
+											{tourNameById.get(String(booking.tourId)) ??
+												"Tour request"}
+											{" · "}
+											{booking.date} at {booking.startTime}
+											{" · "}
+											{booking.guests} guest
+											{booking.guests === 1 ? "" : "s"}
+										</p>
+									</div>
+									<Button asChild size="sm" variant="outline">
+										<Link
+											to="/dashboard/bookings/$bookingId"
+											params={{ bookingId: booking._id }}
+										>
+											Review
+										</Link>
+									</Button>
+								</li>
+							))}
+						</ul>
+					)}
+				</CardContent>
+			</Card>
 
 			<Card>
 				<CardHeader className="flex flex-row items-center justify-between space-y-0">

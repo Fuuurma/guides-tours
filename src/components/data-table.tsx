@@ -1,5 +1,6 @@
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { type ReactNode, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
 	Empty,
 	EmptyContent,
@@ -112,6 +113,31 @@ export function DataTable<T>({
 	}
 
 	const showing = filtered ?? [];
+	if (showing.length === 0) {
+		return (
+			<div className="space-y-3">
+				{searchPlaceholder && (
+					<Input
+						value={rawQuery}
+						onChange={(e) => setRawQuery(e.target.value)}
+						placeholder={searchPlaceholder}
+						aria-label={searchPlaceholder}
+					/>
+				)}
+				<div className="flex flex-col items-center gap-3 rounded-md border border-dashed p-8 text-center">
+					<div>
+						<p className="font-medium">No matches</p>
+						<p className="text-muted-foreground text-sm">
+							Try a different search or clear the current query.
+						</p>
+					</div>
+					<Button variant="outline" size="sm" onClick={() => setRawQuery("")}>
+						Clear search
+					</Button>
+				</div>
+			</div>
+		);
+	}
 	return (
 		<div className="space-y-3">
 			{searchPlaceholder && (
@@ -133,26 +159,15 @@ export function DataTable<T>({
 					</TableRow>
 				</TableHeader>
 				<TableBody>
-					{showing.length === 0 ? (
-						<TableRow>
-							<TableCell
-								colSpan={columns.length}
-								className="text-muted-foreground text-sm text-center"
-							>
-								No matches.
-							</TableCell>
+					{showing.map((row) => (
+						<TableRow key={rowKey(row)}>
+							{columns.map((col) => (
+								<TableCell key={col.key} className={col.className}>
+									{col.render(row)}
+								</TableCell>
+							))}
 						</TableRow>
-					) : (
-						showing.map((row) => (
-							<TableRow key={rowKey(row)}>
-								{columns.map((col) => (
-									<TableCell key={col.key} className={col.className}>
-										{col.render(row)}
-									</TableCell>
-								))}
-							</TableRow>
-						))
-					)}
+					))}
 				</TableBody>
 			</Table>
 		</div>

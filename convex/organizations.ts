@@ -132,7 +132,10 @@ export const listMembers = query({
 		const out: OrgMember[] = [];
 		for (const m of filtered.slice(0, MAX_ENRICH)) {
 			let phone = (m.user?.phone ?? "").trim();
-			let name = m.user?.name?.trim() || m.user?.email || m.userId;
+			// Better Auth normally returns the user object. If a member was
+			// removed between the membership read and enrichment, keep the
+			// operator-facing label human-readable instead of leaking a raw ID.
+			let name = m.user?.name?.trim() || m.user?.email || "Former member";
 			let email = m.user?.email ?? "";
 			// Better Auth listMembers often omits additionalFields like phone —
 			// fill from the user row when missing.

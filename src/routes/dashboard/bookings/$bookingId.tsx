@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction, useMutation, usePaginatedQuery } from "convex/react";
+import { Mail, Phone } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
@@ -42,6 +43,7 @@ function BookingDetailPage() {
 		convexQuery(api.payments.getPublicSettings, {}),
 	);
 	const checkIn = useMutation(api.bookings.checkIn);
+	const confirmBooking = useMutation(api.bookings.confirm);
 	const complete = useMutation(api.bookings.complete);
 	const cancelBooking = useMutation(api.bookings.cancel);
 	const recordReview = useMutation(api.bookings.recordReview);
@@ -93,6 +95,11 @@ function BookingDetailPage() {
 		runAction(
 			() => checkIn({ bookingId: bookingId as Id<"bookings"> }),
 			"Customer checked in",
+		);
+	const onConfirm = () =>
+		runAction(
+			() => confirmBooking({ bookingId: bookingId as Id<"bookings"> }),
+			"Booking confirmed — customer notification queued",
 		);
 	const onComplete = () =>
 		runAction(
@@ -204,6 +211,11 @@ function BookingDetailPage() {
 			actions={
 				<>
 					<StatusBadge status={b.status} />
+					{b.status === "pending" && (
+						<Button onClick={onConfirm} disabled={pending}>
+							Confirm booking
+						</Button>
+					)}
 					{["pending", "confirmed", "checked_in"].includes(b.status) && (
 						<Button asChild variant="outline">
 							<Link
@@ -412,6 +424,25 @@ function BookingDetailPage() {
 						<>
 							<p className="font-medium">{b.customer.name}</p>
 							<p className="text-muted-foreground">{b.customer.email}</p>
+							{b.customer.phone ? (
+								<p className="text-muted-foreground">{b.customer.phone}</p>
+							) : null}
+							<div className="flex flex-wrap gap-2 pt-1">
+								<Button asChild size="sm" variant="outline">
+									<a href={`mailto:${b.customer.email}`}>
+										<Mail aria-hidden="true" />
+										Email customer
+									</a>
+								</Button>
+								{b.customer.phone ? (
+									<Button asChild size="sm" variant="outline">
+										<a href={`tel:${b.customer.phone}`}>
+											<Phone aria-hidden="true" />
+											Call customer
+										</a>
+									</Button>
+								) : null}
+							</div>
 							<Link
 								to="/dashboard/customers/$customerId"
 								params={{ customerId: b.customer._id }}
@@ -428,7 +459,10 @@ function BookingDetailPage() {
 
 			<DetailSection title="Booking details">
 				<DetailRow label="Source" value={b.source} />
-				<DetailRow label="Payment method" value={b.paymentMethod || "(none)"} />
+				<DetailRow
+					label="Recorded payment method"
+					value={b.paymentMethod || "Not recorded — use Collect below"}
+				/>
 				<DetailRow label="Guest names" value={b.guestNames || "(none)"} />
 				<DetailRow label="Notes" value={b.notes || "(none)"} />
 				<DetailRow
@@ -447,6 +481,38 @@ function BookingDetailPage() {
 							: "(not completed)"
 					}
 				/>
+			</DetailSection>
+
+			<DetailSection
+				title={`Payment activity (${paymentItems.length})`}
+				description="Stripe charges and refunds recorded for this booking"
+			>
+				{paymentItems.length === 0 ? (
+					<p className="text-muted-foreground text-sm">
+						No payment has been recorded yet. The balance remains outstanding.
+					</p>
+				) : (
+					<ul className="flex flex-col gap-2">
+						{paymentItems.map((payment) => (
+							<li
+								key={payment._id}
+								className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm"
+							>
+								<div>
+									<p className="font-medium">
+										{formatCentsCompact(payment.amountCents)} ·{" "}
+										{payment.provider}
+									</p>
+									<p className="text-muted-foreground text-xs">
+										{payment.currency} ·{" "}
+										{new Date(payment.createdAt).toLocaleString()}
+									</p>
+								</div>
+								<StatusBadge status={payment.status} />
+							</li>
+						))}
+					</ul>
+				)}
 			</DetailSection>
 
 			{(b.reviewRating || b.reviewComment) && (

@@ -198,6 +198,24 @@ function AssignmentsPage() {
 						? "No assignments match the current filters."
 						: "No assignments yet."
 				}
+				emptyAction={
+					status || filtersActive ? (
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => {
+								setStatus(null);
+								setRange(defaultDateRange());
+							}}
+						>
+							Clear filters
+						</Button>
+					) : (
+						<Button asChild size="sm">
+							<Link to="/dashboard/assignments/new">Create an assignment</Link>
+						</Button>
+					)
+				}
 				searchPlaceholder="Search by date, time, guide, or tour…"
 			/>
 		</ListPage>

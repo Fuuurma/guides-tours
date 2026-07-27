@@ -140,6 +140,13 @@ function TemplatesPage() {
 				isPending={isPending}
 				error={error}
 				emptyMessage="No templates yet."
+				emptyAction={
+					<Button asChild size="sm">
+						<Link to="/dashboard/templates/new">
+							Create your first template
+						</Link>
+					</Button>
+				}
 				searchPlaceholder="Search by name, type, or status…"
 			/>
 		</ListPage>

@@ -50,7 +50,7 @@ async function seedTour(
 }
 
 describe("convex/public_booking — internalCreate mutation", () => {
-	it("creates a confirmed booking for a valid tour in the org", async () => {
+	it("creates a pending booking request for a valid tour in the org", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub_a";
 		const tourId = await t.run(async (ctx) =>
@@ -72,7 +72,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			ctx.db.get(bookingId),
 		);
 		expect(booking).not.toBeNull();
-		expect(booking?.status).toBe("confirmed");
+		expect(booking?.status).toBe("pending");
 		expect(booking?.source).toBe("public_booking");
 	});
 
@@ -460,7 +460,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 	});
 
 	it("booking has zero totalAmountCents (payment happens later)", async () => {
-		// Public bookings are created as confirmed with no money — the
+		// Public bookings begin as pending requests with no money — the
 		// payment is captured separately via Stripe. Verify the fields
 		// are bigint 0n rather than undefined.
 		const t = convexTest(schema, modules);
@@ -578,7 +578,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				updatedAt: 0,
 			});
 		});
-		await t.mutation(internal.public_booking.internalCreate, {
+		const bookingId = await t.mutation(internal.public_booking.internalCreate, {
 			organizationId: orgId,
 			tourId,
 			customerName: "Liam",
@@ -589,11 +589,11 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			startTime: "10:00",
 			guests: 2,
 		});
+		await t.mutation(internal.bookings.internalConfirm, { bookingId });
 		const notifs = (await t.run(async (ctx) =>
 			ctx.db.query("scheduledNotifications").collect(),
 		)) as Array<{ templateId: string; sent: boolean }>;
-		// We seeded 2 active templates → scheduleForBooking should
-		// have queued 2 notifications.
+		// Confirmation queues the 2 active reminder templates.
 		expect(notifs.length).toBe(2);
 		expect(notifs.every((n) => !n.sent)).toBe(true);
 	});

@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { getErrorMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -33,6 +34,7 @@ function VacationDetailPage() {
 	const reject = useMutation(api.vacationRequests.reject);
 	const [pending, setPending] = useState(false);
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
+	const { displayName } = useOrgMembers();
 
 	if (isPending) {
 		return <DetailSkeleton />;
@@ -84,7 +86,7 @@ function VacationDetailPage() {
 	return (
 		<DetailPage
 			title="Vacation request"
-			subtitle={vacation.userId}
+			subtitle={displayName(vacation.userId)}
 			backTo="/dashboard/vacations"
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

@@ -13,6 +13,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { resolveTourStaffing } from "@/lib/staffing";
 import { addHours } from "@/lib/time";
 import { api } from "../../../convex/_generated/api";
@@ -69,9 +70,7 @@ export function NewAssignmentPage() {
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 	const { data: vehicles } = useQuery(convexQuery(api.vehicles.list, {}));
 	const { data: drivers } = useQuery(convexQuery(api.drivers.list, {}));
-	const { data: members } = useQuery(
-		convexQuery(api.organizations.listMembers, {}),
-	);
+	const { displayName: memberName } = useOrgMembers();
 	const { data: prefillSchedule } = useQuery(
 		convexQuery(
 			api.tourSchedules.get,
@@ -143,9 +142,6 @@ export function NewAssignmentPage() {
 		form.set("startTime", prefillSchedule.startTime);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot prefill
 	}, [prefillSchedule, form.set]);
-
-	const memberName = (userId: string) =>
-		members?.find((m) => m.userId === userId)?.name ?? userId;
 
 	// Check conflicts when date/time/guide/vehicle/driver change.
 	const tour = ((tours ?? []) as Tour[]).find(

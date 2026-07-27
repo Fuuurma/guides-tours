@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -186,6 +186,11 @@ function FilesPage() {
 					data={visible}
 					rowKey={(f) => f._id}
 					emptyMessage="No uploaded files yet. Tour gallery uploads will appear here."
+					emptyAction={
+						<Button asChild size="sm">
+							<Link to="/dashboard/tours">Open a tour to upload photos</Link>
+						</Button>
+					}
 					searchPlaceholder="Search files…"
 				/>
 			)}

@@ -21,6 +21,8 @@ export type VacationStatus = "pending" | "approved" | "rejected";
 
 export interface Booking {
 	_id: string;
+	tourId?: string;
+	customerId?: string;
 	date: string;
 	startTime: string;
 	guests: number;
@@ -42,7 +44,7 @@ export interface BookingDetail extends Booking {
 	checkedInBy: string;
 	completedAt: number | null;
 	tour: { _id: string; name: string } | null;
-	customer: { _id: string; name: string; email: string } | null;
+	customer: { _id: string; name: string; email: string; phone: string } | null;
 }
 
 export interface Tour {

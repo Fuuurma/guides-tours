@@ -78,6 +78,7 @@ function PublicBookingPage() {
 
 	const [confirmation, setConfirmation] = useState<{
 		bookingId: string;
+		status: string;
 		canPay: boolean;
 		balanceDueCents: string;
 		email: string;
@@ -200,13 +201,14 @@ function PublicBookingPage() {
 				if ("bookingId" in body) {
 					setConfirmation({
 						bookingId: body.bookingId,
+						status: body.status,
 						canPay: Boolean(body.canPay),
 						balanceDueCents: body.balanceDueCents ?? "0",
 						email: value.email.trim(),
 						emailConsent: value.emailConsent,
 						stripePublishableKey: body.stripePublishableKey,
 					});
-					toast.success("Booking confirmed!");
+					toast.success("Booking request received");
 				}
 			} catch (err) {
 				const msg = getErrorMessage(err);
@@ -334,11 +336,12 @@ function PublicBookingPage() {
 				>
 					<Card>
 						<CardHeader>
-							<CardTitle>Booking confirmed</CardTitle>
+							<CardTitle>Booking request received</CardTitle>
 							<CardDescription>
-								Thank you for booking with {data.organizationName}.
+								Thank you for requesting a tour with {data.organizationName}.
+								The operator will confirm this request before it is final.
 								{confirmation.emailConsent
-									? ` We've sent a confirmation to ${confirmation.email}.`
+									? ` We'll email ${confirmation.email} when the operator confirms.`
 									: " Save your reference below — email updates were not opted in."}
 							</CardDescription>
 						</CardHeader>
@@ -483,7 +486,7 @@ function PublicBookingPage() {
 					{data.organizationName}
 				</h1>
 				<p className="text-muted-foreground">
-					Book a tour — no account required.
+					Request a tour — no account required.
 				</p>
 			</header>
 
@@ -848,14 +851,14 @@ function PublicBookingPage() {
 												? "Booking…"
 												: slotsLoading
 													? "Loading times…"
-													: "Confirm booking"}
+													: "Request booking"}
 										</Button>
 									)}
 								</form.Subscribe>
 								<p className="text-muted-foreground text-center text-xs">
-									By booking you agree to the operator's cancellation policy.
+									By requesting you agree to the operator's cancellation policy.
 									{emailConsent
-										? " We'll email your confirmation."
+										? " We'll email you when the operator confirms."
 										: " You opted out of email updates."}
 								</p>
 							</CardFooter>

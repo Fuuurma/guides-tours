@@ -1,6 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useMutation } from "convex/react";
+import { useEffect } from "react";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
 import {
@@ -43,7 +44,11 @@ const INITIAL: FormValues = {
 	notes: "",
 };
 
-export function NewSchedulePage() {
+export function NewSchedulePage({
+	preselectedTourId,
+}: {
+	preselectedTourId?: string;
+}) {
 	const create = useMutation(api.tourSchedules.create);
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
 
@@ -78,6 +83,14 @@ export function NewSchedulePage() {
 		redirectTo: (id) => `/dashboard/schedules/${id}`,
 		successMessage: "Schedule created",
 	});
+
+	useEffect(() => {
+		if (form.values.tourId || !preselectedTourId || !tours) return;
+		const tourExists = (tours as Tour[]).some(
+			(tour) => tour._id === preselectedTourId,
+		);
+		if (tourExists) form.set("tourId", preselectedTourId);
+	}, [form.values.tourId, form.set, preselectedTourId, tours]);
 
 	return (
 		<EntityFormPage

@@ -165,6 +165,13 @@ function NotificationTemplatesPage() {
 					isPending={isPending}
 					error={error}
 					emptyMessage="No notification templates yet."
+					emptyAction={
+						<Button asChild size="sm">
+							<Link to="/dashboard/notifications/new">
+								Create a booking message
+							</Link>
+						</Button>
+					}
 					searchPlaceholder="Search by name, type, subject, or status…"
 				/>
 			</ListPage>

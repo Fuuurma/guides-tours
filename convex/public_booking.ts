@@ -13,7 +13,7 @@
 //      exposed adapter query)
 //   2. Validate tour is active + has capacity
 //   3. Get-or-create customer by email within that org
-//   4. Create booking in "confirmed" state
+//   4. Create booking in "pending" state for operator confirmation
 //
 // Rate-limit lives in Convex (lib/rate_limit.ts). CAPTCHA is a
 // Cloudflare concern if needed.
@@ -31,7 +31,7 @@ import {
 	normalizeEmail,
 } from "./lib/validation";
 
-const COLLECTIBLE_PUBLIC = new Set(["pending", "confirmed", "checked_in"]);
+const COLLECTIBLE_PUBLIC = new Set(["confirmed", "checked_in"]);
 
 // ----- Public query: org + active tours by slug -----
 //
@@ -275,7 +275,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 
 			return {
 				bookingId,
-				status: "confirmed" as const,
+				status: "pending" as const,
 				balanceDueCents: balanceDueCents.toString(),
 				canPay,
 				stripePublishableKey:
@@ -497,7 +497,7 @@ export const internalCreate = internalMutation({
 			guestNames: "",
 			languageRequired: "",
 			notes: validInput.notes,
-			status: "confirmed",
+			status: "pending",
 			depositAmountCents: 0n,
 			totalAmountCents,
 			balanceDueCents: totalAmountCents,
@@ -544,27 +544,8 @@ export const internalCreate = internalMutation({
 			},
 		});
 
-		// Send an immediate booking-confirmation email/SMS using
-		// the org's active `booking_confirmation` template. Same
-		// path as the dashboard create flow — best-effort.
-		await ctx.scheduler.runAfter(
-			0,
-			internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
-				typeof ctx.scheduler.runAfter
-			>[2],
-			{ bookingId },
-		);
-
-		// Schedule reminder notifications (24h + 2h before tour).
-		await ctx.runMutation(
-			internal.scheduledNotifications.scheduleForBooking,
-			{
-				organizationId: args.organizationId,
-				bookingId,
-				date: args.date,
-				startTime: args.startTime,
-			},
-		);
+		// Customer confirmation and future reminders begin only after the
+		// operator confirms the request from the dashboard.
 
 		return bookingId;
 	},

@@ -164,6 +164,24 @@ function SchedulesPage() {
 						? "No schedules match the current filters."
 						: "No schedules yet."
 				}
+				emptyAction={
+					status || filtersActive ? (
+						<Button
+							variant="outline"
+							size="sm"
+							onClick={() => {
+								setStatus(null);
+								setRange(defaultDateRange());
+							}}
+						>
+							Clear filters
+						</Button>
+					) : (
+						<Button asChild size="sm">
+							<Link to="/dashboard/schedules/new">Create a schedule</Link>
+						</Button>
+					)
+				}
 				searchPlaceholder="Search by date, time, tour, or status…"
 			/>
 		</ListPage>

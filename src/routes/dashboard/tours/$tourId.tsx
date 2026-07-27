@@ -2,6 +2,7 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
+import { AlertCircle, CheckCircle2, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
@@ -14,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import { lastNDays } from "@/lib/date-range";
 import { formatCents } from "@/lib/format";
 import { resolveTourStaffing } from "@/lib/staffing";
@@ -36,11 +38,21 @@ function TourDetailPage() {
 		error,
 	} = useQuery(convexQuery(api.tours.get, { tourId: tourId as Id<"tours"> }));
 	const period = lastNDays(30);
+	const today = localYmd();
+	const availabilityTo = localYmd(addDaysLocal(new Date(), 90));
 	const { data: stats } = useQuery(
 		convexQuery(api.analytics.getForTour, {
 			tourId: tourId as Id<"tours">,
 			startDate: period.startDate,
 			endDate: period.endDate,
+		}),
+	);
+	const { data: upcomingSchedules } = useQuery(
+		convexQuery(api.tourSchedules.list, {
+			tourId: tourId as Id<"tours">,
+			dateFrom: today,
+			dateTo: availabilityTo,
+			status: "available",
 		}),
 	);
 
@@ -87,6 +99,55 @@ function TourDetailPage() {
 		tour.requiresVehicle !== undefined ||
 		tour.requiresDriver !== undefined ||
 		Boolean(tour.requiredVehicleType);
+	const hasUpcomingAvailability = (upcomingSchedules ?? []).some(
+		(schedule) => schedule.capacityBooked < schedule.capacityTotal,
+	);
+	const readinessItems = [
+		{
+			label: "Public visibility",
+			detail: tour.isActive
+				? "Customers can see this tour on the booking page."
+				: "Inactive tours are hidden from the public booking page.",
+			ready: tour.isActive,
+			action: tour.isActive ? null : "Edit tour",
+			recommended: false,
+		},
+		{
+			label: "Customer-facing description",
+			detail: tour.description?.trim()
+				? "The public page has useful context for choosing this tour."
+				: "Add a short description so customers know what they are requesting.",
+			ready: Boolean(tour.description?.trim()),
+			action: tour.description?.trim() ? null : "Add description",
+			recommended: false,
+		},
+		{
+			label: "Upcoming availability",
+			detail:
+				upcomingSchedules === undefined
+					? "Checking the next 90 days…"
+					: hasUpcomingAvailability
+						? "At least one future slot has room for new requests."
+						: "Create an available schedule before sharing this booking page.",
+			ready: upcomingSchedules === undefined ? null : hasUpcomingAvailability,
+			action: hasUpcomingAvailability ? null : "Create schedule",
+			recommended: false,
+		},
+		{
+			label: "Price",
+			detail:
+				tour.basePriceCents !== undefined
+					? "Customers can see the per-person price when requesting."
+					: "No price is shown publicly — useful for quote-based bookings.",
+			ready: tour.basePriceCents !== undefined,
+			action: null,
+			recommended: true,
+		},
+	] as const;
+	const requiredIssues = readinessItems.filter(
+		(item) => !item.recommended && item.ready === false,
+	).length;
+	const readinessLoading = upcomingSchedules === undefined;
 
 	return (
 		<DetailPage
@@ -127,6 +188,87 @@ function TourDetailPage() {
 				</MetricCard>
 				<MetricCard label="Currency" value={tour.currency} />
 			</div>
+
+			<DetailSection
+				title="Booking readiness"
+				description={
+					readinessLoading
+						? "Checking public availability and tour setup…"
+						: requiredIssues === 0
+							? "The key pieces for accepting public requests are in place."
+							: `${requiredIssues} item${requiredIssues === 1 ? "" : "s"} needs attention before customers can book confidently.`
+				}
+			>
+				<div className="grid gap-3 md:grid-cols-2">
+					{readinessItems.map((item) => (
+						<div
+							key={item.label}
+							className="flex items-start justify-between gap-3 rounded-lg border p-3"
+						>
+							<div className="flex min-w-0 gap-3">
+								<div className="pt-0.5">
+									{item.ready === null ? (
+										<LoaderCircle
+											aria-hidden="true"
+											className="size-4 animate-spin text-muted-foreground"
+										/>
+									) : item.ready ? (
+										<CheckCircle2
+											aria-hidden="true"
+											className="size-4 text-emerald-600"
+										/>
+									) : (
+										<AlertCircle
+											aria-hidden="true"
+											className="size-4 text-amber-600"
+										/>
+									)}
+								</div>
+								<div className="min-w-0">
+									<div className="flex flex-wrap items-center gap-2">
+										<p className="font-medium text-sm">{item.label}</p>
+										{item.recommended && (
+											<span className="text-muted-foreground text-xs">
+												Recommended
+											</span>
+										)}
+									</div>
+									<p className="text-muted-foreground text-sm">{item.detail}</p>
+								</div>
+							</div>
+							{item.action === "Create schedule" ? (
+								<Button
+									asChild
+									size="sm"
+									variant="outline"
+									className="shrink-0"
+								>
+									<Link
+										to="/dashboard/schedules/new"
+										search={{ tourId: tour._id }}
+									>
+										Create schedule
+									</Link>
+								</Button>
+							) : item.action ? (
+								<Button
+									asChild
+									size="sm"
+									variant="outline"
+									className="shrink-0"
+								>
+									<Link
+										to="/dashboard/tours/$tourId/edit"
+										params={{ tourId: tour._id }}
+									>
+										{item.action}
+									</Link>
+								</Button>
+							) : null}
+						</div>
+					))}
+				</div>
+			</DetailSection>
 
 			{stats ? (
 				<DetailSection

@@ -3,6 +3,13 @@ import { useEffect, useState } from "react";
 import { DetailPage } from "@/components/detail-page";
 import { EntityFormPage, useEntityForm } from "@/components/entity-form";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { centsToInputValue } from "@/lib/format";
@@ -26,6 +33,7 @@ interface FormValues extends Record<string, unknown> {
 	depositUsd: string;
 	totalUsd: string;
 	paymentMethod: string;
+	scheduleId: string;
 }
 
 interface EditBookingPageProps {
@@ -70,6 +78,9 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				depositAmountCents: depositCents ?? undefined,
 				totalAmountCents: totalCents ?? undefined,
 				paymentMethod: v.paymentMethod.trim() || undefined,
+				scheduleId: v.scheduleId
+					? (v.scheduleId as Id<"tourSchedules">)
+					: undefined,
 			});
 			return bookingId;
 		},
@@ -102,10 +113,21 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			depositUsd: "",
 			totalUsd: "",
 			paymentMethod: "",
+			scheduleId: "",
 		},
 		redirectTo: (id) => `/dashboard/bookings/${id}`,
 		successMessage: "Booking updated",
 	});
+	const schedules = useQuery(
+		api.tourSchedules.list,
+		booking?.tourId && form.values.date
+			? {
+					tourId: booking.tourId,
+					dateFrom: form.values.date,
+					dateTo: form.values.date,
+				}
+			: "skip",
+	);
 
 	// Populate form from server data once it loads.
 	useEffect(() => {
@@ -120,6 +142,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 				depositAmountCents: bigint | number;
 				totalAmountCents: bigint | number;
 				paymentMethod: string;
+				scheduleId?: string;
 			};
 			form.set("date", b.date);
 			form.set("startTime", b.startTime);
@@ -130,6 +153,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 			form.set("depositUsd", centsToInputValue(b.depositAmountCents));
 			form.set("totalUsd", centsToInputValue(b.totalAmountCents));
 			form.set("paymentMethod", b.paymentMethod ?? "");
+			form.set("scheduleId", b.scheduleId ?? "");
 			setLoaded(true);
 		}
 	}, [booking, loaded, form]);
@@ -165,7 +189,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 		<EntityFormPage
 			form={form}
 			title="Edit booking"
-			description="Update booking details. State changes (check-in, complete, cancel) are handled separately on the booking page."
+			description="Rescheduling checks blackouts and capacity. Confirm, check in, and cancel from the booking page."
 			backTo={`/dashboard/bookings/${bookingId}`}
 			submitLabel="Save changes"
 		>
@@ -176,18 +200,52 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 						type="date"
 						required
 						value={form.values.date}
-						onChange={(e) => form.set("date", e.target.value)}
+						onChange={(e) => {
+							form.set("date", e.target.value);
+							form.set("scheduleId", "");
+						}}
 					/>
 				</FormField>
-				<FormField label="Start time" htmlFor="edit-time">
-					<Input
-						id="edit-time"
-						type="time"
-						required
-						value={form.values.startTime}
-						onChange={(e) => form.set("startTime", e.target.value)}
-					/>
-				</FormField>
+				{(schedules ?? []).filter((s) => s.status !== "cancelled").length >
+				0 ? (
+					<FormField label="Schedule slot" htmlFor="edit-slot">
+						<Select
+							value={form.values.scheduleId}
+							onValueChange={(id) => {
+								form.set("scheduleId", id);
+								const slot = (schedules ?? []).find((s) => s._id === id);
+								if (slot) form.set("startTime", slot.startTime);
+							}}
+						>
+							<SelectTrigger id="edit-slot">
+								<SelectValue placeholder="Select a time…" />
+							</SelectTrigger>
+							<SelectContent>
+								{(schedules ?? [])
+									.filter((s) => s.status !== "cancelled")
+									.map((s) => (
+										<SelectItem key={s._id} value={s._id}>
+											{s.startTime}–{s.endTime} ·{" "}
+											{s.capacityTotal - s.capacityBooked} left
+										</SelectItem>
+									))}
+							</SelectContent>
+						</Select>
+					</FormField>
+				) : (
+					<FormField label="Start time" htmlFor="edit-time">
+						<Input
+							id="edit-time"
+							type="time"
+							required
+							value={form.values.startTime}
+							onChange={(e) => {
+								form.set("startTime", e.target.value);
+								form.set("scheduleId", "");
+							}}
+						/>
+					</FormField>
+				)}
 				<FormField
 					label="Guests"
 					htmlFor="edit-guests"

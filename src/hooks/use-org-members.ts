@@ -30,7 +30,9 @@ export function useOrgMembers(roles?: string[]) {
 		[members],
 	);
 
-	const displayName = (userId: string) => nameById.get(userId) ?? userId;
+	const displayName = (userId: string) =>
+		nameById.get(userId) ??
+		(query.isPending ? "Loading member…" : "Former member");
 
 	return {
 		members,

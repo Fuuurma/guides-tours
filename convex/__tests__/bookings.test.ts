@@ -298,14 +298,19 @@ describe("convex/bookings — schedule wiring", () => {
 		orgId: string,
 		tourId: Id<"tours">,
 		capacity: number,
+		overrides: Partial<{
+			date: string;
+			startTime: string;
+			endTime: string;
+		}> = {},
 	): Promise<Id<"tourSchedules">> {
 		const now = Date.now();
 		return await ctx.db.insert("tourSchedules", {
 			organizationId: orgId,
 			tourId,
-			date: "2026-12-01",
-			startTime: "09:00",
-			endTime: "11:00",
+			date: overrides.date ?? "2026-12-01",
+			startTime: overrides.startTime ?? "09:00",
+			endTime: overrides.endTime ?? "11:00",
 			capacityTotal: capacity,
 			capacityBooked: 0,
 			status: "available",
@@ -314,6 +319,146 @@ describe("convex/bookings — schedule wiring", () => {
 			updatedAt: now,
 		});
 	}
+
+	it("rescheduling moves capacity and keeps the booking confirmed", async () => {
+		const t = convexTest(schema, modules);
+		const { bookingId, firstScheduleId, secondScheduleId } = await t.run(
+			async (ctx) => {
+				const c = ctx as unknown as TestCtx;
+				const orgId = "org_sched_reschedule";
+				const tourId = await seedTour(c, orgId);
+				const customerId = await seedCustomer(c, orgId);
+				const firstScheduleId = await seedSchedule(c, orgId, tourId, 4, {
+					date: "2030-06-15",
+					startTime: "10:00",
+					endTime: "12:00",
+				});
+				const secondScheduleId = await seedSchedule(c, orgId, tourId, 4, {
+					date: "2030-06-22",
+					startTime: "14:00",
+					endTime: "16:00",
+				});
+				await c.db.patch(firstScheduleId, { capacityBooked: 2 });
+				const bookingId = await c.db.insert("bookings", {
+					organizationId: orgId,
+					tourId,
+					scheduleId: firstScheduleId,
+					customerId,
+					date: "2030-06-15",
+					startTime: "10:00",
+					guests: 2,
+					guestNames: "Alice",
+					languageRequired: "",
+					notes: "",
+					status: "confirmed",
+					depositAmountCents: 0n,
+					totalAmountCents: 20000n,
+					balanceDueCents: 20000n,
+					paymentMethod: "",
+					checkedInBy: "",
+					netRevenueCents: 20000n,
+					source: "public_booking",
+					reviewComment: "",
+					createdAt: 0,
+					updatedAt: 0,
+				});
+				return { bookingId, firstScheduleId, secondScheduleId };
+			},
+		);
+
+		await t.mutation(internal.bookings.internalUpdate, {
+			bookingId,
+			date: "2030-06-22",
+			startTime: "14:00",
+			scheduleId: secondScheduleId,
+		});
+
+		const result = await t.run(async (ctx) => ({
+			booking: await ctx.db.get(bookingId),
+			first: await ctx.db.get(firstScheduleId),
+			second: await ctx.db.get(secondScheduleId),
+		}));
+		expect(result.booking?.status).toBe("confirmed");
+		expect(result.booking?.scheduleId).toBe(secondScheduleId);
+		expect(result.booking?.date).toBe("2030-06-22");
+		expect(result.booking?.startTime).toBe("14:00");
+		expect(result.first?.capacityBooked).toBe(0);
+		expect(result.second?.capacityBooked).toBe(2);
+	});
+
+	it("rejects blackout dates and target schedules over capacity", async () => {
+		const t = convexTest(schema, modules);
+		const { bookingId, targetScheduleId, tourId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const orgId = "org_sched_limits";
+			const tourId = await seedTour(c, orgId);
+			const customerId = await seedCustomer(c, orgId);
+			const firstScheduleId = await seedSchedule(c, orgId, tourId, 4, {
+				date: "2030-07-15",
+				startTime: "10:00",
+				endTime: "12:00",
+			});
+			const targetScheduleId = await seedSchedule(c, orgId, tourId, 1, {
+				date: "2030-07-22",
+				startTime: "10:00",
+				endTime: "12:00",
+			});
+			await c.db.patch(firstScheduleId, { capacityBooked: 2 });
+			await c.db.insert("tourBlackoutDates", {
+				organizationId: orgId,
+				tourId,
+				startDate: "2030-07-29",
+				endDate: "2030-07-29",
+				reason: "Private event",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			const bookingId = await c.db.insert("bookings", {
+				organizationId: orgId,
+				tourId,
+				scheduleId: firstScheduleId,
+				customerId,
+				date: "2030-07-15",
+				startTime: "10:00",
+				guests: 2,
+				guestNames: "Alice",
+				languageRequired: "",
+				notes: "",
+				status: "confirmed",
+				depositAmountCents: 0n,
+				totalAmountCents: 20000n,
+				balanceDueCents: 20000n,
+				paymentMethod: "",
+				checkedInBy: "",
+				netRevenueCents: 20000n,
+				source: "public_booking",
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { bookingId, targetScheduleId, tourId };
+		});
+
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				date: "2030-07-22",
+				startTime: "10:00",
+				scheduleId: targetScheduleId,
+			}),
+		).rejects.toThrow(/over capacity/i);
+		await expect(
+			t.mutation(internal.bookings.internalUpdate, {
+				bookingId,
+				date: "2030-07-29",
+				startTime: "10:00",
+			}),
+		).rejects.toThrow(/not available/i);
+
+		const untouched = await t.run(async (ctx) => ctx.db.get(bookingId));
+		expect(untouched?.tourId).toBe(tourId);
+		expect(untouched?.date).toBe("2030-07-15");
+	});
 
 	it("cancel via explicit scheduleId decrements booked count", async () => {
 		const t = convexTest(schema, modules);

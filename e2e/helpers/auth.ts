@@ -31,6 +31,20 @@ export type OnboardedSession = {
 	orgSlug: string;
 };
 
+/** Sign in an existing Better Auth user and wait for the dashboard shell. */
+export async function signIn(
+	page: Page,
+	credentials: { email: string; password: string },
+): Promise<void> {
+	await page.goto("/sign-in");
+	await page.locator("#email").waitFor({ state: "visible" });
+	await waitForHydration(page);
+	await page.locator("#email").fill(credentials.email);
+	await page.locator("#password").fill(credentials.password);
+	await page.getByRole("button", { name: "Sign in" }).click();
+	await page.waitForURL(/\/dashboard(?:$|\/)/, { timeout: 60_000 });
+}
+
 /**
  * Sign up a fresh user, create an organization, land on /dashboard.
  */

@@ -68,6 +68,11 @@ function ScheduleDetailPage() {
 	const utilization = schedule.capacityTotal
 		? Math.round((schedule.capacityBooked / schedule.capacityTotal) * 100)
 		: 0;
+	const seatsRemaining = Math.max(
+		schedule.capacityTotal - schedule.capacityBooked,
+		0,
+	);
+	const canAddBookings = schedule.status === "available" && seatsRemaining > 0;
 
 	const bookingRows = (bookings ?? []) as ScheduleBooking[];
 	const bookingsErrorNode = bookingsError ? (
@@ -148,11 +153,15 @@ function ScheduleDetailPage() {
 				<div className="flex flex-wrap gap-2">
 					{schedule.status !== "cancelled" && (
 						<>
-							<Button asChild>
-								<Link to="/dashboard/bookings/new" search={{ scheduleId }}>
-									+ Book guests
-								</Link>
-							</Button>
+							{canAddBookings ? (
+								<Button asChild>
+									<Link to="/dashboard/bookings/new" search={{ scheduleId }}>
+										+ Book guests
+									</Link>
+								</Button>
+							) : (
+								<Button disabled>Full</Button>
+							)}
 							<Button asChild variant="outline">
 								<Link
 									to="/dashboard/assignments/new"
@@ -189,7 +198,7 @@ function ScheduleDetailPage() {
 				</div>
 			}
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
 				<MetricCard label="Date" value={schedule.date} />
 				<MetricCard
 					label="Time"
@@ -199,6 +208,7 @@ function ScheduleDetailPage() {
 					label="Booked / Total"
 					value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`}
 				/>
+				<MetricCard label="Remaining" value={seatsRemaining} />
 				<MetricCard label="Status" value={schedule.status}>
 					<StatusBadge status={schedule.status} />
 				</MetricCard>
@@ -210,7 +220,9 @@ function ScheduleDetailPage() {
 			>
 				<p className="text-3xl font-semibold">{utilization}%</p>
 				<p className="text-muted-foreground text-sm">
-					{schedule.capacityBooked} of {schedule.capacityTotal} spots booked
+					{seatsRemaining > 0
+						? `${seatsRemaining} spot${seatsRemaining === 1 ? "" : "s"} remaining`
+						: "This schedule is full — new bookings are blocked."}
 				</p>
 			</DetailSection>
 

@@ -32,7 +32,6 @@ interface Settings {
 	twilioAccountSid: string;
 	twilioPhoneNumber: string;
 	twilioMessagingServiceSid: string;
-	whatsappEnabled: boolean;
 	emailEnabled: boolean;
 	emailFromName: string;
 	emailFromEmail: string;
@@ -66,7 +65,6 @@ export function NotificationSettingsPage() {
 	const [twilioPhoneNumber, setTwilioPhoneNumber] = useState("");
 	const [twilioMessagingServiceSid, setTwilioMessagingServiceSid] =
 		useState("");
-	const [whatsappEnabled, setWhatsappEnabled] = useState(false);
 	const [emailEnabled, setEmailEnabled] = useState(true);
 	const [emailFromName, setEmailFromName] = useState("");
 	const [emailFromEmail, setEmailFromEmail] = useState("");
@@ -95,7 +93,6 @@ export function NotificationSettingsPage() {
 			setTwilioAccountSid(s.twilioAccountSid);
 			setTwilioPhoneNumber(s.twilioPhoneNumber);
 			setTwilioMessagingServiceSid(s.twilioMessagingServiceSid ?? "");
-			setWhatsappEnabled(s.whatsappEnabled);
 			setEmailEnabled(s.emailEnabled);
 			setEmailFromName(s.emailFromName);
 			setEmailFromEmail(s.emailFromEmail);
@@ -148,7 +145,6 @@ export function NotificationSettingsPage() {
 				// Empty string clears a previously saved SID (backend
 				// normalizes "" → undefined on the stored field).
 				twilioMessagingServiceSid: twilioMessagingServiceSid,
-				whatsappEnabled,
 				emailEnabled,
 				emailFromName: emailFromName || undefined,
 				emailFromEmail: emailFromEmail || undefined,
@@ -344,28 +340,6 @@ export function NotificationSettingsPage() {
 								placeholder="MG..."
 							/>
 						</FormField>
-					</CardContent>
-				</Card>
-
-				<Card>
-					<CardHeader>
-						<CardTitle>WhatsApp</CardTitle>
-						<CardDescription>WhatsApp Business API (optional)</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						<label
-							htmlFor="whatsapp-enabled"
-							className="flex items-center gap-2 text-sm"
-						>
-							<Checkbox
-								id="whatsapp-enabled"
-								checked={whatsappEnabled}
-								onCheckedChange={(checked) =>
-									setWhatsappEnabled(checked === true)
-								}
-							/>
-							WhatsApp channel enabled
-						</label>
 					</CardContent>
 				</Card>
 
