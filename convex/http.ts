@@ -41,9 +41,15 @@ http.route({
 	handler: stripeWebhook,
 });
 
-// Public booking endpoint — POST /api/public/book/:slug. No auth
+// Public booking endpoint — POST /api/public/book/<slug>. No auth
 // required (visitors from the marketing site). The slug identifies
 // the organization; the body identifies tour + customer.
+//
+// Routing: Convex's HTTP router does NOT support path-parameter
+// syntax in `path` (the `path` field is exact-match). We register
+// `pathPrefix: "/api/public/book/"` so any path that begins with
+// that prefix routes here, then parse the slug from the URL path
+// below. The trailing `/` is required by the router.
 //
 // Hardening:
 // - Origin allowlist via PUBLIC_BOOKING_ALLOWED_ORIGINS env var.
@@ -57,7 +63,7 @@ http.route({
 //   action so it can't be bypassed by hitting the httpAction
 //   repeatedly with different slugs.
 http.route({
-	path: "/api/public/book/:slug",
+	pathPrefix: "/api/public/book/",
 	method: "POST",
 	handler: httpAction(async (ctx, request) => {
 		if (request.method !== "POST") {
