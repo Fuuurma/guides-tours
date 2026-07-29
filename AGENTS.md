@@ -1328,3 +1328,90 @@ notification_dispatch.ts, analytics.ts, scheduledNotifications.ts).
 - `npx tsc --noEmit` (both convex + FE) — passes
 - `pnpm vitest run` — 766/766 tests pass across 70 test files
 - `pnpm lint` — passes
+
+## Deep dive audit round 15 (2026-07-28)
+
+Deep security review of critical flows: Stripe payments, auth, and test
+coverage gap analysis. Also resolved a high-severity dependency
+vulnerability.
+
+### Dependency vulnerability resolved
+
+- **sharp <0.35.0** (CVE-2026-33327, CVE-2026-33328, CVE-2026-35590,
+  CVE-2026-35591) — transitive dependency via wrangler/miniflare.
+  Fixed: updated wrangler 4.112.0 → 4.115.0 and
+  @cloudflare/vite-plugin 1.45.1 → 1.48.0. `pnpm audit` now reports
+  zero vulnerabilities.
+
+### Stripe payment flow — CLEAN (no issues found)
+
+Deep review of payments.ts, payments_stripe_actions.ts,
+payments_stripe.ts, stripe-payment-element.tsx, payments settings page:
+- Amount manipulation: PROTECTED (validated against balanceDueCents)
+- IDOR: PROTECTED (org-scoping on all checkout actions)
+- Webhook signature: EXCELLENT (timing-safe comparison, 5-min replay
+  window, uniform responses to prevent org enumeration)
+- Secrets encryption: EXCELLENT (AES-256-GCM, never exposed to client)
+- Refund for unpaid booking: PROTECTED (checks status === "succeeded")
+- Amount immutability: PROTECTED (set at PaymentIntent creation)
+- Webhook replay: EXCELLENT (duplicate detection via eventId,
+  idempotent state transitions)
+- Publishable key: correctly handled as public data
+
+### P1 — Email verification disabled (fixed)
+
+112. **`auth.ts`** — `requireEmailVerification: false` allowed users
+     to sign up without verifying email ownership. Combined with the
+     invitation flow, this enabled pre-registration attacks (GHSA-
+     FMH4-WCC4-5JM3). Fixed: enabled `requireEmailVerification: true`
+     in both `createAuth` and `createAuthOptions`, added
+     `emailVerification.sendVerificationEmail` callback that sends
+     a verification email via SES.
+
+113. **`auth.ts` organization plugin** — no
+     `requireEmailVerificationOnInvitation` setting. Fixed: set to
+     `true` so invitations can only be accepted with a verified email.
+
+### P1 — Email enumeration via error messages (fixed)
+
+114. **`sign-in.tsx`** — displayed raw Better Auth error messages
+     ("user not found" vs "wrong password"), enabling email
+     enumeration. Fixed: generic "Invalid email or password" message.
+
+115. **`sign-up.tsx`** — displayed "email already in use" errors,
+     enabling email enumeration. Fixed: generic "Could not create
+     account" message.
+
+### Noted but not fixed (by design / platform default)
+
+- **Rate limiting on auth endpoints** — Better Auth's built-in rate
+  limiting is enabled by default in production (10s window, 100 max
+  requests). Custom per-endpoint limits could be added but the
+  default is reasonable.
+- **Password complexity** — min 8 chars with no complexity requirements.
+  Better Auth supports `minPasswordLength` but not regex validation
+  in the server config. Client-side complexity could be added to the
+  Zod schema, but server-side enforcement would require a custom
+  password validator hook.
+- **Onboarding bypass** — client-side check in dashboard.tsx. Adding
+  `beforeLoad` to 30+ routes is a refactor, not a security fix (backend
+  enforces org membership via `requireRole`).
+- **Silent org fallback in authz.ts** — documented as a known issue;
+  removing it would break existing sessions where no active org is set.
+
+### Test coverage gaps identified
+
+- **payments_stripe_actions.ts** — NO tests (6 exported actions for
+  Stripe API integration). HIGHEST PRIORITY gap.
+- **crons.ts** — NO tests (8 production cron jobs)
+- **http.ts** — NO tests (HTTP security layer)
+- **auth.ts** — weak coverage (only 4 trivial env var tests)
+- **organizations.ts, userProfiles.ts, webhookDeliveries.ts,
+  staffingDigest.ts, ota/integrations.ts** — no tests
+
+### Verification
+
+- `pnpm audit` — zero vulnerabilities
+- `npx tsc --noEmit` (both convex + FE) — passes
+- `pnpm vitest run` — 766/766 tests pass across 70 test files
+- `pnpm lint` — passes

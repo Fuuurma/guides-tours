@@ -41,7 +41,9 @@ function SignInPage() {
 				password: value.password,
 			});
 			if (signInError) {
-				setServerError(signInError.message ?? "Sign in failed");
+				// Generic message to prevent email enumeration via
+				// distinct "user not found" vs "wrong password" errors.
+				setServerError("Invalid email or password");
 				return;
 			}
 			// After sign-in, peek at whether the user has any org. If not,

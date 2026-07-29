@@ -43,7 +43,8 @@ function SignUpPage() {
 				name: value.name,
 			});
 			if (signUpError) {
-				setServerError(signUpError.message ?? "Sign up failed");
+				// Generic message — "email already in use" leaks valid emails.
+				setServerError("Could not create account. Please try again.");
 				return;
 			}
 			// First user → land on onboarding to create the company org.
