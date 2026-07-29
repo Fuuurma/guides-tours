@@ -982,17 +982,19 @@ describe("convex/bookings — internalUpdate (edit-booking flow)", () => {
 						.eq("resourceId", bookingId),
 				)
 				.collect(),
-		)) as Array<{ action: string; newValues: Record<string, unknown> }>;
+		)) as Array<{
+		action: string;
+		oldValues: Record<string, unknown>;
+		newValues: Record<string, unknown>;
+	}>;
 		const updateLog = logs.find((l) => l.action === "booking.updated");
 		expect(updateLog).toBeDefined();
-		const changes = updateLog?.newValues?.changes as Record<
-			string,
-			{ old: string; new: string }
-		>;
-		expect(changes?.notes?.old).toBe("before");
-		expect(changes?.notes?.new).toBe("after");
+		// After the round-8 audit fix, oldValues/newValues are
+		// flattened maps of field → value (not {old,new} pairs).
+		expect(updateLog?.oldValues?.notes).toBe("before");
+		expect(updateLog?.newValues?.notes).toBe("after");
 		// guestNames was unchanged, so should NOT appear in changes.
-		expect(changes?.guestNames).toBeUndefined();
+		expect(updateLog?.newValues?.guestNames).toBeUndefined();
 	});
 });
 

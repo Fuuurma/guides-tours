@@ -771,3 +771,103 @@ describe("convex/payments — upsertSettings validation", () => {
 		expect(s100?.depositPercentage).toBe(100);
 	});
 });
+
+describe("convex/payments — audit logging", () => {
+	it("recordFromAction writes an audit log row", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_audit_record";
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 2500n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_audit_1",
+		});
+		const audits = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("auditLogs")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.filter((q) => q.eq(q.field("action"), "payment.recorded_from_action"))
+				.collect();
+		});
+		expect(audits.length).toBe(1);
+		expect(audits[0].newValues).toMatchObject({
+			amountCents: "2500",
+			currency: "USD",
+		});
+	});
+
+	it("markSucceeded writes an audit log row with old+new status", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_audit_succeeded";
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 1000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_audit_2",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		const audits = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("auditLogs")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.filter((q) => q.eq(q.field("action"), "payment.succeeded"))
+				.collect();
+		});
+		expect(audits.length).toBe(1);
+		expect(audits[0].oldValues).toMatchObject({ status: "pending" });
+		expect(audits[0].newValues).toMatchObject({ status: "succeeded" });
+	});
+
+	it("markRefunded writes a refunds row + audit log", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_audit_refund";
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 3000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_audit_3",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		await t.mutation(internal.payments.markRefunded, {
+			paymentId,
+			refund: {
+				stripeRefundId: "re_audit_1",
+				amountCents: 3000n,
+				currency: "USD",
+				reason: "requested_by_customer",
+			},
+		});
+		const refunds = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("refunds")
+				.withIndex("by_stripe_refund", (q) =>
+					q.eq("stripeRefundId", "re_audit_1"),
+				)
+				.first();
+		});
+		expect(refunds).toBeDefined();
+		expect(refunds?.amountCents).toBe(3000n);
+		const audits = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("auditLogs")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.filter((q) => q.eq(q.field("action"), "payment.refunded"))
+				.collect();
+		});
+		expect(audits.length).toBe(1);
+		expect(audits[0].oldValues).toMatchObject({ status: "succeeded" });
+		expect(audits[0].newValues).toMatchObject({ status: "refunded" });
+	});
+});

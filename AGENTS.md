@@ -794,3 +794,67 @@ klook, tripadvisor, viator).
 - `npx tsc --noEmit -p convex/tsconfig.json` — passes
 - `pnpm vitest run` (changed files) — 41/41 pass
 - `pnpm lint` — passes
+
+## Backend audit round 8 (2026-07-28)
+
+Deep audit of core business logic: `bookings.ts` (1439 lines),
+`payments.ts` (844 lines), `payments_stripe_actions.ts` (888 lines).
+Focus on audit-trail completeness, unbounded queries, and reminder
+scheduling correctness.
+
+### P2 — Medium (fixed)
+
+50. **`bookings.create` schedules reminders with raw args instead
+    of resolved schedule date/time** — when a `scheduleId` is
+    linked, the booking row gets `schedule.date`/`schedule.startTime`
+    but `scheduleForBooking` was called with `args.date`/
+    `args.startTime`. Reminders would fire at the wrong time if
+    the schedule's date/time differed from the args. Fixed in
+    `convex/bookings.ts`: now uses the resolved `date`/`startTime`.
+
+51. **`bookings.clearPendingBookingReminders` uses unbounded
+    `.collect()`** — a booking with pathological data could have
+    hundreds of pending reminders. Fixed in `convex/bookings.ts`:
+    now uses `.take(20)` (well above the legitimate max of ~3).
+
+52. **`bookings.performCancel` pending notifications `.collect()`
+    (unbounded)** — same issue as #51. Fixed in
+    `convex/bookings.ts`: now uses `.take(20)`.
+
+53. **`payments.recordFromAction` missing audit log** — unlike
+    `payments.record` (which logs), the internal `recordFromAction`
+    mutation (used by Stripe webhook + public booking flow) created
+    payment rows with no audit trail. Fixed in
+    `convex/payments.ts`: now writes a `payment.recorded_from_action`
+    audit log row.
+
+54. **`payments.upsertSettings` missing audit log** — Stripe
+    settings creates/updates (including enabling/disabling Stripe,
+    changing deposit %, changing currency) had no audit trail.
+    Fixed in `convex/payments.ts`: now writes
+    `paymentSettings.created` / `paymentSettings.updated` audit
+    rows (secrets excluded from log values).
+
+### P3 — Low (fixed)
+
+55. **`bookings.performUpdate` audit log `oldValues` was empty** —
+    the `changes` object already tracked `{old, new}` pairs but
+    `oldValues` was `{}` and `newValues` was `{changes}` (nested).
+    Fixed in `convex/bookings.ts`: now flattens into
+    `oldValues`/`newValues` maps of field → value.
+
+### Tests added
+
+- 3 new tests in `convex/__tests__/payments.test.ts` for audit
+  logging: `recordFromAction`, `markSucceeded`, `markRefunded`
+  all verify audit log rows are written with correct old/new
+  values.
+- Updated existing `bookings.test.ts` audit log test to match
+  the new flattened `oldValues`/`newValues` format.
+
+### Verification
+
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm vitest run` (changed files) — all new tests pass,
+  pre-existing flaky timeouts unchanged
+- `pnpm lint` — passes

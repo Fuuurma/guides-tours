@@ -99,12 +99,16 @@ async function clearPendingBookingReminders(
 	ctx: MutationCtx,
 	bookingId: Id<"bookings">,
 ) {
+	// A booking should have at most a handful of pending reminders
+	// (24h + 2h + booking_confirmation). Cap at 20 as a safety net
+	// against pathological data — well above any legitimate count.
+	const MAX_REMINDERS = 20;
 	const pending = await ctx.db
 		.query("scheduledNotifications")
 		.withIndex("by_booking_sent", (q) =>
 			q.eq("bookingId", bookingId).eq("sent", false),
 		)
-		.collect();
+		.take(MAX_REMINDERS);
 	for (const notification of pending) {
 		await ctx.db.patch(notification._id, {
 			sent: true,
@@ -641,8 +645,11 @@ export const create = mutation({
 			newValues: {
 				tourId: args.tourId,
 				customerId: args.customerId,
-				date: args.date,
-				startTime: args.startTime,
+					// Use the resolved date/startTime (which may differ
+				// from args.date/args.startTime when a scheduleId
+				// was linked — the schedule's date/time wins).
+				date,
+				startTime,
 				guests: args.guests,
 			},
 		});
@@ -951,8 +958,14 @@ async function performUpdate(
 		action: "booking.updated",
 		resourceType: "booking",
 		resourceId: args.bookingId,
-		oldValues: {},
-		newValues: { changes },
+		// Flatten changes into oldValues/newValues so the audit row
+		// records what actually changed (previously oldValues was {}).
+		oldValues: Object.fromEntries(
+			Object.entries(changes).map(([k, v]) => [k, v.old]),
+		),
+		newValues: Object.fromEntries(
+			Object.entries(changes).map(([k, v]) => [k, v.new]),
+		),
 	});
 
 	return args.bookingId;
@@ -1189,13 +1202,15 @@ async function performCancel(
 	// Cancel any pending scheduledNotifications for this booking so
 	// the cron doesn't fire 24h/2h reminders about a booking that
 	// no longer exists. Mark sent=true (preserves the audit row) +
-	// record a skip reason.
+	// record a skip reason. Cap at 20 — same rationale as
+	// clearPendingBookingReminders.
+	const MAX_CANCEL_REMINDERS = 20;
 	const pending = await ctx.db
 		.query("scheduledNotifications")
 		.withIndex("by_booking_sent", (q) =>
 			q.eq("bookingId", booking._id).eq("sent", false),
 		)
-		.collect();
+		.take(MAX_CANCEL_REMINDERS);
 	for (const s of pending) {
 		await ctx.db.patch(s._id, {
 			sent: true,

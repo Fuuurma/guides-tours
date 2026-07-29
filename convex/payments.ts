@@ -485,9 +485,33 @@ export const upsertSettings = mutation({
 				defaultCurrency: args.defaultCurrency,
 				updatedAt: now,
 			});
+			await logAudit(ctx, {
+				organizationId: member.organizationId,
+				userId: member.userId,
+				action: "paymentSettings.updated",
+				resourceType: "paymentSettings",
+				resourceId: existing._id,
+				// Don't log secret values — just whether they changed.
+				oldValues: {
+					stripeEnabled: existing.stripeEnabled,
+					stripeIsSandbox: existing.stripeIsSandbox,
+					acceptDeposits: existing.acceptDeposits,
+					depositPercentage: existing.depositPercentage,
+					defaultCurrency: existing.defaultCurrency,
+					stripePublishableKey: existing.stripePublishableKey,
+				},
+				newValues: {
+					stripeEnabled: args.stripeEnabled,
+					stripeIsSandbox: args.stripeIsSandbox,
+					acceptDeposits: args.acceptDeposits,
+					depositPercentage: args.depositPercentage,
+					defaultCurrency: args.defaultCurrency,
+					stripePublishableKey: args.stripePublishableKey,
+				},
+			});
 			return existing._id;
 		}
-		return await ctx.db.insert("paymentSettings", {
+		const id = await ctx.db.insert("paymentSettings", {
 			organizationId: member.organizationId,
 			stripeEnabled: args.stripeEnabled,
 			stripePublishableKey: args.stripePublishableKey,
@@ -500,6 +524,22 @@ export const upsertSettings = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		await logAudit(ctx, {
+			organizationId: member.organizationId,
+			userId: member.userId,
+			action: "paymentSettings.created",
+			resourceType: "paymentSettings",
+			resourceId: id,
+			oldValues: {},
+			newValues: {
+				stripeEnabled: args.stripeEnabled,
+				stripeIsSandbox: args.stripeIsSandbox,
+				acceptDeposits: args.acceptDeposits,
+				depositPercentage: args.depositPercentage,
+				defaultCurrency: args.defaultCurrency,
+			},
+		});
+		return id;
 	},
 });
 
@@ -723,7 +763,7 @@ export const recordFromAction = internalMutation({
 			return existing._id;
 		}
 		const now = Date.now();
-		return await ctx.db.insert("payments", {
+		const paymentId = await ctx.db.insert("payments", {
 			organizationId: args.organizationId,
 			bookingId: args.bookingId,
 			amountCents: args.amountCents,
@@ -734,6 +774,21 @@ export const recordFromAction = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: "internal",
+			action: "payment.recorded_from_action",
+			resourceType: "payment",
+			resourceId: paymentId,
+			oldValues: {},
+			newValues: {
+				amountCents: args.amountCents.toString(),
+				currency: args.currency,
+				bookingId: args.bookingId,
+				stripePaymentIntentId: args.stripePaymentIntentId,
+			},
+		});
+		return paymentId;
 	},
 });
 
