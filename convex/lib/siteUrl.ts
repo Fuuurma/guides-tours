@@ -1,6 +1,14 @@
-/** Canonical public app origin for emails, SMS, and invite deep-links. */
+/** Canonical public app origin for emails, SMS, and invite deep-links.
+ * Falls back to localhost for dev. In production, SITE_URL must be set
+ * to an HTTPS URL — a warning is logged if it's HTTP or unset. */
 export function getSiteUrl(): string {
-	return process.env.SITE_URL ?? "http://127.0.0.1:3020";
+	const url = process.env.SITE_URL ?? "http://127.0.0.1:3020";
+	if (url.startsWith("http://") && !url.includes("127.0.0.1") && !url.includes("localhost")) {
+		console.warn(
+			`[siteUrl] SITE_URL is HTTP (${url}). Set it to an HTTPS URL in production.`,
+		);
+	}
+	return url;
 }
 
 /** Absolute dashboard URL (no trailing slash on base). */

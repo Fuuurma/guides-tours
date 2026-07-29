@@ -192,6 +192,11 @@ export const internalUpsert = internalMutation({
 					totalBookings: existing.totalBookings,
 					totalGuests: existing.totalGuests,
 					grossRevenueCents: existing.grossRevenueCents.toString(),
+					cancellations: existing.cancellations,
+					noShows: existing.noShows,
+					avgGroupSize: existing.avgGroupSize,
+					utilizationRate: existing.utilizationRate,
+					totalCapacity: existing.totalCapacity,
 					periodDate: existing.periodDate,
 					periodType: existing.periodType,
 				},
@@ -199,6 +204,11 @@ export const internalUpsert = internalMutation({
 					totalBookings: args.totalBookings,
 					totalGuests: args.totalGuests,
 					grossRevenueCents: args.grossRevenueCents.toString(),
+					cancellations: args.cancellations,
+					noShows: args.noShows,
+					avgGroupSize: args.avgGroupSize,
+					utilizationRate: args.utilizationRate,
+					totalCapacity: args.totalCapacity,
 				},
 			});
 			return existing._id;

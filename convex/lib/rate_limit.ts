@@ -56,12 +56,16 @@ async function collectRecentAttemptsByIp(
 	ip: string,
 	now: number = Date.now(),
 ) {
-	if (!ip) return [];
+	// Treat missing/empty IP as "unknown" so the IP rate limit still
+	// applies (prevents bypass by omitting the IP header). Legitimate
+	// requests from a NAT'd office share the same IP, so "unknown"
+	// gets its own bucket — it won't interfere with real IPs.
+	const effectiveIp = ip || "unknown";
 	const windowStart = now - WINDOW_MS;
 	return await ctx.db
 		.query("publicBookingAttempts")
 		.withIndex("by_ip_created", (q) =>
-			q.eq("ip", ip).gte("createdAt", windowStart),
+			q.eq("ip", effectiveIp).gte("createdAt", windowStart),
 		)
 		.take(MAX_ATTEMPTS_PER_IP + 1);
 }

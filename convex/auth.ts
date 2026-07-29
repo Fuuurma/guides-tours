@@ -49,9 +49,13 @@ const plugins = [
 				`You've been invited to join ${orgName} on guides-tours.\n\n` +
 				`Accept the invitation here:\n${inviteLink}\n\n` +
 				`If you weren't expecting this email, you can safely ignore it.`;
+			// HTML-escape user-provided fields to prevent XSS in email clients.
+			const escHtml = (s: string) =>
+				s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+				 .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 			const bodyHtml =
-				`<p>${data.email},</p>` +
-				`<p>You've been invited to join <strong>${orgName}</strong> on guides-tours.</p>` +
+				`<p>${escHtml(data.email)},</p>` +
+				`<p>You've been invited to join <strong>${escHtml(orgName)}</strong> on guides-tours.</p>` +
 				`<p><a href="${inviteLink}">Accept the invitation</a></p>` +
 				`<p>If you weren't expecting this email, you can safely ignore it.</p>`;
 

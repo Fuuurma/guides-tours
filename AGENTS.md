@@ -1080,3 +1080,88 @@ Deep audit of 22 files across 3 parallel subagents: `http.ts`, `crons.ts`,
 - `npx tsc --noEmit -p convex/tsconfig.json` — passes
 - `pnpm vitest run` — 480/480 tests pass across 50 test files
 - `pnpm lint` — passes
+
+## Backend audit round 12 (2026-07-28)
+
+Deep audit of 38 files across 4 parallel subagents: all `convex/lib/`
+helpers (12 files), payments/orgs/tours/schema (7 files), auth + betterAuth
+(7 files), and OTA provider webhooks (7 files + shared handler).
+
+### Clean files (no issues found)
+- `lib/audit.ts` — minimal helper, no issues
+- `lib/time.ts` — round-trip validation catches invalid dates
+- `lib/staffing.ts` — helper functions, no issues
+- `lib/staffingGaps.ts` — pure computation, no issues
+- `lib/notificationRender.ts` — HTML escaping present, ALLOWED_VARS whitelist
+- `lib/phoneRemindCooldown.ts` — pure computation, no issues
+- `lib/userContact.ts` — proper type assertions for Better Auth adapter
+- `lib/sendEmail.ts` — SES integration, no issues
+- `lib/validation.ts` — email regex + length limits present
+- `payments_stripe.ts` — proper HMAC-SHA256 with timing-safe comparison
+- `payments_stripe_actions.ts` — webhook sig verified before state changes
+- `organizations.ts` — proper org-scoping, MAX_ENRICH cap
+- `tourCategories.ts` — well-implemented CRUD with complete audit logs
+- `tours.ts` — comprehensive validation, good defense-in-depth
+- `schema.ts` — all sensitive fields marked encryptedString
+- `auth.config.ts`, `betterAuth/adapter.ts`, `betterAuth/schema.ts`,
+  `convex.config.ts` — minimal config files, no issues
+- All 7 OTA provider webhook files — thin wrappers delegating to
+  shared handler with proper signature verification
+
+### P1 — HTML injection in email templates (fixed)
+
+100. **`auth.ts` invitation email** — `orgName` and `data.email`
+     were interpolated into HTML without escaping. If an org name
+     contained `<script>` or other HTML, it would execute in email
+     clients. Fixed: added `escHtml()` helper that escapes
+     `&`, `<`, `>`, `"`, `'` before interpolation.
+
+### P2 — Security hardening (fixed)
+
+101. **`lib/crypto.ts` fromHex()** — only checked hex length was
+     even, didn't validate characters were valid hex. Invalid
+     characters would produce `NaN` bytes, causing silent
+     decryption failures. Fixed: added `/^[0-9a-fA-F]*$/` regex
+     validation before parsing.
+
+102. **`lib/rate_limit.ts` IP rate limit bypass** — when IP was
+     missing/empty, `collectRecentAttemptsByIp()` returned `[]`,
+     completely bypassing the IP rate limit. An attacker could
+     omit the IP header to spray bookings. Fixed: missing IP is
+     now treated as `"unknown"` bucket, so the IP rate limit
+     still applies.
+
+103. **`lib/siteUrl.ts` insecure HTTP default** — no warning when
+     `SITE_URL` is HTTP in production. Fixed: logs a warning when
+     `SITE_URL` is HTTP and not localhost/127.0.0.1.
+
+### P3 — Incomplete oldValues (fixed)
+
+104. **`tourAnalytics.ts` internalUpsert** — `oldValues` only
+     captured 5 of 10 changed fields (missing `cancellations`,
+     `noShows`, `avgGroupSize`, `utilizationRate`, `totalCapacity`).
+     `newValues` was similarly incomplete. Fixed: both now capture
+     all 10 fields.
+
+### Noted but not fixed (lower priority / by design)
+
+- **`auth.ts` `requireEmailVerification: false`** — intentional
+  for dev; must be `true` in production. Documented in auth config.
+- **`betterAuth/generatedSchema.ts` OAuth tokens stored as plain
+  strings** — this is Better Auth's schema; encryption is the
+  application's responsibility (handled via `encryptedString` in
+  our schema for our own fields).
+- **`webhook_verify.ts` replay protection optional when timestamp
+  header missing** — intentional per comments; HMAC still required.
+- **`webhook_handler.ts` raw payload stored in webhookDeliveries**
+  — may contain PII; this is the delivery audit trail. Retention
+  is bounded by `cleanupOldNotifications` cron.
+- **`rate_limit.ts` TOCTOU race** — inherent to Convex's
+  transactional model; the rate limit is a best-effort defense,
+  not a hard guarantee. Acceptable for public booking throttling.
+
+### Verification
+
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm vitest run` — 480/480 tests pass across 50 test files
+- `pnpm lint` — passes
