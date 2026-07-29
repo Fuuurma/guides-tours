@@ -322,13 +322,19 @@ export const internalUpdate = internalMutation({
 			if (value !== undefined) patch[field] = value;
 		}
 		await ctx.db.patch(args.templateId, patch);
+		// Log old values for every changed field (not just name).
+		const oldValues: Record<string, unknown> = {};
+		for (const key of Object.keys(patch)) {
+			if (key === "updatedAt") continue;
+			oldValues[key] = (existing as Record<string, unknown>)[key];
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "notification_template.updated",
 			resourceType: "notificationTemplate",
 			resourceId: args.templateId,
-			oldValues: { name: existing.name },
+			oldValues,
 			newValues: patch,
 		});
 		return args.templateId;
@@ -365,7 +371,12 @@ export const internalRemove = internalMutation({
 			action: "notification_template.deleted",
 			resourceType: "notificationTemplate",
 			resourceId: args.templateId,
-			oldValues: { name: existing.name },
+			oldValues: {
+				name: existing.name,
+				channel: existing.channel,
+				isActive: existing.isActive,
+				sendTiming: existing.sendTiming,
+			},
 			newValues: {},
 		});
 		return args.templateId;
@@ -609,9 +620,9 @@ export const recordTestLog = internalMutation({
 			resourceType: "notificationTemplate",
 			resourceId: args.templateId,
 			oldValues: {},
+			// PII: don't log recipient (email/phone).
 			newValues: {
 				channel: args.channel,
-				recipient: args.recipient,
 				status: args.status,
 			},
 		});

@@ -145,7 +145,8 @@ export const internalCreate = internalMutation({
 			resourceType: "driver",
 			resourceId: driverId,
 			oldValues: {},
-			newValues: { userId: args.userId, licenseInfo: args.licenseInfo },
+			// PII: don't log licenseInfo (may contain driver's license number).
+			newValues: { userId: args.userId },
 		});
 		return driverId;
 	},
@@ -202,14 +203,24 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		await ctx.db.patch(args.driverId, patch);
+		// Build oldValues for every changed field + strip PII (licenseInfo) from log.
+		const PII_FIELDS = new Set(["licenseInfo"]);
+		const oldValues: Record<string, unknown> = {};
+		const newValues: Record<string, unknown> = {};
+		for (const key of Object.keys(patch)) {
+			if (key === "updatedAt") continue;
+			if (PII_FIELDS.has(key)) continue;
+			oldValues[key] = (existing as Record<string, unknown>)[key];
+			newValues[key] = patch[key];
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "driver.updated",
 			resourceType: "driver",
 			resourceId: args.driverId,
-			oldValues: { isActive: existing.isActive },
-			newValues: patch,
+			oldValues,
+			newValues,
 		});
 		return args.driverId;
 	},

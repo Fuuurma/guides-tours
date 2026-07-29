@@ -369,13 +369,20 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		await ctx.db.patch(args.scheduleId, patch);
+		// Log old values for every changed field (mirrors
+		// tours.internalUpdate's pattern), not just date+status.
+		const oldValues: Record<string, unknown> = {};
+		for (const key of Object.keys(patch)) {
+			if (key === "updatedAt") continue;
+			oldValues[key] = (existing as Record<string, unknown>)[key];
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tour_schedule.updated",
 			resourceType: "tourSchedule",
 			resourceId: args.scheduleId,
-			oldValues: { date: existing.date, status: existing.status },
+			oldValues,
 			newValues: patch,
 		});
 		return args.scheduleId;
@@ -498,7 +505,14 @@ export const internalRemove = internalMutation({
 			action: "tour_schedule.deleted",
 			resourceType: "tourSchedule",
 			resourceId: args.scheduleId,
-			oldValues: { date: existing.date },
+			oldValues: {
+				tourId: existing.tourId,
+				date: existing.date,
+				startTime: existing.startTime,
+				status: existing.status,
+				capacityTotal: existing.capacityTotal,
+				capacityBooked: existing.capacityBooked,
+			},
 			newValues: {},
 		});
 		return args.scheduleId;

@@ -473,14 +473,24 @@ export const update = mutation({
 		await ctx.db.patch(args.customerId, patch);
 
 		if (Object.keys(changes).length > 0) {
+			// Flatten changes into oldValues/newValues maps of field → value.
+			// PII fields (email, name, phone) are excluded from the audit log.
+			const PII_FIELDS = new Set(["email", "name", "phone", "notes", "specialRequirements", "sourceDetails"]);
+			const oldValues: Record<string, unknown> = {};
+			const newValues: Record<string, unknown> = {};
+			for (const [field, { old: oldVal, new: newVal }] of Object.entries(changes)) {
+				if (PII_FIELDS.has(field)) continue;
+				oldValues[field] = oldVal;
+				newValues[field] = newVal;
+			}
 			await logAudit(ctx, {
 				organizationId: customer.organizationId,
 				userId: member.userId,
 				action: "customer.updated",
 				resourceType: "customer",
 				resourceId: args.customerId,
-				oldValues: {},
-				newValues: { changes },
+				oldValues,
+				newValues,
 			});
 		}
 
@@ -535,9 +545,11 @@ export const remove = mutation({
 			action: "customer.deleted",
 			resourceType: "customer",
 			resourceId: args.customerId,
+			// PII: don't log email/name. Capture non-PII fields for audit trail.
 			oldValues: {
-				email: customer.email,
-				name: customer.name,
+				source: customer.source,
+				vipStatus: customer.vipStatus,
+				totalVisits: customer.totalVisits,
 			},
 			newValues: {},
 		});

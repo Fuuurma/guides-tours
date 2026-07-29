@@ -238,14 +238,21 @@ export const internalUpdate = internalMutation({
 			return args.blackoutId;
 		}
 		await ctx.db.patch(args.blackoutId, patch);
+		// Flatten changes into oldValues/newValues maps of field → value.
+		const oldValues: Record<string, unknown> = {};
+		const newValues: Record<string, unknown> = {};
+		for (const [field, { old: oldVal, new: newVal }] of Object.entries(changes)) {
+			oldValues[field] = oldVal;
+			newValues[field] = newVal;
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tourBlackout.updated",
 			resourceType: "tourBlackout",
 			resourceId: args.blackoutId,
-			oldValues: {},
-			newValues: { changes },
+			oldValues,
+			newValues,
 		});
 		return args.blackoutId;
 	},

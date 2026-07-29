@@ -348,10 +348,9 @@ export const recordImmediateDispatchResult = internalMutation({
 			resourceType: "booking",
 			resourceId: args.bookingId,
 			oldValues: {},
+			// PII: don't log recipient (email/phone) or subject (may contain customer name).
 			newValues: {
 				channel: args.channel,
-				recipient: args.recipient,
-				subject: args.subject,
 				templateName: args.templateName,
 				error: args.errorMessage ?? "",
 			},
@@ -406,6 +405,18 @@ export const cleanupOldAssignments = internalMutation({
 			`[cron] cleanupOldAssignments archived ${targets.length} assignments older than ${cutoffDate}`,
 		);
 
+		if (targets.length > 0) {
+			await logAudit(ctx, {
+				organizationId: "system",
+				userId: "system",
+				action: "assignments.bulk_archived",
+				resourceType: "assignment",
+				resourceId: targets[0]?._id ?? "",
+				oldValues: {},
+				newValues: { count: targets.length, cutoffDate },
+			});
+		}
+
 		return { archived: targets.length, cutoffDate };
 	},
 });
@@ -442,6 +453,21 @@ export const cleanupOldNotifications = internalMutation({
 		console.log(
 			`[cron] cleanupOldNotifications deleted ${oldLogs.length} logs, ${oldScheduled.length} scheduled (cutoff=${new Date(cutoff).toISOString()})`,
 		);
+
+		if (oldLogs.length > 0 || oldScheduled.length > 0) {
+			await logAudit(ctx, {
+				organizationId: "system",
+				userId: "system",
+				action: "notifications.bulk_cleaned",
+				resourceType: "notificationLog",
+				resourceId: oldLogs[0]?._id ?? "",
+				oldValues: {},
+				newValues: {
+					logsDeleted: oldLogs.length,
+					scheduledDeleted: oldScheduled.length,
+				},
+			});
+		}
 
 		return {
 			logsDeleted: oldLogs.length,

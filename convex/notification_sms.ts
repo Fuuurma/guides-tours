@@ -8,6 +8,7 @@ import {
 	internalQuery,
 } from "./_generated/server";
 import { decrypt } from "./lib/crypto";
+import { logAudit } from "./lib/audit";
 
 export type TwilioSendResult = {
 	ok: boolean;
@@ -57,7 +58,7 @@ export const recordSmsMessage = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const now = Date.now();
-		return await ctx.db.insert("smsMessages", {
+		const smsId = await ctx.db.insert("smsMessages", {
 			organizationId: args.organizationId,
 			bookingId: args.bookingId,
 			recipientPhone: args.recipientPhone,
@@ -75,6 +76,22 @@ export const recordSmsMessage = internalMutation({
 			sentAt: args.status === "sent" ? now : undefined,
 			createdAt: now,
 		});
+
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: "system",
+			action: "sms.recorded",
+			resourceType: "smsMessage",
+			resourceId: smsId,
+			oldValues: {},
+			// PII: don't log recipientPhone, recipientName, or messageText.
+			newValues: {
+				status: args.status,
+				twilioMessageSid: args.twilioMessageSid,
+				bookingId: args.bookingId,
+			},
+		});
+		return smsId;
 	},
 });
 

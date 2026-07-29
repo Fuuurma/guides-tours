@@ -245,8 +245,10 @@ describe("immediate booking-confirmation dispatch", () => {
 		const log = logs.find((l) => l.action === "notification.immediate_sent");
 		expect(log).toBeDefined();
 		expect(log?.newValues.channel).toBe("email");
-		expect(log?.newValues.recipient).toBe("alice@d.com");
-		expect(log?.newValues.subject).toBe("Booking confirmed");
+		// PII: recipient + subject are no longer logged.
+		expect(log?.newValues.recipient).toBeUndefined();
+		expect(log?.newValues.subject).toBeUndefined();
+		expect(log?.newValues.templateName).toBe("Booking confirmation");
 	});
 
 	it("recordImmediateDispatchResult writes failure audit log with error", async () => {

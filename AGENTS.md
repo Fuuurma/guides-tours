@@ -911,3 +911,91 @@ queries, and code correctness.
 - `npx tsc --noEmit -p convex/tsconfig.json` — passes
 - `pnpm vitest run convex/__tests__/assignments.test.ts` — 28/28 pass
 - `pnpm lint` — passes
+
+## Backend audit round 10 (2026-07-28)
+
+Deep audit of 11 files: `tourSchedules.ts`, `customers.ts`, `drivers.ts`,
+`vehicles.ts`, `vacationRequests.ts`, `tourBlackoutDates.ts`,
+`notifications.ts`, `notification_sms.ts`, `notificationSettings.ts`,
+`notificationTemplates.ts`. Two parallel subagents scanned for PII leaks,
+missing audit logs, incomplete oldValues, unbounded queries, and org-scoping.
+
+### P1 — Critical: PII leaked into audit logs (fixed)
+
+Audit logs are stored in plaintext and may be exported for compliance.
+PII fields (email, phone, name, license info, message text) must not
+appear in `oldValues`/`newValues`.
+
+61. **`customers.ts` create audit log** — logged `email` + `name` in
+    `newValues`. Fixed: now logs only `source` (non-PII).
+62. **`customers.ts` remove audit log** — logged `email` + `name` in
+    `oldValues`. Fixed: now logs `source`, `vipStatus`, `totalVisits`.
+63. **`drivers.ts` create audit log** — logged `licenseInfo` (may
+    contain driver's license number) in `newValues`. Fixed: now logs
+    only `userId`.
+64. **`drivers.ts` update audit log** — logged full `patch` which
+    could include `licenseInfo`. Fixed: strips PII fields from log.
+65. **`notifications.ts` immediate dispatch audit log** — logged
+    `recipient` (email/phone) + `subject` (may contain customer name).
+    Fixed: now logs only `channel`, `templateName`, `error`.
+66. **`notificationTemplates.ts` test_send audit log** — logged
+    `recipient` (email/phone). Fixed: now logs only `channel`, `status`.
+
+### P2 — Missing audit logs (fixed)
+
+67. **`notifications.ts` cleanupOldAssignments** — bulk-archived
+    assignments with no audit trail. Fixed: writes
+    `assignments.bulk_archived` audit row with count + cutoffDate.
+68. **`notifications.ts` cleanupOldNotifications** — bulk-deleted
+    notification logs with no audit trail. Fixed: writes
+    `notifications.bulk_cleaned` audit row with counts.
+69. **`notification_sms.ts` recordSmsMessage** — created SMS message
+    records with no audit trail. Fixed: writes `sms.recorded` audit
+    row (PII stripped: no recipientPhone/recipientName/messageText).
+70. **`notificationSettings.ts` internalUpsert update path** —
+    updated settings with no audit trail (only insert path had one).
+    Fixed: writes `notification_settings.updated` audit row with
+    all changed fields.
+
+### P3 — Incomplete audit log oldValues (fixed)
+
+71. **`tourSchedules.ts` internalUpdate** — `oldValues` only had
+    `date` + `status`. Fixed: now captures all changed fields.
+72. **`tourSchedules.ts` internalRemove** — `oldValues` only had
+    `date`. Fixed: now captures `tourId`, `date`, `startTime`,
+    `status`, `capacityTotal`, `capacityBooked`.
+73. **`customers.ts` update** — `oldValues` was empty `{}` despite
+    tracking changes. Fixed: flattens `changes` into
+    `oldValues`/`newValues` maps (PII fields excluded).
+74. **`drivers.ts` internalUpdate** — `oldValues` only had `isActive`.
+    Fixed: now captures all changed fields (PII stripped).
+75. **`vehicles.ts` internalUpdate** — `oldValues` only had `name`.
+    Fixed: now captures all changed fields.
+76. **`vacationRequests.ts` internalApprove** — `oldValues` only had
+    `status`. Fixed: now captures `status`, `reviewedBy`, `reviewedAt`.
+77. **`vacationRequests.ts` internalReject** — same as approve.
+    Fixed: now captures `status`, `reviewedBy`, `reviewedAt`.
+78. **`tourBlackoutDates.ts` internalUpdate** — `oldValues` was empty
+    `{}`. Fixed: flattens `changes` into `oldValues`/`newValues`.
+79. **`notificationSettings.ts` internalUpsert insert** — `newValues`
+    only had `twilioEnabled`. Fixed: now logs all set fields.
+80. **`notificationSettings.ts` internalRemove** — `oldValues` was
+    empty. Fixed: captures `twilioEnabled`, `emailEnabled`,
+    `staffingDigestEnabled`, `availabilityReminderEnabled`.
+81. **`notificationTemplates.ts` internalUpdate** — `oldValues` only
+    had `name`. Fixed: now captures all changed fields.
+82. **`notificationTemplates.ts` internalRemove** — `oldValues` only
+    had `name`. Fixed: captures `name`, `channel`, `isActive`,
+    `sendTiming`.
+
+### Tests updated
+
+- `immediate_dispatch.test.ts`: updated success audit log test to
+  verify PII fields (recipient, subject) are NOT logged, and
+  `templateName` IS logged.
+
+### Verification
+
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm vitest run` — 480/480 tests pass across 50 test files
+- `pnpm lint` — passes

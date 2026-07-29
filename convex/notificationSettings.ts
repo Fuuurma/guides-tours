@@ -210,6 +210,23 @@ export const internalUpsert = internalMutation({
 
 		if (existing) {
 			await ctx.db.patch(existing._id, patch);
+			// Build oldValues for every changed field (strip updatedAt).
+			const oldValues: Record<string, unknown> = {};
+			const newValues: Record<string, unknown> = {};
+			for (const key of Object.keys(patch)) {
+				if (key === "updatedAt") continue;
+				oldValues[key] = (existing as Record<string, unknown>)[key];
+				newValues[key] = patch[key];
+			}
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+				action: "notification_settings.updated",
+				resourceType: "notificationSettings",
+				resourceId: existing._id,
+				oldValues,
+				newValues,
+			});
 			return existing._id;
 		}
 
@@ -238,7 +255,7 @@ export const internalUpsert = internalMutation({
 			resourceType: "notificationSettings",
 			resourceId: id,
 			oldValues: {},
-			newValues: { twilioEnabled: args.twilioEnabled ?? false },
+			newValues: { ...patch },
 		});
 		return id;
 	},
@@ -273,7 +290,12 @@ export const internalRemove = internalMutation({
 			action: "notification_settings.deleted",
 			resourceType: "notificationSettings",
 			resourceId: existing._id,
-			oldValues: {},
+			oldValues: {
+				twilioEnabled: existing.twilioEnabled,
+				emailEnabled: existing.emailEnabled,
+				staffingDigestEnabled: existing.staffingDigestEnabled,
+				availabilityReminderEnabled: existing.availabilityReminderEnabled,
+			},
 			newValues: {},
 		});
 		return existing._id;

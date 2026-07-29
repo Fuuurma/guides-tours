@@ -393,8 +393,8 @@ export const internalApprove = internalMutation({
 			action: "vacation_request.approved",
 			resourceType: "vacationRequest",
 			resourceId: args.requestId,
-			oldValues: { status: vr.status },
-			newValues: { status: "approved" },
+				oldValues: { status: vr.status, reviewedBy: vr.reviewedBy, reviewedAt: vr.reviewedAt },
+			newValues: { status: "approved", reviewedBy: args.userId, reviewedAt: Date.now() },
 		});
 
 		return args.requestId;
@@ -463,8 +463,8 @@ export const internalReject = internalMutation({
 			action: "vacation_request.rejected",
 			resourceType: "vacationRequest",
 			resourceId: args.requestId,
-			oldValues: { status: vr.status },
-			newValues: { status: "rejected" },
+				oldValues: { status: vr.status, reviewedBy: vr.reviewedBy, reviewedAt: vr.reviewedAt },
+			newValues: { status: "rejected", reviewedBy: args.userId, reviewedAt: Date.now() },
 		});
 
 		return args.requestId;

@@ -269,13 +269,19 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		await ctx.db.patch(args.vehicleId, patch);
+		// Log old values for every changed field (not just name).
+		const oldValues: Record<string, unknown> = {};
+		for (const key of Object.keys(patch)) {
+			if (key === "updatedAt") continue;
+			oldValues[key] = (existing as Record<string, unknown>)[key];
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "vehicle.updated",
 			resourceType: "vehicle",
 			resourceId: args.vehicleId,
-			oldValues: { name: existing.name },
+			oldValues,
 			newValues: patch,
 		});
 		return args.vehicleId;
