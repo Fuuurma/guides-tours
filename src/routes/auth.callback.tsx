@@ -5,7 +5,13 @@ import { useEffect, useRef } from "react";
 export const Route = createFileRoute("/auth/callback")({
 	validateSearch: (search: Record<string, unknown>) => ({
 		ott: typeof search.ott === "string" ? search.ott : undefined,
-		redirect: typeof search.redirect === "string" ? search.redirect : undefined,
+		// Only allow relative paths to prevent open redirect attacks.
+		redirect:
+			typeof search.redirect === "string" &&
+			search.redirect.startsWith("/") &&
+			!search.redirect.startsWith("//")
+				? search.redirect
+				: undefined,
 	}),
 	component: AuthCallback,
 });

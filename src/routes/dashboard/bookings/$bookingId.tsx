@@ -19,6 +19,20 @@ import type { BookingDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
+/** Safe mailto: href — strips anything that looks like a protocol or newline. */
+function safeMailto(email: string): string {
+	const clean = email.replace(/[\s<>"'`]/g, "");
+	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return "#";
+	return `mailto:${clean}`;
+}
+
+/** Safe tel: href — allows digits, +, -, spaces, parens only. */
+function safeTel(phone: string): string {
+	const clean = phone.replace(/[^\d+()\-\s]/g, "");
+	if (!clean) return "#";
+	return `tel:${clean}`;
+}
+
 export const Route = createFileRoute("/dashboard/bookings/$bookingId")({
 	component: BookingDetailPage,
 });
@@ -429,14 +443,14 @@ function BookingDetailPage() {
 							) : null}
 							<div className="flex flex-wrap gap-2 pt-1">
 								<Button asChild size="sm" variant="outline">
-									<a href={`mailto:${b.customer.email}`}>
+									<a href={safeMailto(b.customer.email)}>
 										<Mail aria-hidden="true" />
 										Email customer
 									</a>
 								</Button>
 								{b.customer.phone ? (
 									<Button asChild size="sm" variant="outline">
-										<a href={`tel:${b.customer.phone}`}>
+										<a href={safeTel(b.customer.phone)}>
 											<Phone aria-hidden="true" />
 											Call customer
 										</a>

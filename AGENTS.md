@@ -1165,3 +1165,83 @@ helpers (12 files), payments/orgs/tours/schema (7 files), auth + betterAuth
 - `npx tsc --noEmit -p convex/tsconfig.json` — passes
 - `pnpm vitest run` — 480/480 tests pass across 50 test files
 - `pnpm lint` — passes
+
+## Frontend audit round 13 (2026-07-28)
+
+Deep audit of 125 frontend files across 4 parallel subagents: auth/lib/
+public routes (20 files), dashboard routes batch 1 (17 files), dashboard
+routes batch 2 (30 files), and components (36 files).
+
+### Clean files (no issues found)
+- `lib/auth-client.ts`, `lib/validation.ts`, `lib/public-booking-form.ts`,
+  `lib/format.ts`, `lib/utils.ts`, `lib/time.ts`, `lib/calendar-date.ts`,
+  `lib/date-range.ts`, `lib/staffing.ts` — all clean
+- `router.tsx`, `start.ts` (CSP headers well-configured), `__root.tsx` — clean
+- `sign-in.tsx`, `sign-up.tsx`, `api/auth/$.ts` — clean
+- All UI components (`ui/*.tsx`) — clean, no dangerouslySetInnerHTML
+- `data-table.tsx`, `detail-page.tsx`, `entity-form.tsx`, `form.tsx`,
+  `forms/form-field.tsx`, `list-page.tsx`, `metric-card.tsx`,
+  `status-badge.tsx`, `status-styles.ts`, `tour-cell.tsx`,
+  `tour-revenue-bars.tsx`, `stripe-payment-element.tsx` — clean
+- `types/entities.ts` — type definitions only
+- Most dashboard routes — good form validation, loading states, error boundaries
+
+### P1 — Open redirect (fixed)
+
+105. **`auth.callback.tsx`** — the `redirect` search param was used
+     directly in `navigate()`, allowing an attacker to craft a URL
+     like `/auth/callback?ott=xyz&redirect=https://evil.com` to
+     redirect users to a malicious site after authentication.
+     Fixed: `validateSearch` now only accepts relative paths starting
+     with `/` but not `//` (protocol-relative URLs).
+
+### P2 — Missing error handling (fixed)
+
+106. **`invite/$invitationId.tsx`** — the `getInvitation` auth call
+     had no try-catch; an unhandled rejection would crash the page.
+     Fixed: wrapped in try-catch with user-friendly error message.
+
+107. **`nav-bar.tsx`** — `handleSwitchOrg` caught errors silently
+     with no user feedback. Fixed: added `toast.error()` on failure.
+
+### P2 — href sanitization (fixed)
+
+108. **`bookings/$bookingId.tsx`** — `mailto:` and `tel:` hrefs
+     used raw DB values. If email/phone contained malicious
+     characters, could lead to protocol injection. Fixed: added
+     `safeMailto()` and `safeTel()` helpers that validate format
+     and strip dangerous characters.
+
+### Noted but not fixed (lower priority / by design)
+
+- **Secrets in React state** (`payments.tsx`, `ota.tsx`,
+  `notification-settings-page.tsx`) — Stripe keys, OTA API secrets,
+  and Twilio auth token are handled in client-side state. This is
+  inherent to the admin settings UI pattern — secrets are entered
+  by admins, sent to backend, and cleared from state. The backend
+  encrypts them at rest. A full refactor to server-only secret
+  entry would require a separate admin endpoint design.
+- **Missing `beforeLoad` auth guards on dashboard routes** — auth
+  is enforced at the layout level in `dashboard.tsx`. TanStack
+  Router best practice is `beforeLoad` but the current layout guard
+  is functional. Adding `beforeLoad` to 30+ routes is a refactor,
+  not a security fix.
+- **No RBAC at route level** — all authenticated org members can
+  access all dashboard routes. RBAC is enforced on the backend
+  via `requireRole`. Frontend RBAC would be UX-only.
+- **`window.confirm` for destructive actions** — UX issue, not
+  security. Custom modals would be nicer but confirm() is
+  functionally adequate.
+- **iframe `sandbox=""` in notifications preview** — this is
+  actually the most restrictive sandbox setting (no scripts, no
+  forms, no popups). The subagent flagged it incorrectly.
+- **Type assertions (`as Id<...>`)** — Convex validates IDs on
+  the backend; client-side assertions are for TypeScript only.
+- **Date parsing without timezone** — dates are stored as YMD
+  strings (UTC), so `Date.parse()` is used for display only.
+
+### Verification
+
+- `npx tsc --noEmit` — passes
+- `pnpm vitest run src/__tests__/` — 76/76 tests pass across 8 test files
+- `pnpm lint` — passes

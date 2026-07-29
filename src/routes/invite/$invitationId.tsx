@@ -47,19 +47,25 @@ function AcceptInvitePage() {
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
-			const { data } = await authClient.organization.getInvitation({
-				query: { id: invitationId },
-			});
-			if (cancelled) return;
-			if (!data) {
-				setServerError("Invitation not found or already used.");
-				return;
+			try {
+				const { data } = await authClient.organization.getInvitation({
+					query: { id: invitationId },
+				});
+				if (cancelled) return;
+				if (!data) {
+					setServerError("Invitation not found or already used.");
+					return;
+				}
+				setInvite({
+					email: data.email,
+					organizationName: data.organizationName,
+					role: data.role,
+				});
+			} catch {
+				if (!cancelled) {
+					setServerError("Could not load invitation. Please try again.");
+				}
 			}
-			setInvite({
-				email: data.email,
-				organizationName: data.organizationName,
-				role: data.role,
-			});
 		})();
 		return () => {
 			cancelled = true;

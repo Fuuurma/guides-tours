@@ -10,6 +10,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { authClient } from "@/lib/auth-client";
+import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 
 interface NavBarProps {
@@ -69,6 +70,7 @@ export function NavBar({ orgName, userName, role }: NavBarProps) {
 			window.location.assign("/dashboard");
 		} catch {
 			setSwitching(false);
+			toast.error("Could not switch organization. Please try again.");
 		}
 	};
 

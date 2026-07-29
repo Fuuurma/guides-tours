@@ -22,6 +22,8 @@ export function GoogleSignInButton({ callbackURL }: { callbackURL: string }) {
 				toast.error(result.error.message ?? "Google sign-in failed");
 				setPending(false);
 			}
+			// On success, the browser redirects to callbackURL — pending
+			// stays true so the button remains disabled during redirect.
 		} catch (error) {
 			toast.error(
 				error instanceof Error ? error.message : "Google sign-in failed",
