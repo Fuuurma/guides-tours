@@ -233,14 +233,21 @@ export const internalUpdate = internalMutation({
 			return args.scheduleId;
 		}
 		await ctx.db.patch(args.scheduleId, patch);
+		// Flatten changes into oldValues/newValues maps of field → value.
+		const oldValues: Record<string, unknown> = {};
+		const newValues: Record<string, unknown> = {};
+		for (const [field, { old: oldVal, new: newVal }] of Object.entries(changes)) {
+			oldValues[field] = oldVal;
+			newValues[field] = newVal;
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tourSeasonalSchedule.updated",
 			resourceType: "tourSeasonalSchedule",
 			resourceId: args.scheduleId,
-			oldValues: {},
-			newValues: { changes },
+			oldValues,
+			newValues,
 		});
 		return args.scheduleId;
 	},
@@ -298,7 +305,7 @@ export const internalGenerate = internalMutation({
 				q.eq("tourId", args.tourId).eq("isActive", true),
 			)
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
+			.take(500);
 		const activeSeasonals = seasonals.sort(
 			(a, b) => (b.priority ?? 0) - (a.priority ?? 0),
 		);
@@ -307,7 +314,7 @@ export const internalGenerate = internalMutation({
 			.query("tourExceptionDates")
 			.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId))
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
+			.take(500);
 		const exceptionByDate = new Map(exceptions.map((e) => [e.date, e]));
 
 		// Load only schedules in the generate window (indexed range) so
@@ -332,7 +339,7 @@ export const internalGenerate = internalMutation({
 			.query("tourBlackoutDates")
 			.withIndex("by_tour_start", (q) => q.eq("tourId", args.tourId))
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
+			.take(500);
 
 		let created = 0;
 		let skipped = 0;

@@ -208,8 +208,9 @@ export const updatePhone = mutation({
 			action: "user.phone_updated",
 			resourceType: "user",
 			resourceId: targetUserId,
-			oldValues: {},
-			newValues: { phone: phone || "" },
+			// PII: don't log phone value — log only that it was updated.
+			oldValues: { phoneUpdated: false },
+			newValues: { phoneUpdated: true },
 		});
 		return { userId: targetUserId, phone };
 	},

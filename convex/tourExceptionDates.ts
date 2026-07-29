@@ -237,14 +237,20 @@ export const internalUpdate = internalMutation({
 			return args.exceptionId;
 		}
 		await ctx.db.patch(args.exceptionId, patch);
+		const oldValues: Record<string, unknown> = {};
+		const newValues: Record<string, unknown> = {};
+		for (const [field, { old: oldVal, new: newVal }] of Object.entries(changes)) {
+			oldValues[field] = oldVal;
+			newValues[field] = newVal;
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tourException.updated",
 			resourceType: "tourException",
 			resourceId: args.exceptionId,
-			oldValues: {},
-			newValues: { changes },
+			oldValues,
+			newValues,
 		});
 		return args.exceptionId;
 	},

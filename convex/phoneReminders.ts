@@ -410,7 +410,9 @@ export const sendReminders = mutation({
 			action: "phone_reminder.sent",
 			resourceType: "notificationSettings",
 			resourceId: settings._id,
-			oldValues: {},
+			oldValues: {
+				phoneRemindLastBulkAt: settings.phoneRemindLastBulkAt,
+			},
 			newValues: {
 				dateFrom,
 				dateTo,

@@ -10,6 +10,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { internalMutation } from "../_generated/server";
+import { logAudit } from "../lib/audit";
 
 /**
  * Upsert an OTA booking. Called by every provider's webhook handler
@@ -136,6 +137,21 @@ export const upsertOtaBooking = internalMutation({
 
 		if (existing) {
 			await ctx.db.patch(existing._id, patch);
+			await logAudit(ctx, {
+				organizationId,
+				userId: "system",
+				action: "ota_booking.updated",
+				resourceType: "otaBooking",
+				resourceId: existing._id,
+				oldValues: { status: existing.status },
+				// PII: don't log customer name/email/phone.
+				newValues: {
+					reservationId: event.reservationId,
+					tourDate: event.tourDate,
+					guests: event.guests,
+					status: "confirmed",
+				},
+			});
 			return { id: existing._id, created: false };
 		}
 
@@ -146,6 +162,21 @@ export const upsertOtaBooking = internalMutation({
 			otaConfirmationCode: undefined,
 			rawOtaData: rawData,
 			receivedAt: now,
+		});
+		await logAudit(ctx, {
+			organizationId,
+			userId: "system",
+			action: "ota_booking.created",
+			resourceType: "otaBooking",
+			resourceId: id,
+			oldValues: {},
+			// PII: don't log customer name/email/phone.
+			newValues: {
+				reservationId: event.reservationId,
+				tourDate: event.tourDate,
+				guests: event.guests,
+				status: "confirmed",
+			},
 		});
 		return { id, created: true };
 	},
@@ -173,6 +204,15 @@ export const cancelOtaBooking = internalMutation({
 			cancelledAt: now,
 			lastSyncAt: now,
 			rawOtaData: args.rawData,
+		});
+		await logAudit(ctx, {
+			organizationId: existing.organizationId,
+			userId: "system",
+			action: "ota_booking.cancelled",
+			resourceType: "otaBooking",
+			resourceId: existing._id,
+			oldValues: { status: existing.status },
+			newValues: { status: "cancelled", reservationId: args.reservationId },
 		});
 		return existing._id;
 	},
@@ -224,9 +264,39 @@ export const upsertAvailabilityCache = internalMutation({
 		};
 		if (existing) {
 			await ctx.db.patch(existing._id, doc);
+			await logAudit(ctx, {
+				organizationId: product.organizationId,
+				userId: "system",
+				action: "ota_availability.updated",
+				resourceType: "otaAvailabilityCache",
+				resourceId: existing._id,
+				oldValues: {
+					availableSpaces: existing.availableSpaces,
+					totalSpaces: existing.totalSpaces,
+				},
+				newValues: {
+					availableSpaces: args.event.availableSpaces,
+					totalSpaces: args.event.totalSpaces,
+					date: args.event.date,
+				},
+			});
 			return existing._id;
 		}
-		return await ctx.db.insert("otaAvailabilityCache", doc);
+		const cacheId = await ctx.db.insert("otaAvailabilityCache", doc);
+		await logAudit(ctx, {
+			organizationId: product.organizationId,
+			userId: "system",
+			action: "ota_availability.created",
+			resourceType: "otaAvailabilityCache",
+			resourceId: cacheId,
+			oldValues: {},
+			newValues: {
+				availableSpaces: args.event.availableSpaces,
+				totalSpaces: args.event.totalSpaces,
+				date: args.event.date,
+			},
+		});
+		return cacheId;
 	},
 });
 

@@ -999,3 +999,84 @@ appear in `oldValues`/`newValues`.
 - `npx tsc --noEmit -p convex/tsconfig.json` — passes
 - `pnpm vitest run` — 480/480 tests pass across 50 test files
 - `pnpm lint` — passes
+
+## Backend audit round 11 (2026-07-28)
+
+Deep audit of 22 files across 3 parallel subagents: `http.ts`, `crons.ts`,
+`files.ts`, `analytics.ts`, `authz.ts`, OTA directory (`webhook_handler.ts`,
+`webhook_verify.ts`, `integrations_mutations.ts`, `integrations.ts`,
+`upsert.ts`), and 12 remaining backend files (`tourExceptionDates.ts`,
+`tourSeasonalSchedules.ts`, `tourTemplates.ts`, `tourImages.ts`,
+`otaProducts.ts`, `userProfiles.ts`, `webhookDeliveries.ts`,
+`staffingDigest.ts`, `scheduledNotifications.ts`, `phoneReminders.ts`,
+`availabilityReminders.ts`, `assignmentNotifications.ts`).
+
+### Clean files (no issues found)
+- `http.ts` — thorough input validation, origin allowlist, body size limit
+- `crons.ts` — only registers cron jobs
+- `analytics.ts` — proper authz, bounded scans, IDOR fixed previously
+- `authz.ts` — RBAC definitions only
+- `webhook_verify.ts` — proper signature validation
+- `integrations.ts` — proper org-scoping, stripSecrets removes sensitive fields
+- `otaProducts.ts` — correct oldValues pattern (model for other files)
+- `webhookDeliveries.ts` — no issues
+- `scheduledNotifications.ts` — no issues
+- `staffingDigest.ts` — trigger operation, empty oldValues acceptable
+- `availabilityReminders.ts` — trigger operation, empty oldValues acceptable
+- `assignmentNotifications.ts` — trigger operations, empty oldValues acceptable
+
+### P1 — PII leak in audit log (fixed)
+
+83. **`userProfiles.ts` updatePhone** — logged phone number in
+    `newValues`. Fixed: now logs only `phoneUpdated: true/false`.
+
+### P2 — Unbounded .collect() calls (fixed)
+
+84. **`tourSeasonalSchedules.ts` generate** — 3 unbounded `.collect()`
+    calls on seasonal schedules, exceptions, and blackouts. Fixed:
+    all changed to `.take(500)`.
+85. **`tourImages.ts` internalReorder** — 1 unbounded `.collect()`
+    on tour images. Fixed: changed to `.take(500)`.
+
+### P2 — Missing audit logs in OTA mutations (fixed)
+
+86. **`ota/integrations_mutations.ts` createInternal** — no audit
+    log. Fixed: writes `ota_integration.created` (secrets excluded).
+87. **`ota/integrations_mutations.ts` updateInternal** — no audit
+    log. Fixed: writes `ota_integration.updated` with complete
+    oldValues (secrets redacted as `[REDACTED]`).
+88. **`ota/integrations_mutations.ts` removeInternal** — no audit
+    log. Fixed: writes `ota_integration.deleted`.
+89. **`ota/upsert.ts` upsertOtaBooking** — no audit log on create
+    or update. Fixed: writes `ota_booking.created`/`ota_booking.updated`
+    (PII stripped: no customer name/email/phone).
+90. **`ota/upsert.ts` cancelOtaBooking** — no audit log. Fixed:
+    writes `ota_booking.cancelled`.
+91. **`ota/upsert.ts` upsertAvailabilityCache** — no audit log on
+    create or update. Fixed: writes `ota_availability.created`/
+    `ota_availability.updated`.
+
+### P3 — Incomplete oldValues in audit logs (fixed)
+
+92. **`tourSeasonalSchedules.ts` internalUpdate** — `oldValues` was
+    empty. Fixed: flattens `changes` into `oldValues`/`newValues`.
+93. **`tourExceptionDates.ts` internalUpdate** — `oldValues` was
+    empty. Fixed: flattens `changes` into `oldValues`/`newValues`.
+94. **`tourTemplates.ts` internalUpdate** — `oldValues` only had
+    `name`. Fixed: now captures all changed fields.
+95. **`tourImages.ts` internalUpdate** — `oldValues` was empty.
+    Fixed: flattens `changes` into `oldValues`/`newValues`.
+96. **`tourImages.ts` internalReorder** — `oldValues` was empty.
+    Fixed: now captures `imageCount`.
+97. **`userProfiles.ts` updatePhone** — `oldValues` was empty.
+    Fixed: now captures `phoneUpdated: false`.
+98. **`phoneReminders.ts` sendReminders** — `oldValues` was empty.
+    Fixed: now captures `phoneRemindLastBulkAt`.
+99. **`files.ts` internalRemove** — `oldValues` included `filename`
+    (potential PII). Fixed: stripped filename, keeps `purpose` + `size`.
+
+### Verification
+
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm vitest run` — 480/480 tests pass across 50 test files
+- `pnpm lint` — passes

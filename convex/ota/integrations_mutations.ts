@@ -9,6 +9,7 @@ import type { FunctionReference } from "convex/server";
 import { internalMutation, internalQuery, mutation } from "../_generated/server";
 import { requireRole } from "../lib/authz";
 import { decrypt, encrypt } from "../lib/crypto";
+import { logAudit } from "../lib/audit";
 
 const PROVIDERS = [
 	"viator",
@@ -146,7 +147,7 @@ export const createInternal = internalMutation({
 			: undefined;
 
 		const now = Date.now();
-		return await ctx.db.insert("otaIntegrations", {
+		const integrationId = await ctx.db.insert("otaIntegrations", {
 			organizationId: args.organizationId,
 			provider: args.provider,
 			apiKey: encKey,
@@ -167,6 +168,23 @@ export const createInternal = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "ota_integration.created",
+			resourceType: "otaIntegration",
+			resourceId: integrationId,
+			oldValues: {},
+			// Don't log encrypted secrets — log only non-sensitive config.
+			newValues: {
+				provider: args.provider,
+				isSandbox: args.isSandbox,
+				autoSyncAvailability: args.autoSyncAvailability ?? false,
+				autoSyncPricing: args.autoSyncPricing ?? false,
+				syncIntervalMinutes: args.syncIntervalMinutes ?? 60,
+			},
+		});
+		return integrationId;
 	},
 });
 
@@ -221,6 +239,29 @@ export const updateInternal = internalMutation({
 		}
 
 		await ctx.db.patch(args.integrationId, patch);
+		// Build oldValues for every changed field (strip secrets + updatedAt).
+		const SECRET_FIELDS = new Set(["apiKey", "apiSecret", "webhookSecret"]);
+		const oldValues: Record<string, unknown> = {};
+		const newValues: Record<string, unknown> = {};
+		for (const key of Object.keys(patch)) {
+			if (key === "updatedAt") continue;
+			if (SECRET_FIELDS.has(key)) {
+				oldValues[key] = "[REDACTED]";
+				newValues[key] = "[REDACTED]";
+			} else {
+				oldValues[key] = (row as Record<string, unknown>)[key];
+				newValues[key] = patch[key];
+			}
+		}
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "ota_integration.updated",
+			resourceType: "otaIntegration",
+			resourceId: args.integrationId,
+			oldValues,
+			newValues,
+		});
 		return args.integrationId;
 	},
 });
@@ -242,6 +283,18 @@ export const removeInternal = internalMutation({
 		await ctx.db.patch(args.integrationId, {
 			isActive: false,
 			updatedAt: Date.now(),
+		});
+		await logAudit(ctx, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			action: "ota_integration.deleted",
+			resourceType: "otaIntegration",
+			resourceId: args.integrationId,
+			oldValues: {
+				provider: row.provider,
+				isActive: row.isActive,
+			},
+			newValues: { isActive: false },
 		});
 		return args.integrationId;
 	},

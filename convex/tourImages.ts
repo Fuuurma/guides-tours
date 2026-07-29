@@ -265,14 +265,20 @@ export const internalUpdate = internalMutation({
 			return args.imageId;
 		}
 		await ctx.db.patch(args.imageId, patch);
+		const oldValues: Record<string, unknown> = {};
+		const newValues: Record<string, unknown> = {};
+		for (const [field, { old: oldVal, new: newVal }] of Object.entries(changes)) {
+			oldValues[field] = oldVal;
+			newValues[field] = newVal;
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "tourImage.updated",
 			resourceType: "tourImage",
 			resourceId: args.imageId,
-			oldValues: {},
-			newValues: { changes },
+			oldValues,
+			newValues,
 		});
 		return args.imageId;
 	},
@@ -322,7 +328,7 @@ export const internalReorder = internalMutation({
 			.query("tourImages")
 			.withIndex("by_tour", (q) => q.eq("tourId", args.tourId))
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.collect();
+			.take(500);
 
 		if (existing.length !== args.orderedImageIds.length) {
 			throw new ConvexError(
@@ -358,7 +364,9 @@ export const internalReorder = internalMutation({
 			action: "tourImage.reordered",
 			resourceType: "tour",
 			resourceId: args.tourId,
-			oldValues: {},
+			oldValues: {
+				imageCount: existing.length,
+			},
 			newValues: { orderedImageIds: args.orderedImageIds },
 		});
 

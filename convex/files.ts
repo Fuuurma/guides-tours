@@ -160,8 +160,8 @@ export const internalRemove = internalMutation({
 			action: "file.deleted",
 			resourceType: "file",
 			resourceId: args.fileId,
+			// PII: don't log filename (may contain customer name).
 			oldValues: {
-				filename: existing.filename,
 				purpose: existing.purpose,
 				size: existing.size,
 			},
