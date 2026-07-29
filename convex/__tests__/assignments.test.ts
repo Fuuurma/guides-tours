@@ -770,4 +770,73 @@ describe("convex/assignments — lifecycle", () => {
 			}),
 		).rejects.toThrow(/completed/);
 	});
+
+	it("update writes audit log with complete oldValues (vehicleId, driverId, endTime)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_audit_upd";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		const aId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-09-20",
+			startTime: "10:00",
+		});
+		await t.mutation(internal.assignments.internalUpdate, {
+			organizationId: orgId,
+			userId: "u1",
+			assignmentId: aId,
+			guideId: "guide-b",
+		});
+		const logs = await t.run(async (ctx) =>
+			ctx.db
+				.query("auditLogs")
+				.withIndex("by_resource", (q) =>
+					q.eq("resourceType", "assignment").eq("resourceId", aId),
+				)
+				.collect(),
+		);
+		const updateLog = logs.find((l: { action: string }) => l.action === "assignment.updated");
+		expect(updateLog).toBeDefined();
+		expect((updateLog as any)?.oldValues?.guideId).toBe("guide-a");
+		expect((updateLog as any)?.oldValues?.endTime).toBeDefined();
+		expect((updateLog as any)?.newValues?.guideId).toBe("guide-b");
+	});
+
+	it("soft delete writes audit log with oldValues (status, guideId, date)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_audit_del";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		const aId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-09-21",
+			startTime: "10:00",
+		});
+		await t.mutation(internal.assignments.internalRemove, {
+			organizationId: orgId,
+			userId: "u1",
+			assignmentId: aId,
+		});
+		const logs = await t.run(async (ctx) =>
+			ctx.db
+				.query("auditLogs")
+				.withIndex("by_resource", (q) =>
+					q.eq("resourceType", "assignment").eq("resourceId", aId),
+				)
+				.collect(),
+		);
+		const delLog = logs.find((l: { action: string }) => l.action === "assignment.soft_deleted");
+		expect(delLog).toBeDefined();
+		expect((delLog as any)?.oldValues?.status).toBe("scheduled");
+		expect((delLog as any)?.oldValues?.guideId).toBe("guide-a");
+		expect((delLog as any)?.oldValues?.date).toBe("2026-09-21");
+	});
 });

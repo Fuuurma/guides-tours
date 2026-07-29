@@ -858,3 +858,56 @@ scheduling correctness.
 - `pnpm vitest run` (changed files) — all new tests pass,
   pre-existing flaky timeouts unchanged
 - `pnpm lint` — passes
+
+## Backend audit round 9 (2026-07-28)
+
+Deep audit of `assignments.ts` (1576 lines — the largest single
+file in the backend). Focus on audit-trail completeness, redundant
+queries, and code correctness.
+
+### P2 — Medium (fixed)
+
+56. **`assignments.internalUpdate` redundant `sameDay` query** —
+    the same `by_tour_date` index scan was executed twice
+    (once inside the guide-change conditional, once unconditionally
+    for fleet checks). Fixed in `convex/assignments.ts`: hoisted
+    the query + `activeOnSlot` filter above the conditional so
+    both code paths share one query.
+
+57. **`assignments.internalCreate` redundant schedule fetch** —
+    `ctx.db.get(scheduleId)` was called at the top of the handler
+    (for org/status validation), then again later for vehicle
+    capacity vs `scheduleRow.capacityBooked`. Fixed in
+    `convex/assignments.ts`: hoisted `schedule` variable so the
+    second call reuses the already-fetched doc.
+
+### P3 — Low (fixed)
+
+58. **`assignments.internalUpdate` audit log `oldValues`
+    incomplete** — only captured `guideId`, `date`, `startTime`.
+    Missing `vehicleId`, `driverId`, `endTime`. Fixed in
+    `convex/assignments.ts`: now captures all fields.
+
+59. **`assignments.internalRemove` audit log `oldValues` empty** —
+    soft-delete audit row had no old values. Fixed in
+    `convex/assignments.ts`: now captures `status`, `guideId`,
+    `date`, `startTime`.
+
+60. **`assignments.list` broken indentation** — `const member` at
+    column 0 instead of indented. Fixed in
+    `convex/assignments.ts`: proper 2-tab indentation.
+
+### Tests added
+
+- 2 new tests in `convex/__tests__/assignments.test.ts`:
+  - `update writes audit log with complete oldValues` — verifies
+    `oldValues` includes `guideId`, `endTime` (not just the
+    previously-incomplete subset)
+  - `soft delete writes audit log with oldValues` — verifies
+    `oldValues` is populated with `status`, `guideId`, `date`
+
+### Verification
+
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm vitest run convex/__tests__/assignments.test.ts` — 28/28 pass
+- `pnpm lint` — passes

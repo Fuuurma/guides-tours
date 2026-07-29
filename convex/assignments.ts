@@ -23,7 +23,7 @@ import { v, ConvexError } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
-import type { Id } from "./_generated/dataModel";
+import type { Id, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
@@ -98,7 +98,7 @@ export const list = query({
 		),
 	},
 	handler: async (ctx, args) => {
-const member = await requireMembership(ctx);
+		const member = await requireMembership(ctx);
 
 		// Bound the result so an org with thousands of assignments
 		// doesn't OOM the response. 500 covers ~6 months of daily
@@ -616,9 +616,10 @@ export const internalCreate = internalMutation({
 	let date = args.date;
 	let startTime = args.startTime;
 	let scheduleId = args.scheduleId;
+	let schedule: Doc<"tourSchedules"> | null = null;
 
 	if (scheduleId) {
-		const schedule = await ctx.db.get(scheduleId);
+		schedule = await ctx.db.get(scheduleId);
 		if (!schedule) throw new ConvexError("Schedule not found");
 		if (schedule.organizationId !== args.organizationId) {
 			throw new ConvexError(
@@ -740,10 +741,11 @@ export const internalCreate = internalMutation({
 			);
 		}
 		if (scheduleId) {
-			const scheduleRow = await ctx.db.get(scheduleId);
-			if (scheduleRow && vehicle.capacity < scheduleRow.capacityBooked) {
+			// Reuse the `schedule` fetched at the top of internalCreate
+			// (still in scope) instead of a redundant ctx.db.get.
+			if (schedule && vehicle.capacity < schedule.capacityBooked) {
 				throw new ConvexError(
-					`Vehicle seats (${vehicle.capacity}) are below booked guests (${scheduleRow.capacityBooked})`,
+					`Vehicle seats (${vehicle.capacity}) are below booked guests (${schedule.capacityBooked})`,
 				);
 			}
 		}
@@ -978,25 +980,28 @@ export const internalUpdate = internalMutation({
 		const endTime = calculateEndTime(next.startTime, tour.durationHours);
 
 		// Same tour+date+startTime staffing cap as create.
+		// Fetch same-day assignments once and reuse for both the guide
+		// staffing cap check and the fleet (vehicle/driver) checks.
+		const sameDay = await ctx.db
+			.query("assignments")
+			.withIndex("by_tour_date", (q) =>
+				q.eq("tourId", existing.tourId).eq("date", next.date),
+			)
+			.take(100);
+		const activeOnSlot = sameDay.filter(
+			(a) =>
+				a._id !== args.assignmentId &&
+				a.organizationId === args.organizationId &&
+				a.status !== "cancelled" &&
+				a.deletedAt === undefined &&
+				a.startTime === next.startTime,
+		);
+
 		if (
 			next.date !== existing.date ||
 			next.startTime !== existing.startTime ||
 			next.guideId !== existing.guideId
 		) {
-			const sameDay = await ctx.db
-				.query("assignments")
-				.withIndex("by_tour_date", (q) =>
-					q.eq("tourId", existing.tourId).eq("date", next.date),
-				)
-				.take(100);
-			const activeOnSlot = sameDay.filter(
-				(a) =>
-					a._id !== args.assignmentId &&
-					a.organizationId === args.organizationId &&
-					a.status !== "cancelled" &&
-					a.deletedAt === undefined &&
-					a.startTime === next.startTime,
-			);
 			if (activeOnSlot.length >= staffing.requiredGuides) {
 				throw new ConvexError(
 					`This tour already has ${activeOnSlot.length} guide(s) on ${next.date} at ${next.startTime} (needs ${staffing.requiredGuides})`,
@@ -1009,20 +1014,6 @@ export const internalUpdate = internalMutation({
 			}
 		}
 
-		const sameDayForFleet = await ctx.db
-			.query("assignments")
-			.withIndex("by_tour_date", (q) =>
-				q.eq("tourId", existing.tourId).eq("date", next.date),
-			)
-			.take(100);
-		const activeOnSlot = sameDayForFleet.filter(
-			(a) =>
-				a._id !== args.assignmentId &&
-				a.organizationId === args.organizationId &&
-				a.status !== "cancelled" &&
-				a.deletedAt === undefined &&
-				a.startTime === next.startTime,
-		);
 		const slotHasVehicle = activeOnSlot.some((a) => a.vehicleId);
 		const slotHasDriver = activeOnSlot.some((a) => a.driverId);
 
@@ -1194,8 +1185,11 @@ export const internalUpdate = internalMutation({
 			resourceId: args.assignmentId,
 			oldValues: {
 				guideId: existing.guideId,
+				vehicleId: existing.vehicleId,
+				driverId: existing.driverId,
 				date: existing.date,
 				startTime: existing.startTime,
+				endTime: existing.endTime,
 			},
 			newValues: next,
 		});
@@ -1474,7 +1468,12 @@ export const internalRemove = internalMutation({
 			action: "assignment.soft_deleted",
 			resourceType: "assignment",
 			resourceId: args.assignmentId,
-			oldValues: {},
+			oldValues: {
+				status: a.status,
+				guideId: a.guideId,
+				date: a.date,
+				startTime: a.startTime,
+			},
 			newValues: { deletedAt: now },
 		});
 		return args.assignmentId;
