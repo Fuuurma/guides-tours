@@ -26,6 +26,7 @@ const plugins = [
 		ac,
 		roles,
 		allowUserToCreateOrganization: true,
+		requireEmailVerificationOnInvitation: true,
 		// Real SES send via the shared lib/sendEmail helper. If SES is not
 		// configured (missing AWS_REGION / AWS_ACCESS_KEY_ID / etc.), the
 		// helper logs + returns "skipped" — the invite still gets created
@@ -114,9 +115,38 @@ export const createAuthOptions = (
 	database: authComponent.adapter(ctx),
 	emailAndPassword: {
 		enabled: true,
-		requireEmailVerification: false,
+		requireEmailVerification: true,
+		minPasswordLength: 8,
+	},
+	emailVerification: {
+		sendVerificationEmail: async ({ user, url }) => {
+			await sendTemplatedEmail({
+				to: user.email,
+				subject: "Verify your email on guides-tours",
+				bodyText: `Click the link below to verify your email:\n${url}\n\nIf you didn't create an account, you can safely ignore this email.`,
+				bodyHtml: `<p>Click the link below to verify your email:</p><p><a href="${url}">Verify email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
+			});
+		},
 	},
 	socialProviders: googleSocialProviders(),
+	user: {
+		additionalFields: {
+			phone: { type: "string", required: false, defaultValue: "" },
+			bio: { type: "string", required: false, defaultValue: "" },
+			photoUrl: { type: "string", required: false, defaultValue: "" },
+			vacationDays: {
+				type: "number",
+				required: false,
+				defaultValue: 20,
+			},
+			vacationDaysUsed: {
+				type: "number",
+				required: false,
+				defaultValue: 0,
+			},
+			isActive: { type: "boolean", required: false, defaultValue: true },
+		},
+	},
 	plugins: [...plugins],
 });
 
@@ -167,7 +197,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 export const getCurrentUser = query({
 	args: {},
 	handler: async (ctx) => {
-		return await authComponent.getAuthUser(ctx);
+		return await authComponent.safeGetAuthUser(ctx);
 	},
 });
 
