@@ -133,6 +133,9 @@ export const internalRemove = internalMutation({
 		// If this blob backed a tour image, remove the gallery row too
 		// so the tour UI doesn't keep a broken storage reference.
 		if (existing.purpose === "tour-image") {
+			// Use by_tour would require knowing the tourId, but we only
+			// have the storageId. Scan by_org and break after match.
+			// There should only be one tourImage per storageId.
 			const images = await ctx.db
 				.query("tourImages")
 				.withIndex("by_org", (q) =>
@@ -142,6 +145,7 @@ export const internalRemove = internalMutation({
 			for (const img of images) {
 				if (img.storageId === existing.storageId) {
 					await ctx.db.delete(img._id);
+					break;
 				}
 			}
 		}

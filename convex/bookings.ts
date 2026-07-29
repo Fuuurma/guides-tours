@@ -26,7 +26,7 @@ import { v, ConvexError } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { requireMembership, requireRole } from "./lib/authz";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
@@ -711,219 +711,252 @@ export const update = mutation({
 		if (booking.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
-		// Source: backend/tours/services/booking_service.py:206-207.
-		// Modify refuses: completed | cancelled | no_show. We carry
-		// `completed` + `cancelled` (no `no_show` in our schema union).
-		if (booking.status === "cancelled" || booking.status === "completed") {
-			throw new ConvexError(
-				`Cannot modify a ${booking.status} booking`,
-			);
-		}
-		const rescheduleRequested =
-			args.date !== undefined ||
-			args.startTime !== undefined ||
-			args.scheduleId !== undefined;
-		if (booking.status === "checked_in" && rescheduleRequested) {
-			throw new ConvexError("Cannot reschedule a checked-in booking");
-		}
-
-		const tour = rescheduleRequested ? await ctx.db.get(booking.tourId) : null;
-		if (rescheduleRequested && !tour) {
-			throw new ConvexError("Tour not found");
-		}
-		const targetDate = rescheduleRequested
-			? args.date ?? booking.date
-			: booking.date;
-		const targetStartTime = rescheduleRequested
-			? args.startTime ?? booking.startTime
-			: booking.startTime;
-		const targetSchedule = rescheduleRequested
-			? await findTargetSchedule(ctx, {
-					organizationId: member.organizationId,
-					tourId: booking.tourId,
-					date: targetDate,
-					startTime: targetStartTime,
-					scheduleId: args.scheduleId,
-				})
-			: booking.scheduleId
-				? await ctx.db.get(booking.scheduleId)
-				: null;
-		const nextDate = targetSchedule?.date ?? targetDate;
-		const nextStartTime = targetSchedule?.startTime ?? targetStartTime;
-		const nextGuests = args.guests ?? booking.guests;
-
-		if (rescheduleRequested) {
-			const tourTs = parseBookingTime(nextDate, nextStartTime);
-			if (tourTs === null || tourTs <= Date.now()) {
-				throw new ConvexError("Cannot move a booking into the past");
-			}
-			const cutoffHours = tour?.bookingCutoffHours ?? 0;
-			if (cutoffHours > 0 && tourTs - Date.now() < cutoffHours * 3_600_000) {
-				throw new ConvexError(
-					`Bookings must be made at least ${cutoffHours}h before the tour`,
-				);
-			}
-			if (await isBlackoutHelper(ctx, booking.tourId, nextDate)) {
-				throw new ConvexError(
-					"This date is not available for booking. Please pick another date.",
-				);
-			}
-		}
-
-		// Length validation on free-text fields (defense in depth).
-		if (args.notes !== undefined) {
-			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
-		}
-		if (args.guestNames !== undefined) {
-			assertFieldWithinLimit("guestNames", args.guestNames, MAX_GUEST_NAMES_LEN);
-		}
-		if (args.languageRequired !== undefined) {
-			assertFieldWithinLimit("languageRequired", args.languageRequired, MAX_SHORT_FIELD_LEN);
-		}
-		if (args.paymentMethod !== undefined) {
-			assertFieldWithinLimit("paymentMethod", args.paymentMethod, MAX_PAYMENT_METHOD_LEN);
-		}
-
-		const now = Date.now();
-		const patch: Record<string, unknown> = {};
-		const changes: Record<string, { old: unknown; new: unknown }> = {};
-
-		for (const field of ALLOWED_UPDATE_FIELDS) {
-			const incoming = (args as Record<string, unknown>)[field];
-			if (incoming === undefined) continue;
-			const oldValue = (booking as Record<string, unknown>)[field];
-			if (oldValue !== incoming) {
-				changes[field] = { old: oldValue, new: incoming };
-			}
-			patch[field] = incoming;
-		}
-		if (rescheduleRequested) {
-			patch.date = nextDate;
-			patch.startTime = nextStartTime;
-			patch.scheduleId = targetSchedule?._id;
-			patch.guests = nextGuests;
-			for (const [field, nextValue] of [
-				["date", nextDate],
-				["startTime", nextStartTime],
-				["scheduleId", targetSchedule?._id],
-				["guests", nextGuests],
-			] as const) {
-				const oldValue = (booking as Record<string, unknown>)[field];
-				if (oldValue !== nextValue) {
-					changes[field] = { old: oldValue, new: nextValue };
-				}
-			}
-		}
-
-		const oldScheduleId = booking.scheduleId;
-		const nextScheduleId = targetSchedule?._id;
-		if (oldScheduleId === nextScheduleId) {
-			const delta = nextGuests - booking.guests;
-			if (delta > 0 && nextScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: member.organizationId,
-						scheduleId: nextScheduleId,
-						guests: delta,
-					},
-				);
-			} else if (delta < 0 && nextScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.decrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: member.organizationId,
-						scheduleId: nextScheduleId,
-						guests: Math.abs(delta),
-					},
-				);
-			}
-		} else {
-			if (oldScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.decrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: member.organizationId,
-						scheduleId: oldScheduleId,
-						guests: booking.guests,
-					},
-				);
-			}
-			if (nextScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: member.organizationId,
-						scheduleId: nextScheduleId,
-						guests: nextGuests,
-					},
-				);
-			}
-		}
-
-		// Source: balance_due = total_amount - deposit_amount on total update.
-		if (patch.totalAmountCents !== undefined) {
-			const newTotal = patch.totalAmountCents as bigint;
-			const dep =
-				(patch.depositAmountCents as bigint | undefined) ??
-				booking.depositAmountCents;
-			patch.balanceDueCents = newTotal - dep;
-			// Net revenue = total (no commission on regular bookings).
-			patch.netRevenueCents = newTotal;
-		} else if (patch.depositAmountCents !== undefined) {
-			const dep = patch.depositAmountCents as bigint;
-			patch.balanceDueCents = booking.totalAmountCents - dep;
-			patch.netRevenueCents = booking.totalAmountCents;
-		}
-
-		patch.updatedAt = now;
-		await ctx.db.patch(args.bookingId, patch);
-
-		const slotChanged =
-			changes.date !== undefined ||
-			changes.startTime !== undefined ||
-			changes.scheduleId !== undefined ||
-			changes.guests !== undefined;
-		if (slotChanged) {
-			await clearPendingBookingReminders(ctx, args.bookingId);
-			if (booking.status === "confirmed") {
-				await ctx.scheduler.runAfter(
-					0,
-						internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
-							typeof ctx.scheduler.runAfter
-						>[2],
-					{ bookingId: args.bookingId },
-				);
-				await ctx.runMutation(internal.scheduledNotifications.scheduleForBooking, {
-					organizationId: booking.organizationId,
-					bookingId: args.bookingId,
-					date: nextDate,
-					startTime: nextStartTime,
-				});
-			}
-		}
-
-		await logAudit(ctx, {
-			organizationId: booking.organizationId,
-			userId: member.userId,
-			action: "booking.updated",
-			resourceType: "booking",
-			resourceId: args.bookingId,
-			oldValues: {},
-			newValues: { changes },
-		});
-
-		return args.bookingId;
+		return performUpdate(ctx, booking, member.organizationId, member.userId, args);
 	},
 });
+
+/**
+ * Shared update logic for the public `update` and internal
+ * `internalUpdate` mutations. Caller is responsible for authz
+ * (the public mutation checks org membership; the internal mirror
+ * is called from already-authed contexts like tests + cron).
+ *
+ * Extracted to eliminate ~250 lines of duplicated logic — a bug
+ * fix in one copy previously missed the other. Mirrors the
+ * `performConfirm` / `performCancel` / `performComplete` pattern
+ * already used by the other lifecycle mutations.
+ */
+async function performUpdate(
+	ctx: MutationCtx,
+	booking: Doc<"bookings">,
+	organizationId: string,
+	userIdForAudit: string,
+	args: {
+		bookingId: Id<"bookings">;
+		date?: string;
+		startTime?: string;
+		guests?: number;
+		guestNames?: string;
+		languageRequired?: string;
+		notes?: string;
+		depositAmountCents?: bigint;
+		totalAmountCents?: bigint;
+		paymentMethod?: string;
+		scheduleId?: Id<"tourSchedules">;
+	},
+): Promise<Id<"bookings">> {
+	// Source: backend/tours/services/booking_service.py:206-207.
+	// Modify refuses: completed | cancelled | no_show. We carry
+	// `completed` + `cancelled` (no `no_show` in our schema union).
+	if (booking.status === "cancelled" || booking.status === "completed") {
+		throw new ConvexError(
+			`Cannot modify a ${booking.status} booking`,
+		);
+	}
+	const rescheduleRequested =
+		args.date !== undefined ||
+		args.startTime !== undefined ||
+		args.scheduleId !== undefined;
+	if (booking.status === "checked_in" && rescheduleRequested) {
+		throw new ConvexError("Cannot reschedule a checked-in booking");
+	}
+
+	const tour = rescheduleRequested ? await ctx.db.get(booking.tourId) : null;
+	if (rescheduleRequested && !tour) {
+		throw new ConvexError("Tour not found");
+	}
+	const targetDate = rescheduleRequested
+		? args.date ?? booking.date
+		: booking.date;
+	const targetStartTime = rescheduleRequested
+		? args.startTime ?? booking.startTime
+		: booking.startTime;
+	const targetSchedule = rescheduleRequested
+		? await findTargetSchedule(ctx, {
+				organizationId,
+				tourId: booking.tourId,
+				date: targetDate,
+				startTime: targetStartTime,
+				scheduleId: args.scheduleId,
+			})
+		: booking.scheduleId
+			? await ctx.db.get(booking.scheduleId)
+			: null;
+	const nextDate = targetSchedule?.date ?? targetDate;
+	const nextStartTime = targetSchedule?.startTime ?? targetStartTime;
+	const nextGuests = args.guests ?? booking.guests;
+
+	if (rescheduleRequested) {
+		const tourTs = parseBookingTime(nextDate, nextStartTime);
+		if (tourTs === null || tourTs <= Date.now()) {
+			throw new ConvexError("Cannot move a booking into the past");
+		}
+		const cutoffHours = tour?.bookingCutoffHours ?? 0;
+		if (cutoffHours > 0 && tourTs - Date.now() < cutoffHours * 3_600_000) {
+			throw new ConvexError(
+				`Bookings must be made at least ${cutoffHours}h before the tour`,
+			);
+		}
+		if (await isBlackoutHelper(ctx, booking.tourId, nextDate)) {
+			throw new ConvexError(
+				"This date is not available for booking. Please pick another date.",
+			);
+		}
+	}
+
+	// Length validation on free-text fields (defense in depth).
+	if (args.notes !== undefined) {
+		assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+	}
+	if (args.guestNames !== undefined) {
+		assertFieldWithinLimit("guestNames", args.guestNames, MAX_GUEST_NAMES_LEN);
+	}
+	if (args.languageRequired !== undefined) {
+		assertFieldWithinLimit("languageRequired", args.languageRequired, MAX_SHORT_FIELD_LEN);
+	}
+	if (args.paymentMethod !== undefined) {
+		assertFieldWithinLimit("paymentMethod", args.paymentMethod, MAX_PAYMENT_METHOD_LEN);
+	}
+
+	const now = Date.now();
+	const patch: Record<string, unknown> = {};
+	const changes: Record<string, { old: unknown; new: unknown }> = {};
+
+	for (const field of ALLOWED_UPDATE_FIELDS) {
+		const incoming = (args as Record<string, unknown>)[field];
+		if (incoming === undefined) continue;
+		const oldValue = (booking as Record<string, unknown>)[field];
+		if (oldValue !== incoming) {
+			changes[field] = { old: oldValue, new: incoming };
+		}
+		patch[field] = incoming;
+	}
+	if (rescheduleRequested) {
+		patch.date = nextDate;
+		patch.startTime = nextStartTime;
+		patch.scheduleId = targetSchedule?._id;
+		patch.guests = nextGuests;
+		for (const [field, nextValue] of [
+			["date", nextDate],
+			["startTime", nextStartTime],
+			["scheduleId", targetSchedule?._id],
+			["guests", nextGuests],
+		] as const) {
+			const oldValue = (booking as Record<string, unknown>)[field];
+			if (oldValue !== nextValue) {
+				changes[field] = { old: oldValue, new: nextValue };
+			}
+		}
+	}
+
+	const oldScheduleId = booking.scheduleId;
+	const nextScheduleId = targetSchedule?._id;
+	if (oldScheduleId === nextScheduleId) {
+		const delta = nextGuests - booking.guests;
+		if (delta > 0 && nextScheduleId) {
+			await ctx.runMutation(
+				internal.tourSchedules.incrementBooked as unknown as Parameters<
+					typeof ctx.runMutation
+				>[0],
+				{
+					organizationId,
+					scheduleId: nextScheduleId,
+					guests: delta,
+				},
+			);
+		} else if (delta < 0 && nextScheduleId) {
+			await ctx.runMutation(
+				internal.tourSchedules.decrementBooked as unknown as Parameters<
+					typeof ctx.runMutation
+				>[0],
+				{
+					organizationId,
+					scheduleId: nextScheduleId,
+					guests: Math.abs(delta),
+				},
+			);
+		}
+	} else {
+		if (oldScheduleId) {
+			await ctx.runMutation(
+				internal.tourSchedules.decrementBooked as unknown as Parameters<
+					typeof ctx.runMutation
+				>[0],
+				{
+					organizationId,
+					scheduleId: oldScheduleId,
+					guests: booking.guests,
+				},
+			);
+		}
+		if (nextScheduleId) {
+			await ctx.runMutation(
+				internal.tourSchedules.incrementBooked as unknown as Parameters<
+					typeof ctx.runMutation
+				>[0],
+				{
+					organizationId,
+					scheduleId: nextScheduleId,
+					guests: nextGuests,
+				},
+			);
+		}
+	}
+
+	// Source: balance_due = total_amount - deposit_amount on total update.
+	if (patch.totalAmountCents !== undefined) {
+		const newTotal = patch.totalAmountCents as bigint;
+		const dep =
+			(patch.depositAmountCents as bigint | undefined) ??
+			booking.depositAmountCents;
+		patch.balanceDueCents = newTotal - dep;
+		// Net revenue = total (no commission on regular bookings).
+		patch.netRevenueCents = newTotal;
+	} else if (patch.depositAmountCents !== undefined) {
+		const dep = patch.depositAmountCents as bigint;
+		patch.balanceDueCents = booking.totalAmountCents - dep;
+		patch.netRevenueCents = booking.totalAmountCents;
+	}
+
+	patch.updatedAt = now;
+	await ctx.db.patch(args.bookingId, patch);
+
+	const slotChanged =
+		changes.date !== undefined ||
+		changes.startTime !== undefined ||
+		changes.scheduleId !== undefined ||
+		changes.guests !== undefined;
+	if (slotChanged) {
+		await clearPendingBookingReminders(ctx, args.bookingId);
+		if (booking.status === "confirmed") {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
+					typeof ctx.scheduler.runAfter
+				>[2],
+				{ bookingId: args.bookingId },
+			);
+			await ctx.runMutation(internal.scheduledNotifications.scheduleForBooking, {
+				organizationId,
+				bookingId: args.bookingId,
+				date: nextDate,
+				startTime: nextStartTime,
+			});
+		}
+	}
+
+	await logAudit(ctx, {
+		organizationId: booking.organizationId,
+		userId: userIdForAudit,
+		action: "booking.updated",
+		resourceType: "booking",
+		resourceId: args.bookingId,
+		oldValues: {},
+		newValues: { changes },
+	});
+
+	return args.bookingId;
+}
 
 /** Confirm a public booking request and start customer communications. */
 export const confirm = mutation({
@@ -1016,216 +1049,7 @@ export const internalUpdate = internalMutation({
 	handler: async (ctx, args) => {
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
-		if (booking.status === "cancelled" || booking.status === "completed") {
-			throw new ConvexError(
-				`Cannot modify a ${booking.status} booking`,
-			);
-		}
-		const rescheduleRequested =
-			args.date !== undefined ||
-			args.startTime !== undefined ||
-			args.scheduleId !== undefined;
-		if (booking.status === "checked_in" && rescheduleRequested) {
-			throw new ConvexError("Cannot reschedule a checked-in booking");
-		}
-		const tour = rescheduleRequested ? await ctx.db.get(booking.tourId) : null;
-		if (rescheduleRequested && !tour) {
-			throw new ConvexError("Tour not found");
-		}
-		const targetDate = rescheduleRequested
-			? args.date ?? booking.date
-			: booking.date;
-		const targetStartTime = rescheduleRequested
-			? args.startTime ?? booking.startTime
-			: booking.startTime;
-		const targetSchedule = rescheduleRequested
-			? await findTargetSchedule(ctx, {
-					organizationId: booking.organizationId,
-					tourId: booking.tourId,
-					date: targetDate,
-					startTime: targetStartTime,
-					scheduleId: args.scheduleId,
-				})
-			: null;
-		const nextDate = targetSchedule?.date ?? targetDate;
-		const nextStartTime = targetSchedule?.startTime ?? targetStartTime;
-		const nextGuests = args.guests ?? booking.guests;
-
-		if (rescheduleRequested) {
-			const tourTs = parseBookingTime(nextDate, nextStartTime);
-			if (tourTs === null || tourTs <= Date.now()) {
-				throw new ConvexError("Cannot move a booking into the past");
-			}
-			const cutoffHours = tour?.bookingCutoffHours ?? 0;
-			if (cutoffHours > 0 && tourTs - Date.now() < cutoffHours * 3_600_000) {
-				throw new ConvexError(
-					`Bookings must be made at least ${cutoffHours}h before the tour`,
-				);
-			}
-			if (await isBlackoutHelper(ctx, booking.tourId, nextDate)) {
-				throw new ConvexError(
-					"This date is not available for booking. Please pick another date.",
-				);
-			}
-		}
-
-		const now = Date.now();
-		const patch: Record<string, unknown> = {};
-		const changes: Record<string, { old: unknown; new: unknown }> = {};
-
-		for (const field of ALLOWED_UPDATE_FIELDS) {
-			const incoming = (args as Record<string, unknown>)[field];
-			if (incoming === undefined) continue;
-			const oldValue = (booking as Record<string, unknown>)[field];
-			if (oldValue !== incoming) {
-				changes[field] = { old: oldValue, new: incoming };
-			}
-			patch[field] = incoming;
-		}
-		if (rescheduleRequested) {
-			patch.date = nextDate;
-			patch.startTime = nextStartTime;
-			patch.scheduleId = targetSchedule?._id;
-			patch.guests = nextGuests;
-			for (const [field, nextValue] of [
-				["date", nextDate],
-				["startTime", nextStartTime],
-				["scheduleId", targetSchedule?._id],
-				["guests", nextGuests],
-			] as const) {
-				const oldValue = (booking as Record<string, unknown>)[field];
-				if (oldValue !== nextValue) {
-					changes[field] = { old: oldValue, new: nextValue };
-				}
-			}
-		}
-
-		const oldScheduleId = booking.scheduleId;
-		const nextScheduleId = rescheduleRequested
-			? targetSchedule?._id
-			: booking.scheduleId;
-		if (oldScheduleId === nextScheduleId) {
-			const delta = nextGuests - booking.guests;
-			if (delta > 0 && nextScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: booking.organizationId,
-						scheduleId: nextScheduleId,
-						guests: delta,
-					},
-				);
-			} else if (delta < 0 && nextScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.decrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: booking.organizationId,
-						scheduleId: nextScheduleId,
-						guests: Math.abs(delta),
-					},
-				);
-			}
-		} else {
-			if (oldScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.decrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: booking.organizationId,
-						scheduleId: oldScheduleId,
-						guests: booking.guests,
-					},
-				);
-			}
-			if (nextScheduleId) {
-				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
-					{
-						organizationId: booking.organizationId,
-						scheduleId: nextScheduleId,
-						guests: nextGuests,
-					},
-				);
-			}
-		}
-
-		// Same length caps as the public update.
-		if (args.notes !== undefined) {
-			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
-		}
-		if (args.guestNames !== undefined) {
-			assertFieldWithinLimit(
-				"guestNames",
-				args.guestNames,
-				MAX_GUEST_NAMES_LEN,
-			);
-		}
-		if (args.languageRequired !== undefined) {
-			assertFieldWithinLimit(
-				"languageRequired",
-				args.languageRequired,
-				MAX_SHORT_FIELD_LEN,
-			);
-		}
-		if (args.paymentMethod !== undefined) {
-			assertFieldWithinLimit(
-				"paymentMethod",
-				args.paymentMethod,
-				MAX_PAYMENT_METHOD_LEN,
-			);
-		}
-
-		if (patch.totalAmountCents !== undefined) {
-			const newTotal = patch.totalAmountCents as bigint;
-			const dep =
-				(patch.depositAmountCents as bigint | undefined) ??
-				booking.depositAmountCents;
-			patch.balanceDueCents = newTotal - dep;
-			patch.netRevenueCents = newTotal;
-		} else if (patch.depositAmountCents !== undefined) {
-			const dep = patch.depositAmountCents as bigint;
-			patch.balanceDueCents = booking.totalAmountCents - dep;
-			patch.netRevenueCents = booking.totalAmountCents;
-		}
-
-		patch.updatedAt = now;
-		await ctx.db.patch(args.bookingId, patch);
-
-		if (rescheduleRequested && booking.status === "confirmed") {
-			await clearPendingBookingReminders(ctx, args.bookingId);
-			await ctx.scheduler.runAfter(
-				0,
-				internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[2],
-				{ bookingId: args.bookingId },
-			);
-			await ctx.runMutation(internal.scheduledNotifications.scheduleForBooking, {
-				organizationId: booking.organizationId,
-				bookingId: args.bookingId,
-				date: nextDate,
-				startTime: nextStartTime,
-			});
-		}
-
-		await logAudit(ctx, {
-			organizationId: booking.organizationId,
-			userId: "system",
-			action: "booking.updated",
-			resourceType: "booking",
-			resourceId: args.bookingId,
-			oldValues: {},
-			newValues: { changes },
-		});
-
-		return args.bookingId;
+		return performUpdate(ctx, booking, booking.organizationId, "system", args);
 	},
 });
 

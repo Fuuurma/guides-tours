@@ -28,7 +28,6 @@ import { decrypt } from "./lib/crypto";
 import { requireRole } from "./lib/authz";
 import { normalizeEmail } from "./lib/validation";
 import {
-	parseStripeSignature,
 	verifyStripeSignature,
 } from "./payments_stripe";
 
@@ -680,9 +679,15 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	const obj = parsed?.data?.object;
 	const eventType = parsed.type;
 
-	// Resolve org for webhook-secret lookup. Prefer metadata; for
-	// charge.refunded (often missing org metadata) fall back to the
-	// PaymentIntent id → local payment row.
+	// SECURITY: Resolve org for webhook-secret lookup, then verify
+	// the signature BEFORE any state-changing mutation or
+	// delivery-log write. The org-resolution lookups below are
+	// reads only — they don't leak whether an orgId exists because
+	// all "missing" cases return the same uniform 200 response
+	// (so an attacker without the webhook secret cannot enumerate
+	// orgIds or PaymentIntent IDs by observing distinct responses).
+	// Prefer metadata; for charge.refunded (often missing org
+	// metadata) fall back to the PaymentIntent id → local payment row.
 	let orgId = obj?.metadata?.organizationId;
 	if (!orgId) {
 		const piForLookup = paymentIntentIdFrom(obj);
@@ -694,20 +699,34 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			orgId = row?.organizationId;
 		}
 	}
+	// Uniform response for all "can't resolve org" cases — do NOT
+	// distinguish "no metadata" from "org not found" from "no
+	// webhook secret configured". An attacker probing the endpoint
+	// should not be able to tell which orgIds have Stripe enabled.
+	const UNIFORM_OK = new Response("ok", { status: 200 });
 	if (!orgId) {
-		return new Response("ignored (no org metadata)", { status: 200 });
+		return UNIFORM_OK;
 	}
 
 	const settings = await ctx.runQuery(internal.payments.getStripeSecrets, {
 		organizationId: orgId,
 	});
 	if (!settings?.stripeWebhookSecret) {
-		return new Response("no webhook secret configured", { status: 500 });
+		// Log server-side for ops, but return the same uniform 200
+		// so the response is indistinguishable from the no-org case.
+		console.warn(
+			`[stripe-webhook] org ${orgId} has no webhook secret configured`,
+		);
+		return UNIFORM_OK;
 	}
 	const webhookSecret = await decrypt(settings.stripeWebhookSecret);
 
 	const valid = await verifyStripeSignature(rawBody, sigHeader, webhookSecret);
 	if (!valid) {
+		// Signature failure is the one case where we DO return a
+		// distinct status — Stripe needs 401 to know to retry, and
+		// an attacker without the secret already knows they don't
+		// have it.
 		return new Response("invalid signature", { status: 401 });
 	}
 
@@ -867,5 +886,3 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 
 	return new Response("ok", { status: 200 });
 });
-
-void parseStripeSignature;

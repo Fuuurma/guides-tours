@@ -170,29 +170,35 @@ export const getPublicSettings = query({
  * Record a new payment (typically PENDING until the Stripe webhook
  * confirms). Idempotent by stripePaymentIntentId — if a row with
  * the same intent already exists, return it.
+ *
+ * SECURITY: This was previously a public mutation callable by any
+ * `member`-role user, which let them create pending payment rows
+ * with arbitrary stripePaymentIntentId + amountCents for any booking
+ * in their org — a table-pollution / reconciliation-confusion abuse
+ * vector. It is now internal; the Stripe flows use `recordFromAction`
+ * (which takes organizationId explicitly and is called only by
+ * actions that already verified org membership). If a future
+ * dashboard "manual payment" feature needs a public entrypoint, it
+ * should be a dedicated mutation with tighter validation (e.g.
+ * provider != "stripe" for manual/cash payments, no arbitrary
+ * stripePaymentIntentId).
  */
-export const record = mutation({
+export const record = internalMutation({
 	args: {
+		organizationId: v.string(),
 		bookingId: v.optional(v.id("bookings")),
 		amountCents: v.int64(),
 		currency: v.string(),
 		stripePaymentIntentId: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-		]);
 		if (args.bookingId) {
 			const booking = await ctx.db.get(args.bookingId);
-			if (!booking || booking.organizationId !== member.organizationId) {
+			if (!booking || booking.organizationId !== args.organizationId) {
 				throw new ConvexError("Forbidden: booking belongs to a different organization");
 			}
 		}
 		// Validate currency shape (ISO 4217) and stripe intent id length.
-		// The FE sends validated values, but any Convex client can call
-		// this — defending in depth keeps the table clean.
 		if (!CURRENCY_REGEX.test(args.currency)) {
 			throw new ConvexError(
 				`Invalid currency: "${args.currency}" must be 3 uppercase letters`,
@@ -211,7 +217,7 @@ export const record = mutation({
 			)
 			.unique();
 		if (existing) {
-			if (existing.organizationId !== member.organizationId) {
+			if (existing.organizationId !== args.organizationId) {
 				throw new ConvexError("Payment intent already belongs to another organization");
 			}
 			return existing._id;
@@ -219,7 +225,7 @@ export const record = mutation({
 
 		const now = Date.now();
 		const paymentId = await ctx.db.insert("payments", {
-			organizationId: member.organizationId,
+			organizationId: args.organizationId,
 			bookingId: args.bookingId,
 			amountCents: args.amountCents,
 			currency: args.currency,
@@ -230,8 +236,8 @@ export const record = mutation({
 			updatedAt: now,
 		});
 		await logAudit(ctx, {
-			organizationId: member.organizationId,
-			userId: member.userId,
+			organizationId: args.organizationId,
+			userId: "internal",
 			action: "payment.recorded",
 			resourceType: "payment",
 			resourceId: paymentId,

@@ -97,8 +97,12 @@ export const gapsForOrg = internalQuery({
 				requiredVehicleType?: string;
 			}
 		>();
-		for (const id of tourIds) {
-			const t = await ctx.db.get(id as Id<"tours">);
+		// Parallelize tour lookups instead of sequential awaits
+		// (was N round trips, now 1 batch).
+		const tourDocs = await Promise.all(
+			[...tourIds].map((id) => ctx.db.get(id as Id<"tours">)),
+		);
+		for (const t of tourDocs) {
 			if (t) {
 				toursById.set(String(t._id), {
 					_id: t._id,
@@ -265,22 +269,36 @@ export const sendForOrg = internalAction({
 export const runDaily = internalMutation({
 	args: {},
 	handler: async (ctx) => {
-		const targets = await ctx.runQuery(internal.staffingDigest.listDigestTargets, {});
-		let scheduled = 0;
-		for (const t of targets) {
-			await ctx.scheduler.runAfter(0, internal.staffingDigest.sendForOrg, {
-				organizationId: t.organizationId,
-				email: t.email,
-				phone: t.phone,
-				daysAhead: t.daysAhead,
-				emailEnabled: t.emailEnabled,
-				emailFromEmail: t.emailFromEmail,
-				emailFromName: t.emailFromName,
-				phoneRemindWithDigest: t.phoneRemindWithDigest,
-			});
-			scheduled += 1;
-		}
-		return { scheduled };
+		const targets = (await ctx.runQuery(
+			internal.staffingDigest.listDigestTargets,
+			{},
+		)) as Array<{
+			organizationId: string;
+			email?: string;
+			phone?: string;
+			daysAhead: number;
+			emailEnabled: boolean;
+			emailFromEmail?: string;
+			emailFromName?: string;
+			phoneRemindWithDigest?: boolean;
+		}>;
+		// Schedule all orgs in parallel — the scheduler calls are
+		// independent and were previously sequential.
+		await Promise.all(
+			targets.map((t) =>
+				ctx.scheduler.runAfter(0, internal.staffingDigest.sendForOrg, {
+					organizationId: t.organizationId,
+					email: t.email,
+					phone: t.phone,
+					daysAhead: t.daysAhead,
+					emailEnabled: t.emailEnabled,
+					emailFromEmail: t.emailFromEmail,
+					emailFromName: t.emailFromName,
+					phoneRemindWithDigest: t.phoneRemindWithDigest,
+				}),
+			),
+		);
+		return { scheduled: targets.length };
 	},
 });
 

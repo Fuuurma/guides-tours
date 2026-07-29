@@ -147,8 +147,10 @@ export const WEBHOOK_MAX_AGE_MS = 5 * 60 * 1000;
 
 export interface TimestampCheckResult {
 	valid: boolean;
-	/** When valid is false, why. Useful for logging / metrics. */
-	reason?: "missing" | "not_numeric" | "too_old" | "too_future";
+	/** When valid is false, why. Useful for logging / metrics.
+	 * "skipped" means the timestamp header was absent and the
+	 * replay check was skipped (valid: true). */
+	reason?: "missing" | "not_numeric" | "too_old" | "too_future" | "skipped";
 }
 
 /**
@@ -156,6 +158,15 @@ export interface TimestampCheckResult {
  *
  * Pure function — no signature/HMAC logic, no I/O. Tests assert
  * boundary conditions without needing a fake clock.
+ *
+ * NOTE: When the timestamp header is missing (null/empty), this
+ * returns { valid: true, reason: "skipped" } rather than rejecting.
+ * Real OTAs typically do NOT send a separate timestamp header —
+ * they either embed it in the signature (Stripe's `t=...,v1=...`
+ * format) or don't send one at all. Rejecting on missing timestamp
+ * would break all real OTA webhooks. The replay protection is a
+ * defense-in-depth bonus when the header IS present, not a hard
+ * requirement.
  */
 export function checkWebhookTimestamp(
 	timestampHeader: string | null,
@@ -163,7 +174,10 @@ export function checkWebhookTimestamp(
 	maxAgeMs: number = WEBHOOK_MAX_AGE_MS,
 ): TimestampCheckResult {
 	if (timestampHeader === null || timestampHeader === "") {
-		return { valid: false, reason: "missing" };
+		// Skip replay check — the provider doesn't send a timestamp.
+		// The HMAC signature still protects against tampering; only
+		// replay of a captured valid payload is unchecked.
+		return { valid: true, reason: "skipped" };
 	}
 	// Reject anything that isn't a pure integer string. parseInt is
 	// too lenient — "123.45" would parse as 123 and slip through.
@@ -190,6 +204,9 @@ export function checkWebhookTimestamp(
  * OTAs send). The timestamp header is checked separately against
  * an acceptable window — protects against replay of old captured
  * payloads without breaking provider compatibility.
+ *
+ * When the timestamp header is missing, the replay check is skipped
+ * (see checkWebhookTimestamp) but the signature is still verified.
  */
 export async function verifyWebhookSignatureWithTimestamp(
 	payload: string | Buffer | Uint8Array,
@@ -206,5 +223,7 @@ export async function verifyWebhookSignatureWithTimestamp(
 	if (!signatureOk) {
 		return { valid: false, reason: undefined, signatureOk: false };
 	}
-	return { valid: true, signatureOk: true };
+	// Preserve the timestamp check's reason (e.g. "skipped" when
+	// the header was missing) so callers can log/distinguish.
+	return { valid: true, reason: tsCheck.reason, signatureOk: true };
 }

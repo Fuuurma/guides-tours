@@ -175,6 +175,7 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
+		const oldValues: Record<string, unknown> = {};
 		for (const field of [
 			"name",
 			"slug",
@@ -185,7 +186,10 @@ export const internalUpdate = internalMutation({
 			"isActive",
 		]) {
 			const value = (args as Record<string, unknown>)[field];
-			if (value !== undefined) patch[field] = value;
+			if (value !== undefined) {
+				patch[field] = value;
+				oldValues[field] = (existing as Record<string, unknown>)[field];
+			}
 		}
 		await ctx.db.patch(args.categoryId, patch);
 		await logAudit(ctx, {
@@ -194,7 +198,7 @@ export const internalUpdate = internalMutation({
 			action: "tour_category.updated",
 			resourceType: "tourCategory",
 			resourceId: args.categoryId,
-			oldValues: { name: existing.name },
+			oldValues,
 			newValues: patch,
 		});
 		return args.categoryId;

@@ -24,6 +24,36 @@ describe("buildSesSendEmailXml", () => {
 		expect(xml).toContain("<Html>");
 		expect(xml).toContain("&lt;p&gt;html&lt;/p&gt;");
 	});
+
+	it("produces well-formed XML with properly opened Subject and Body tags", () => {
+		const xml = buildSesSendEmailXml({
+			from: "noreply@example.com",
+			to: "user@example.com",
+			subject: "Test subject",
+			bodyText: "Test body",
+		});
+		// Every opening tag must have a matching closing tag and
+		// tags must be properly opened with "<". This catches the
+		// class of bug where "Subject>" was emitted instead of
+		// "<Subject>" (missing opening angle bracket).
+		expect(xml).toContain("<Subject>");
+		expect(xml).toContain("</Subject>");
+		expect(xml).toContain("<Body>");
+		expect(xml).toContain("</Body>");
+		// The malformed pattern is "Subject>" or "Body>" NOT
+		// preceded by "<" or "</" (i.e. a bare tag with no opening
+		// angle bracket). Use negative lookbehind to exclude both
+		// the opening "<Subject>" and closing "</Subject>" forms.
+		expect(xml).not.toMatch(/(?<![<\/])Subject>/);
+		expect(xml).not.toMatch(/(?<![<\/])Body>/);
+		// Verify balanced tag count for the structural elements.
+		const openSubject = (xml.match(/<Subject>/g) ?? []).length;
+		const closeSubject = (xml.match(/<\/Subject>/g) ?? []).length;
+		expect(openSubject).toBe(closeSubject);
+		const openBody = (xml.match(/<Body>/g) ?? []).length;
+		const closeBody = (xml.match(/<\/Body>/g) ?? []).length;
+		expect(openBody).toBe(closeBody);
+	});
 });
 
 describe("signSesRequest", () => {

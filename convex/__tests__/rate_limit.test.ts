@@ -180,6 +180,7 @@ describe("public booking rate limit", () => {
 			await ctx.db.insert("publicBookingAttempts", {
 				organizationId: undefined,
 				email,
+				ip: "",
 				slug: "test-org",
 				outcome: "pending",
 				createdAt: Date.now() - 5 * 60 * 60 * 1000,

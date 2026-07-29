@@ -230,5 +230,12 @@ async function dispatchEvent(
 			reservationId: event.reservationId,
 			rawData: event.rawPayload,
 		});
+		return;
+	}
+	if (event.kind === "availability.update") {
+		await ctx.runMutation(internal.ota.upsert.upsertAvailabilityCache, {
+			integrationId: integrationId as Id<"otaIntegrations">,
+			event,
+		});
 	}
 }

@@ -1026,6 +1026,40 @@ export const internalUpdate = internalMutation({
 		const slotHasVehicle = activeOnSlot.some((a) => a.vehicleId);
 		const slotHasDriver = activeOnSlot.some((a) => a.driverId);
 
+		// Guide vacation + availability checks (mirrors internalCreate).
+		// Only needed when guideId or date changed — if both are unchanged,
+		// the existing assignment already passed these checks at create time.
+		if (next.guideId !== existing.guideId || next.date !== existing.date) {
+			const MAX_VACATIONS = 500;
+			const vacations = await ctx.db
+				.query("vacationRequests")
+				.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+				.filter((q) => q.eq(q.field("userId"), next.guideId))
+				.take(MAX_VACATIONS);
+			const onVacation = vacations.some(
+				(vr) =>
+					vr.status === "approved" &&
+					vr.startDate <= next.date &&
+					vr.endDate >= next.date,
+			);
+			if (onVacation) {
+				throw new ConvexError("Guide is on approved vacation on this date");
+			}
+
+			const avail = await ctx.db
+				.query("availabilities")
+				.withIndex("by_org_user_date", (q) =>
+					q
+						.eq("organizationId", args.organizationId)
+						.eq("userId", next.guideId)
+						.eq("date", next.date),
+				)
+				.unique();
+			if (avail && !avail.isAvailable) {
+				throw new ConvexError("Guide is marked as unavailable on this date");
+			}
+		}
+
 		if (next.vehicleId) {
 			const vehicle = await ctx.db.get(next.vehicleId);
 			if (!vehicle) throw new ConvexError("Vehicle not found");
@@ -1034,12 +1068,37 @@ export const internalUpdate = internalMutation({
 					"Forbidden: vehicle belongs to a different organization",
 				);
 			}
+			// Vehicle status check (mirrors internalCreate) — prevents
+			// reassigning to a retired/in-maintenance vehicle.
+			if (vehicle.status !== "available") {
+				throw new ConvexError(
+					`Vehicle is not available (status: ${vehicle.status})`,
+				);
+			}
 			if (
 				staffing.requiredVehicleType &&
 				vehicle.vehicleType !== staffing.requiredVehicleType
 			) {
 				throw new ConvexError(
 					`This tour requires a ${staffing.requiredVehicleType} (selected ${vehicle.vehicleType})`,
+				);
+			}
+			// Vehicle capacity vs schedule booked (mirrors internalCreate).
+			if (existing.scheduleId) {
+				const scheduleRow = await ctx.db.get(existing.scheduleId);
+				if (scheduleRow && vehicle.capacity < scheduleRow.capacityBooked) {
+					throw new ConvexError(
+						`Vehicle seats (${vehicle.capacity}) are below booked guests (${scheduleRow.capacityBooked})`,
+					);
+				}
+			}
+			// "Other vehicle" on slot (mirrors internalCreate).
+			const otherVehicle = activeOnSlot.find(
+				(a) => a.vehicleId && a.vehicleId !== next.vehicleId,
+			);
+			if (otherVehicle) {
+				throw new ConvexError(
+					"This departure already has a different vehicle assigned",
 				);
 			}
 		} else if (staffing.requiresVehicle && !slotHasVehicle) {
@@ -1056,9 +1115,23 @@ export const internalUpdate = internalMutation({
 					"Forbidden: driver belongs to a different organization",
 				);
 			}
+			// Driver active check (mirrors internalCreate) — prevents
+			// reassigning to an inactive driver.
+			if (!driver.isActive) {
+				throw new ConvexError("Driver is not active");
+			}
 			if (driver.userId === next.guideId) {
 				throw new ConvexError(
 					"The same person cannot be both guide and driver on one assignment",
+				);
+			}
+			// "Other driver" on slot (mirrors internalCreate).
+			const otherDriver = activeOnSlot.find(
+				(a) => a.driverId && a.driverId !== next.driverId,
+			);
+			if (otherDriver) {
+				throw new ConvexError(
+					"This departure already has a different driver assigned",
 				);
 			}
 		} else if (staffing.requiresDriver && !slotHasDriver) {
@@ -1080,6 +1153,27 @@ export const internalUpdate = internalMutation({
 		if (conflicts.length > 0) {
 			const first = conflicts[0];
 			throw new ConvexError(first?.message ?? "Schedule conflict");
+		}
+
+		// Dual-role: driver must not already be guiding an overlapping slot
+		// (mirrors internalCreate). Only check when driverId changed.
+		if (next.driverId && next.driverId !== existing.driverId) {
+			const driverRow = await ctx.db.get(next.driverId);
+			if (driverRow) {
+				const dual = await checkConflictsHelper(ctx, {
+					organizationId: args.organizationId,
+					date: next.date,
+					startTime: next.startTime,
+					endTime,
+					guideId: driverRow.userId,
+					excludeAssignmentId: args.assignmentId,
+				});
+				if (dual.length > 0) {
+					throw new ConvexError(
+						"This driver is already assigned as a guide during this time",
+				);
+			}
+		}
 		}
 
 		const now = Date.now();
@@ -1402,18 +1496,36 @@ export async function checkConflictsHelper(
 		excludeAssignmentId?: string;
 	},
 ): Promise<Array<{ conflictType: "guide" | "vehicle" | "driver"; message: string }>> {
-	const out: Array<{ conflictType: "guide" | "vehicle" | "driver"; message: string }> = [];
-	const checkOne = async (
+	// Collect overlapping assignments per conflict type. Run the
+	// three index scans in parallel (they're independent) — the
+	// public checkConflicts query already does this, but the helper
+	// was sequential. Also batch tour name lookups instead of using
+	// hardcoded "(guide conflict)" placeholders.
+	type CollectedRow = {
+		_id: string;
+		tourId: Id<"tours">;
+		startTime: string;
+		endTime?: string;
+		deletedAt?: number;
+		status: string;
+	};
+	const collected: Array<{ conflictType: "guide" | "vehicle" | "driver"; row: CollectedRow }> = [];
+
+	async function collect(
+		indexName: "by_guide_date" | "by_vehicle_date" | "by_driver_date",
+		indexField: string,
+		value: string,
 		conflictType: "guide" | "vehicle" | "driver",
-		rows: Array<{
-			_id: string;
-			startTime: string;
-			endTime?: string;
-			deletedAt?: number;
-			status: string;
-		}>,
-		tourName: string,
-	) => {
+	): Promise<void> {
+		const rows = await ctx.db
+			.query("assignments")
+			.withIndex(indexName, (q: any) =>
+				q.eq(indexField, value).eq("date", args.date),
+			)
+			// SECURITY: scope to org — a guideId from another org must
+			// not surface as a "conflict" in this org's UI.
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.take(MAX_CONFLICTS);
 		for (const r of rows) {
 			if (r.deletedAt) continue;
 			if (r.status !== "scheduled") continue;
@@ -1426,46 +1538,39 @@ export async function checkConflictsHelper(
 					r.endTime ?? r.startTime,
 				)
 			) {
-				out.push({
-					conflictType,
-					message: `${(conflictType[0] ?? "").toUpperCase()}${conflictType.slice(1)} already assigned to '${tourName}' from ${r.startTime} to ${r.endTime ?? r.startTime}`,
-				});
+				collected.push({ conflictType, row: r as CollectedRow });
 			}
 		}
-	};
-	if (args.guideId) {
-		const rows = await ctx.db
-			.query("assignments")
-			.withIndex("by_guide_date", (q) =>
-				q.eq("guideId", args.guideId).eq("date", args.date),
-			)
-			// SECURITY: scope to org — a guideId from another org must
-			// not surface as a "conflict" in this org's UI.
-			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(MAX_CONFLICTS);
-		await checkOne("guide", rows, "(guide conflict)");
 	}
-	if (args.vehicleId) {
-		const rows = await ctx.db
-			.query("assignments")
-			.withIndex("by_vehicle_date", (q) =>
-				q.eq("vehicleId", args.vehicleId).eq("date", args.date),
-			)
-			// SECURITY: scope to org.
-			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(MAX_CONFLICTS);
-		await checkOne("vehicle", rows, "(vehicle conflict)");
+
+	await Promise.all([
+		args.guideId
+			? collect("by_guide_date", "guideId", args.guideId, "guide")
+			: Promise.resolve(),
+		args.vehicleId
+			? collect("by_vehicle_date", "vehicleId", args.vehicleId, "vehicle")
+			: Promise.resolve(),
+		args.driverId
+			? collect("by_driver_date", "driverId", args.driverId, "driver")
+			: Promise.resolve(),
+	]);
+
+	// Batched tour lookup: dedupe + fetch once + Map.
+	const uniqueTourIds = [...new Set(collected.map((c) => c.row.tourId))];
+	const tourDocs = await Promise.all(
+		uniqueTourIds.map((id) => ctx.db.get(id)),
+	);
+	const tourNameById = new Map<string, string>();
+	for (let i = 0; i < uniqueTourIds.length; i++) {
+		const t = tourDocs[i];
+		if (t) tourNameById.set(String(uniqueTourIds[i]), t.name);
 	}
-	if (args.driverId) {
-		const rows = await ctx.db
-			.query("assignments")
-			.withIndex("by_driver_date", (q) =>
-				q.eq("driverId", args.driverId).eq("date", args.date),
-			)
-			// SECURITY: scope to org.
-			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(MAX_CONFLICTS);
-		await checkOne("driver", rows, "(driver conflict)");
-	}
-	return out;
+
+	return collected.map(({ conflictType, row: r }) => {
+		const tourName = tourNameById.get(String(r.tourId)) ?? "(deleted tour)";
+		return {
+			conflictType,
+			message: `${(conflictType[0] ?? "").toUpperCase()}${conflictType.slice(1)} already assigned to '${tourName}' from ${r.startTime} to ${r.endTime ?? r.startTime}`,
+		};
+	});
 }

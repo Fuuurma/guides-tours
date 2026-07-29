@@ -52,30 +52,45 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
-		let q = ctx.db
-			.query("vehicles")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
-		if (args.status) {
-			q = ctx.db
+		// Pick the most selective index. When both status and
+		// vehicleType are set, the previous code overwrote the status
+		// query with the vehicleType query — the status filter was
+		// silently dropped. Now we use the more selective index and
+		// apply the other filter in JS.
+		const MAX_VEHICLES = 500;
+		let all;
+		if (args.status && args.vehicleType) {
+			// Both filters — use by_org_status (typically more selective
+			// than type) and filter by type in JS.
+			all = await ctx.db
 				.query("vehicles")
 				.withIndex("by_org_status", (q) =>
 					q.eq("organizationId", orgId).eq("status", args.status!),
-				);
-		}
-		if (args.vehicleType) {
-			q = ctx.db
+				)
+				.take(MAX_VEHICLES);
+			all = all.filter((v) => v.vehicleType === args.vehicleType);
+		} else if (args.status) {
+			all = await ctx.db
+				.query("vehicles")
+				.withIndex("by_org_status", (q) =>
+					q.eq("organizationId", orgId).eq("status", args.status!),
+				)
+				.take(MAX_VEHICLES);
+		} else if (args.vehicleType) {
+			all = await ctx.db
 				.query("vehicles")
 				.withIndex("by_org_type", (q) =>
 					q
 						.eq("organizationId", orgId)
 						.eq("vehicleType", args.vehicleType!),
-				);
+				)
+				.take(MAX_VEHICLES);
+		} else {
+			all = await ctx.db
+				.query("vehicles")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.take(MAX_VEHICLES);
 		}
-		// Bound the result so an org with thousands of vehicles
-		// doesn't OOM the response. The FE page renders at most a
-		// few dozen.
-		const MAX_VEHICLES = 500;
-		const all = await q.take(MAX_VEHICLES);
 		return all.sort((a, b) => a.name.localeCompare(b.name));
 	},
 });
@@ -237,6 +252,9 @@ export const internalUpdate = internalMutation({
 		}
 		if (args.notes !== undefined) {
 			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
+		}
+		if (args.capacity !== undefined && args.capacity <= 0) {
+			throw new ConvexError("Capacity must be positive");
 		}
 		const existing = await ctx.db.get(args.vehicleId);
 		if (!existing) throw new ConvexError("Vehicle not found");

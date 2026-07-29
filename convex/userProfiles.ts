@@ -52,23 +52,35 @@ export async function collectMissingStaffPhones(
 		}
 	}
 
+	// Parallelize driver lookups instead of sequential awaits
+	// (was N round trips, now 1 batch).
+	const driverIds = [...driverTableCounts.keys()];
+	const driverDocs = await Promise.all(
+		driverIds.map((id) => ctx.db.get(id as Id<"drivers">)),
+	);
 	const drivers = new Map<string, { userId: string; count: number }>();
-	for (const [driverId, count] of driverTableCounts) {
-		const d = await ctx.db.get(driverId as Id<"drivers">);
+	for (let i = 0; i < driverIds.length; i++) {
+		const d = driverDocs[i];
 		if (!d || d.organizationId !== orgId) continue;
-		drivers.set(driverId, { userId: d.userId, count });
+		drivers.set(driverIds[i]!, { userId: d.userId, count: driverTableCounts.get(driverIds[i]!)! });
 	}
 
 	const userIds = new Set<string>([
 		...guideCounts.keys(),
 		...[...drivers.values()].map((d) => d.userId),
 	]);
+	// Parallelize user contact lookups (was N round trips to
+	// Better Auth, now 1 batch).
+	const contactResults = await Promise.all(
+		[...userIds].map((userId) => loadUserContact(ctx, userId)),
+	);
 	const contacts = new Map<
 		string,
 		{ name: string; email: string; phone: string }
 	>();
+	let idx = 0;
 	for (const userId of userIds) {
-		const c = await loadUserContact(ctx, userId);
+		const c = contactResults[idx++];
 		if (c) {
 			contacts.set(userId, {
 				name: c.name,

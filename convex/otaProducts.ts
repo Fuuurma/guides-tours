@@ -295,13 +295,20 @@ export const internalUpdate = internalMutation({
 			return args.productId;
 		}
 		await ctx.db.patch(args.productId, patch);
+		// Build oldValues from the changes map so the audit log
+		// records what each field was before the update. Previously
+		// hardcoded to {} — the old values were lost.
+		const oldValues: Record<string, unknown> = {};
+		for (const [field, change] of Object.entries(changes)) {
+			oldValues[field] = change.old;
+		}
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			action: "otaProduct.updated",
 			resourceType: "otaProduct",
 			resourceId: args.productId,
-			oldValues: {},
+			oldValues,
 			newValues: { changes },
 		});
 		return args.productId;
@@ -330,6 +337,21 @@ export const internalRemove = internalMutation({
 		if (!existing) throw new ConvexError("Product not found");
 		if (existing.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
+		}
+		// SECURITY: refuse to hard-delete if there are availability
+		// cache entries referencing this OTA product. Orphans the
+		// cache rows. The operator should deactivate the product
+		// (syncStatus) instead.
+		const relatedCache = await ctx.db
+			.query("otaAvailabilityCache")
+			.withIndex("by_product_date", (q) =>
+				q.eq("otaProductId", args.productId),
+			)
+			.take(1);
+		if (relatedCache.length > 0) {
+			throw new ConvexError(
+				"Cannot delete OTA product with availability cache entries; set syncStatus to INACTIVE first",
+			);
 		}
 		await ctx.db.delete(args.productId);
 		await logAudit(ctx, {

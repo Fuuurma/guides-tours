@@ -126,6 +126,22 @@ export const internalCreate = internalMutation({
 		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
 		}
+		// Uniqueness: one exception per (tourId, date). Multiple
+		// "modified" exceptions for the same date would conflict
+		// during seasonal schedule generation. The by_tour_date index
+		// leads with (tourId, date) so this is an indexed lookup.
+		const existing = await ctx.db
+			.query("tourExceptionDates")
+			.withIndex("by_tour_date", (q) =>
+				q.eq("tourId", args.tourId).eq("date", args.date),
+			)
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.first();
+		if (existing) {
+			throw new ConvexError(
+				"An exception already exists for this tour on this date",
+			);
+		}
 		const now = Date.now();
 		const id = await ctx.db.insert("tourExceptionDates", {
 			organizationId: args.organizationId,
@@ -197,6 +213,10 @@ export const internalUpdate = internalMutation({
 		const nextEnd = args.endTime ?? existing.endTime;
 		if (nextStart && nextEnd && nextEnd < nextStart) {
 			throw new ConvexError("endTime must be on or after startTime");
+		}
+		// capacityOverride must be positive (mirrors internalCreate).
+		if (args.capacityOverride !== undefined && args.capacityOverride <= 0) {
+			throw new ConvexError("capacityOverride must be positive");
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		const changes: Record<string, { old: unknown; new: unknown }> = {};

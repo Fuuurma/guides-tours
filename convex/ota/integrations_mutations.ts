@@ -6,7 +6,7 @@
 
 import { v, ConvexError } from "convex/values";
 import type { FunctionReference } from "convex/server";
-import { internalMutation, mutation } from "../_generated/server";
+import { internalMutation, internalQuery, mutation } from "../_generated/server";
 import { requireRole } from "../lib/authz";
 import { decrypt, encrypt } from "../lib/crypto";
 
@@ -252,8 +252,12 @@ export const removeInternal = internalMutation({
  * Used by OTA client code (e.g. ViatorClient) so callers don't have
  * to deal with the decrypt dance. Tenant-scope is enforced at
  * the caller.
+ *
+ * Registered as internalQuery (not internalMutation) because it only
+ * reads — using a mutation for a read-only operation runs it as a
+ * transaction unnecessarily and prevents reactive caching.
  */
-export const getDecrypted = internalMutation({
+export const getDecrypted = internalQuery({
 	args: { integrationId: v.id("otaIntegrations") },
 	handler: async (ctx, args) => {
 		const row = await ctx.db.get(args.integrationId);

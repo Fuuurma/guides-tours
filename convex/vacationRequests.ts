@@ -54,34 +54,43 @@ export const list = query({
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
 		const orgId = member.organizationId;
-		let q = ctx.db
-			.query("vacationRequests")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
-			.order("desc");
-
-		if (args.status) {
-			q = ctx.db
+		// Pick the most selective index. When both status and userId
+		// are set, the previous code overwrote the status query with
+		// the userId query — the status filter was silently dropped.
+		let all;
+		if (args.status && args.userId) {
+			all = await ctx.db
 				.query("vacationRequests")
 				.withIndex("by_org_status", (q) =>
 					q.eq("organizationId", orgId).eq("status", args.status!),
 				)
-				.order("desc");
-		}
-
-		if (args.userId) {
+				.take(MAX_VACATION_REQUESTS);
+			all = all.filter((vr) => vr.userId === args.userId);
+		} else if (args.status) {
+			all = await ctx.db
+				.query("vacationRequests")
+				.withIndex("by_org_status", (q) =>
+					q.eq("organizationId", orgId).eq("status", args.status!),
+				)
+				.order("desc")
+				.take(MAX_VACATION_REQUESTS);
+		} else if (args.userId) {
 			// SECURITY: scope to org even when filtering by userId —
 			// a userId from another org must not be readable here.
-			q = ctx.db
+			all = await ctx.db
 				.query("vacationRequests")
 				.withIndex("by_user", (q) => q.eq("userId", args.userId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId))
-				.order("desc");
+				.order("desc")
+				.take(MAX_VACATION_REQUESTS);
+		} else {
+			all = await ctx.db
+				.query("vacationRequests")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.order("desc")
+				.take(MAX_VACATION_REQUESTS);
 		}
-
-		// Bound the result so a user with thousands of vacation
-		// requests doesn't OOM the response. The FE page renders at
-		// most a few dozen.
-		return await q.take(MAX_VACATION_REQUESTS);
+		return all;
 	},
 });
 
@@ -103,9 +112,10 @@ export const get = query({
 /**
  * Internal mirror of `get` that skips the authz check. Use only from
  * server-side code that has already verified the caller (e.g. an
- * internal mutation that just inserted the row).
+ * internal mutation that just inserted the row). Read-only — uses
+ * internalQuery (not internalMutation) since it only calls ctx.db.get.
  */
-export const getInternal = internalMutation({
+export const getInternal = internalQuery({
 	args: { requestId: v.id("vacationRequests") },
 	handler: async (ctx, args) => {
 		return await ctx.db.get(args.requestId);

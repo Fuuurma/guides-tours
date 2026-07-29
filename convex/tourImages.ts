@@ -135,12 +135,15 @@ export const internalAdd = internalMutation({
 		// Use by_tour_primary to fetch only primary images (small set)
 		// instead of all tour images.
 		if (args.isPrimary) {
+			// There should only be one primary per tour. Use .take(1)
+			// instead of .collect() to avoid fetching all primaries
+			// (defense in depth — a bug could create duplicates).
 			const existingPrimaries = await ctx.db
 				.query("tourImages")
 				.withIndex("by_tour_primary", (q) =>
 					q.eq("tourId", args.tourId).eq("isPrimary", true),
 				)
-				.collect();
+				.take(1);
 			for (const img of existingPrimaries) {
 				await ctx.db.patch(img._id, { isPrimary: false, updatedAt: Date.now() });
 			}
@@ -224,12 +227,14 @@ export const internalUpdate = internalMutation({
 		// same tour. Use by_tour_primary to fetch only primaries (small
 		// set) instead of all tour images.
 		if (args.isPrimary && !existing.isPrimary) {
+			// There should only be one primary per tour. Use .take(1)
+			// instead of .collect() to avoid fetching all primaries.
 			const others = await ctx.db
 				.query("tourImages")
 				.withIndex("by_tour_primary", (q) =>
 					q.eq("tourId", existing.tourId).eq("isPrimary", true),
 				)
-				.collect();
+				.take(1);
 			for (const img of others) {
 				if (img._id !== existing._id) {
 					await ctx.db.patch(img._id, { isPrimary: false, updatedAt: Date.now() });
@@ -395,6 +400,7 @@ export const internalRemove = internalMutation({
 		for (const f of fileRows) {
 			if (f.storageId === existing.storageId) {
 				await ctx.db.delete(f._id);
+				break;
 			}
 		}
 		// Best-effort: also delete the storage blob

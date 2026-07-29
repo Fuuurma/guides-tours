@@ -319,9 +319,12 @@ export const create = mutation({
 			phone: validInput.phone,
 			notes: validInput.notes,
 			smsConsent: args.smsConsent ?? false,
-			emailConsent: args.emailConsent ?? true,
+			// emailConsent defaults to false (opt-in) for GDPR/privacy
+			// compliance. Previously defaulted to true (opt-out) which
+			// violates GDPR's "consent must be explicit" principle.
+			emailConsent: args.emailConsent ?? false,
 			smsConsentDate: args.smsConsent ? now : undefined,
-			emailConsentDate: args.emailConsent !== false ? now : undefined,
+			emailConsentDate: args.emailConsent ? now : undefined,
 			preferredLanguage: args.preferredLanguage ?? "en",
 			tags: args.tags ?? [],
 			source: args.source ?? "",

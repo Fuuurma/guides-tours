@@ -21,6 +21,8 @@ import type { DataModel } from "../_generated/dataModel";
 
 /** Sliding-window cap: 5 attempts per 15 minutes per email. */
 export const MAX_ATTEMPTS_PER_EMAIL = 5;
+/** Sliding-window cap: 10 attempts per 15 minutes per IP. */
+export const MAX_ATTEMPTS_PER_IP = 10;
 export const WINDOW_MS = 15 * 60 * 1000;
 
 type CountCtx = GenericMutationCtx<DataModel> | GenericQueryCtx<DataModel>;
@@ -46,6 +48,24 @@ async function collectRecentAttempts(
 		.take(MAX_ATTEMPTS_PER_EMAIL + 1);
 }
 
+/** Collect attempts for this IP to answer the window check.
+ *  Per-IP cap is higher than per-email (10 vs 5) to allow NAT'd
+ *  offices booking for multiple guests, but still block spray. */
+async function collectRecentAttemptsByIp(
+	ctx: CountCtx,
+	ip: string,
+	now: number = Date.now(),
+) {
+	if (!ip) return [];
+	const windowStart = now - WINDOW_MS;
+	return await ctx.db
+		.query("publicBookingAttempts")
+		.withIndex("by_ip_created", (q) =>
+			q.eq("ip", ip).gte("createdAt", windowStart),
+		)
+		.take(MAX_ATTEMPTS_PER_IP + 1);
+}
+
 /** Records an attempt. Returns the attempt ID + whether it was
  *  allowed. Callers should update the outcome via updateAttemptOutcome
  *  once they know if the booking succeeded or failed. */
@@ -55,18 +75,24 @@ export const recordAttempt = internalMutation({
 		slug: v.string(),
 		organizationId: v.optional(v.string()),
 		outcome: v.string(),
+		ip: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const now = Date.now();
 		const recent = await collectRecentAttempts(ctx, args.email, now);
+		const ip = (args.ip ?? "").trim();
+		const recentByIp = await collectRecentAttemptsByIp(ctx, ip, now);
 
-		const allowed = recent.length < MAX_ATTEMPTS_PER_EMAIL;
+		const emailAllowed = recent.length < MAX_ATTEMPTS_PER_EMAIL;
+		const ipAllowed = recentByIp.length < MAX_ATTEMPTS_PER_IP;
+		const allowed = emailAllowed && ipAllowed;
 
 		// Always record — both successes and rejections — so we can
 		// audit attempts even when the rate limit is bypassed.
 		const attemptId = await ctx.db.insert("publicBookingAttempts", {
 			organizationId: args.organizationId,
 			email: args.email,
+			ip,
 			slug: args.slug,
 			outcome: allowed ? args.outcome : "rejected_rate_limit",
 			createdAt: now,
@@ -75,6 +101,7 @@ export const recordAttempt = internalMutation({
 		return {
 			allowed,
 			attempts: Math.min(recent.length + 1, MAX_ATTEMPTS_PER_EMAIL + 1),
+			ipAttempts: Math.min(recentByIp.length + 1, MAX_ATTEMPTS_PER_IP + 1),
 			attemptId,
 		};
 	},

@@ -194,6 +194,16 @@ export const internalCreate = internalMutation({
 				"Invalid end time (expected HH:MM)",
 			);
 		}
+		// endTime must be after startTime (allows midnight wrap since
+		// parseBookingTime only checks format, not ordering). Compare
+		// as integer minutes — same convention as assignments.ts.
+		const startMin = Number.parseInt(args.startTime.split(":")[0] ?? "0", 10) * 60
+			+ Number.parseInt(args.startTime.split(":")[1] ?? "0", 10);
+		const endMin = Number.parseInt(args.endTime.split(":")[0] ?? "0", 10) * 60
+			+ Number.parseInt(args.endTime.split(":")[1] ?? "0", 10);
+		if (endMin <= startMin) {
+			throw new ConvexError("endTime must be after startTime");
+		}
 		const tour = await ctx.db.get(args.tourId);
 		if (!tour) throw new ConvexError("Tour not found");
 		if (tour.organizationId !== args.organizationId) {
@@ -304,8 +314,25 @@ export const internalUpdate = internalMutation({
 		if (parseBookingTime(nextDate, nextEnd) === null) {
 			throw new ConvexError("Invalid end time (expected HH:MM)");
 		}
+		// endTime must be after startTime (mirrors internalCreate).
+		const startMin = Number.parseInt(nextStart.split(":")[0] ?? "0", 10) * 60
+			+ Number.parseInt(nextStart.split(":")[1] ?? "0", 10);
+		const endMin = Number.parseInt(nextEnd.split(":")[0] ?? "0", 10) * 60
+			+ Number.parseInt(nextEnd.split(":")[1] ?? "0", 10);
+		if (endMin <= startMin) {
+			throw new ConvexError("endTime must be after startTime");
+		}
 		if (args.status !== undefined) {
 			assertScheduleStatus(args.status);
+			// SECURITY: refuse to cancel a schedule that has active
+			// (non-cancelled) bookings — orphans them. The operator
+			// must cancel the bookings first (which restores capacity
+			// via decrementBooked). Mirrors internalRemove's check.
+			if (args.status === "cancelled" && existing.capacityBooked > 0) {
+				throw new ConvexError(
+					`Cannot cancel schedule with ${existing.capacityBooked} booked guest(s); cancel their bookings first`,
+				);
+			}
 		}
 		if (nextDate !== existing.date || nextStart !== existing.startTime) {
 			await assertScheduleSlotFree(ctx, {
@@ -327,12 +354,19 @@ export const internalUpdate = internalMutation({
 			const value = (args as Record<string, unknown>)[field];
 			if (value !== undefined) patch[field] = value;
 		}
-		// Auto-flip to "full" if capacityTotal reached
-		if (
-			patch.capacityTotal !== undefined &&
-			(patch.capacityTotal as number) <= existing.capacityBooked
-		) {
-			patch.status = "full";
+		// Auto-flip status based on capacity:
+		//   - capacityTotal <= capacityBooked → "full"
+		//   - capacityTotal > capacityBooked and was "full" → "available"
+		// (Previously only flipped to "full", never back to "available"
+		// when an admin increased capacity — the schedule stayed "full"
+		// even though it had room. Mirrors decrementBooked's logic.)
+		if (patch.capacityTotal !== undefined && patch.status === undefined) {
+			const cap = patch.capacityTotal as number;
+			if (cap <= existing.capacityBooked) {
+				patch.status = "full";
+			} else if (existing.status === "full" && cap > existing.capacityBooked) {
+				patch.status = "available";
+			}
 		}
 		await ctx.db.patch(args.scheduleId, patch);
 		await logAudit(ctx, {

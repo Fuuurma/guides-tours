@@ -437,17 +437,32 @@ export const purgeOldSends = internalMutation({
 	args: {},
 	handler: async (ctx) => {
 		const cutoff = Date.now() - PHONE_REMIND_SEND_RETENTION_MS;
-		const MAX = 2000;
-		const old = await ctx.db
-			.query("phoneReminderSends")
-			.withIndex("by_lastSentAt", (q) => q.lt("lastSentAt", cutoff))
-			.take(MAX);
-		await Promise.all(old.map((row) => ctx.db.delete(row._id)));
-		if (old.length > 0) {
+		const MAX_PER_ORG = 500;
+		// Iterate orgs via notificationSettings (the set of orgs that
+		// could have phoneReminderSends rows). Previously used the
+		// non-org-scoped by_lastSentAt index, which meant one org's
+		// old rows could crowd out another's in the .take(2000) cap.
+		const orgSettings = await ctx.db
+			.query("notificationSettings")
+			.take(100);
+		let totalDeleted = 0;
+		for (const settings of orgSettings) {
+			const old = await ctx.db
+				.query("phoneReminderSends")
+				.withIndex("by_org_lastSentAt", (q) =>
+					q
+						.eq("organizationId", settings.organizationId)
+						.lt("lastSentAt", cutoff),
+				)
+				.take(MAX_PER_ORG);
+			await Promise.all(old.map((row) => ctx.db.delete(row._id)));
+			totalDeleted += old.length;
+		}
+		if (totalDeleted > 0) {
 			console.log(
-				`[cron] purgeOldPhoneReminderSends deleted ${old.length} (cutoff=${new Date(cutoff).toISOString()})`,
+				`[cron] purgeOldPhoneReminderSends deleted ${totalDeleted} (cutoff=${new Date(cutoff).toISOString()})`,
 			);
 		}
-		return { deleted: old.length, cutoff };
+		return { deleted: totalDeleted, cutoff };
 	},
 });

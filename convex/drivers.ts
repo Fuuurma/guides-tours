@@ -115,12 +115,16 @@ export const internalCreate = internalMutation({
 		if (args.notes) {
 			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
 		}
-		// One driver profile per user per company (source: driver_service.py:48-50).
+		// One driver profile per user per org (source: driver_service.py:48-50).
+		// The by_user index leads with userId only, so .first() could
+		// return a profile from another org — missing a same-org
+		// duplicate. Use .filter() to scope by org, then .first().
 		const existing = await ctx.db
 			.query("drivers")
 			.withIndex("by_user", (q) => q.eq("userId", args.userId))
+			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.first();
-		if (existing && existing.organizationId === args.organizationId) {
+		if (existing) {
 			throw new ConvexError("Driver profile already exists for this user");
 		}
 		const now = Date.now();

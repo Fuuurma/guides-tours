@@ -268,7 +268,12 @@ export const getBookingForImmediateDispatch = internalQuery({
 		if (!booking) return null;
 		// Customer and tour are independent of each other (both
 		// reference the booking) — fetch in parallel.
-		const [customer, tour, template] = await Promise.all([
+		// Fetch all active booking_confirmation templates for this
+		// org, then prefer isDefault. Previously used .first() which
+		// returns the oldest by _creationTime — not necessarily the
+		// default. Bound the scan: an org with hundreds of templates
+		// of one type is unusual.
+		const [customer, tour, templates] = await Promise.all([
 			ctx.db.get(booking.customerId),
 			ctx.db.get(booking.tourId),
 			ctx.db
@@ -279,9 +284,12 @@ export const getBookingForImmediateDispatch = internalQuery({
 						.eq("templateType", "booking_confirmation"),
 				)
 				.filter((q) => q.eq(q.field("isActive"), true))
-				.first(),
+				.take(100),
 		]);
 		if (!customer) return null;
+		// Prefer isDefault; fall back to first active if none is
+		// marked default (backwards compat with orgs that never set one).
+		const template = templates.find((t) => t.isDefault) ?? templates[0];
 		if (!template) return null;
 		const tourName = tour?.name ?? "your tour";
 		return {

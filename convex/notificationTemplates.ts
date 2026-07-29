@@ -47,26 +47,43 @@ export const list = query({
 		// doesn't OOM the response. The FE page renders at most a
 		// few dozen active templates.
 		const MAX_TEMPLATES = 500;
-		let q = ctx.db
-			.query("notificationTemplates")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
-		if (args.templateType) {
-			q = ctx.db
+		// Pick the most selective index. When both templateType and
+		// isActive are set, the previous code overwrote the type query
+		// with the active query — the type filter was silently dropped.
+		let all;
+		if (args.templateType && args.isActive !== undefined) {
+			all = await ctx.db
 				.query("notificationTemplates")
 				.withIndex("by_org_type", (q) =>
 					q
 						.eq("organizationId", orgId)
 						.eq("templateType", args.templateType!),
-				);
-		}
-		if (args.isActive !== undefined) {
-			q = ctx.db
+				)
+				.take(MAX_TEMPLATES);
+			all = all.filter((t) => t.isActive === args.isActive);
+		} else if (args.templateType) {
+			all = await ctx.db
+				.query("notificationTemplates")
+				.withIndex("by_org_type", (q) =>
+					q
+						.eq("organizationId", orgId)
+						.eq("templateType", args.templateType!),
+				)
+				.take(MAX_TEMPLATES);
+		} else if (args.isActive !== undefined) {
+			all = await ctx.db
 				.query("notificationTemplates")
 				.withIndex("by_org_active", (q) =>
 					q.eq("organizationId", orgId).eq("isActive", args.isActive!),
-				);
+				)
+				.take(MAX_TEMPLATES);
+		} else {
+			all = await ctx.db
+				.query("notificationTemplates")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.take(MAX_TEMPLATES);
 		}
-		return await q.take(MAX_TEMPLATES);
+		return all;
 	},
 });
 

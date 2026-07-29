@@ -254,6 +254,13 @@ export const internalUpdate = internalMutation({
 				throw new ConvexError("requiredGuides must be between 1 and 10");
 			}
 		}
+		// Numeric field validation (mirrors internalCreate).
+		if (args.capacity !== undefined && args.capacity <= 0) {
+			throw new ConvexError("Capacity must be positive");
+		}
+		if (args.durationHours !== undefined && args.durationHours <= 0) {
+			throw new ConvexError("Duration must be positive");
+		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		for (const field of [
 			"name",
@@ -310,6 +317,17 @@ export const instantiate = mutation({
 		if (!tmpl) throw new ConvexError("Template not found");
 		if (tmpl.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: template belongs to a different organization");
+		}
+		// SECURITY: re-validate categoryId belongs to this org
+		// (defense in depth — the template was validated at creation
+		// but the category could have been deleted or moved since).
+		if (tmpl.categoryId !== undefined) {
+			const cat = await ctx.db.get(tmpl.categoryId);
+			if (cat && cat.organizationId !== member.organizationId) {
+				throw new ConvexError(
+					"Template's category belongs to a different organization",
+				);
+			}
 		}
 		const now = Date.now();
 		const tourId: Id<"tours"> = await ctx.db.insert("tours", {

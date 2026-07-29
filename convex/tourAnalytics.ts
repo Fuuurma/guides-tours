@@ -188,7 +188,13 @@ export const internalUpsert = internalMutation({
 				action: "tourAnalytics.updated",
 				resourceType: "tourAnalytics",
 				resourceId: existing._id,
-				oldValues: {},
+				oldValues: {
+					totalBookings: existing.totalBookings,
+					totalGuests: existing.totalGuests,
+					grossRevenueCents: existing.grossRevenueCents.toString(),
+					periodDate: existing.periodDate,
+					periodType: existing.periodType,
+				},
 				newValues: {
 					totalBookings: args.totalBookings,
 					totalGuests: args.totalGuests,
@@ -351,12 +357,14 @@ export const runDaily = internalMutation({
 			),
 		].slice(0, MAX_ORGS);
 
-		for (const organizationId of orgIds) {
-			await ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
-				organizationId,
-				periodDate: yesterday,
-			});
-		}
+		await Promise.all(
+			orgIds.map((organizationId) =>
+				ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
+					organizationId,
+					periodDate: yesterday,
+				}),
+			),
+		);
 		return { orgs: orgIds.length, periodDate: yesterday };
 	},
 });

@@ -145,8 +145,8 @@ export function buildSesSendEmailXml(params: {
 			.replace(/'/g, "&apos;");
 
 	const parts: string[] = [
-		`Subject><Data>${escapeXml(params.subject)}</Data></Subject>`,
-		`Body>`,
+		`<Subject><Data>${escapeXml(params.subject)}</Data></Subject>`,
+		`<Body>`,
 		`  <Text><Data>${escapeXml(params.bodyText)}</Data></Text>`,
 	];
 	if (params.bodyHtml) {

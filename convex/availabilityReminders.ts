@@ -165,16 +165,23 @@ async function loadGuidesForOrg(
 	};
 
 	const members = (page.page ?? []).filter((m) => m.role === "guide");
+	// Parallelize user lookups instead of sequential awaits
+	// (was N round trips to Better Auth, now 1 batch).
+	const userIds = members.map((m) => m.userId).filter((u): u is string => !!u);
+	const users = await Promise.all(
+		userIds.map((userId) =>
+			ctx.runQuery(
+				components.betterAuth.adapter.findOne as never,
+				{
+					model: "user" as never,
+					where: [{ field: "id", value: userId }] as never,
+				},
+			),
+		),
+	);
 	const out: GuideContact[] = [];
-	for (const m of members) {
-		if (!m.userId) continue;
-		const user = (await ctx.runQuery(
-			components.betterAuth.adapter.findOne as never,
-			{
-				model: "user" as never,
-				where: [{ field: "id", value: m.userId }] as never,
-			},
-		)) as {
+	for (let i = 0; i < userIds.length; i++) {
+		const user = users[i] as {
 			id?: string;
 			name?: string | null;
 			email?: string | null;
@@ -182,7 +189,7 @@ async function loadGuidesForOrg(
 		} | null;
 		if (!user?.email) continue;
 		out.push({
-			userId: m.userId,
+			userId: userIds[i]!,
 			name: user.name?.trim() || user.email,
 			email: user.email,
 			phone: (user.phone ?? "").trim(),
@@ -316,24 +323,30 @@ export const runForOrg = internalAction({
 export const runDaily = internalMutation({
 	args: {},
 	handler: async (ctx) => {
-		const targets = await ctx.runQuery(
+		const targets = (await ctx.runQuery(
 			internal.availabilityReminders.listReminderTargets,
 			{},
+		)) as Array<{
+			organizationId: string;
+			daysAhead: number;
+			emailFromEmail?: string;
+		}>;
+		// Schedule all orgs in parallel — the scheduler calls are
+		// independent and were previously sequential.
+		await Promise.all(
+			targets.map((t) =>
+				ctx.scheduler.runAfter(
+					0,
+					internal.availabilityReminders.runForOrg,
+					{
+						organizationId: t.organizationId,
+						daysAhead: t.daysAhead,
+						emailFromEmail: t.emailFromEmail,
+					},
+				),
+			),
 		);
-		let scheduled = 0;
-		for (const t of targets) {
-			await ctx.scheduler.runAfter(
-				0,
-				internal.availabilityReminders.runForOrg,
-				{
-					organizationId: t.organizationId,
-					daysAhead: t.daysAhead,
-					emailFromEmail: t.emailFromEmail,
-				},
-			);
-			scheduled += 1;
-		}
-		return { scheduled };
+		return { scheduled: targets.length };
 	},
 });
 

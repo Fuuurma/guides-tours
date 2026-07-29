@@ -130,32 +130,38 @@ export const listMembers = query({
 		// Cap enrichment so a huge org can't blow the query budget.
 		const MAX_ENRICH = 200;
 		const out: OrgMember[] = [];
-		for (const m of filtered.slice(0, MAX_ENRICH)) {
-			let phone = (m.user?.phone ?? "").trim();
-			// Better Auth normally returns the user object. If a member was
-			// removed between the membership read and enrichment, keep the
-			// operator-facing label human-readable instead of leaking a raw ID.
-			let name = m.user?.name?.trim() || m.user?.email || "Former member";
-			let email = m.user?.email ?? "";
-			// Better Auth listMembers often omits additionalFields like phone —
-			// fill from the user row when missing.
-			if (!phone) {
-				const contact = await loadUserContact(ctx, m.userId);
-				if (contact) {
-					phone = contact.phone;
-					if (!email) email = contact.email;
-					if (!m.user?.name?.trim() && contact.name) name = contact.name;
+
+		// Batch user-contact enrichment via Promise.all so we don't do
+		// up to 200 sequential round trips.
+		const enriched = await Promise.all(
+			filtered.slice(0, MAX_ENRICH).map(async (m) => {
+				let phone = (m.user?.phone ?? "").trim();
+				// Better Auth normally returns the user object. If a member was
+				// removed between the membership read and enrichment, keep the
+				// operator-facing label human-readable instead of leaking a raw ID.
+				let name = m.user?.name?.trim() || m.user?.email || "Former member";
+				let email = m.user?.email ?? "";
+				// Better Auth listMembers often omits additionalFields like phone —
+				// fill from the user row when missing.
+				if (!phone) {
+					const contact = await loadUserContact(ctx, m.userId);
+					if (contact) {
+						phone = contact.phone;
+						if (!email) email = contact.email;
+						if (!m.user?.name?.trim() && contact.name) name = contact.name;
+					}
 				}
-			}
-			out.push({
-				userId: m.userId,
-				name,
-				email,
-				role: m.role,
-				image: m.user?.image ?? null,
-				phone,
-			});
-		}
+				return {
+					userId: m.userId,
+					name,
+					email,
+					role: m.role,
+					image: m.user?.image ?? null,
+					phone,
+				} satisfies OrgMember;
+			}),
+		);
+		out.push(...enriched);
 
 		return out.sort((a, b) => a.name.localeCompare(b.name));
 	},

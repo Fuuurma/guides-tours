@@ -114,9 +114,14 @@ describe("checkWebhookTimestamp", () => {
 		expect(r.reason).toBe("too_future");
 	});
 
-	test("rejects missing header", () => {
-		expect(checkWebhookTimestamp(null, NOW).reason).toBe("missing");
-		expect(checkWebhookTimestamp("", NOW).reason).toBe("missing");
+	test("skips replay check when header is missing", () => {
+		// Real OTAs typically don't send a separate timestamp header.
+		// Missing header → skip replay check (valid: true, reason: "skipped").
+		// The HMAC signature still protects against tampering.
+		expect(checkWebhookTimestamp(null, NOW).valid).toBe(true);
+		expect(checkWebhookTimestamp(null, NOW).reason).toBe("skipped");
+		expect(checkWebhookTimestamp("", NOW).valid).toBe(true);
+		expect(checkWebhookTimestamp("", NOW).reason).toBe("skipped");
 	});
 
 	test("rejects non-numeric header", () => {
@@ -183,7 +188,9 @@ describe("verifyWebhookSignatureWithTimestamp", () => {
 		expect(r.reason).toBe("too_future");
 	});
 
-	test("rejects missing timestamp", async () => {
+	test("accepts valid signature with missing timestamp (skips replay check)", async () => {
+		// Real OTAs typically don't send a separate timestamp header.
+		// Missing timestamp → skip replay check, but still verify HMAC.
 		const payload = '{"event":"booking.created"}';
 		const sig = await hmacSha256Hex(payload, SECRET);
 		const r = await verifyWebhookSignatureWithTimestamp(
@@ -193,8 +200,9 @@ describe("verifyWebhookSignatureWithTimestamp", () => {
 			SECRET,
 			NOW,
 		);
-		expect(r.valid).toBe(false);
-		expect(r.reason).toBe("missing");
+		expect(r.valid).toBe(true);
+		expect(r.signatureOk).toBe(true);
+		expect(r.reason).toBe("skipped");
 	});
 
 	test("rejects valid timestamp + bad signature", async () => {

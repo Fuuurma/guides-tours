@@ -149,6 +149,13 @@ export const internalCreate = internalMutation({
 		if (args.endDate < args.startDate) {
 			throw new ConvexError("endDate must be on or after startDate");
 		}
+		// SECURITY: validate tourId belongs to this org (defense in
+		// depth — mirrors tourExceptionDates.internalCreate).
+		const tour = await ctx.db.get(args.tourId);
+		if (!tour) throw new ConvexError("Tour not found");
+		if (tour.organizationId !== args.organizationId) {
+			throw new ConvexError("Forbidden: tour belongs to a different organization");
+		}
 		const now = Date.now();
 		const id = await ctx.db.insert("tourBlackoutDates", {
 			organizationId: args.organizationId,

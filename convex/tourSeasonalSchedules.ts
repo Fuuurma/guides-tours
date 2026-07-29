@@ -36,7 +36,11 @@ export const list = query({
 				)
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
-		const all = await q.collect();
+		// Bound the result so an org with thousands of seasonal
+		// schedules doesn't OOM the response. Previously used
+		// .collect() (unbounded).
+		const MAX_SEASONAL = 500;
+		const all = await q.take(MAX_SEASONAL);
 		return all
 			.filter((s) => args.isActive === undefined || s.isActive === args.isActive)
 			.sort((a, b) => a.startDate.localeCompare(b.startDate));
@@ -201,6 +205,10 @@ export const internalUpdate = internalMutation({
 					throw new ConvexError(`daysOfWeek must be 0..6, got ${d}`);
 				}
 			}
+		}
+		// capacityOverride must be positive (mirrors internalCreate).
+		if (args.capacityOverride !== undefined && args.capacityOverride <= 0) {
+			throw new ConvexError("capacityOverride must be positive");
 		}
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };
 		const changes: Record<string, { old: unknown; new: unknown }> = {};
@@ -390,22 +398,12 @@ export const internalGenerate = internalMutation({
 				continue;
 			}
 
-			// Defense-in-depth: exact-index uniqueness (also covers races
-			// the in-memory set can't see).
-			const clash = await ctx.db
-				.query("tourSchedules")
-				.withIndex("by_tour_date_start", (q) =>
-					q
-						.eq("tourId", args.tourId)
-						.eq("date", date)
-						.eq("startTime", startTime),
-				)
-				.unique();
-			if (clash) {
-				existingKeys.add(key);
-				skipped++;
-				continue;
-			}
+			// Note: no per-day unique() check here — the
+			// existingInRange batch above covers all schedules in the
+			// window, and Convex mutations are serialized so no race
+			// can occur within this mutation. The previous per-day
+			// unique() added 366 queries for a year-long window with
+			// no additional safety.
 
 			const now = Date.now();
 			const id = await ctx.db.insert("tourSchedules", {

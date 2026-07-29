@@ -948,7 +948,8 @@ export default defineSchema({
 	})
 		.index("by_org_user", ["organizationId", "userId"])
 		.index("by_org", ["organizationId"])
-		.index("by_lastSentAt", ["lastSentAt"]),
+		.index("by_lastSentAt", ["lastSentAt"])
+		.index("by_org_lastSentAt", ["organizationId", "lastSentAt"]),
 
 	// ----- Audit & logs -----
 
@@ -1012,6 +1013,11 @@ export default defineSchema({
 		// time. The by_org_created index still works on string fields.
 		organizationId: v.optional(v.string()),
 		email: v.string(),
+		// Client IP from CF-Connecting-IP header (or X-Forwarded-For
+		// fallback). Empty string when no IP is available (local dev,
+		// direct calls). Used for per-IP rate limiting to complement
+		// the per-email limit.
+		ip: v.string(),
 		// success | rejected_unknown_slug | rejected_rate_limit |
 		// rejected_validation | rejected_capacity
 		outcome: v.string(),
@@ -1019,6 +1025,7 @@ export default defineSchema({
 		createdAt: v.number(),
 	})
 		.index("by_email_created", ["email", "createdAt"])
+		.index("by_ip_created", ["ip", "createdAt"])
 		.index("by_org_created", ["organizationId", "createdAt"])
 		.index("by_created", ["createdAt"]),
 });

@@ -80,6 +80,12 @@ export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 	}
 
 	// Fall back to the user's first org (no active set yet).
+	// SECURITY NOTE: this silent fallback means a user in multiple
+	// orgs will operate on their "first" org if they never called
+	// setActiveOrganization. The client should always set the active
+	// org explicitly to avoid writing to the wrong tenant. We keep
+	// the fallback for backwards compatibility but log it so ops can
+	// detect multi-org users who haven't set an active org.
 	const list = await auth.api.listOrganizations({ headers });
 	const first = list[0];
 	if (!first) {
@@ -94,10 +100,26 @@ export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 	const me = memberList.members.find(
 		(m: { userId: string }) => m.userId === user._id,
 	);
+	if (!me) {
+		// listOrganizations should only return orgs the user is a
+		// member of, so this should never happen. If it does, it
+		// indicates a data inconsistency (org exists but no member
+		// row for this user). Defaulting to "member" would silently
+		// grant access — throw instead so the inconsistency is
+		// visible and the user is not granted unintended permissions.
+		throw new ConvexError(
+			`User ${user._id} is not a member of organization ${first.id} (data inconsistency — contact admin)`,
+		);
+	}
+	if (list.length > 1) {
+		console.warn(
+			`[authz] user ${user._id} has ${list.length} orgs but no active org set — defaulting to ${first.id}. Client should call setActiveOrganization.`,
+		);
+	}
 	return {
 		userId: user._id,
 		organizationId: first.id,
-		role: me?.role ?? "member",
+		role: me.role,
 	};
 }
 

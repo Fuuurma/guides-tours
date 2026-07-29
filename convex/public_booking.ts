@@ -162,6 +162,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		scheduleId: v.optional(v.id("tourSchedules")),
 		emailConsent: v.optional(v.boolean()),
 		smsConsent: v.optional(v.boolean()),
+		ip: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Rate-limit check (per-email). Recorded BEFORE the slug
@@ -180,8 +181,9 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 						slug: string;
 						organizationId: string | undefined;
 						outcome: string;
+						ip?: string;
 					},
-					{ allowed: boolean; attempts: number; attemptId: Id<"publicBookingAttempts"> }
+					{ allowed: boolean; attempts: number; ipAttempts?: number; attemptId: Id<"publicBookingAttempts"> }
 				>;
 				updateAttemptOutcome: FunctionReference<
 					"mutation",
@@ -200,10 +202,11 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 			slug: args.slug,
 			organizationId: undefined,
 			outcome: "pending",
+			ip: args.ip,
 		});
 		if (!rateCheck.allowed) {
 			throw new ConvexError(
-				`rate limit exceeded: try again later (${rateCheck.attempts} attempts in window)`,
+				`rate limit exceeded: try again later (${rateCheck.attempts} email / ${rateCheck.ipAttempts ?? 0} ip attempts in window)`,
 			);
 		}
 

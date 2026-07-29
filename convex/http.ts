@@ -174,6 +174,13 @@ http.route({
 			);
 		}
 
+		// Extract client IP for per-IP rate limiting. CF-Connecting-IP
+		// is set by Cloudflare; X-Forwarded-For is the standard fallback.
+		const ip =
+			request.headers.get("cf-connecting-ip") ??
+			request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+			"";
+
 		const { internal } = await import("./_generated/api");
 		try {
 			const result = await ctx.runAction(
@@ -191,6 +198,7 @@ http.route({
 					scheduleId: scheduleId as Id<"tourSchedules"> | undefined,
 					emailConsent,
 					smsConsent,
+					ip,
 				},
 			);
 			return new Response(
