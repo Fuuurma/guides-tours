@@ -517,16 +517,33 @@ export const internalCreate = internalMutation({
 		});
 
 		if (scheduleId) {
-			await ctx.runMutation(
-				internal.tourSchedules.incrementBooked as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
-				{
-					organizationId: args.organizationId,
-					scheduleId,
-					guests: args.guests,
-				},
-			);
+			try {
+				await ctx.runMutation(
+					internal.tourSchedules.incrementBooked as unknown as Parameters<
+						typeof ctx.runMutation
+					>[0],
+					{
+						organizationId: args.organizationId,
+						scheduleId,
+						guests: args.guests,
+					},
+				);
+			} catch (err) {
+				// Compensating action: if incrementBooked fails (e.g.,
+				// over capacity, schedule cancelled between check and
+				// increment), cancel the orphaned booking so we don't
+				// leave a "pending" row that will never be confirmed.
+				await ctx.runMutation(
+					internal.bookings.internalCancel as unknown as Parameters<
+						typeof ctx.runMutation
+					>[0],
+					{
+						bookingId,
+						reason: "capacity_exceeded",
+					},
+				);
+				throw err;
+			}
 		}
 
 		await logAudit(ctx, {

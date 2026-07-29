@@ -1245,3 +1245,86 @@ routes batch 2 (30 files), and components (36 files).
 - `npx tsc --noEmit` — passes
 - `pnpm vitest run src/__tests__/` — 76/76 tests pass across 8 test files
 - `pnpm lint` — passes
+
+## Backend + config audit round 14 (2026-07-28)
+
+Deep audit of remaining files: config files (vite, tsconfig, package,
+playwright, vitest, tsr, convex.config), server functions (__root.tsx,
+api/auth/$.ts), public booking flow (public_booking.ts, rate_limit.ts,
+http.ts, ota/router.ts), and remaining backend files (availabilities.ts,
+notification_dispatch.ts, analytics.ts, scheduledNotifications.ts).
+
+### Clean files (no issues found)
+- `vite.config.ts` — localhost-only host, no issues
+- `tsconfig.json` — strict mode, no issues
+- `playwright.config.ts`, `vitest.config.ts`, `tsr.config.json` —
+  test/router config, no issues
+- `convex/convex.config.ts` — minimal, no issues
+- `api/auth/$.ts` — simple handler delegation, no issues
+- `ota/router.ts` — simple route registration, no issues
+- `analytics.ts` — all queries bounded with `.take(10_000)`, proper
+  org-scoping via `requireMembership`
+- `availabilities.ts` — all queries bounded, proper audit logs,
+  org-scoped. Consent check inconsistency is intentional (email
+  defaults to opt-out, SMS defaults to opt-in for compliance)
+- `notification_dispatch.ts` — dispatch results are logged via
+  `recordDispatchResult` → `notificationLogs` table (domain-specific
+  audit trail, not a generic `logAudit` call, but serves same purpose)
+- `start.ts` — comprehensive security headers (HSTS, X-Frame-Options,
+  nosniff, Referrer-Policy, Permissions-Policy, CSP)
+
+### P1 — Orphaned booking on capacity failure (fixed)
+
+109. **`public_booking.ts` createForSlug** — the booking was inserted
+     BEFORE `incrementBooked` checked capacity. If `incrementBooked`
+     threw "over capacity", the booking remained as an orphaned
+     "pending" row. Fixed: wrapped `incrementBooked` call in
+     try-catch; on failure, cancels the booking via
+     `internalCancel` with reason "capacity_exceeded", then re-throws.
+
+### P2 — Missing error handling in server function (fixed)
+
+110. **`__root.tsx` getAuth** — the `getToken()` call had no
+     try-catch. If the auth service was unavailable, the error
+     would propagate and crash the SSR render. Fixed: returns
+     `null` on failure so the client falls back to unauthenticated
+     state.
+
+### P2 — Missing audit log (fixed)
+
+111. **`scheduledNotifications.ts` scheduleForBooking** — created
+     scheduled notification rows without any audit log. Fixed:
+     added `logAudit` call with `scheduled_notifications.created`
+     action, capturing count and template types.
+
+### Noted but not fixed (by design / inherent to platform)
+
+- **Rate limit TOCTOU race** (`rate_limit.ts`) — inherent to Convex's
+  transactional model; rate limiting is best-effort defense, not a
+  hard guarantee. Convex's OCC retries concurrent mutations to the
+  same document, so the race window is minimal.
+- **IP header spoofing** (`http.ts`) — `cf-connecting-ip` and
+  `x-forwarded-for` can be spoofed, but IP rate limiting is
+  defense-in-depth alongside email rate limiting.
+- **Origin check optional in production** (`http.ts`) — intentional
+  for development; operators must set `PUBLIC_BOOKING_ALLOWED_ORIGINS`
+  in production.
+- **CSP `unsafe-inline` for scripts** (`start.ts`) — required for
+  TanStack Start hydration; framework limitation.
+- **CORS enabled for auth endpoints** (`http.ts`) — needed for dev
+  cross-origin Vite proxy; `trustedOrigins` restricts in production.
+- **`updateAttemptOutcome` no authz** (`rate_limit.ts`) — internal
+  mutation only, called from the booking action with the attempt ID
+  it just created. Not exposed to clients.
+- **Consent check inconsistency** (`notification_dispatch.ts`,
+  `availabilities.ts`) — `emailConsent !== false` vs
+  `smsConsent === true` is intentional: email defaults to opt-out
+  (send unless explicitly declined), SMS defaults to opt-in (don't
+  send unless explicitly consented). This is a common compliance
+  pattern.
+
+### Verification
+
+- `npx tsc --noEmit` (both convex + FE) — passes
+- `pnpm vitest run` — 766/766 tests pass across 70 test files
+- `pnpm lint` — passes

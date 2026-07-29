@@ -10,6 +10,7 @@ import { v, ConvexError } from "convex/values";
 import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { logAudit } from "./lib/audit";
 import { parseBookingTime } from "./lib/time";
 
 // Hours-before-tour that each reminder fires at.
@@ -67,6 +68,21 @@ export const scheduleForBooking = internalMutation({
 				createdAt: now,
 			});
 			created.push(id);
+		}
+
+		if (created.length > 0) {
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: "system",
+				action: "scheduled_notifications.created",
+				resourceType: "booking",
+				resourceId: args.bookingId,
+				oldValues: {},
+				newValues: {
+					scheduledCount: created.length,
+					templateTypes: Object.keys(REMINDER_OFFSETS),
+				},
+			});
 		}
 
 		return created;

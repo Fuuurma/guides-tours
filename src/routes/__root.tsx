@@ -19,7 +19,14 @@ import { getToken } from "@/lib/auth-server";
 import appCss from "../styles.css?url";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
-	return await getToken();
+	try {
+		return await getToken();
+	} catch {
+		// If token retrieval fails (e.g., auth service unavailable),
+		// return null so the client falls back to unauthenticated state
+		// rather than crashing the SSR render.
+		return null;
+	}
 });
 
 export const Route = createRootRouteWithContext<{
