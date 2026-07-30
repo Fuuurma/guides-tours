@@ -1415,3 +1415,44 @@ payments_stripe.ts, stripe-payment-element.tsx, payments settings page:
 - `npx tsc --noEmit` (both convex + FE) — passes
 - `pnpm vitest run` — 766/766 tests pass across 70 test files
 - `pnpm lint` — passes
+
+## Round 16 — test coverage expansion (2026-07-29)
+
+Added 38 new tests across 5 new test files, closing the most critical
+test coverage gaps identified in round 15.
+
+### New test files
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| auth_security.test.ts | 7 | requireEmailVerification, requireEmailVerificationOnInvitation, sendVerificationEmail callback, minPasswordLength, isGoogleEnabled, getCurrentUser null when unauthenticated |
+| public_booking_security.test.ts | 3 | Orphaned booking compensation (no pending booking when incrementBooked throws), malformed email (no @), email with no domain TLD |
+| organizations.test.ts | 7 | activeOrganization, listMyOrganizations, listMembers (with auth rejection) |
+| webhookDeliveries.test.ts | 12 | recordDelivery (idempotent), updateDeliveryStatus, listByOrg, listRecent |
+| userProfiles.test.ts | 9 | updatePhone (validation + auth), getContact (cross-org rejection), missingStaffPhones, collectMissingStaffPhones |
+
+### Test approach notes
+
+- **Better Auth component limitation**: @convex-dev/better-auth v0.12.5
+  does not implement the `join` parameter in its adapter, so
+  `auth.api.getSession` always returns null in convex-test. Tests mock
+  `../auth` (and sometimes `../lib/userContact`) to drive the real
+  query/mutation logic with controlled auth state.
+- **Orphaned booking test**: In convex-test, `ctx.runMutation` within
+  a mutation runs in the same transaction, so when the parent mutation
+  re-throws after the compensating `internalCancel`, the entire
+  transaction rolls back — the booking never persists.
+
+### Remaining test gaps (lower priority)
+
+- payments_stripe_actions.ts — still no tests (Stripe API actions)
+- crons.ts — no tests (8 production cron jobs)
+- http.ts — no tests (HTTP security layer)
+- staffingDigest.ts — no tests
+- ota/integrations.ts — no tests (read queries)
+
+### Verification
+
+- `npx tsc --noEmit` (both convex + FE) — passes
+- `pnpm vitest run` — 804/804 tests pass across 75 test files
+- `pnpm lint` — passes
