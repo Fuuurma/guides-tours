@@ -1456,3 +1456,53 @@ test coverage gaps identified in round 15.
 - `npx tsc --noEmit` (both convex + FE) — passes
 - `pnpm vitest run` — 804/804 tests pass across 75 test files
 - `pnpm lint` — passes
+
+## Round 17 — payments_stripe_actions tests (2026-07-29)
+
+Closed the highest-priority test coverage gap: payments_stripe_actions.ts
+was previously completely untested (6 exported actions for Stripe API
+integration — the most security-critical payment flows).
+
+### New test file
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| payments_stripe_actions.test.ts | 21 | All 5 Stripe actions + edge cases |
+
+### Test breakdown
+
+- **createCheckoutSession** (6): PI creation, IDOR (cross-org), amount
+  validation, Stripe not configured, Stripe API error, unauthenticated
+- **createPublicPaymentIntent** (4): full balance, email mismatch,
+  Stripe disabled, invalid email
+- **createHostedCheckout** (2): session URL, missing URL
+- **createPublicHostedCheckout** (2): email match, email mismatch
+- **refundViaStripe** (4): succeeded refund, non-succeeded rejection,
+  cross-org IDOR, Stripe API failure
+- **assertBookingCheckoutAllowed** (3): cancelled status, zero amount,
+  completed status
+
+### Mock approach
+
+- `vi.mock("../auth")` + `vi.mock("../lib/authz")` — bypass Better Auth
+  (adapter can't resolve sessions in convex-test)
+- `vi.mock("../lib/crypto")` — no-op encrypt/decrypt
+- `vi.stubGlobal("fetch", ...)` — simulate Stripe API responses
+
+### Test count progression
+
+- Start of audit: 480 tests
+- End of round 16: 818 tests
+- End of round 17: **839 tests** across 78 test files
+- **359 new tests** added total
+
+### Remaining gaps (low priority)
+
+- `http.ts` — HTTP security layer (origin checks, body size limits)
+- `crons.ts` — just schedule definitions, no testable logic
+
+### Verification
+
+- `npx tsc --noEmit` (both convex + FE) — passes
+- `pnpm vitest run` — 839/839 tests pass across 78 test files
+- `pnpm lint` — passes
