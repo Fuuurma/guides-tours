@@ -115,7 +115,6 @@ vi.mock("../lib/userContact", () => ({
 					userId: guideId,
 					name: c?.name ?? guideId,
 					email: c?.email ?? "",
-					phone: c?.phone ?? "",
 					roles: ["guide"],
 					assignmentCount: count,
 				});
@@ -130,7 +129,6 @@ vi.mock("../lib/userContact", () => ({
 					userId,
 					name: c?.name ?? userId,
 					email: c?.email ?? "",
-					phone: c?.phone ?? "",
 					roles: ["driver"],
 					assignmentCount: count,
 				});
