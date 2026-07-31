@@ -169,7 +169,10 @@ export async function sendTwilioSms(
 		return { ok: false, error: message };
 	}
 
-	const payload = (await response.json().catch(() => ({}))) as {
+	const payload = (await response.json().catch((parseErr) => {
+		console.error("[notification_sms] Failed to parse Twilio response JSON:", parseErr);
+		return {};
+	})) as {
 		sid?: string;
 		status?: string;
 		code?: number;

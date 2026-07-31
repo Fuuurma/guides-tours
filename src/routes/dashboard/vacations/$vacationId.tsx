@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { useOrgMembers } from "@/hooks/use-org-members";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -39,7 +39,7 @@ function VacationDetailPage() {
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
-	if (error) return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={getSafeDisplayMessage(error)} />;
 	if (!vacation)
 		return (
 			<DetailPage

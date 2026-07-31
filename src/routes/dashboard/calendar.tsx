@@ -31,7 +31,7 @@ import {
 	startOfWeekLocal,
 } from "@/lib/calendar-date";
 import { evaluateSlotStaffing, resolveTourStaffing } from "@/lib/staffing";
-import { cn } from "@/lib/utils";
+import { cn, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -343,7 +343,7 @@ function CalendarPage() {
 				</Select>
 			</div>
 
-			{error && <ErrorBanner message={error.message} />}
+			{error && <ErrorBanner message={getSafeDisplayMessage(error)} />}
 
 			<Tabs value={view} onValueChange={onViewChange}>
 				<TabsList>

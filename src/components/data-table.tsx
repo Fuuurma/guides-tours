@@ -10,6 +10,7 @@ import {
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	Table,
 	TableBody,
@@ -99,7 +100,7 @@ export function DataTable<T>({
 		);
 	}
 	if (error) {
-		return <ErrorBanner message={`Error: ${error.message}`} />;
+		return <ErrorBanner message={getSafeDisplayMessage(error)} />;
 	}
 	if (!data?.length) {
 		return (

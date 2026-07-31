@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { formatCentsCompact } from "@/lib/format";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import type { CustomerDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -67,7 +68,7 @@ function CustomerDetailPage() {
 		return <DetailSkeleton />;
 	}
 	if (error) {
-		return <ErrorBanner message={`Error: ${error.message}`} />;
+		return <ErrorBanner message={getSafeDisplayMessage(error)} />;
 	}
 	if (!customer) {
 		return (

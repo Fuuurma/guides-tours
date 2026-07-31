@@ -15,6 +15,24 @@ export function getErrorMessage(err: unknown): string {
 }
 
 /**
+ * Return a user-safe error message for display in error banners.
+ * ConvexError messages are authored by us and safe to show. Other
+ * errors (network failures, internal errors) get a generic message
+ * to avoid leaking backend implementation details.
+ */
+export function getSafeDisplayMessage(err: unknown): string {
+	if (err instanceof Error) {
+		const msg = err.message;
+		// ConvexError messages are our own thrown strings — safe to show.
+		// They typically contain user-facing messages like "Tour not found".
+		if (msg && !msg.includes("Internal Server Error") && !msg.includes("Validator error")) {
+			return msg;
+		}
+	}
+	return "Something went wrong. Please try again.";
+}
+
+/**
  * Validate that a URL points to a trusted Stripe domain before
  * using it for navigation. Prevents open redirects if the backend
  * is compromised or returns an unexpected value.

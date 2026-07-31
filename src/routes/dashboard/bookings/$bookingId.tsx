@@ -14,7 +14,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCentsCompact } from "@/lib/format";
-import { getErrorMessage, isStripeCheckoutUrl } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import type { BookingDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -141,7 +141,7 @@ function BookingDetailPage() {
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
-	if (error) return <ErrorBanner message={`Error: ${error.message}`} />;
+	if (error) return <ErrorBanner message={getSafeDisplayMessage(error)} />;
 	if (!booking) {
 		return (
 			<DetailPage title="Booking not found" backTo="/dashboard/bookings" />

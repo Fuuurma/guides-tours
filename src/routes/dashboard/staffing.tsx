@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import type { SlotGap } from "@/lib/staffing";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 
 function defaultRange() {
@@ -229,7 +229,7 @@ function StaffingPage() {
 				</p>
 			)}
 
-			{error && <ErrorBanner message={error.message} />}
+			{error && <ErrorBanner message={getSafeDisplayMessage(error)} />}
 			{isPending ? (
 				<Skeleton className="h-48 w-full" />
 			) : items.length === 0 ? (

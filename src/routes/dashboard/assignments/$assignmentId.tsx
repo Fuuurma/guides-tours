@@ -21,7 +21,7 @@ import {
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { resolveTourStaffing } from "@/lib/staffing";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -204,7 +204,7 @@ function AssignmentDetailPage() {
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
-	if (error) return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={getSafeDisplayMessage(error)} />;
 	if (!assignment)
 		return (
 			<DetailPage

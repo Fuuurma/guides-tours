@@ -27,7 +27,7 @@ import {
 	publicBookingDefaults,
 	publicBookingSchema,
 } from "@/lib/public-booking-form";
-import { getErrorMessage, isStripeCheckoutUrl } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import {
 	MAX_EMAIL_LEN,
 	MAX_NAME_LEN,
@@ -301,7 +301,7 @@ function PublicBookingPage() {
 				<Card>
 					<CardHeader>
 						<CardTitle>Error</CardTitle>
-						<CardDescription>{error.message}</CardDescription>
+						<CardDescription>{getSafeDisplayMessage(error)}</CardDescription>
 					</CardHeader>
 				</Card>
 			</main>

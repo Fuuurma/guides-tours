@@ -16,7 +16,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -177,7 +177,7 @@ function FilesPage() {
 				</Select>
 			}
 		>
-			{error ? <ErrorBanner message={error.message} /> : null}
+			{error ? <ErrorBanner message={getSafeDisplayMessage(error)} /> : null}
 			{isPending ? (
 				<p className="text-muted-foreground text-sm">Loading files…</p>
 			) : (

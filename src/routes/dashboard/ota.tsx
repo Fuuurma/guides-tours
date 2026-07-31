@@ -27,7 +27,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormActions, FormField } from "../../components/form";
@@ -114,7 +114,7 @@ function OtaIntegrationsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{error && <ErrorBanner message={`Error: ${error.message}`} />}
+					{error && <ErrorBanner message={getSafeDisplayMessage(error)} />}
 					{isPending ? (
 						<div className="space-y-2">
 							<Skeleton className="h-12 w-full" />

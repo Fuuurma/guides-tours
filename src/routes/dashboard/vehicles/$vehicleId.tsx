@@ -9,6 +9,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { localYmd } from "@/lib/calendar-date";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -57,7 +58,7 @@ function VehicleDetailPage() {
 		return <DetailSkeleton />;
 	}
 	if (error) {
-		return <ErrorBanner message={error.message} />;
+		return <ErrorBanner message={getSafeDisplayMessage(error)} />;
 	}
 	if (!vehicle) {
 		return (

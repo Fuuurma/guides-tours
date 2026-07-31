@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -59,7 +59,7 @@ function ScheduleDetailPage() {
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
-	if (error) return <ErrorBanner message={error.message} />;
+	if (error) return <ErrorBanner message={getSafeDisplayMessage(error)} />;
 	if (!schedule)
 		return (
 			<DetailPage title="Schedule not found" backTo="/dashboard/schedules" />

@@ -48,7 +48,7 @@ function getKeyMaterial(): Uint8Array {
 		return new TextEncoder().encode(raw);
 	}
 	throw new Error(
-		`ENCRYPTION_KEY must be 32 bytes (got ${raw.length}). Use \`openssl rand -hex 32\` or a 32-char string.`,
+		"ENCRYPTION_KEY must be 32 bytes. Use `openssl rand -hex 32` or a 32-char string.",
 	);
 }
 

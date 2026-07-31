@@ -242,25 +242,26 @@ http.route({
 			if (err instanceof ConvexError) {
 				const data = err.data as string;
 				if (typeof data === "string") {
-					if (data.includes("rate limit")) {
+					const lower = data.toLowerCase();
+					if (lower.includes("rate limit")) {
 						message = "Too many booking attempts. Please try again later.";
 						status = 429;
-					} else if (data.includes("not found")) {
+					} else if (lower.includes("not found")) {
 						message = "Tour, schedule, or organization not found";
 						status = 404;
-					} else if (data.includes("capacity") || data.includes("over capacity")) {
+					} else if (lower.includes("capacity") || lower.includes("over capacity")) {
 						message = "This tour is fully booked";
 						status = 400;
-					} else if (data.includes("blacked out") || data.includes("not available")) {
+					} else if (lower.includes("blacked out") || lower.includes("not available")) {
 						message = "This date is not available for booking";
 						status = 400;
-					} else if (data.includes("past") || data.includes("cutoff")) {
+					} else if (lower.includes("past") || lower.includes("cutoff")) {
 						message = "Cannot book tours in the past or within the cutoff period";
 						status = 400;
-					} else if (data.includes("Invalid email")) {
+					} else if (lower.includes("invalid email")) {
 						message = "Invalid email address";
 						status = 400;
-					} else if (data.includes("missing") || data.includes("Invalid")) {
+					} else if (lower.includes("missing") || lower.includes("invalid")) {
 						message = data;
 						status = 400;
 					}
