@@ -1495,7 +1495,10 @@ integration — the most security-critical payment flows).
 - End of round 16: 818 tests
 - End of round 17: **839 tests** across 78 test files
 - End of round 18: **839 tests** across 78 test files (no new tests, fixes only)
-- **359 new tests** added total
+- End of round 19: **839 tests** across 78 test files (no new tests, fixes only)
+- End of round 20: **839 tests** across 78 test files (no new tests, fixes only)
+- End of round 21: **856 tests** across 79 test files
+- **376 new tests** added total
 
 ### Remaining gaps (low priority)
 
@@ -1538,3 +1541,42 @@ Commit `ea94b64`. Addressed HIGH/MEDIUM issues from frontend + backend review su
 - `customers.ts` email uniqueness: read-then-write race condition (Convex has no unique index constraints).
 - `window.confirm` for destructive actions: 13 instances across dashboard pages (cosmetic, not a security issue).
 - Missing Zod validation on dashboard CRUD forms (backend validates all inputs).
+
+## Round 19 — Stripe URL validation + input limits (2026-07-28)
+
+Commit `dcb0193`. Addressed frontend findings from second-round audit.
+
+### Frontend
+- **Stripe URL validation:** New `isStripeCheckoutUrl()` helper validates URLs point to `*.stripe.com` over HTTPS before navigation. Applied in `bookings/$bookingId.tsx` and `book/$slug.tsx` to prevent open redirects.
+- **Input maxLength:** Added to `new-tour-page.tsx` (name: 100, description: 2000, languages: 100) and OTA page (product ID: 500, product code: 100).
+- **autoComplete="off":** Added to all 3 OTA secret inputs.
+
+### Backend
+- **assignments.ts:** Added `guideId` length validation (max 100) in `internalCreate`.
+
+## Round 20 — Config hardening + error sanitization (2026-07-28)
+
+Commit `9c428cd`. Addressed config/dependency audit findings.
+
+### Backend
+- **http.ts:** Case-insensitive error pattern matching (was missing "Not found" errors from mutations that use title case).
+- **siteUrl.ts:** Throw in production if `SITE_URL` is unset instead of silently defaulting to localhost.
+- **crypto.ts:** Remove key length from error message (info leak).
+- **notification_sms.ts:** Log JSON parse errors instead of silently swallowing them.
+
+### Frontend
+- **getSafeDisplayMessage() helper:** Sanitizes error messages for display — shows generic message for internal/validator errors, passes through ConvexError messages (our own thrown strings). Applied to 16 ErrorBanner usages across dashboard pages and public booking page.
+
+### Config
+- **.gitignore:** Added `.env.local` and `.env.*.local`.
+- **package.json:** Added `engines` field (node >=20, pnpm >=10).
+
+## Round 21 — http.ts security tests (2026-07-28)
+
+Commit `63c4f64`. Added 17 new tests for the round 18 http.ts security fixes.
+
+### New test file: `public_booking_http_security.test.ts`
+- **Origin validation (5 tests):** rejects missing/disallowed origins when allowlist configured, allows valid origins, allows when unset/empty.
+- **Slug format validation (6 tests):** rejects path traversal, special chars, oversized slugs; accepts valid alphanumeric/hyphen/underscore slugs.
+- **Body size enforcement (3 tests):** rejects >8KB by actual body length, not Content-Length header (spoofed header still rejected).
+- **Error sanitization (3 tests):** returns "Invalid request data" for validator errors, no internal details leaked.
