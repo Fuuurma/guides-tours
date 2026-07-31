@@ -1494,15 +1494,47 @@ integration — the most security-critical payment flows).
 - Start of audit: 480 tests
 - End of round 16: 818 tests
 - End of round 17: **839 tests** across 78 test files
+- End of round 18: **839 tests** across 78 test files (no new tests, fixes only)
 - **359 new tests** added total
 
 ### Remaining gaps (low priority)
 
-- `http.ts` — HTTP security layer (origin checks, body size limits)
 - `crons.ts` — just schedule definitions, no testable logic
+- Frontend: replace `window.confirm` with AlertDialog for destructive actions (13 instances)
+- Frontend: add Zod validation to dashboard CRUD forms (backend validates)
+- Backend: customers.ts email uniqueness has read-then-write race (Convex limitation, no unique constraints)
 
 ### Verification
 
 - `npx tsc --noEmit` (both convex + FE) — passes
 - `pnpm vitest run` — 839/839 tests pass across 78 test files
 - `pnpm lint` — passes
+
+## Round 18 — http.ts hardening + input validation + frontend guards (2026-07-28)
+
+Commit `ea94b64`. Addressed HIGH/MEDIUM issues from frontend + backend review subagents.
+
+### http.ts fixes (4 issues)
+1. **Origin validation bypass (HIGH):** Reject requests with missing `Origin` header when `PUBLIC_BOOKING_ALLOWED_ORIGINS` is configured.
+2. **Slug path traversal (MEDIUM):** Validate slug format (`/^[a-zA-Z0-9-]+$/`) before use.
+3. **Content-Length spoofing (MEDIUM):** Enforce actual body size by counting bytes read, not trusting the `Content-Length` header.
+4. **Information disclosure (HIGH):** Sanitize error messages — return generic user-facing messages, log full errors server-side. Treat Convex validator errors as 400 (client error).
+
+### Backend fixes
+- **bookings.ts:** Cap `_listByScheduleRaw` at 500 rows (was unbounded `.collect()` — CRITICAL OOM risk).
+- **Input length validation** added to 6 files via `assertFieldWithinLimit`:
+  - `tourCategories.ts`: name/slug (100), description (2000), icon/color (50)
+  - `vehicles.ts`: make/model (100), color/ownershipType (50)
+  - `tourSchedules.ts`: notes (1000)
+  - `tourSeasonalSchedules.ts`: name (100), startTime (10), notes (1000)
+  - `notificationTemplates.ts`: templateType/channel/sendTiming (50)
+  - `ota/integrations_mutations.ts`: apiKey/apiSecret/webhookSecret (500), partnerId (100), apiEndpoint (500)
+
+### Frontend fixes
+- **Secret input hardening:** Added `maxLength` + `autoComplete="off"` to all secret inputs in `payments.tsx` (Stripe publishable/secret/webhook keys) and `notification-settings-page.tsx` (Twilio Account SID, auth token, phone number, messaging service SID).
+- **Dashboard auth guard:** Added `beforeLoad` route-level guard to `/dashboard` route — redirects unauthenticated users to `/sign-in` before any dashboard component renders. Complements existing component-level check.
+
+### Known limitations (not fixed)
+- `customers.ts` email uniqueness: read-then-write race condition (Convex has no unique index constraints).
+- `window.confirm` for destructive actions: 13 instances across dashboard pages (cosmetic, not a security issue).
+- Missing Zod validation on dashboard CRUD forms (backend validates all inputs).
