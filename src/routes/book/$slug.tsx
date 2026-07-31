@@ -27,7 +27,7 @@ import {
 	publicBookingDefaults,
 	publicBookingSchema,
 } from "@/lib/public-booking-form";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import {
 	MAX_EMAIL_LEN,
 	MAX_NAME_LEN,
@@ -435,6 +435,11 @@ function PublicBookingPage() {
 																	successPath: `/book/${slug}?paid=1`,
 																	cancelPath: `/book/${slug}?pay_cancelled=1`,
 																});
+																if (!isStripeCheckoutUrl(url)) {
+																	toast.error("Invalid checkout URL received");
+																	setPaying(false);
+																	return;
+																}
 																window.location.href = url;
 															} catch (err) {
 																toast.error(getErrorMessage(err));

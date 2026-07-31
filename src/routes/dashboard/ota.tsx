@@ -457,6 +457,7 @@ function OtaProductsSection({
 						<FormField label="OTA product ID *" htmlFor="ota-pid">
 							<Input
 								id="ota-pid"
+								maxLength={500}
 								value={otaProductId}
 								onChange={(e) => setOtaProductId(e.target.value)}
 								placeholder="Provider product / activity ID"
@@ -467,6 +468,7 @@ function OtaProductsSection({
 							<FormField label="Product code" htmlFor="ota-code">
 								<Input
 									id="ota-code"
+									maxLength={100}
 									value={otaProductCode}
 									onChange={(e) => setOtaProductCode(e.target.value)}
 								/>
@@ -606,6 +608,7 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 							id="apiKey"
 							required
 							maxLength={500}
+							autoComplete="off"
 							value={apiKey}
 							onChange={(e) => setApiKey(e.target.value)}
 							placeholder="abc123…"
@@ -617,6 +620,7 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 							id="apiSecret"
 							type="password"
 							maxLength={500}
+							autoComplete="off"
 							value={apiSecret}
 							onChange={(e) => setApiSecret(e.target.value)}
 							placeholder="(optional)"
@@ -632,6 +636,7 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 							id="webhookSecret"
 							type="password"
 							maxLength={500}
+							autoComplete="off"
 							value={webhookSecret}
 							onChange={(e) => setWebhookSecret(e.target.value)}
 							placeholder="(optional)"

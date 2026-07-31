@@ -26,6 +26,7 @@ import type { FunctionReference } from "convex/server";
 import type { Id, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
+import { assertFieldWithinLimit } from "./lib/validation";
 import { logAudit } from "./lib/audit";
 import { authComponent, createAuth } from "./auth";
 import { parseBookingTime } from "./lib/time";
@@ -612,6 +613,7 @@ export const internalCreate = internalMutation({
 		userId: v.string(),
 	},
 	handler: async (ctx, args) => {
+	assertFieldWithinLimit("guideId", args.guideId, 100);
 	let tourId = args.tourId;
 	let date = args.date;
 	let startTime = args.startTime;

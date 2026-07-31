@@ -14,7 +14,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCentsCompact } from "@/lib/format";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import type { BookingDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -182,6 +182,11 @@ function BookingDetailPage() {
 			const { url } = await createCheckout({
 				bookingId: bookingId as Id<"bookings">,
 			});
+			if (!isStripeCheckoutUrl(url)) {
+				toast.error("Invalid checkout URL received");
+				setPending(false);
+				return;
+			}
 			window.location.href = url;
 		} catch (err) {
 			toast.error(getErrorMessage(err));

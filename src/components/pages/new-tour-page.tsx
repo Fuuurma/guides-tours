@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { resolveTourStaffing, TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
-import { parseUsdToCents, validatePositiveInteger } from "@/lib/validation";
+import {
+	MAX_DESCRIPTION_LEN,
+	MAX_NAME_LEN,
+	parseUsdToCents,
+	validatePositiveInteger,
+} from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { FormField } from "../form";
@@ -138,6 +143,7 @@ export function NewTourPage() {
 				<Input
 					id="name"
 					required
+					maxLength={MAX_NAME_LEN}
 					value={form.values.name}
 					onChange={(e) => form.set("name", e.target.value)}
 					placeholder="Old Town Walk"
@@ -147,6 +153,7 @@ export function NewTourPage() {
 			<FormField label="Description" htmlFor="desc">
 				<Textarea
 					id="desc"
+					maxLength={MAX_DESCRIPTION_LEN}
 					value={form.values.description}
 					onChange={(e) => form.set("description", e.target.value)}
 					rows={3}
@@ -282,6 +289,7 @@ export function NewTourPage() {
 				>
 					<Input
 						id="langs"
+						maxLength={100}
 						value={form.values.languages}
 						onChange={(e) => form.set("languages", e.target.value)}
 						placeholder="en, es"
