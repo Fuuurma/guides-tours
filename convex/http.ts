@@ -71,15 +71,21 @@ http.route({
 		}
 
 		// Origin check (only if explicitly configured).
+		// When an allowlist is set, reject requests with no Origin
+		// header — browsers always send Origin for cross-origin POSTs,
+		// so a missing header means a non-browser client or a
+		// same-origin request from a compromised subdomain.
 		const origin = request.headers.get("origin");
 		const allowedOriginsRaw = process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS;
-		if (origin && allowedOriginsRaw) {
+		if (allowedOriginsRaw) {
 			const allowed = allowedOriginsRaw
 				.split(",")
 				.map((s) => s.trim())
 				.filter(Boolean);
-			if (allowed.length > 0 && !allowed.includes(origin)) {
-				return new Response("origin not allowed", { status: 403 });
+			if (allowed.length > 0) {
+				if (!origin || !allowed.includes(origin)) {
+					return new Response("origin not allowed", { status: 403 });
+				}
 			}
 		}
 
@@ -101,18 +107,32 @@ http.route({
 		}
 		const slug = segments[slugIdx + 1];
 
+		// Validate slug format: alphanumeric, hyphens, underscores only.
+		// Prevents path traversal and limits slug length.
+		const SLUG_RE = /^[a-zA-Z0-9_-]{1,100}$/;
+		if (!slug || !SLUG_RE.test(slug)) {
+			return new Response("invalid slug", { status: 400 });
+		}
+
 		// Cap the request body at 8 KB — the booking payload is tiny
 		// (~6 fields). Anything larger is either an attacker probing
-		// for memory exhaustion or a buggy client.
-		const contentLength = Number(request.headers.get("content-length") ?? 0);
+		// for memory exhaustion or a buggy client. We check the actual
+		// body length, not the Content-Length header (which can be
+		// spoofed or omitted).
 		const MAX_BODY_BYTES = 8 * 1024;
-		if (contentLength > MAX_BODY_BYTES) {
+		let rawBody: string;
+		try {
+			rawBody = await request.text();
+		} catch {
+			return new Response("failed to read body", { status: 400 });
+		}
+		if (rawBody.length > MAX_BODY_BYTES) {
 			return new Response("payload too large", { status: 413 });
 		}
 
 		let payload: unknown;
 		try {
-			payload = await request.json();
+			payload = JSON.parse(rawBody);
 		} catch {
 			return new Response("invalid JSON", { status: 400 });
 		}
@@ -213,16 +233,43 @@ http.route({
 				},
 			);
 		} catch (err) {
-			const message =
-				err instanceof ConvexError
-					? (err.data as string)
-					: err instanceof Error
-						? err.message
-						: "internal error";
-			let status = 400;
-			if (typeof message === "string") {
-				if (message.includes("not found")) status = 404;
-				else if (message.includes("rate limit")) status = 429;
+			// Log full error server-side for debugging.
+			console.error("[public-booking] Error:", err);
+			// Return only safe, user-facing error messages to the
+			// client — internal details could aid attackers.
+			let message = "An error occurred processing your booking";
+			let status = 500;
+			if (err instanceof ConvexError) {
+				const data = err.data as string;
+				if (typeof data === "string") {
+					if (data.includes("rate limit")) {
+						message = "Too many booking attempts. Please try again later.";
+						status = 429;
+					} else if (data.includes("not found")) {
+						message = "Tour, schedule, or organization not found";
+						status = 404;
+					} else if (data.includes("capacity") || data.includes("over capacity")) {
+						message = "This tour is fully booked";
+						status = 400;
+					} else if (data.includes("blacked out") || data.includes("not available")) {
+						message = "This date is not available for booking";
+						status = 400;
+					} else if (data.includes("past") || data.includes("cutoff")) {
+						message = "Cannot book tours in the past or within the cutoff period";
+						status = 400;
+					} else if (data.includes("Invalid email")) {
+						message = "Invalid email address";
+						status = 400;
+					} else if (data.includes("missing") || data.includes("Invalid")) {
+						message = data;
+						status = 400;
+					}
+				}
+			} else if (err instanceof Error && err.message.includes("Validator error")) {
+				// Convex args validator rejected the input — this is a
+				// client-side error, not a server fault.
+				message = "Invalid request data";
+				status = 400;
 			}
 			return new Response(JSON.stringify({ error: message }), {
 				status,

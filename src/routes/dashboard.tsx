@@ -1,6 +1,6 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { NavBar } from "@/components/nav-bar";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,14 @@ import { Toaster } from "@/components/ui/sonner";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard")({
+	beforeLoad: async ({ context }) => {
+		// Route-level auth guard — prevents unauthenticated users from
+		// accessing any dashboard sub-route. The root route sets
+		// `isAuthenticated` from the server-side token check.
+		if (!context.isAuthenticated) {
+			throw redirect({ to: "/sign-in" });
+		}
+	},
 	component: DashboardLayout,
 });
 

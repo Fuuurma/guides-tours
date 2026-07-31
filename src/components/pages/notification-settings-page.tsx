@@ -294,6 +294,8 @@ export function NotificationSettingsPage() {
 								value={twilioAccountSid}
 								onChange={(e) => setTwilioAccountSid(e.target.value)}
 								placeholder="AC..."
+								maxLength={100}
+								autoComplete="off"
 							/>
 						</FormField>
 						<FormField
@@ -312,6 +314,8 @@ export function NotificationSettingsPage() {
 									value={twilioAuthToken}
 									onChange={(e) => setTwilioAuthToken(e.target.value)}
 									placeholder={settings ? "•••••••" : "Enter token"}
+									maxLength={500}
+									autoComplete="off"
 								/>
 								{settings && <Badge variant="secondary">Token set</Badge>}
 							</div>
@@ -326,6 +330,8 @@ export function NotificationSettingsPage() {
 								value={twilioPhoneNumber}
 								onChange={(e) => setTwilioPhoneNumber(e.target.value)}
 								placeholder="+15551234567"
+								maxLength={20}
+								autoComplete="off"
 							/>
 						</FormField>
 						<FormField
@@ -338,6 +344,8 @@ export function NotificationSettingsPage() {
 								value={twilioMessagingServiceSid}
 								onChange={(e) => setTwilioMessagingServiceSid(e.target.value)}
 								placeholder="MG..."
+								maxLength={100}
+								autoComplete="off"
 							/>
 						</FormField>
 					</CardContent>

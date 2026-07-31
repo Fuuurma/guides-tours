@@ -162,6 +162,8 @@ function PaymentSettingsPage() {
 								value={stripePublishableKey}
 								onChange={(e) => setStripePublishableKey(e.target.value)}
 								placeholder="pk_live_… or pk_test_…"
+								maxLength={200}
+								autoComplete="off"
 							/>
 						</FormField>
 						<FormField
@@ -177,6 +179,8 @@ function PaymentSettingsPage() {
 								value={stripeSecretKey}
 								onChange={(e) => setStripeSecretKey(e.target.value)}
 								placeholder={settings ? "•••••••" : "sk_live_…"}
+								maxLength={500}
+								autoComplete="off"
 							/>
 						</FormField>
 						<FormField
@@ -190,6 +194,8 @@ function PaymentSettingsPage() {
 								value={stripeWebhookSecret}
 								onChange={(e) => setStripeWebhookSecret(e.target.value)}
 								placeholder={settings ? "•••••••" : "whsec_…"}
+								maxLength={500}
+								autoComplete="off"
 							/>
 						</FormField>
 						<div className="rounded-md border bg-muted/40 p-3 text-sm">

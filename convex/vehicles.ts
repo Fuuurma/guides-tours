@@ -157,6 +157,18 @@ export const internalCreate = internalMutation({
 		if (args.licensePlate !== undefined) {
 			assertFieldWithinLimit("licensePlate", args.licensePlate, MAX_LICENSE_LEN);
 		}
+		if (args.make !== undefined) {
+			assertFieldWithinLimit("make", args.make, MAX_VEHICLE_NAME_LEN);
+		}
+		if (args.model !== undefined) {
+			assertFieldWithinLimit("model", args.model, MAX_VEHICLE_NAME_LEN);
+		}
+		if (args.color !== undefined) {
+			assertFieldWithinLimit("color", args.color, MAX_SHORT_FIELD_LEN);
+		}
+		if (args.ownershipType !== undefined) {
+			assertFieldWithinLimit("ownershipType", args.ownershipType, MAX_SHORT_FIELD_LEN);
+		}
 		if (args.notes !== undefined) {
 			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);
 		}
@@ -249,6 +261,18 @@ export const internalUpdate = internalMutation({
 		}
 		if (args.licensePlate !== undefined) {
 			assertFieldWithinLimit("licensePlate", args.licensePlate, MAX_LICENSE_LEN);
+		}
+		if (args.make !== undefined) {
+			assertFieldWithinLimit("make", args.make, MAX_VEHICLE_NAME_LEN);
+		}
+		if (args.model !== undefined) {
+			assertFieldWithinLimit("model", args.model, MAX_VEHICLE_NAME_LEN);
+		}
+		if (args.color !== undefined) {
+			assertFieldWithinLimit("color", args.color, MAX_SHORT_FIELD_LEN);
+		}
+		if (args.ownershipType !== undefined) {
+			assertFieldWithinLimit("ownershipType", args.ownershipType, MAX_SHORT_FIELD_LEN);
 		}
 		if (args.notes !== undefined) {
 			assertFieldWithinLimit("notes", args.notes, MAX_NOTES_LEN);

@@ -22,6 +22,7 @@ import {
 	MAX_EMAIL_BODY_LEN,
 	MAX_EMAIL_SUBJECT_LEN,
 	MAX_NAME_LEN,
+	MAX_SHORT_FIELD_LEN,
 	MAX_SMS_BODY_LEN,
 	assertFieldWithinLimit,
 	normalizeEmail,
@@ -154,6 +155,9 @@ export const internalCreate = internalMutation({
 				`Name is too long (max ${MAX_NAME_LEN} characters)`,
 			);
 		}
+		assertFieldWithinLimit("templateType", args.templateType, MAX_SHORT_FIELD_LEN);
+		assertFieldWithinLimit("channel", args.channel, MAX_SHORT_FIELD_LEN);
+		assertFieldWithinLimit("sendTiming", args.sendTiming, MAX_SHORT_FIELD_LEN);
 		assertFieldWithinLimit(
 			"emailSubject",
 			args.emailSubject,
@@ -272,6 +276,12 @@ export const internalUpdate = internalMutation({
 			throw new ConvexError(
 				`Name is too long (max ${MAX_NAME_LEN} characters)`,
 			);
+		}
+		if (args.channel !== undefined) {
+			assertFieldWithinLimit("channel", args.channel, MAX_SHORT_FIELD_LEN);
+		}
+		if (args.sendTiming !== undefined) {
+			assertFieldWithinLimit("sendTiming", args.sendTiming, MAX_SHORT_FIELD_LEN);
 		}
 		if (args.emailSubject !== undefined) {
 			assertFieldWithinLimit(

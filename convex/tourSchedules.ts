@@ -16,6 +16,7 @@ import {
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { assertFieldWithinLimit } from "./lib/validation";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { parseBookingTime } from "./lib/time";
@@ -184,6 +185,9 @@ export const internalCreate = internalMutation({
 		if (args.capacityTotal <= 0) {
 			throw new ConvexError("Capacity must be positive");
 		}
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, 1000);
+		}
 		if (parseBookingTime(args.date, args.startTime) === null) {
 			throw new ConvexError(
 				"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
@@ -290,6 +294,9 @@ export const internalUpdate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, 1000);
+		}
 		const existing = await ctx.db.get(args.scheduleId);
 		if (!existing) throw new ConvexError("Schedule not found");
 		if (existing.organizationId !== args.organizationId) {

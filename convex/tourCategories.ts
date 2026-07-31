@@ -13,6 +13,7 @@ import {
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { assertFieldWithinLimit } from "./lib/validation";
 
 // ---- queries ----
 
@@ -86,6 +87,17 @@ export const internalCreate = internalMutation({
 		displayOrder: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
+		assertFieldWithinLimit("name", args.name, 100);
+		assertFieldWithinLimit("slug", args.slug, 100);
+		if (args.description !== undefined) {
+			assertFieldWithinLimit("description", args.description, 2000);
+		}
+		if (args.icon !== undefined) {
+			assertFieldWithinLimit("icon", args.icon, 50);
+		}
+		if (args.color !== undefined) {
+			assertFieldWithinLimit("color", args.color, 50);
+		}
 		// Slug uniqueness per org
 		const existing = await ctx.db
 			.query("tourCategories")
@@ -157,6 +169,21 @@ export const internalUpdate = internalMutation({
 		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
+		if (args.name !== undefined) {
+			assertFieldWithinLimit("name", args.name, 100);
+		}
+		if (args.slug !== undefined) {
+			assertFieldWithinLimit("slug", args.slug, 100);
+		}
+		if (args.description !== undefined) {
+			assertFieldWithinLimit("description", args.description, 2000);
+		}
+		if (args.icon !== undefined) {
+			assertFieldWithinLimit("icon", args.icon, 50);
+		}
+		if (args.color !== undefined) {
+			assertFieldWithinLimit("color", args.color, 50);
+		}
 		const existing = await ctx.db.get(args.categoryId);
 		if (!existing) throw new ConvexError("Category not found");
 		if (existing.organizationId !== args.organizationId) {

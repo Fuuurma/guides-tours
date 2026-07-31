@@ -10,6 +10,7 @@ import { internalMutation, internalQuery, mutation } from "../_generated/server"
 import { requireRole } from "../lib/authz";
 import { decrypt, encrypt } from "../lib/crypto";
 import { logAudit } from "../lib/audit";
+import { assertFieldWithinLimit } from "../lib/validation";
 
 const PROVIDERS = [
 	"viator",
@@ -123,6 +124,19 @@ export const createInternal = internalMutation({
 				`Unknown provider "${args.provider}". Supported: ${PROVIDERS.join(", ")}`,
 			);
 		}
+		assertFieldWithinLimit("apiKey", args.apiKey, 500);
+		if (args.apiSecret !== undefined) {
+			assertFieldWithinLimit("apiSecret", args.apiSecret, 500);
+		}
+		if (args.webhookSecret !== undefined) {
+			assertFieldWithinLimit("webhookSecret", args.webhookSecret, 500);
+		}
+		if (args.partnerId !== undefined) {
+			assertFieldWithinLimit("partnerId", args.partnerId, 100);
+		}
+		if (args.apiEndpoint !== undefined) {
+			assertFieldWithinLimit("apiEndpoint", args.apiEndpoint, 500);
+		}
 
 		const existing = await ctx.db
 			.query("otaIntegrations")
@@ -211,6 +225,22 @@ export const updateInternal = internalMutation({
 			throw new ConvexError(
 				"Forbidden: integration belongs to a different organization",
 			);
+		}
+
+		if (args.apiKey !== undefined) {
+			assertFieldWithinLimit("apiKey", args.apiKey, 500);
+		}
+		if (args.apiSecret !== undefined) {
+			assertFieldWithinLimit("apiSecret", args.apiSecret, 500);
+		}
+		if (args.webhookSecret !== undefined) {
+			assertFieldWithinLimit("webhookSecret", args.webhookSecret, 500);
+		}
+		if (args.partnerId !== undefined) {
+			assertFieldWithinLimit("partnerId", args.partnerId, 100);
+		}
+		if (args.apiEndpoint !== undefined) {
+			assertFieldWithinLimit("apiEndpoint", args.apiEndpoint, 500);
 		}
 
 		const patch: Record<string, unknown> = { updatedAt: Date.now() };

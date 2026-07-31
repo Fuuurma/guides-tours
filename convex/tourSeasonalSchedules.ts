@@ -13,6 +13,7 @@ import {
 import type { FunctionReference } from "convex/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { assertFieldWithinLimit } from "./lib/validation";
 
 // ---- queries ----
 
@@ -100,6 +101,13 @@ export const internalCreate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		assertFieldWithinLimit("name", args.name, 100);
+		if (args.startTime !== undefined) {
+			assertFieldWithinLimit("startTime", args.startTime, 10);
+		}
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, 1000);
+		}
 		if (args.endDate < args.startDate) {
 			throw new ConvexError("endDate must be on or after startDate");
 		}
@@ -189,6 +197,15 @@ export const internalUpdate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
+		if (args.name !== undefined) {
+			assertFieldWithinLimit("name", args.name, 100);
+		}
+		if (args.startTime !== undefined) {
+			assertFieldWithinLimit("startTime", args.startTime, 10);
+		}
+		if (args.notes !== undefined) {
+			assertFieldWithinLimit("notes", args.notes, 1000);
+		}
 		const existing = await ctx.db.get(args.scheduleId);
 		if (!existing) throw new ConvexError("Schedule not found");
 		if (existing.organizationId !== args.organizationId) {

@@ -311,7 +311,7 @@ async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">
 	const all = await ctx.db
 		.query("bookings")
 		.withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId))
-		.collect();
+		.take(500);
 	const active = all
 		.filter((b) => b.status !== "cancelled")
 		.sort((a, b) => a.startTime.localeCompare(b.startTime));
