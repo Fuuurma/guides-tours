@@ -21,7 +21,7 @@ process.env.ENCRYPTION_KEY ??= "a".repeat(64);
 import { convexTest } from "convex-test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import schema from "../schema";
-import { api, internal } from "../_generated/api";
+import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
