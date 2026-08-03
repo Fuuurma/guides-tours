@@ -52,8 +52,29 @@
 //   - Forms: self only
 //   - Base-URI: self (prevents <base> tag hijacking)
 
-import { createMiddleware, createStart } from "@tanstack/react-start";
+import {
+	createCsrfMiddleware,
+	createMiddleware,
+	createStart,
+} from "@tanstack/react-start";
 import { setResponseHeader } from "@tanstack/react-start/server";
+
+// CSRF protection for server functions.
+//
+// Server functions are same-origin RPC endpoints (e.g. the `getAuth`
+// createServerFn in __root.tsx) and should be protected from cross-site
+// requests. This middleware validates Sec-Fetch-Site / Origin / Referer
+// and returns 403 for cross-site requests.
+//
+// It is scoped to `handlerType === "serverFn"` so it does not interfere
+// with:
+//   - the Better Auth `/api/auth/*` handler (has its own originCheck
+//     CSRF protection)
+//   - HTTP routes (Stripe/OTA webhooks, public booking) which are
+//     signature-authenticated and must accept cross-site POSTs
+const csrfMiddleware = createCsrfMiddleware({
+	filter: (ctx) => ctx.handlerType === "serverFn",
+});
 
 const securityHeadersMiddleware = createMiddleware().server(
 	async ({ next }) => {
@@ -89,5 +110,5 @@ const securityHeadersMiddleware = createMiddleware().server(
 );
 
 export const startInstance = createStart(() => ({
-	requestMiddleware: [securityHeadersMiddleware],
+	requestMiddleware: [csrfMiddleware, securityHeadersMiddleware],
 }));
