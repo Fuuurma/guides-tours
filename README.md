@@ -10,7 +10,7 @@ Tour operator SaaS — TanStack Start + Convex + Better Auth + Stripe + SES.
 - **Auth:** Better Auth local-install — sign-up → onboarding → dashboard passes end-to-end
 - **Stack migrations:** all done (no remaining source codebases)
 - **Awaiting:** production env vars + `npx convex deploy --prod` + `pnpm wrangler deploy`
-- **Migration plan:** [`newProjectsPlanner/migrations/2026-06-deployment-and-convergence.md`](../../newProjectsPlanner/migrations/2026-06-deployment-and-convergence.md)
+- **Migration plan:** [`hub/migrations/2026-06-deployment-and-convergence.md`](https://github.com/Fuuurma/hub/blob/main/migrations/2026-06-deployment-and-convergence.md)
 - **Deploy guide:** [DEPLOYMENT.md](./DEPLOYMENT.md)
 - **Edge-runtime notes:** [docs/EDGE-RUNTIME.md](./docs/EDGE-RUNTIME.md) (why we use custom SigV4 + raw fetch for AWS/Stripe)
 - **Data layer status:** [docs/DATA_LAYER_STATUS.md](./docs/DATA_LAYER_STATUS.md) (which backend modules are FE-wired vs. data-layer only)
