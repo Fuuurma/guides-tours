@@ -1,18 +1,13 @@
 import { useForm } from "@tanstack/react-form";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { createFileRoute } from "@tanstack/react-router";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardFooter,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { authClient } from "@/lib/auth-client";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -35,17 +30,21 @@ const orgSchema = z.object({
 type OrgForm = z.infer<typeof orgSchema>;
 
 function OnboardingPage() {
+	const [serverError, setServerError] = useState<string | null>(null);
+
 	const form = useForm({
 		defaultValues: { name: "", slug: "" } satisfies OrgForm,
 		validators: { onSubmit: orgSchema },
 		onSubmit: async ({ value }) => {
+			setServerError(null);
 			const { error } = await authClient.organization.create({
 				name: value.name,
 				slug: value.slug,
 				keepCurrentActiveOrganization: false,
 			});
 			if (error) {
-				throw new Error(error.message);
+				setServerError(getErrorMessage(error));
+				return;
 			}
 			// Force-refresh so the dashboard's tenant-scoped queries
 			// pick up the new active org from session.
@@ -95,81 +94,72 @@ function OnboardingPage() {
 	}, [debouncedName, form]);
 
 	return (
-		<main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-			<Card>
-				<CardHeader>
-					<CardTitle>Set up your company</CardTitle>
-					<CardDescription>
-						guides-tours is multi-tenant. Create the organization your team will
-						share.
-					</CardDescription>
-				</CardHeader>
-				<form
-					onSubmit={(e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						void form.handleSubmit().catch((err: unknown) => {
-							const message = getErrorMessage(err);
-							// Server errors stay local — show as a banner below
-							// the form (mixed semantics per the TanStack Form pattern).
-							const banner = document.getElementById("server-error");
-							if (banner) banner.textContent = message;
-						});
-					}}
-				>
-					<CardContent className="space-y-4">
-						<form.Field name="name">
-							{(field) => (
-								<FormField
-									field={field}
-									label="Company name"
-									inputProps={{
-										type: "text",
-										placeholder: "Acme Tours Barcelona",
-									}}
-								/>
-							)}
-						</form.Field>
-
-						<form.Field name="slug">
-							{(field) => (
-								<FormField
-									field={field}
-									label="URL slug"
-									hint="Used in invite links and your public booking page."
-									inputProps={{
-										type: "text",
-										placeholder: "acme-tours",
-									}}
-								/>
-							)}
-						</form.Field>
-
-						<p
-							id="server-error"
-							className="text-destructive text-sm"
-							role="alert"
+		<AuthShell
+			title="Set up your company"
+			serifAccent=""
+			description="Create the organization your team will share."
+		>
+			<form
+				onSubmit={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					void form.handleSubmit();
+				}}
+				className="space-y-4"
+			>
+				<form.Field name="name">
+					{(field) => (
+						<FormField
+							field={field}
+							label="Company name"
+							inputProps={{
+								type: "text",
+								placeholder: "Acme Tours Barcelona",
+								autoComplete: "organization",
+								autoFocus: true,
+							}}
 						/>
-					</CardContent>
-					<CardFooter>
-						<form.Subscribe
-							selector={(state) =>
-								[state.canSubmit, state.isSubmitting] as const
-							}
+					)}
+				</form.Field>
+
+				<form.Field name="slug">
+					{(field) => (
+						<FormField
+							field={field}
+							label="URL slug"
+							hint="Used in invite links and your public booking page."
+							inputProps={{
+								type: "text",
+								placeholder: "acme-tours",
+								autoComplete: "url",
+							}}
+						/>
+					)}
+				</form.Field>
+
+				{serverError ? <ErrorBanner message={serverError} /> : null}
+
+				<form.Subscribe
+					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+				>
+					{([canSubmit, isSubmitting]) => (
+						<Button
+							type="submit"
+							size="lg"
+							className="h-11 w-full rounded-full"
+							disabled={!canSubmit || isSubmitting}
 						>
-							{([canSubmit, isSubmitting]) => (
-								<Button
-									type="submit"
-									disabled={!canSubmit || isSubmitting}
-									className="w-full"
-								>
-									{isSubmitting ? "Creating..." : "Create organization"}
-								</Button>
+							{isSubmitting ? (
+								<>
+									<Loader2 className="size-4 animate-spin" /> Creating...
+								</>
+							) : (
+								"Create organization"
 							)}
-						</form.Subscribe>
-					</CardFooter>
-				</form>
-			</Card>
-		</main>
+						</Button>
+					)}
+				</form.Subscribe>
+			</form>
+		</AuthShell>
 	);
 }

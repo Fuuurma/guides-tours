@@ -27,6 +27,20 @@ test.describe("public booking smoke", () => {
 		await expect(page.getByLabel(/email/i)).toBeVisible();
 	});
 
+	test("forgot-password route is reachable", async ({ page }) => {
+		const response = await page.goto("/forgot-password");
+		expect(response?.status()).toBeLessThan(500);
+		await expect(page.getByLabel(/email/i)).toBeVisible();
+	});
+
+	test("reset-password route is reachable (missing token shows graceful state)", async ({
+		page,
+	}) => {
+		const response = await page.goto("/reset-password");
+		expect(response?.status()).toBeLessThan(500);
+		await expect(page.getByText(/missing a valid reset token/i)).toBeVisible();
+	});
+
 	test("public booking page exists for any slug (200 or 404, never 500)", async ({
 		page,
 	}) => {

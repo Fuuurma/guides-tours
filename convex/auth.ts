@@ -117,6 +117,14 @@ export const createAuthOptions = (
 		enabled: true,
 		requireEmailVerification: true,
 		minPasswordLength: 8,
+		sendResetPassword: async ({ user, url }) => {
+			await sendTemplatedEmail({
+				to: user.email,
+				subject: "Reset your password on guides-tours",
+				bodyText: `Click the link below to reset your password:\n${url}\n\nIf you didn't request this, you can safely ignore this email.`,
+				bodyHtml: `<p>Click the link below to reset your password:</p><p><a href="${url}">Reset password</a></p><p>If you didn't request this, you can safely ignore this email.</p>`,
+			});
+		},
 	},
 	emailVerification: {
 		sendVerificationEmail: async ({ user, url }) => {
@@ -161,6 +169,14 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 			enabled: true,
 			requireEmailVerification: true,
 			minPasswordLength: 8,
+			sendResetPassword: async ({ user, url }) => {
+				await sendTemplatedEmail({
+					to: user.email,
+					subject: "Reset your password on guides-tours",
+					bodyText: `Click the link below to reset your password:\n${url}\n\nIf you didn't request this, you can safely ignore this email.`,
+					bodyHtml: `<p>Click the link below to reset your password:</p><p><a href="${url}">Reset password</a></p><p>If you didn't request this, you can safely ignore this email.</p>`,
+				});
+			},
 		},
 		emailVerification: {
 			sendVerificationEmail: async ({ user, url }) => {

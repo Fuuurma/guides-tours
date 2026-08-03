@@ -107,19 +107,7 @@ export const Route = createFileRoute("/")({
 					"The calm operating system for tour operators. Manage tours, bookings, schedules, teams, vehicles, payments, and OTA channels in one connected workspace.",
 			},
 		],
-		links: [
-			{ rel: "preconnect", href: "https://fonts.googleapis.com" },
-			{
-				rel: "preconnect",
-				href: "https://fonts.gstatic.com",
-				crossOrigin: "anonymous",
-			},
-			{
-				rel: "stylesheet",
-				href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap",
-			},
-			{ rel: "preload", as: "image", href: TOUR_IMAGES.hero },
-		],
+		links: [{ rel: "preload", as: "image", href: TOUR_IMAGES.hero }],
 	}),
 	component: Home,
 });

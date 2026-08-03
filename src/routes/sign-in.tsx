@@ -1,22 +1,30 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { motion } from "motion/react";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
+import { AuthShell } from "@/components/auth/auth-shell";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { FormField } from "@/components/forms/form-field";
-import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardFooter,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/sign-in")({
+	validateSearch: (search: Record<string, unknown>) => {
+		const redirect =
+			typeof search.redirect === "string" &&
+			search.redirect.startsWith("/") &&
+			!search.redirect.startsWith("//")
+				? search.redirect
+				: undefined;
+		const invitationId =
+			typeof search.invitationId === "string" ? search.invitationId : undefined;
+		return {
+			...(redirect ? { redirect } : {}),
+			...(invitationId ? { invitationId } : {}),
+		};
+	},
 	component: SignInPage,
 });
 
@@ -29,6 +37,7 @@ type SignInForm = z.infer<typeof signInSchema>;
 
 function SignInPage() {
 	const navigate = useNavigate();
+	const { redirect, invitationId } = Route.useSearch();
 	const [serverError, setServerError] = useState<string | null>(null);
 
 	const form = useForm({
@@ -46,6 +55,20 @@ function SignInPage() {
 				setServerError("Invalid email or password");
 				return;
 			}
+
+			if (invitationId) {
+				// Coming from the invite "sign in to accept" link — accept
+				// the invitation after a successful sign-in.
+				await authClient.organization.acceptInvitation({ invitationId });
+				await navigate({ to: "/dashboard" });
+				return;
+			}
+
+			if (redirect) {
+				await navigate({ to: redirect });
+				return;
+			}
+
 			// After sign-in, peek at whether the user has any org. If not,
 			// route them through onboarding. Otherwise straight to dashboard.
 			const { data: orgs } = await authClient.organization.list();
@@ -56,84 +79,107 @@ function SignInPage() {
 	});
 
 	return (
-		<main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-4 py-12">
-			<motion.div
-				initial={{ opacity: 0, y: 8 }}
-				animate={{ opacity: 1, y: 0 }}
-				transition={{ duration: 0.3, ease: "easeOut" }}
+		<AuthShell
+			title="Welcome back"
+			serifAccent=""
+			description="Sign in to run your day from one workspace."
+		>
+			<form
+				onSubmit={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					void form.handleSubmit();
+				}}
+				className="space-y-4"
 			>
-				<Card>
-					<CardHeader>
-						<CardTitle>Sign in</CardTitle>
-						<CardDescription>Welcome back to guides-tours</CardDescription>
-					</CardHeader>
-					<form
-						onSubmit={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							void form.handleSubmit();
-						}}
+				<form.Field name="email">
+					{(field) => (
+						<FormField
+							field={field}
+							label="Email"
+							inputProps={{
+								type: "email",
+								autoComplete: "email",
+								autoFocus: true,
+							}}
+						/>
+					)}
+				</form.Field>
+
+				<form.Field name="password">
+					{(field) => (
+						<FormField
+							field={field}
+							label="Password"
+							inputProps={{
+								type: "password",
+								autoComplete: "current-password",
+							}}
+						/>
+					)}
+				</form.Field>
+
+				{serverError ? <ErrorBanner message={serverError} /> : null}
+
+				<div className="flex items-center justify-between pt-1">
+					<Link
+						to="/forgot-password"
+						className="text-sm text-muted-foreground transition-colors hover:text-foreground"
 					>
-						<CardContent className="space-y-4">
-							<form.Field name="email">
-								{(field) => (
-									<FormField
-										field={field}
-										label="Email"
-										inputProps={{
-											type: "email",
-											autoComplete: "email",
-										}}
-									/>
-								)}
-							</form.Field>
+						Forgot password?
+					</Link>
+					{invitationId ? (
+						<span className="text-xs text-muted-foreground">
+							Signing in to accept invite
+						</span>
+					) : null}
+				</div>
 
-							<form.Field name="password">
-								{(field) => (
-									<FormField
-										field={field}
-										label="Password"
-										inputProps={{
-											type: "password",
-											autoComplete: "current-password",
-										}}
-									/>
-								)}
-							</form.Field>
+				<form.Subscribe
+					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+				>
+					{([canSubmit, isSubmitting]) => (
+						<Button
+							type="submit"
+							size="lg"
+							className="h-11 w-full rounded-full"
+							disabled={!canSubmit || isSubmitting}
+						>
+							{isSubmitting ? (
+								<>
+									<Loader2 className="size-4 animate-spin" /> Signing in...
+								</>
+							) : (
+								"Sign in"
+							)}
+						</Button>
+					)}
+				</form.Subscribe>
 
-							{serverError ? (
-								<p className="text-destructive text-sm" role="alert">
-									{serverError}
-								</p>
-							) : null}
-						</CardContent>
-						<CardFooter className="flex flex-col gap-3">
-							<form.Subscribe
-								selector={(state) =>
-									[state.canSubmit, state.isSubmitting] as const
-								}
-							>
-								{([canSubmit, isSubmitting]) => (
-									<Button
-										type="submit"
-										disabled={!canSubmit || isSubmitting}
-										className="w-full"
-									>
-										{isSubmitting ? "Signing in..." : "Sign in"}
-									</Button>
-								)}
-							</form.Subscribe>
-							<GoogleSignInButton callbackURL="/dashboard" />
-							<p className="text-muted-foreground text-sm">
-								No account yet?{" "}
-								<Link to="/sign-up" className="text-foreground underline">
-									Create one
-								</Link>
-							</p>
-						</CardFooter>
-					</form>
-				</Card>
-			</motion.div>
-		</main>
+				<div className="relative">
+					<div className="absolute inset-0 flex items-center">
+						<span className="w-full border-t" />
+					</div>
+					<div className="relative flex justify-center">
+						<span className="bg-background px-3 text-xs text-muted-foreground">
+							or
+						</span>
+					</div>
+				</div>
+
+				<GoogleSignInButton
+					callbackURL={
+						redirect ? `${window.location.origin}${redirect}` : "/dashboard"
+					}
+				/>
+
+				<p className="pt-2 text-center text-sm text-muted-foreground">
+					No account yet?{" "}
+					<Link to="/sign-up" className="font-medium text-foreground underline">
+						Create one
+					</Link>
+				</p>
+			</form>
+		</AuthShell>
 	);
 }

@@ -42,7 +42,22 @@ export const Route = createRootRouteWithContext<{
 			},
 			{ title: "guides-tours" },
 		],
-		links: [{ rel: "stylesheet", href: appCss }],
+		links: [
+			{ rel: "stylesheet", href: appCss },
+			// Global fonts — used by the landing page (font-display serif
+			// accents) and the auth pages. Loaded at the root so every
+			// route gets the same typography instead of fallback fonts.
+			{ rel: "preconnect", href: "https://fonts.googleapis.com" },
+			{
+				rel: "preconnect",
+				href: "https://fonts.gstatic.com",
+				crossOrigin: "anonymous",
+			},
+			{
+				rel: "stylesheet",
+				href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap",
+			},
+		],
 	}),
 	beforeLoad: async (ctx) => {
 		const token = await getAuth();
