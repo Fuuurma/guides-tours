@@ -14,7 +14,11 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCentsCompact } from "@/lib/format";
-import { getErrorMessage, getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
+import {
+	getErrorMessage,
+	getSafeDisplayMessage,
+	isStripeCheckoutUrl,
+} from "@/lib/utils";
 import type { BookingDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";

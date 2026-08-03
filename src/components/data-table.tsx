@@ -10,7 +10,6 @@ import {
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	Table,
 	TableBody,
@@ -19,6 +18,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { getSafeDisplayMessage } from "@/lib/utils";
 
 export interface DataTableColumn<T> {
 	key: string;

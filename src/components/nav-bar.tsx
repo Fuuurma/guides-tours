@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
 	Select,
@@ -10,7 +11,6 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { authClient } from "@/lib/auth-client";
-import { toast } from "sonner";
 import { api } from "../../convex/_generated/api";
 
 interface NavBarProps {

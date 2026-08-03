@@ -25,7 +25,11 @@ export function getSafeDisplayMessage(err: unknown): string {
 		const msg = err.message;
 		// ConvexError messages are our own thrown strings — safe to show.
 		// They typically contain user-facing messages like "Tour not found".
-		if (msg && !msg.includes("Internal Server Error") && !msg.includes("Validator error")) {
+		if (
+			msg &&
+			!msg.includes("Internal Server Error") &&
+			!msg.includes("Validator error")
+		) {
 			return msg;
 		}
 	}

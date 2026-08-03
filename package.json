@@ -21,7 +21,7 @@
     "test:e2e": "playwright test",
     "format": "biome format",
     "lint": "biome lint",
-    "check": "biome check",
+    "check": "biome check --error-on-warnings",
     "deploy:check": "node scripts/deploy-check.mjs",
     "deploy": "pnpm deploy:check && pnpm build && wrangler deploy"
   },
