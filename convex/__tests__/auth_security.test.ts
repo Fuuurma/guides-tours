@@ -1,12 +1,17 @@
 // Security-focused tests for the Better Auth configuration.
 //
 // Coverage:
-//   - requireEmailVerification is true (not false) in the auth config
+//   - requireEmailVerification is true in production (not false)
 //   - requireEmailVerificationOnInvitation is true in the organization plugin
 //   - sendVerificationEmail callback is defined
 //   - minPasswordLength is at least 8
 //   - isGoogleEnabled query returns a boolean
 //   - getCurrentUser returns null when not authenticated
+//
+// Note: requireEmailVerification is env-aware — true when SITE_URL is a
+// deployed domain, false when it's a localhost/127.0.0.1 dev URL (mirrors
+// restaurant-calendar). These tests set SITE_URL to a production-looking
+// URL to pin the secure default.
 
 process.env.ENCRYPTION_KEY ??= "a".repeat(64);
 
@@ -24,9 +29,17 @@ describe("auth security configuration", () => {
 	// for inspecting the static security settings.
 	const options = createAuthOptions({} as any);
 
-	it("requireEmailVerification is true (not false)", () => {
-		expect(options.emailAndPassword?.enabled).toBe(true);
-		expect(options.emailAndPassword?.requireEmailVerification).toBe(true);
+	it("requireEmailVerification is true in production", () => {
+		process.env.SITE_URL = "https://guides-tours.fuurma.tech";
+		const prodOptions = createAuthOptions({} as any);
+		expect(prodOptions.emailAndPassword?.enabled).toBe(true);
+		expect(prodOptions.emailAndPassword?.requireEmailVerification).toBe(true);
+	});
+
+	it("requireEmailVerification is false in local dev (unblocks onboarding)", () => {
+		process.env.SITE_URL = "http://127.0.0.1:3020";
+		const devOptions = createAuthOptions({} as any);
+		expect(devOptions.emailAndPassword?.requireEmailVerification).toBe(false);
 	});
 
 	it("requireEmailVerificationOnInvitation is true in the organization plugin", () => {

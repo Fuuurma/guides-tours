@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, Outlet } from "@tanstack/react-router";
 import type * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -44,22 +44,30 @@ export function ListPage({
 	children,
 }: ListPageProps) {
 	return (
-		<Card>
-			<CardHeader className="flex flex-row items-center justify-between space-y-0">
-				<div>
-					<CardTitle>{title}</CardTitle>
-					{description && <CardDescription>{description}</CardDescription>}
-				</div>
-				<div className="flex gap-2">
-					{actions}
-					{newTo && (
-						<Button asChild>
-							<Link to={newTo}>{newLabel ?? "+ New"}</Link>
-						</Button>
-					)}
-				</div>
-			</CardHeader>
-			<CardContent>{children}</CardContent>
-		</Card>
+		<>
+			{/* Child routes (e.g. /dashboard/tours/new, /dashboard/tours/$tourId)
+			    render here instead of the list. When no child route matches,
+			    the list below is shown. */}
+			<Outlet />
+			{children ? (
+				<Card>
+					<CardHeader className="flex flex-row items-center justify-between space-y-0">
+						<div>
+							<CardTitle>{title}</CardTitle>
+							{description && <CardDescription>{description}</CardDescription>}
+						</div>
+						<div className="flex gap-2">
+							{actions}
+							{newTo && (
+								<Button asChild>
+									<Link to={newTo}>{newLabel ?? "+ New"}</Link>
+								</Button>
+							)}
+						</div>
+					</CardHeader>
+					<CardContent>{children}</CardContent>
+				</Card>
+			) : null}
+		</>
 	);
 }

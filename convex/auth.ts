@@ -90,6 +90,20 @@ function getSiteUrl(): string {
 	return process.env.SITE_URL ?? "http://127.0.0.1:3020";
 }
 
+// Local dev detection — mirrors restaurant-calendar. In dev the site URL
+// is a localhost/127.0.0.1 address, so email verification is skipped and
+// sign-up auto-signs-in (unblocking the onboarding flow, which would
+// otherwise dead-end since SES is not configured locally). In production
+// the site URL is the deployed domain, so verification is required —
+// this preserves the pre-registration-attack protection from audit fix
+// #112 (GHSA-FMH4-WCC4-5JM3).
+function isLocalDev(): boolean {
+	const siteUrl = getSiteUrl();
+	return (
+		siteUrl.includes("127.0.0.1") || siteUrl.includes("localhost")
+	);
+}
+
 function googleSocialProviders():
 	| Record<string, { clientId: string; clientSecret: string }>
 	| Record<string, never> {
@@ -115,7 +129,9 @@ export const createAuthOptions = (
 	database: authComponent.adapter(ctx),
 	emailAndPassword: {
 		enabled: true,
-		requireEmailVerification: true,
+		// Local dev skips email verification so sign-up auto-signs-in and
+		// the onboarding flow works without SES. Production requires it.
+		requireEmailVerification: isLocalDev() ? false : true,
 		minPasswordLength: 8,
 		sendResetPassword: async ({ user, url }) => {
 			await sendTemplatedEmail({
@@ -127,6 +143,9 @@ export const createAuthOptions = (
 		},
 	},
 	emailVerification: {
+		// After a user verifies via the emailed link, sign them in
+		// automatically (production flow).
+		autoSignInAfterVerification: true,
 		sendVerificationEmail: async ({ user, url }) => {
 			await sendTemplatedEmail({
 				to: user.email,
@@ -167,7 +186,10 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 		database: authComponent.adapter(ctx),
 		emailAndPassword: {
 			enabled: true,
-			requireEmailVerification: true,
+			// Local dev skips email verification so sign-up auto-signs-in
+			// and the onboarding flow works without SES. Production
+			// requires it.
+			requireEmailVerification: isLocalDev() ? false : true,
 			minPasswordLength: 8,
 			sendResetPassword: async ({ user, url }) => {
 				await sendTemplatedEmail({
@@ -179,6 +201,9 @@ export const createAuth = (ctx: GenericCtx<DataModel>) =>
 			},
 		},
 		emailVerification: {
+			// After a user verifies via the emailed link, sign them in
+			// automatically (production flow).
+			autoSignInAfterVerification: true,
 			sendVerificationEmail: async ({ user, url }) => {
 				await sendTemplatedEmail({
 					to: user.email,
