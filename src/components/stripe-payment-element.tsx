@@ -7,6 +7,7 @@ import {
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FieldGroup } from "@/components/ui/field";
 import { getErrorMessage } from "@/lib/utils";
 
 const stripePromiseCache = new Map<string, Promise<Stripe | null>>();
@@ -68,32 +69,34 @@ function PaymentElementForm({
 	};
 
 	return (
-		<form onSubmit={onSubmit} className="space-y-4">
-			<PaymentElement
-				options={{
-					layout: "tabs",
-				}}
-			/>
-			{error ? (
-				<p className="text-destructive text-sm" role="alert">
-					{error}
-				</p>
-			) : null}
-			<div className="flex flex-wrap gap-2">
-				<Button type="submit" disabled={!stripe || !elements || pending}>
-					{pending ? "Processing…" : `Pay ${amountLabel}`}
-				</Button>
-				{onCancel ? (
-					<Button
-						type="button"
-						variant="outline"
-						disabled={pending}
-						onClick={onCancel}
-					>
-						Cancel
-					</Button>
+		<form onSubmit={onSubmit}>
+			<FieldGroup className="gap-4">
+				<PaymentElement
+					options={{
+						layout: "tabs",
+					}}
+				/>
+				{error ? (
+					<p className="text-destructive text-sm" role="alert">
+						{error}
+					</p>
 				) : null}
-			</div>
+				<div className="flex flex-wrap gap-2">
+					<Button type="submit" disabled={!stripe || !elements || pending}>
+						{pending ? "Processing…" : `Pay ${amountLabel}`}
+					</Button>
+					{onCancel ? (
+						<Button
+							type="button"
+							variant="outline"
+							disabled={pending}
+							onClick={onCancel}
+						>
+							Cancel
+						</Button>
+					) : null}
+				</div>
+			</FieldGroup>
 		</form>
 	);
 }

@@ -127,7 +127,7 @@ function VehicleDetailPage() {
 						No upcoming assignments
 					</p>
 				) : (
-					<ul className="space-y-2">
+					<ul className="flex flex-col gap-2">
 						{upcomingItems.slice(0, 20).map((a) => {
 							const driverUser = a.driverId
 								? driverUserById.get(a.driverId)

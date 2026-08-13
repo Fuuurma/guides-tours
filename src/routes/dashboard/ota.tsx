@@ -788,6 +788,7 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 									<FieldLabel htmlFor="apiKey">API key *</FieldLabel>
 									<Input
 										id="apiKey"
+										type="password"
 										required
 										maxLength={500}
 										autoComplete="off"

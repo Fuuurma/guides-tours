@@ -172,7 +172,7 @@ function TemplateDetailPage() {
 						{template[key].length === 0 ? (
 							<p className="text-muted-foreground text-xs italic">(none)</p>
 						) : (
-							<ul className="list-disc pl-5 space-y-1 text-sm">
+							<ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
 								{template[key].map((s) => (
 									<li key={s}>{s}</li>
 								))}

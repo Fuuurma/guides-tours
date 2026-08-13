@@ -19,7 +19,7 @@ function Skeleton({
  */
 function DetailSkeleton({ className }: { className?: string }) {
 	return (
-		<div className={cn("space-y-4 p-4", className)}>
+		<div className={cn("flex flex-col gap-4 p-4", className)}>
 			<Skeleton className="h-8 w-1/3" />
 			<Skeleton className="h-4 w-1/2" />
 			<Skeleton className="h-32 w-full" />

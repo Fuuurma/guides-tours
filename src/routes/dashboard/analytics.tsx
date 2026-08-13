@@ -132,7 +132,7 @@ function AnalyticsPage() {
 
 	if (orgError || overviewError || revenueError) {
 		return (
-			<div className="space-y-4">
+			<div className="flex flex-col gap-4">
 				<h1 className="text-2xl font-semibold">Analytics</h1>
 				<ErrorBanner
 					message="Failed to load analytics"
@@ -164,7 +164,7 @@ function AnalyticsPage() {
 	}
 
 	return (
-		<div className="space-y-6">
+		<div className="flex flex-col gap-6">
 			<header className="flex flex-wrap items-end justify-between gap-4">
 				<div>
 					<h1 className="text-2xl font-semibold">Analytics</h1>
@@ -349,7 +349,7 @@ function AnalyticsPage() {
 								No bookings in this window.
 							</p>
 						) : (
-							<ul className="space-y-2 text-sm">
+							<ul className="flex flex-col gap-2 text-sm">
 								{topTours.map((t) => (
 									<li
 										key={t.tourId}
@@ -386,7 +386,7 @@ function AnalyticsPage() {
 								No assignments in this window.
 							</p>
 						) : (
-							<ul className="space-y-2 text-sm">
+							<ul className="flex flex-col gap-2 text-sm">
 								{tourStats.map((t) => (
 									<li
 										key={t.tourId}
@@ -422,7 +422,7 @@ function AnalyticsPage() {
 							No bookings in this window.
 						</p>
 					) : (
-						<ul className="space-y-2 text-sm md:columns-2 md:gap-8">
+						<ul className="grid gap-2 text-sm md:grid-cols-2 md:gap-x-8">
 							{sources.map((s) => (
 								<li
 									key={s.source}
@@ -463,7 +463,7 @@ function AnalyticsPage() {
 								No assignments in this window.
 							</p>
 						) : (
-							<ul className="space-y-2 text-sm">
+							<ul className="flex flex-col gap-2 text-sm">
 								{guideStats.slice(0, 8).map((g) => (
 									<li
 										key={g.guideId}
@@ -496,7 +496,7 @@ function AnalyticsPage() {
 								No activity in this window.
 							</p>
 						) : (
-							<ul className="max-h-64 space-y-1 overflow-y-auto text-sm">
+							<ul className="flex max-h-64 flex-col gap-1 overflow-y-auto text-sm">
 								{[...dailyStats]
 									.sort((a, b) => b.date.localeCompare(a.date))
 									.slice(0, 14)

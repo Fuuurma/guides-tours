@@ -272,7 +272,7 @@ function BookingDetailPage() {
 			}
 		>
 			{showCancelForm && (
-				<div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-4">
+				<div className="flex flex-col gap-4 rounded-md border border-destructive/50 bg-destructive/5 p-4">
 					<p className="text-sm font-medium">
 						Cancel booking — this will be recorded in the audit log.
 					</p>
@@ -301,7 +301,7 @@ function BookingDetailPage() {
 			)}
 
 			{showRefundForm && succeededPayment && (
-				<div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-4">
+				<div className="flex flex-col gap-4 rounded-md border border-destructive/50 bg-destructive/5 p-4">
 					<p className="text-sm font-medium">
 						Refund via Stripe — money is returned to the customer and the
 						booking balance is restored.
@@ -363,7 +363,7 @@ function BookingDetailPage() {
 			)}
 
 			{canCollect && (
-				<div className="mt-4 space-y-3 rounded-md border p-4">
+				<div className="mt-4 flex flex-col gap-3 rounded-md border p-4">
 					<p className="text-sm font-medium">
 						Collect {formatCentsCompact(b.balanceDueCents)}
 					</p>
@@ -561,7 +561,7 @@ function BookingDetailPage() {
 							Record review
 						</Button>
 					) : (
-						<div className="space-y-3">
+						<div className="flex flex-col gap-3">
 							<label
 								htmlFor="booking-rating"
 								className="text-sm font-medium block"

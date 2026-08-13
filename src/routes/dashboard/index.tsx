@@ -29,7 +29,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import { formatCentsWhole } from "@/lib/format";
-import { getErrorMessage } from "@/lib/utils";
+import { cn, getErrorMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -213,27 +213,26 @@ function DashboardIndex() {
 				</Empty>
 			) : (
 				<>
-					<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+					<div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
 						<LinkedMetric
-							label="Staffing gaps (7d)"
+							label="Staffing gaps this week"
 							value={gaps.length}
 							to="/dashboard/staffing"
+							description="Uncovered departures in the next 7 days. Assign crew before morning scramble."
+							featured
 						/>
-						<LinkedMetric
-							label="Bookings today"
-							value={todaysBookings.length}
-							to="/dashboard/bookings"
-						/>
-						<LinkedMetric
-							label="Pending requests"
-							value={pendingBookingPage?.total ?? pendingBookings.length}
-							to="/dashboard/bookings"
-						/>
-						<LinkedMetric
-							label="Active tours"
-							value={totalTours}
-							to="/dashboard/tours"
-						/>
+						<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+							<LinkedMetric
+								label="Bookings today"
+								value={todaysBookings.length}
+								to="/dashboard/bookings"
+							/>
+							<LinkedMetric
+								label="Pending requests"
+								value={pendingBookingPage?.total ?? pendingBookings.length}
+								to="/dashboard/bookings"
+							/>
+						</div>
 					</div>
 
 					{org?.slug ? <PublicBookingLinkBar slug={org.slug} /> : null}
@@ -547,20 +546,37 @@ function LinkedMetric({
 	label,
 	value,
 	to,
+	description,
+	featured = false,
 }: {
 	label: string;
 	value: number | string;
 	to: string;
+	description?: string;
+	featured?: boolean;
 }) {
 	return (
 		<Link
 			to={to}
-			className="block rounded-xl border bg-card p-5 transition-colors hover:bg-muted/40"
+			className={cn(
+				"block rounded-xl border bg-card transition-colors hover:bg-muted/40",
+				featured ? "p-6" : "p-5",
+			)}
 		>
 			<p className="text-sm text-muted-foreground">{label}</p>
-			<p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
+			<p
+				className={cn(
+					"mt-2 font-semibold tracking-tight tabular-nums",
+					featured ? "text-4xl" : "text-2xl",
+				)}
+			>
 				{value}
 			</p>
+			{description ? (
+				<p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+					{description}
+				</p>
+			) : null}
 		</Link>
 	);
 }

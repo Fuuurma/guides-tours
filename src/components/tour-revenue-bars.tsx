@@ -64,7 +64,7 @@ export function TourRevenueBars({ days, maxBars = 28 }: Props) {
 	);
 
 	return (
-		<div className="space-y-3">
+		<div className="flex flex-col gap-3">
 			<div
 				className="flex h-36 items-end gap-1"
 				role="img"

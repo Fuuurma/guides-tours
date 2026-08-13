@@ -197,7 +197,7 @@ function DeliveryLogsSection() {
 	);
 
 	return (
-		<section className="mt-10 space-y-3">
+		<section className="mt-10 flex flex-col gap-3">
 			<div>
 				<h2 className="text-lg font-semibold">Recent deliveries</h2>
 				<p className="text-muted-foreground text-sm">
