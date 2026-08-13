@@ -4,21 +4,25 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DetailPage, DetailSection } from "@/components/detail-page";
-import { FormField } from "@/components/form";
 import { MemberSelect } from "@/components/member-select";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { resolveTourStaffing } from "@/lib/staffing";
 import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
@@ -71,7 +75,10 @@ function AssignmentDetailPage() {
 	const remove = useMutation(api.assignments.remove);
 	const update = useMutation(api.assignments.update);
 	const resendNotify = useMutation(api.assignmentNotifications.resend);
-	const [pending, setPending] = useState(false);
+	const confirm = useConfirm();
+	const [action, setAction] = useState<
+		"complete" | "cancel" | "remove" | "save" | null
+	>(null);
 	const [editing, setEditing] = useState(false);
 	const [guideId, setGuideId] = useState("");
 	const [vehicleId, setVehicleId] = useState("");
@@ -108,43 +115,56 @@ function AssignmentDetailPage() {
 	const eligibleDrivers = (drivers ?? []).filter((d) => d.isActive !== false);
 
 	const onComplete = async () => {
-		setPending(true);
+		setAction("complete");
 		try {
 			await complete({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment marked complete");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPending(false);
+			setAction(null);
 		}
 	};
 	const onCancel = async () => {
-		const reason = window.prompt("Reason for cancellation? (optional)") ?? "";
-		setPending(true);
+		const ok = await confirm({
+			title: "Cancel this assignment?",
+			description:
+				"The guide will be unassigned from this departure. You can assign someone else afterward.",
+			confirmText: "Cancel assignment",
+			variant: "destructive",
+		});
+		if (!ok) {
+			return;
+		}
+		setAction("cancel");
 		try {
 			await cancel({
 				assignmentId: assignmentId as Id<"assignments">,
-				reason: reason.trim() || undefined,
 			});
 			toast.success("Assignment cancelled");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPending(false);
+			setAction(null);
 		}
 	};
 	const onRemove = async () => {
-		if (!window.confirm("Delete this assignment? This will soft-delete it.")) {
+		const ok = await confirm({
+			title: "Delete this assignment?",
+			description: "This will soft-delete it.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
-		setPending(true);
+		setAction("remove");
 		try {
 			await remove({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment deleted");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPending(false);
+			setAction(null);
 		}
 	};
 	const onSaveStaffing = async () => {
@@ -160,7 +180,7 @@ function AssignmentDetailPage() {
 			toast.error("This tour requires a driver");
 			return;
 		}
-		setPending(true);
+		setAction("save");
 		try {
 			await update({
 				assignmentId: assignmentId as Id<"assignments">,
@@ -175,7 +195,7 @@ function AssignmentDetailPage() {
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPending(false);
+			setAction(null);
 		}
 	};
 
@@ -218,6 +238,7 @@ function AssignmentDetailPage() {
 	const canCancel = assignment.status === "scheduled";
 	const canDelete = assignment.status !== "completed";
 	const canEdit = assignment.status === "scheduled";
+	const busy = action !== null;
 
 	return (
 		<DetailPage
@@ -230,7 +251,7 @@ function AssignmentDetailPage() {
 						<Button
 							variant="outline"
 							onClick={() => setEditing(true)}
-							disabled={pending}
+							disabled={busy}
 						>
 							Edit staffing
 						</Button>
@@ -238,29 +259,49 @@ function AssignmentDetailPage() {
 					{canEdit && (
 						<Button
 							variant="outline"
-							disabled={pending || resendPending}
+							disabled={busy || resendPending}
 							onClick={() => void onResend("both")}
 						>
+							{resendPending ? <Spinner data-icon="inline-start" /> : null}
 							{resendPending ? "Sending…" : "Resend notify"}
 						</Button>
 					)}
 					{canComplete && (
-						<Button onClick={onComplete} disabled={pending}>
+						<Button onClick={onComplete} disabled={busy}>
+							{action === "complete" ? (
+								<Spinner data-icon="inline-start" />
+							) : null}
 							Mark complete
 						</Button>
 					)}
 					{canCancel && (
-						<Button variant="outline" onClick={onCancel} disabled={pending}>
+						<Button variant="outline" onClick={onCancel} disabled={busy}>
+							{action === "cancel" ? (
+								<Spinner data-icon="inline-start" />
+							) : null}
 							Cancel
 						</Button>
 					)}
 					{canDelete && (
-						<Button variant="destructive" onClick={onRemove} disabled={pending}>
+						<Button variant="destructive" onClick={onRemove} disabled={busy}>
+							{action === "remove" ? (
+								<Spinner data-icon="inline-start" />
+							) : null}
 							Delete
 						</Button>
 					)}
-					{tour && (
+					{assignment.scheduleId ? (
 						<Button asChild variant="outline">
+							<Link
+								to="/dashboard/schedules/$scheduleId"
+								params={{ scheduleId: assignment.scheduleId }}
+							>
+								View departure
+							</Link>
+						</Button>
+					) : null}
+					{tour && (
+						<Button asChild variant="ghost">
 							<Link to="/dashboard/tours/$tourId" params={{ tourId: tour._id }}>
 								View tour
 							</Link>
@@ -281,7 +322,18 @@ function AssignmentDetailPage() {
 				</MetricCard>
 			</div>
 
-			{staffing ? (
+			{slot && !slot.ready ? (
+				<Alert variant="destructive">
+					<AlertTitle>This departure still needs crew</AlertTitle>
+					<AlertDescription>
+						Still needs {slot.gaps.join(", ")}
+						{staffing
+							? ` · ${staffing.requiredGuides} guide${staffing.requiredGuides === 1 ? "" : "s"} required`
+							: ""}
+						.
+					</AlertDescription>
+				</Alert>
+			) : staffing ? (
 				<p className="text-muted-foreground text-xs">
 					Needs {staffing.requiredGuides} guide
 					{staffing.requiredGuides === 1 ? "" : "s"}
@@ -290,9 +342,7 @@ function AssignmentDetailPage() {
 						: ""}
 					{staffing.requiresDriver ? " · driver" : ""}
 					{slot
-						? ` · slot ${slot.guideCount}/${slot.requiredGuides} guides${
-								slot.ready ? " · ready" : ` · needs ${slot.gaps.join(", ")}`
-							}`
+						? ` · ${slot.guideCount}/${slot.requiredGuides} guides assigned`
 						: ""}
 				</p>
 			) : null}
@@ -321,7 +371,7 @@ function AssignmentDetailPage() {
 						) : null
 					}
 				>
-					<ul className="space-y-2">
+					<ul className="flex flex-col gap-2">
 						{slot.siblings.map((s) => (
 							<li
 								key={s._id}
@@ -383,70 +433,78 @@ function AssignmentDetailPage() {
 					title="Edit staffing"
 					description="Change guide, vehicle, or driver for this departure"
 				>
-					<div className="grid gap-4 md:grid-cols-3">
-						<FormField label="Guide *" htmlFor="edit-guide">
-							<MemberSelect
-								id="edit-guide"
-								value={guideId}
-								onValueChange={setGuideId}
-								roles={["guide", "owner", "admin"]}
-							/>
-						</FormField>
-						<FormField
-							label={staffing?.requiresVehicle ? "Vehicle *" : "Vehicle"}
-							htmlFor="edit-vehicle"
-						>
-							<Select
-								value={vehicleId || "__none__"}
-								onValueChange={(v) => setVehicleId(v === "__none__" ? "" : v)}
-							>
-								<SelectTrigger id="edit-vehicle">
-									<SelectValue placeholder="None" />
-								</SelectTrigger>
-								<SelectContent>
-									{!staffing?.requiresVehicle && (
-										<SelectItem value="__none__">None</SelectItem>
-									)}
-									{eligibleVehicles.map((v) => (
-										<SelectItem key={v._id} value={v._id}>
-											{v.name}
-											{v.vehicleType ? ` · ${v.vehicleType}` : ""}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</FormField>
-						<FormField
-							label={staffing?.requiresDriver ? "Driver *" : "Driver"}
-							htmlFor="edit-driver"
-						>
-							<Select
-								value={driverId || "__none__"}
-								onValueChange={(v) => setDriverId(v === "__none__" ? "" : v)}
-							>
-								<SelectTrigger id="edit-driver">
-									<SelectValue placeholder="None" />
-								</SelectTrigger>
-								<SelectContent>
-									{!staffing?.requiresDriver && (
-										<SelectItem value="__none__">None</SelectItem>
-									)}
-									{eligibleDrivers.map((d) => (
-										<SelectItem key={d._id} value={d._id}>
-											{displayName(d.userId)}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</FormField>
-					</div>
+					<FieldGroup>
+						<div className="grid gap-4 md:grid-cols-3">
+							<Field>
+								<FieldLabel htmlFor="edit-guide">Guide *</FieldLabel>
+								<MemberSelect
+									id="edit-guide"
+									value={guideId}
+									onValueChange={setGuideId}
+									roles={["guide", "owner", "admin"]}
+								/>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor="edit-vehicle">
+									{staffing?.requiresVehicle ? "Vehicle *" : "Vehicle"}
+								</FieldLabel>
+								<Select
+									value={vehicleId || "__none__"}
+									onValueChange={(v) => setVehicleId(v === "__none__" ? "" : v)}
+								>
+									<SelectTrigger id="edit-vehicle">
+										<SelectValue placeholder="None" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectGroup>
+											{!staffing?.requiresVehicle && (
+												<SelectItem value="__none__">None</SelectItem>
+											)}
+											{eligibleVehicles.map((v) => (
+												<SelectItem key={v._id} value={v._id}>
+													{v.name}
+													{v.vehicleType ? ` · ${v.vehicleType}` : ""}
+												</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor="edit-driver">
+									{staffing?.requiresDriver ? "Driver *" : "Driver"}
+								</FieldLabel>
+								<Select
+									value={driverId || "__none__"}
+									onValueChange={(v) => setDriverId(v === "__none__" ? "" : v)}
+								>
+									<SelectTrigger id="edit-driver">
+										<SelectValue placeholder="None" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectGroup>
+											{!staffing?.requiresDriver && (
+												<SelectItem value="__none__">None</SelectItem>
+											)}
+											{eligibleDrivers.map((d) => (
+												<SelectItem key={d._id} value={d._id}>
+													{displayName(d.userId)}
+												</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+							</Field>
+						</div>
+					</FieldGroup>
 					<div className="mt-4 flex gap-2">
-						<Button onClick={onSaveStaffing} disabled={pending}>
+						<Button onClick={onSaveStaffing} disabled={busy}>
+							{action === "save" ? <Spinner data-icon="inline-start" /> : null}
 							Save
 						</Button>
 						<Button
 							variant="outline"
-							disabled={pending}
+							disabled={busy}
 							onClick={() => {
 								setEditing(false);
 								setGuideId(assignment.guideId);
@@ -460,8 +518,8 @@ function AssignmentDetailPage() {
 				</DetailSection>
 			) : (
 				<DetailSection
-					title="Resources"
-					description="Vehicle and driver (if assigned)"
+					title="Fleet"
+					description="Vehicle and driver for this assignment"
 				>
 					<DetailRow
 						label="Vehicle"
@@ -475,9 +533,7 @@ function AssignmentDetailPage() {
 									{vehicle.name}
 								</Link>
 							) : (
-								<span className="italic text-muted-foreground">
-									Not assigned
-								</span>
+								<span className="text-muted-foreground">Not assigned</span>
 							)
 						}
 					/>
@@ -493,9 +549,7 @@ function AssignmentDetailPage() {
 									{displayName(driver.userId)}
 								</Link>
 							) : (
-								<span className="italic text-muted-foreground">
-									Not assigned
-								</span>
+								<span className="text-muted-foreground">Not assigned</span>
 							)
 						}
 					/>

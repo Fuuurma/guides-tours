@@ -1,11 +1,7 @@
 import type * as React from "react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * A metric card used on dashboard detail pages and the home
@@ -37,18 +33,22 @@ export function MetricCard({
 }: MetricCardProps) {
 	return (
 		<Card className={className}>
-			<CardHeader className="pb-2">
-				<CardDescription>{label}</CardDescription>
-			</CardHeader>
-			<CardContent>
-				{children ??
-					(badgeVariant ? (
-						<Badge variant={badgeVariant}>{value ?? "—"}</Badge>
+			<CardContent className="pt-6">
+				<p className="text-sm text-muted-foreground">{label}</p>
+				<div className="mt-2">
+					{isPending ? (
+						<Skeleton className="h-7 w-20" />
 					) : (
-						<p className="text-2xl font-semibold">
-							{isPending ? "…" : (value ?? "—")}
-						</p>
-					))}
+						(children ??
+						(badgeVariant ? (
+							<Badge variant={badgeVariant}>{value ?? "—"}</Badge>
+						) : (
+							<p className="text-2xl font-semibold tracking-tight tabular-nums">
+								{value ?? "—"}
+							</p>
+						)))
+					)}
+				</div>
 			</CardContent>
 		</Card>
 	);

@@ -100,6 +100,30 @@ describe("convex/http — public booking cross-tenant guards at the httpAction b
 		expect(bookings[0].organizationId).toBe(orgA.id);
 	});
 
+	it("resolves Better Auth organizations returned with a Convex _id", async () => {
+		const t = convexTest(schema, modules);
+		registerBetterAuthMock(t);
+		const org = seedMockOrg({
+			id: "org_convex_id",
+			slug: "convex-id",
+			idField: "_id",
+		});
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx, { orgId: org.id }),
+		);
+
+		const res = await post(t, org.slug, { ...VALID_PAYLOAD, tourId });
+
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { bookingId?: string };
+		expect(body.bookingId).toBeTruthy();
+		const bookings = await t.run(async (ctx) =>
+			ctx.db.query("bookings").collect(),
+		);
+		expect(bookings).toHaveLength(1);
+		expect(bookings[0].organizationId).toBe(org.id);
+	});
+
 	it("rejects a POST to /api/public/book/<org-A-slug> with a hostile tourId from org B", async () => {
 		const { t, orgA, orgB } = await setupTwoOrgs();
 		// Tour belongs to org B; the request says it belongs to org A.

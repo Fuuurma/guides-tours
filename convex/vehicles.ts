@@ -11,6 +11,7 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
@@ -20,6 +21,12 @@ import {
 	MAX_VEHICLE_NAME_LEN,
 	assertFieldWithinLimit,
 } from "./lib/validation";
+
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
 
 const ALLOWED_UPDATE_FIELDS = [
 	"name",
@@ -126,7 +133,7 @@ export const create = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.vehicles.internalCreate,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -224,7 +231,7 @@ export const update = mutation({
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		const { vehicleId, ...rest } = args;
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.vehicles.internalUpdate,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -325,7 +332,7 @@ export const setStatus = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalSetStatus as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.vehicles.internalSetStatus,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -376,7 +383,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.vehicles.internalRemove,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -397,6 +404,15 @@ export const internalRemove = internalMutation({
 		if (!existing) throw new ConvexError("Vehicle not found");
 		if (existing.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
+		}
+		const references = await ctx.db
+			.query("assignments")
+			.withIndex("by_vehicle_date", (q) => q.eq("vehicleId", args.vehicleId))
+			.take(1);
+		if (references.length > 0) {
+			throw new ConvexError(
+				"Cannot delete a vehicle that is referenced by assignments; retire it instead",
+			);
 		}
 		await ctx.db.delete(args.vehicleId);
 		await logAudit(ctx, {

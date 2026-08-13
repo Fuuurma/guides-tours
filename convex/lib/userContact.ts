@@ -25,7 +25,7 @@ export async function loadUserContact(
 		components.betterAuth.adapter.findOne as never,
 		{
 			model: "user" as never,
-			where: [{ field: "id", value: userId }] as never,
+			where: [{ field: "_id", value: userId }] as never,
 		},
 	)) as {
 		name?: string | null;

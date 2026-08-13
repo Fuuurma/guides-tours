@@ -15,6 +15,12 @@ import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
+
 // ---- queries ----
 
 export const list = query({
@@ -101,7 +107,7 @@ export const add = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalAdd as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourImages.internalAdd,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -202,7 +208,7 @@ export const update = mutation({
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		const { imageId, ...rest } = args;
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourImages.internalUpdate,
 			{ organizationId: member.organizationId, userId: member.userId, imageId, ...rest },
 		);
 	},
@@ -296,10 +302,7 @@ export const reorder = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalReorder as unknown as FunctionReference<
-				"mutation",
-				"public" | "internal"
-			>,
+			internalRefs.tourImages.internalReorder,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -379,7 +382,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourImages.internalRemove,
 			{ organizationId: member.organizationId, userId: member.userId, imageId: args.imageId },
 		);
 	},

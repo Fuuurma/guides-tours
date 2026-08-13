@@ -11,6 +11,7 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
@@ -20,7 +21,22 @@ import {
 } from "./lib/validation";
 import { authComponent, createAuth } from "./auth";
 
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
+
 const ALLOWED_UPDATE_FIELDS = ["licenseInfo", "notes", "isActive"] as const;
+const availabilityValidator = v.object({
+	monday: v.optional(v.boolean()),
+	tuesday: v.optional(v.boolean()),
+	wednesday: v.optional(v.boolean()),
+	thursday: v.optional(v.boolean()),
+	friday: v.optional(v.boolean()),
+	saturday: v.optional(v.boolean()),
+	sunday: v.optional(v.boolean()),
+});
 
 // ---- queries ----
 
@@ -68,7 +84,7 @@ export const create = mutation({
 	args: {
 		userId: v.string(),
 		licenseInfo: v.string(),
-		availability: v.optional(v.any()),
+		availability: v.optional(availabilityValidator),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -91,7 +107,7 @@ export const create = mutation({
 		}
 
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.drivers.internalCreate,
 			{
 				organizationId: member.organizationId,
 				createdByUserId: member.userId,
@@ -107,7 +123,7 @@ export const internalCreate = internalMutation({
 		createdByUserId: v.string(),
 		userId: v.string(),
 		licenseInfo: v.string(),
-		availability: v.optional(v.any()),
+		availability: v.optional(availabilityValidator),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -163,7 +179,7 @@ export const update = mutation({
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		const { driverId, ...rest } = args;
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.drivers.internalUpdate,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -234,7 +250,7 @@ export const setActive = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalSetActive as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.drivers.internalSetActive,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -280,7 +296,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.drivers.internalRemove,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,

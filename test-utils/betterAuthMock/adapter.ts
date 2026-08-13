@@ -11,14 +11,19 @@
 //
 // The shape matches the real component's expected input/output:
 //   - input:  { model: "organization", where: [{ field: "slug", value }] }
-//   - output: { id: string, name: string, slug: string } | null
+//   - output: { id?: string, _id?: string, name: string, slug: string } | null
 //
 // TEST-ONLY. The production code path uses the real
 // `convex/betterAuth` component, not this file.
 import { query } from "./_generated/server.js";
 import { v } from "convex/values";
 
-type MockOrg = { id: string; name: string; slug: string };
+type MockOrg = {
+	id?: string;
+	_id?: string;
+	name: string;
+	slug: string;
+};
 
 // Module-scoped mock data. The test seam mutates this map directly
 // via `seedMockOrg` / `resetMockOrgs` from `./index.ts`. Because
@@ -58,7 +63,7 @@ export const findOne = query({
 		}
 		for (const org of mockOrgsById.values()) {
 			if (org.slug === slugFilter.value) {
-				return org as unknown as { id: string; name: string; slug: string };
+				return org;
 			}
 		}
 		return null;
@@ -69,7 +74,9 @@ export const findOne = query({
 // without going through the test seam in ./index.ts. Prefer
 // `seedMockOrg` from the test seam.
 export function _seedMockOrgDirect(org: MockOrg): void {
-	mockOrgsById.set(org.id, org);
+	const key = org.id ?? org._id;
+	if (!key) throw new Error("[betterAuthMock] organization requires id or _id");
+	mockOrgsById.set(key, org);
 }
 
 export function _resetMockOrgsDirect(): void {

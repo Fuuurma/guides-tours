@@ -32,6 +32,17 @@ import {
 } from "./lib/validation";
 
 const COLLECTIBLE_PUBLIC = new Set(["confirmed", "checked_in"]);
+type PublicOrganizationRecord = {
+	id?: string;
+	_id?: string;
+	name?: string;
+};
+
+function getPublicOrganizationId(
+	org: PublicOrganizationRecord | null,
+): string | undefined {
+	return org?.id ?? org?._id;
+}
 
 // ----- Public query: org + active tours by slug -----
 //
@@ -48,8 +59,9 @@ export const getOrgAndToursBySlug = query({
 				model: "organization" as never,
 				where: [{ field: "slug", value: args.slug }] as never,
 			},
-		)) as { id?: string; name?: string } | null;
-		if (!org?.id) return null;
+		)) as PublicOrganizationRecord | null;
+		const organizationId = getPublicOrganizationId(org);
+		if (!organizationId) return null;
 
 		// by_org_active leads with (org, isActive) so inactive tours
 		// are skipped at the index level instead of fetched + filtered.
@@ -57,14 +69,14 @@ export const getOrgAndToursBySlug = query({
 			.query("tours")
 			.withIndex("by_org_active", (q) =>
 				q
-					.eq("organizationId", org.id as string)
+						.eq("organizationId", organizationId)
 					.eq("isActive", true),
 			)
 			.take(200);
 
 		return {
-			organizationId: org.id,
-			organizationName: org.name ?? "Tour operator",
+			organizationId,
+			organizationName: org?.name ?? "Tour operator",
 			tours: tours.map((t) => ({
 				_id: t._id,
 				name: t.name,
@@ -98,11 +110,12 @@ export const listAvailableSlots = query({
 				model: "organization" as never,
 				where: [{ field: "slug", value: args.slug }] as never,
 			},
-		)) as { id?: string } | null;
-		if (!org?.id) return [];
+		)) as PublicOrganizationRecord | null;
+		const organizationId = getPublicOrganizationId(org);
+		if (!organizationId) return [];
 
 		const tour = await ctx.db.get(args.tourId);
-		if (!tour || tour.organizationId !== org.id || !tour.isActive) {
+		if (!tour || tour.organizationId !== organizationId || !tour.isActive) {
 			return [];
 		}
 
@@ -121,7 +134,7 @@ export const listAvailableSlots = query({
 
 		return schedules
 			.filter((s) => {
-				if (s.organizationId !== org.id) return false;
+				if (s.organizationId !== organizationId) return false;
 				if (s.status !== "available") return false;
 				if (s.capacityBooked >= s.capacityTotal) return false;
 				const tourTs = parseBookingTime(s.date, s.startTime);
@@ -221,7 +234,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 					{ field: "slug", value: args.slug },
 				] as never,
 			},
-		)) as { id?: string } | null;
+		)) as PublicOrganizationRecord | null;
 		if (!org) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
@@ -229,7 +242,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 			});
 			throw new ConvexError("organization not found");
 		}
-		const organizationId = org.id;
+		const organizationId = getPublicOrganizationId(org);
 		if (!organizationId) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,

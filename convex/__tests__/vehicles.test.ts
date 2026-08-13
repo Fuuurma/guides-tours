@@ -28,6 +28,32 @@ async function seedVehicle(
 	});
 }
 
+async function seedTour(ctx: any, orgId: string) {
+	return await ctx.db.insert("tours", {
+		organizationId: orgId,
+		name: "City Tour",
+		description: "A tour",
+		durationHours: 2,
+		isActive: true,
+		recurrenceType: "none",
+		recurrenceDaysOfWeek: [],
+		capacity: 8,
+		bufferMinutes: 0,
+		minGuests: 1,
+		maxGuests: 8,
+		bookingCutoffHours: 24,
+		tourType: "car",
+		languages: ["en"],
+		requiredGuides: 1,
+		inclusions: [],
+		exclusions: [],
+		highlights: [],
+		currency: "USD",
+		createdAt: 0,
+		updatedAt: 0,
+	});
+}
+
 describe("vehicles", () => {
 	it("create: stores vehicle and writes audit log", async () => {
 		const t = convexTest(schema, modules);
@@ -121,6 +147,36 @@ describe("vehicles", () => {
 			ctx.db.query("auditLogs").collect(),
 		)) as any;
 		expect(logs.some((l: any) => l.action === "vehicle.deleted")).toBe(true);
+	});
+
+	it("remove: rejects when assignments reference the vehicle", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_v6_ref";
+		const vehicleId = await t.run((ctx) => seedVehicle(ctx, orgId));
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run((ctx) =>
+			ctx.db.insert("assignments", {
+				organizationId: orgId,
+				tourId,
+				guideId: "guide-1",
+				vehicleId,
+				date: "2026-08-12",
+				startTime: "09:00",
+				endTime: "11:00",
+				status: "scheduled",
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+
+		await expect(
+			t.mutation(internal.vehicles.internalRemove, {
+				organizationId: orgId,
+				userId: "user-1",
+				vehicleId,
+			}),
+		).rejects.toThrow(/referenced by assignments/);
+		await expect(t.run((ctx) => ctx.db.get(vehicleId))).resolves.toBeDefined();
 	});
 
 	it("remove: rejects wrong organization", async () => {

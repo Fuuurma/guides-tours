@@ -4,10 +4,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { getErrorMessage } from "@/lib/utils";
 import type { TourTemplate as Template } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -25,10 +27,14 @@ function TemplatesPage() {
 	} = useQuery(convexQuery(api.tourTemplates.list, {}));
 	const updateTemplate = useMutation(api.tourTemplates.update);
 	const removeTemplate = useMutation(api.tourTemplates.remove);
-	const [pendingId, setPendingId] = useState<string | null>(null);
+	const confirm = useConfirm();
+	const [pending, setPending] = useState<{
+		id: string;
+		kind: "toggle" | "delete";
+	} | null>(null);
 
 	const toggleActive = async (id: string, currentActive: boolean) => {
-		setPendingId(id);
+		setPending({ id, kind: "toggle" });
 		try {
 			await updateTemplate({
 				templateId: id as Id<"tourTemplates">,
@@ -38,25 +44,26 @@ function TemplatesPage() {
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 	const onDelete = async (id: string, label: string) => {
-		if (
-			!window.confirm(
-				`Delete the "${label}" template? This won't affect tours created from it.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete "${label}"?`,
+			description: "This won't affect tours created from it.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
-		setPendingId(id);
+		setPending({ id, kind: "delete" });
 		try {
 			await removeTemplate({ templateId: id as Id<"tourTemplates"> });
 			toast.success("Template deleted");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 
@@ -99,23 +106,27 @@ function TemplatesPage() {
 			key: "actions",
 			header: "",
 			render: (t) => {
-				const isBusy = pendingId === t._id;
+				const rowBusy = pending?.id === t._id;
+				const toggling = rowBusy && pending?.kind === "toggle";
+				const deleting = rowBusy && pending?.kind === "delete";
 				return (
-					<div className="flex items-center gap-1 justify-end">
+					<div className="flex items-center justify-end gap-1">
 						<Button
 							size="sm"
 							variant="outline"
 							onClick={() => toggleActive(t._id, t.isActive)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{toggling ? <Spinner data-icon="inline-start" /> : null}
 							{t.isActive ? "Disable" : "Enable"}
 						</Button>
 						<Button
 							size="sm"
 							variant="destructive"
 							onClick={() => onDelete(t._id, t.name)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{deleting ? <Spinner data-icon="inline-start" /> : null}
 							Delete
 						</Button>
 					</div>
@@ -139,7 +150,8 @@ function TemplatesPage() {
 				rowKey={(t) => t._id}
 				isPending={isPending}
 				error={error}
-				emptyMessage="No templates yet."
+				emptyMessage="No templates yet"
+				emptyDescription="Save defaults so you can spin up similar tours without re-entering staffing and copy."
 				emptyAction={
 					<Button asChild size="sm">
 						<Link to="/dashboard/templates/new">

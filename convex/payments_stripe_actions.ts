@@ -32,6 +32,8 @@ import {
 } from "./payments_stripe";
 
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
+const DEFAULT_SITE_URL = "http://127.0.0.1:3020";
+const MAX_CHECKOUT_RETURN_PATH_LEN = 500;
 
 const COLLECTIBLE_STATUSES = new Set([
 	"pending",
@@ -68,6 +70,51 @@ function currencyForStripe(code: string): string {
 
 function currencyForDb(code: string): string {
 	return code.toUpperCase();
+}
+
+function checkoutSiteOrigin(): string {
+	const rawSiteUrl = process.env.SITE_URL ?? DEFAULT_SITE_URL;
+	let siteUrl: URL;
+	try {
+		siteUrl = new URL(rawSiteUrl);
+	} catch {
+		throw new ConvexError("SITE_URL must be a valid URL");
+	}
+	const isLocal =
+		siteUrl.hostname === "127.0.0.1" || siteUrl.hostname === "localhost";
+	if (
+		siteUrl.protocol !== "https:" &&
+		!(isLocal && siteUrl.protocol === "http:")
+	) {
+		throw new ConvexError("SITE_URL must use HTTPS outside local development");
+	}
+	return siteUrl.origin;
+}
+
+function checkoutReturnPath(
+	value: string | undefined,
+	fallback: string,
+): string {
+	const raw = value === undefined ? fallback : value.trim();
+	if (!raw) {
+		throw new ConvexError("Checkout return path is required");
+	}
+	if (raw.length > MAX_CHECKOUT_RETURN_PATH_LEN) {
+		throw new ConvexError("Checkout return path is too long");
+	}
+	if (
+		!raw.startsWith("/") ||
+		raw.startsWith("//") ||
+		raw.startsWith("/\\") ||
+		/[\u0000-\u001f\u007f]/u.test(raw)
+	) {
+		throw new ConvexError("Checkout return path must be a same-site path");
+	}
+	const parsed = new URL(raw, DEFAULT_SITE_URL);
+	if (parsed.origin !== DEFAULT_SITE_URL) {
+		throw new ConvexError("Checkout return path must be a same-site path");
+	}
+	return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
 
 function paymentIntentIdFrom(obj: StripeObject | undefined): string | null {
@@ -370,12 +417,15 @@ export const createHostedCheckout = action({
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
 
-		const siteUrl = process.env.SITE_URL ?? "http://127.0.0.1:3020";
-		const successPath =
-			args.successPath ??
-			`/dashboard/bookings/${args.bookingId}?paid=1`;
-		const cancelPath =
-			args.cancelPath ?? `/dashboard/bookings/${args.bookingId}`;
+		const siteUrl = checkoutSiteOrigin();
+		const successPath = checkoutReturnPath(
+			args.successPath,
+			`/dashboard/bookings/${args.bookingId}?paid=1`,
+		);
+		const cancelPath = checkoutReturnPath(
+			args.cancelPath,
+			`/dashboard/bookings/${args.bookingId}`,
+		);
 
 		const params = new URLSearchParams();
 		params.append("mode", "payment");
@@ -495,11 +545,15 @@ export const createPublicHostedCheckout = action({
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
 
-		const siteUrl = process.env.SITE_URL ?? "http://127.0.0.1:3020";
-		const successPath =
-			args.successPath ?? `/book/paid?bookingId=${args.bookingId}`;
-		const cancelPath =
-			args.cancelPath ?? `/book/paid?bookingId=${args.bookingId}&cancelled=1`;
+		const siteUrl = checkoutSiteOrigin();
+		const successPath = checkoutReturnPath(
+			args.successPath,
+			`/book/paid?bookingId=${args.bookingId}`,
+		);
+		const cancelPath = checkoutReturnPath(
+			args.cancelPath,
+			`/book/paid?bookingId=${args.bookingId}&cancelled=1`,
+		);
 
 		const params = new URLSearchParams();
 		params.append("mode", "payment");

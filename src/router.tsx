@@ -11,9 +11,11 @@ export function getRouter() {
 		throw new Error("VITE_CONVEX_URL is not set");
 	}
 
-	const convexQueryClient = new ConvexQueryClient(convexUrl, {
-		expectAuth: true,
-	});
+	// This app has both protected dashboard queries and anonymous booking
+	// pages. Leaving the socket paused until auth is confirmed would make a
+	// fresh unauthenticated public page wait forever because no auth provider
+	// callback runs to resume it.
+	const convexQueryClient = new ConvexQueryClient(convexUrl);
 
 	const queryClient: QueryClient = new QueryClient({
 		defaultOptions: {

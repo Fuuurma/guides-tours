@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
@@ -39,6 +41,7 @@ function VehiclesPage() {
 	} = useQuery(convexQuery(api.vehicles.list, {}));
 	const setStatus = useMutation(api.vehicles.setStatus);
 	const removeVehicle = useMutation(api.vehicles.remove);
+	const confirm = useConfirm();
 	const [pendingId, setPendingId] = useState<string | null>(null);
 
 	const changeStatus = async (id: string, newStatus: string) => {
@@ -56,11 +59,12 @@ function VehiclesPage() {
 		}
 	};
 	const onDelete = async (id: string, label: string) => {
-		if (
-			!window.confirm(
-				`Delete "${label}"? Future assignments won't be able to use it.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete "${label}"?`,
+			description: "Future assignments won't be able to use it.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
 		setPendingId(id);
@@ -124,11 +128,13 @@ function VehiclesPage() {
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{STATUS_OPTIONS.map((s) => (
-									<SelectItem key={s} value={s}>
-										{s}
-									</SelectItem>
-								))}
+								<SelectGroup>
+									{STATUS_OPTIONS.map((s) => (
+										<SelectItem key={s} value={s}>
+											{s}
+										</SelectItem>
+									))}
+								</SelectGroup>
 							</SelectContent>
 						</Select>
 						<Button
@@ -150,7 +156,7 @@ function VehiclesPage() {
 	return (
 		<ListPage
 			title="Vehicles"
-			description={`${itemCount} vehicle${itemCount === 1 ? "" : "s"}`}
+			description={`${itemCount} vehicle${itemCount === 1 ? "" : "s"} — fleet for tours that need one`}
 			newTo="/dashboard/vehicles/new"
 			newLabel="+ New vehicle"
 		>
@@ -160,7 +166,8 @@ function VehiclesPage() {
 				rowKey={(v) => v._id}
 				isPending={isPending}
 				error={error}
-				emptyMessage="No vehicles yet."
+				emptyMessage="No vehicles yet"
+				emptyDescription="Add vans, boats, or other vehicles so you can assign them to departures."
 				emptyAction={
 					<Button asChild size="sm">
 						<Link to="/dashboard/vehicles/new">Add your first vehicle</Link>

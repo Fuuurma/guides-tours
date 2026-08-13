@@ -23,12 +23,28 @@ export const activeOrganization = query({
 		const activeOrgId =
 			(session?.session as { activeOrganizationId?: string } | null)
 				?.activeOrganizationId ?? null;
-		if (!activeOrgId) return null;
-
-		const org = await auth.api.getFullOrganization({
-			headers,
-			query: { organizationId: activeOrgId },
-		});
+		let selectedOrganizationId = activeOrgId;
+		let org = selectedOrganizationId
+			? await auth.api.getFullOrganization({
+					headers,
+					query: { organizationId: selectedOrganizationId },
+				})
+			: null;
+		if (!org) {
+			const organizations = await auth.api.listOrganizations({ headers });
+			const fallbackOrganization = organizations[0];
+			if (!fallbackOrganization) return null;
+			selectedOrganizationId = fallbackOrganization.id;
+			if (organizations.length > 1) {
+				console.warn(
+					`[organizations] user ${user._id} has ${organizations.length} orgs but no valid active org set — defaulting to ${selectedOrganizationId}. Client should call setActiveOrganization.`,
+				);
+			}
+			org = await auth.api.getFullOrganization({
+				headers,
+				query: { organizationId: selectedOrganizationId },
+			});
+		}
 		if (!org) return null;
 
 		// Find the caller's role in this org.

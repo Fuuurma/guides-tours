@@ -1,11 +1,14 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "guides-tours",
-	"compatibility_date": "2025-09-02",
-  "compatibility_flags": ["nodejs_compat"],
-  "dev": {
-    "ip": "127.0.0.1",
-    "port": 4320
-  },
-  "main": "@tanstack/react-start/server-entry"
+	"compatibility_date": "2026-07-29",
+	"compatibility_flags": ["nodejs_compat"],
+	"observability": {
+		"enabled": true
+	},
+	"dev": {
+		"ip": "127.0.0.1",
+		"port": 4320
+	},
+	"main": "@tanstack/react-start/server-entry"
 }

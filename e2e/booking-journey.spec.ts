@@ -27,7 +27,12 @@ async function createSchedule(
 	await page.locator("#end").fill(args.end);
 	await page.locator("#cap").fill(args.capacity);
 	await page.getByRole("button", { name: "Create schedule" }).click();
-	await page.waitForURL(/\/dashboard\/schedules\/[^/]+$/, { timeout: 60_000 });
+	await page.waitForURL(
+		(url) =>
+			/^\/dashboard\/schedules\/[^/]+$/.test(url.pathname) &&
+			url.pathname !== "/dashboard/schedules/new",
+		{ timeout: 60_000 },
+	);
 	return page.url();
 }
 
@@ -59,10 +64,17 @@ test.describe("complete operator booking journey", () => {
 		await page.getByRole("link", { name: "Assign guide" }).click();
 		await page.waitForURL(/\/dashboard\/assignments\/new/);
 		await waitForHydration(page);
+		await expect(page.locator("#tour")).toContainText(tourName, {
+			timeout: 30_000,
+		});
 		await page.locator("#guide").click();
 		await page.getByRole("option").first().click();
 		await page.getByRole("button", { name: "Create assignment" }).click();
-		await page.waitForURL(/\/dashboard\/assignments\/[^/]+$/);
+		await page.waitForURL(
+			(url) =>
+				/^\/dashboard\/assignments\/[^/]+$/.test(url.pathname) &&
+				url.pathname !== "/dashboard/assignments/new",
+		);
 		await expect(page.getByText("E2E Owner").first()).toBeVisible();
 
 		const secondScheduleUrl = await createSchedule(page, {
@@ -118,7 +130,11 @@ test.describe("complete operator booking journey", () => {
 			timeout: 30_000,
 		});
 		await page.getByText("Journey Customer").first().click();
-		await page.waitForURL(/\/dashboard\/bookings\/[^/]+$/);
+		await page.waitForURL(
+			(url) =>
+				/^\/dashboard\/bookings\/[^/]+$/.test(url.pathname) &&
+				url.pathname !== "/dashboard/bookings/new",
+		);
 		await waitForHydration(page);
 		await expect(
 			page.getByRole("button", { name: "Confirm booking" }),
@@ -137,7 +153,11 @@ test.describe("complete operator booking journey", () => {
 		await page.locator("#edit-slot").click();
 		await page.getByRole("option", { name: /14:00/ }).click();
 		await page.getByRole("button", { name: "Save changes" }).click();
-		await page.waitForURL(/\/dashboard\/bookings\/[^/]+$/);
+		await page.waitForURL(
+			(url) =>
+				/^\/dashboard\/bookings\/[^/]+$/.test(url.pathname) &&
+				url.pathname !== "/dashboard/bookings/new",
+		);
 		await expect(page.getByText(`${secondDate} at 14:00`).first()).toBeVisible({
 			timeout: 30_000,
 		});

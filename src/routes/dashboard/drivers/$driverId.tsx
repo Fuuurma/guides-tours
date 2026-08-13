@@ -2,21 +2,43 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
+import { CalendarClock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
-import { FormField } from "@/components/form";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	Empty,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import {
+	Field,
+	FieldDescription,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { localYmd } from "@/lib/calendar-date";
 import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
-import { validatePhoneOptional } from "@/lib/validation";
+import {
+	MAX_LICENSE_LEN,
+	MAX_NOTES_LEN,
+	validateNotesOptional,
+	validatePhoneOptional,
+} from "@/lib/validation";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -60,12 +82,16 @@ function DriverDetailPage() {
 
 	const updatePhone = useMutation(api.userProfiles.updatePhone);
 	const updateDriver = useMutation(api.drivers.update);
+	const setActive = useMutation(api.drivers.setActive);
 	const [phoneDraft, setPhoneDraft] = useState("");
 	const [phoneError, setPhoneError] = useState<string | null>(null);
 	const [phoneSaving, setPhoneSaving] = useState(false);
 	const [licenseDraft, setLicenseDraft] = useState("");
 	const [notesDraft, setNotesDraft] = useState("");
+	const [licenseError, setLicenseError] = useState<string | null>(null);
+	const [notesError, setNotesError] = useState<string | null>(null);
 	const [profileSaving, setProfileSaving] = useState(false);
+	const [activeSaving, setActiveSaving] = useState(false);
 
 	useEffect(() => {
 		if (contact) setPhoneDraft(contact.phone);
@@ -98,11 +124,29 @@ function DriverDetailPage() {
 
 	const saveProfile = async () => {
 		if (!driver) return;
+		const license = licenseDraft.trim();
+		if (!license) {
+			setLicenseError("License info is required");
+			return;
+		}
+		if (license.length > MAX_LICENSE_LEN) {
+			setLicenseError(
+				`License info is too long (max ${MAX_LICENSE_LEN} characters)`,
+			);
+			return;
+		}
+		const notesErr = validateNotesOptional(notesDraft);
+		if (notesErr) {
+			setNotesError(notesErr);
+			return;
+		}
+		setLicenseError(null);
+		setNotesError(null);
 		setProfileSaving(true);
 		try {
 			await updateDriver({
 				driverId: driver._id,
-				licenseInfo: licenseDraft.trim(),
+				licenseInfo: license,
 				notes: notesDraft.trim(),
 			});
 			toast.success("Driver profile updated");
@@ -110,6 +154,19 @@ function DriverDetailPage() {
 			toast.error(getErrorMessage(e));
 		} finally {
 			setProfileSaving(false);
+		}
+	};
+
+	const toggleActive = async (next: boolean) => {
+		if (!driver) return;
+		setActiveSaving(true);
+		try {
+			await setActive({ driverId: driver._id, isActive: next });
+			toast.success(next ? "Driver activated" : "Driver deactivated");
+		} catch (e) {
+			toast.error(getErrorMessage(e));
+		} finally {
+			setActiveSaving(false);
 		}
 	};
 
@@ -125,6 +182,9 @@ function DriverDetailPage() {
 	const upcomingItems = upcoming ?? [];
 	const phone = (contact?.phone ?? member?.phone ?? "").trim();
 	const smsReady = phone.length > 0;
+	const profileDirty =
+		licenseDraft.trim() !== (driver.licenseInfo ?? "") ||
+		notesDraft.trim() !== (driver.notes ?? "");
 
 	return (
 		<DetailPage title={name} subtitle="Driver" backTo="/dashboard/drivers">
@@ -150,13 +210,10 @@ function DriverDetailPage() {
 				title="Contact"
 				description="Phone is used for driving assignment SMS when Twilio is enabled."
 			>
-				<div className="flex max-w-md flex-col gap-3 sm:flex-row sm:items-end">
-					<div className="flex-1">
-						<FormField
-							label="Phone"
-							htmlFor="driver-phone"
-							error={phoneError ?? undefined}
-						>
+				<FieldGroup className="max-w-md">
+					<Field data-invalid={Boolean(phoneError)}>
+						<FieldLabel htmlFor="driver-phone">Phone</FieldLabel>
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-end">
 							<Input
 								id="driver-phone"
 								type="tel"
@@ -167,19 +224,23 @@ function DriverDetailPage() {
 									if (phoneError) setPhoneError(null);
 								}}
 								autoComplete="tel"
+								aria-invalid={Boolean(phoneError)}
+								className="flex-1"
 							/>
-						</FormField>
-					</div>
-					<Button
-						type="button"
-						onClick={() => void savePhone()}
-						disabled={
-							phoneSaving || phoneDraft.trim() === (contact?.phone ?? "")
-						}
-					>
-						{phoneSaving ? "Saving…" : "Save"}
-					</Button>
-				</div>
+							<Button
+								type="button"
+								onClick={() => void savePhone()}
+								disabled={
+									phoneSaving || phoneDraft.trim() === (contact?.phone ?? "")
+								}
+							>
+								{phoneSaving ? <Spinner data-icon="inline-start" /> : null}
+								{phoneSaving ? "Saving…" : "Save"}
+							</Button>
+						</div>
+						{phoneError ? <FieldError>{phoneError}</FieldError> : null}
+					</Field>
+				</FieldGroup>
 				{member && (
 					<p className="text-muted-foreground mt-2 text-sm">
 						Email: {member.email || "—"} ·{" "}
@@ -198,37 +259,60 @@ function DriverDetailPage() {
 				title="Driver profile"
 				description="License and notes shown on assignments and fleet views."
 			>
-				<div className="max-w-md space-y-3">
-					<FormField label="License info" htmlFor="driver-license">
+				<FieldGroup className="max-w-md gap-4">
+					<Field orientation="horizontal">
+						<FieldLabel htmlFor="driver-active">Available to assign</FieldLabel>
+						<Switch
+							id="driver-active"
+							checked={driver.isActive}
+							disabled={activeSaving}
+							onCheckedChange={(checked) => void toggleActive(checked)}
+						/>
+						<FieldDescription>
+							Inactive drivers stay on file but cannot be assigned to new
+							departures.
+						</FieldDescription>
+					</Field>
+					<Field data-invalid={Boolean(licenseError)}>
+						<FieldLabel htmlFor="driver-license">License info *</FieldLabel>
 						<Input
 							id="driver-license"
 							value={licenseDraft}
-							onChange={(e) => setLicenseDraft(e.target.value)}
+							onChange={(e) => {
+								setLicenseDraft(e.target.value);
+								if (licenseError) setLicenseError(null);
+							}}
 							placeholder="Class B · expires 2028"
-							maxLength={200}
+							maxLength={MAX_LICENSE_LEN}
+							aria-invalid={Boolean(licenseError)}
 						/>
-					</FormField>
-					<FormField label="Notes" htmlFor="driver-notes">
-						<Input
+						{licenseError ? <FieldError>{licenseError}</FieldError> : null}
+					</Field>
+					<Field data-invalid={Boolean(notesError)}>
+						<FieldLabel htmlFor="driver-notes">Notes</FieldLabel>
+						<Textarea
 							id="driver-notes"
 							value={notesDraft}
-							onChange={(e) => setNotesDraft(e.target.value)}
+							onChange={(e) => {
+								setNotesDraft(e.target.value);
+								if (notesError) setNotesError(null);
+							}}
 							placeholder="Optional"
-							maxLength={2000}
+							rows={3}
+							maxLength={MAX_NOTES_LEN}
+							aria-invalid={Boolean(notesError)}
 						/>
-					</FormField>
+						{notesError ? <FieldError>{notesError}</FieldError> : null}
+					</Field>
 					<Button
 						type="button"
 						onClick={() => void saveProfile()}
-						disabled={
-							profileSaving ||
-							(licenseDraft.trim() === (driver.licenseInfo ?? "") &&
-								notesDraft.trim() === (driver.notes ?? ""))
-						}
+						disabled={profileSaving || !profileDirty}
 					>
+						{profileSaving ? <Spinner data-icon="inline-start" /> : null}
 						{profileSaving ? "Saving…" : "Save profile"}
 					</Button>
-				</div>
+				</FieldGroup>
 			</DetailSection>
 
 			<DetailSection
@@ -240,11 +324,19 @@ function DriverDetailPage() {
 				}
 			>
 				{upcomingItems.length === 0 ? (
-					<p className="text-muted-foreground text-sm italic">
-						No upcoming assignments
-					</p>
+					<Empty className="min-h-0 border-dashed p-6 md:p-8">
+						<EmptyHeader>
+							<EmptyMedia variant="icon">
+								<CalendarClock />
+							</EmptyMedia>
+							<EmptyTitle>No upcoming assignments</EmptyTitle>
+							<EmptyDescription>
+								Assign this driver when a departure needs a vehicle.
+							</EmptyDescription>
+						</EmptyHeader>
+					</Empty>
 				) : (
-					<ul className="space-y-2">
+					<ul className="flex flex-col gap-2">
 						{upcomingItems.slice(0, 20).map((a) => (
 							<li key={a._id} className="text-sm">
 								<Link

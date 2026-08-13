@@ -101,14 +101,21 @@ function CustomerDetailPage() {
 			}
 			backTo="/dashboard/customers"
 			actions={
-				<Button asChild>
-					<Link
-						to="/dashboard/customers/$customerId/edit"
-						params={{ customerId: c._id }}
-					>
-						Edit
-					</Link>
-				</Button>
+				<>
+					<Button asChild>
+						<Link to="/dashboard/bookings/new" search={{ customerId: c._id }}>
+							New booking
+						</Link>
+					</Button>
+					<Button asChild variant="outline">
+						<Link
+							to="/dashboard/customers/$customerId/edit"
+							params={{ customerId: c._id }}
+						>
+							Edit
+						</Link>
+					</Button>
+				</>
 			}
 		>
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -144,15 +151,24 @@ function CustomerDetailPage() {
 				description={`${bookings.length} booking${bookings.length === 1 ? "" : "s"} on file`}
 			>
 				{historyError ? (
-					<p className="text-muted-foreground text-sm italic">
-						(failed to load)
-					</p>
+					<ErrorBanner message={getSafeDisplayMessage(historyError)} />
 				) : (
 					<DataTable
 						data={bookings}
 						columns={bookingColumns}
 						rowKey={(b) => String(b._id)}
-						emptyMessage="No bookings yet for this customer."
+						emptyMessage="No bookings yet"
+						emptyDescription="Walk-up and phone bookings for this person show up here."
+						emptyAction={
+							<Button asChild size="sm">
+								<Link
+									to="/dashboard/bookings/new"
+									search={{ customerId: c._id }}
+								>
+									Book them on a departure
+								</Link>
+							</Button>
+						}
 					/>
 				)}
 			</DetailSection>

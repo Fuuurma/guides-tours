@@ -197,7 +197,7 @@ export const updatePhone = mutation({
 		await ctx.runMutation(components.betterAuth.adapter.updateOne as never, {
 			input: {
 				model: "user",
-				where: [{ field: "id", value: targetUserId }],
+				where: [{ field: "_id", value: targetUserId }],
 				update: { phone: phone || null },
 			},
 		} as never);

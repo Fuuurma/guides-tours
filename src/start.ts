@@ -47,8 +47,8 @@
 //     inline scripts — they're all bundled by Vite, not user-supplied)
 //   - Styles from self + Google Fonts (CSS font loading)
 //   - Images from self + data: URIs (avatar URLs)
-//   - Connect to self + Convex (real-time queries)
-//   - Frames: none (X-Frame-Options: DENY)
+//   - Connect to self + Convex + Stripe (real-time queries and payments)
+//   - Frames: Stripe's hosted payment element only
 //   - Forms: self only
 //   - Base-URI: self (prevents <base> tag hijacking)
 
@@ -94,11 +94,12 @@ const securityHeadersMiddleware = createMiddleware().server(
 			"Content-Security-Policy",
 			[
 				"default-src 'self'",
-				"script-src 'self' 'unsafe-inline'",
+				"script-src 'self' 'unsafe-inline' https://js.stripe.com",
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
 				"font-src 'self' https://fonts.gstatic.com data:",
 				"img-src 'self' data: https:",
-				"connect-src 'self' https://*.convex.cloud wss://*.convex.cloud",
+				"connect-src 'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://api.stripe.com https://*.stripe.com",
+				"frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
 				"frame-ancestors 'none'",
 				"form-action 'self'",
 				"base-uri 'self'",

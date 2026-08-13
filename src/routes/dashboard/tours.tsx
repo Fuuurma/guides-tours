@@ -68,7 +68,8 @@ function ToursPage() {
 				rowKey={(t) => t._id}
 				isPending={isPending}
 				error={error}
-				emptyMessage="No tours yet."
+				emptyMessage="No tours yet"
+				emptyDescription="A tour is what your company runs. Create one, publish dates, then assign guides and vehicles."
 				emptyAction={
 					<Button asChild size="sm">
 						<Link to="/dashboard/tours/new">Create your first tour</Link>

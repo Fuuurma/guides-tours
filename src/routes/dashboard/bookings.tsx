@@ -9,7 +9,16 @@ import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { defaultDateRange } from "@/lib/date-range";
+import {
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { upcomingDateRange } from "@/lib/date-range";
 import { formatCentsCompact } from "@/lib/format";
 import type { Booking } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -79,7 +88,7 @@ function bookingColumns(
 function BookingsPage() {
 	const [source, setSource] = useState<string | null>(null);
 	const [status, setStatus] = useState<string | null>(null);
-	const [range, setRange] = useState(defaultDateRange);
+	const [range, setRange] = useState(upcomingDateRange);
 
 	const args: {
 		source?: string;
@@ -112,7 +121,7 @@ function BookingsPage() {
 	const filtersActive =
 		source !== null ||
 		status !== null ||
-		range.from !== defaultDateRange().from;
+		range.from !== upcomingDateRange().from;
 	const statusFilters = [
 		"pending",
 		"confirmed",
@@ -138,56 +147,76 @@ function BookingsPage() {
 			newTo="/dashboard/bookings/new"
 			newLabel="+ New booking"
 		>
-			<div className="mb-4 space-y-3">
+			<div className="mb-4 flex flex-col gap-3">
 				<div className="flex flex-wrap items-center gap-2">
-					<span className="text-muted-foreground text-sm">Source:</span>
-					{["direct", ...ALL_PROVIDERS.map((p) => p.id)].map((s) => (
-						<Button
-							key={s}
-							variant={source === s ? "default" : "outline"}
-							size="sm"
-							onClick={() => setSource(source === s ? null : s)}
-							aria-pressed={source === s}
+					<span className="text-sm text-muted-foreground">Source</span>
+					<Select
+						value={source ?? "__all__"}
+						onValueChange={(value) =>
+							setSource(value === "__all__" ? null : value)
+						}
+					>
+						<SelectTrigger
+							className="h-8 w-[200px]"
+							aria-label="Filter by source"
 						>
-							{s === "direct" ? "Direct" : providerLabel(s)}
-						</Button>
-					))}
+							<SelectValue placeholder="All sources" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectGroup>
+								<SelectItem value="__all__">All sources</SelectItem>
+								<SelectItem value="direct">Direct</SelectItem>
+								{ALL_PROVIDERS.map((provider) => (
+									<SelectItem key={provider.id} value={provider.id}>
+										{providerLabel(provider.id)}
+									</SelectItem>
+								))}
+							</SelectGroup>
+						</SelectContent>
+					</Select>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<span className="text-muted-foreground text-sm">Status:</span>
-					{statusFilters.map((value) => (
-						<Button
-							key={value}
-							variant={status === value ? "default" : "outline"}
-							size="sm"
-							onClick={() => setStatus(status === value ? null : value)}
-							aria-pressed={status === value}
-						>
-							{value.replace("_", " ")}
-						</Button>
-					))}
+					<span className="text-sm text-muted-foreground">Status</span>
+					<ToggleGroup
+						type="single"
+						variant="outline"
+						size="sm"
+						spacing={2}
+						value={status ?? ""}
+						onValueChange={(value) => setStatus(value || null)}
+						className="flex-wrap justify-start"
+						aria-label="Filter by status"
+					>
+						{statusFilters.map((value) => (
+							<ToggleGroupItem key={value} value={value}>
+								{value.replace("_", " ")}
+							</ToggleGroupItem>
+						))}
+					</ToggleGroup>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
-					<span className="text-muted-foreground text-sm">Date range:</span>
+					<span className="text-sm text-muted-foreground">Date range</span>
 					<Input
 						type="date"
 						value={range.from}
 						onChange={(e) => setRange({ ...range, from: e.target.value })}
 						className="w-auto"
+						aria-label="From date"
 					/>
-					<span className="text-muted-foreground text-sm">→</span>
+					<span className="text-sm text-muted-foreground">→</span>
 					<Input
 						type="date"
 						value={range.to}
 						onChange={(e) => setRange({ ...range, to: e.target.value })}
 						className="w-auto"
+						aria-label="To date"
 					/>
 					<Button
 						variant="outline"
 						size="sm"
-						onClick={() => setRange(defaultDateRange())}
+						onClick={() => setRange(upcomingDateRange())}
 					>
-						Last 30 days
+						Next 30 days
 					</Button>
 					{filtersActive && (
 						<Button
@@ -196,7 +225,7 @@ function BookingsPage() {
 							onClick={() => {
 								setSource(null);
 								setStatus(null);
-								setRange(defaultDateRange());
+								setRange(upcomingDateRange());
 							}}
 						>
 							Clear all
@@ -213,7 +242,12 @@ function BookingsPage() {
 				emptyMessage={
 					source || status
 						? `No ${status ?? "bookings"}${source ? ` from ${source}` : ""} in this date range.`
-						: "No bookings yet."
+						: "No bookings yet"
+				}
+				emptyDescription={
+					source || status
+						? undefined
+						: "Add a booking a guest made by phone, or share your direct booking link."
 				}
 				emptyAction={
 					filtersActive ? (
@@ -223,7 +257,7 @@ function BookingsPage() {
 							onClick={() => {
 								setSource(null);
 								setStatus(null);
-								setRange(defaultDateRange());
+								setRange(upcomingDateRange());
 							}}
 						>
 							Clear all filters

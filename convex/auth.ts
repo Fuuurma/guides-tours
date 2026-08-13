@@ -90,15 +90,16 @@ function getSiteUrl(): string {
 	return process.env.SITE_URL ?? "http://127.0.0.1:3020";
 }
 
-// Local dev detection — mirrors restaurant-calendar. In dev the site URL
-// is a localhost/127.0.0.1 address, so email verification is skipped and
-// sign-up auto-signs-in (unblocking the onboarding flow, which would
-// otherwise dead-end since SES is not configured locally). In production
-// the site URL is the deployed domain, so verification is required —
-// this preserves the pre-registration-attack protection from audit fix
-// #112 (GHSA-FMH4-WCC4-5JM3).
+// Local dev detection — mirrors restaurant-calendar, but only when
+// SITE_URL is explicitly set to a local URL. Missing SITE_URL must not
+// silently inherit getSiteUrl()'s localhost fallback, because that would
+// disable email verification on a misconfigured production deployment.
+// In production the site URL is the deployed domain, so verification is
+// required — this preserves the pre-registration-attack protection from
+// audit fix #112 (GHSA-FMH4-WCC4-5JM3).
 function isLocalDev(): boolean {
-	const siteUrl = getSiteUrl();
+	const siteUrl = process.env.SITE_URL;
+	if (!siteUrl) return false;
 	return (
 		siteUrl.includes("127.0.0.1") || siteUrl.includes("localhost")
 	);

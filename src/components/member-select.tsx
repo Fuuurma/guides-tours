@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
@@ -58,13 +59,19 @@ export function MemberSelect({
 				<SelectValue placeholder={isPending ? "Loading…" : placeholder} />
 			</SelectTrigger>
 			<SelectContent>
-				{allowNone && <SelectItem value={NONE_VALUE}>{noneLabel}</SelectItem>}
-				{items.map((m) => (
-					<SelectItem key={m.userId} value={m.userId}>
-						{m.name}
-						{m.role ? ` (${m.role})` : ""}
-					</SelectItem>
-				))}
+				{allowNone && (
+					<SelectGroup>
+						<SelectItem value={NONE_VALUE}>{noneLabel}</SelectItem>
+					</SelectGroup>
+				)}
+				<SelectGroup>
+					{items.map((m) => (
+						<SelectItem key={m.userId} value={m.userId}>
+							{m.name}
+							{m.role ? ` (${m.role})` : ""}
+						</SelectItem>
+					))}
+				</SelectGroup>
 			</SelectContent>
 		</Select>
 	);

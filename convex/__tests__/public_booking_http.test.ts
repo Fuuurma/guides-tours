@@ -64,6 +64,23 @@ describe("convex/http — public booking httpAction routing and input validation
 		expect(body.error).toBeTruthy();
 	});
 
+	it("serves a CORS preflight for browser booking requests", async () => {
+		const t = convexTest(schema, modules);
+		const res = await t.fetch(PUBLIC_BOOK_PATH("any-slug"), {
+			method: "OPTIONS",
+			headers: {
+				origin: "http://127.0.0.1:3020",
+				"access-control-request-method": "POST",
+				"access-control-request-headers": "content-type",
+			},
+		});
+		expect(res.status).toBe(204);
+		expect(res.headers.get("access-control-allow-origin")).toBe(
+			"http://127.0.0.1:3020",
+		);
+		expect(res.headers.get("access-control-allow-methods")).toContain("POST");
+	});
+
 	it("returns 415 when content-type is not application/json", async () => {
 		const t = convexTest(schema, modules);
 		const res = await t.fetch(PUBLIC_BOOK_PATH("any-slug"), {

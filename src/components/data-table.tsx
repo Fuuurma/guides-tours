@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
 	Empty,
 	EmptyContent,
+	EmptyDescription,
 	EmptyHeader,
 	EmptyTitle,
 } from "@/components/ui/empty";
@@ -39,6 +40,7 @@ interface DataTableProps<T> {
 	isPending?: boolean;
 	error?: Error | null;
 	emptyMessage?: string;
+	emptyDescription?: string;
 	emptyAction?: ReactNode;
 	/** Show a search input that filters rows by case-insensitive substring. */
 	searchPlaceholder?: string;
@@ -62,6 +64,7 @@ export function DataTable<T>({
 	isPending,
 	error,
 	emptyMessage = "No records yet.",
+	emptyDescription,
 	emptyAction,
 	searchPlaceholder,
 }: DataTableProps<T>) {
@@ -92,7 +95,7 @@ export function DataTable<T>({
 
 	if (isPending) {
 		return (
-			<div className="space-y-2">
+			<div className="flex flex-col gap-2">
 				<Skeleton className="h-8 w-full" />
 				<Skeleton className="h-8 w-full" />
 				<Skeleton className="h-8 w-3/4" />
@@ -107,6 +110,9 @@ export function DataTable<T>({
 			<Empty className="border">
 				<EmptyHeader>
 					<EmptyTitle>{emptyMessage}</EmptyTitle>
+					{emptyDescription ? (
+						<EmptyDescription>{emptyDescription}</EmptyDescription>
+					) : null}
 				</EmptyHeader>
 				{emptyAction && <EmptyContent>{emptyAction}</EmptyContent>}
 			</Empty>
@@ -116,7 +122,7 @@ export function DataTable<T>({
 	const showing = filtered ?? [];
 	if (showing.length === 0) {
 		return (
-			<div className="space-y-3">
+			<div className="flex flex-col gap-3">
 				{searchPlaceholder && (
 					<Input
 						value={rawQuery}
@@ -140,7 +146,7 @@ export function DataTable<T>({
 		);
 	}
 	return (
-		<div className="space-y-3">
+		<div className="flex flex-col gap-3">
 			{searchPlaceholder && (
 				<Input
 					value={rawQuery}

@@ -1,19 +1,26 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
-import { FormField } from "@/components/form";
 import { MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+	Field,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { cn, getErrorMessage } from "@/lib/utils";
-import { validatePhoneOptional } from "@/lib/validation";
+import { MAX_PHONE_LEN, validatePhoneOptional } from "@/lib/validation";
 import { api } from "../../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/guides/$userId")({
@@ -75,15 +82,7 @@ function GuideDetailPage() {
 
 	const upsert = useMutation(api.availabilities.upsert);
 	const removeAvail = useMutation(api.availabilities.remove);
-	const updatePhone = useMutation(api.userProfiles.updatePhone);
 	const [pendingDate, setPendingDate] = useState<string | null>(null);
-	const [phoneDraft, setPhoneDraft] = useState("");
-	const [phoneError, setPhoneError] = useState<string | null>(null);
-	const [phoneSaving, setPhoneSaving] = useState(false);
-
-	useEffect(() => {
-		if (contact) setPhoneDraft(contact.phone);
-	}, [contact]);
 
 	const member = (members ?? []).find((m) => m.userId === userId);
 	const availByDate = useMemo(() => {
@@ -132,24 +131,6 @@ function GuideDetailPage() {
 		}
 	};
 
-	const savePhone = async () => {
-		const err = validatePhoneOptional(phoneDraft);
-		if (err) {
-			setPhoneError(err);
-			return;
-		}
-		setPhoneError(null);
-		setPhoneSaving(true);
-		try {
-			await updatePhone({ userId, phone: phoneDraft.trim() });
-			toast.success("Phone updated");
-		} catch (e) {
-			toast.error(getErrorMessage(e));
-		} finally {
-			setPhoneSaving(false);
-		}
-	};
-
 	if (membersPending) return <DetailSkeleton />;
 	if (!member) {
 		return <DetailPage title="Guide not found" backTo="/dashboard/guides" />;
@@ -180,36 +161,7 @@ function GuideDetailPage() {
 				title="Contact"
 				description="Phone is used for assignment and availability SMS when Twilio is enabled."
 			>
-				<div className="flex max-w-md flex-col gap-3 sm:flex-row sm:items-end">
-					<div className="flex-1">
-						<FormField
-							label="Phone"
-							htmlFor="guide-phone"
-							error={phoneError ?? undefined}
-						>
-							<Input
-								id="guide-phone"
-								type="tel"
-								placeholder="+1 555 0100"
-								value={phoneDraft}
-								onChange={(e) => {
-									setPhoneDraft(e.target.value);
-									if (phoneError) setPhoneError(null);
-								}}
-								autoComplete="tel"
-							/>
-						</FormField>
-					</div>
-					<Button
-						type="button"
-						onClick={() => void savePhone()}
-						disabled={
-							phoneSaving || phoneDraft.trim() === (contact?.phone ?? "")
-						}
-					>
-						{phoneSaving ? "Saving…" : "Save"}
-					</Button>
-				</div>
+				<GuidePhoneForm userId={userId} phone={contact?.phone ?? ""} />
 			</DetailSection>
 
 			<DetailSection
@@ -347,5 +299,95 @@ function GuideDetailPage() {
 				)}
 			</DetailSection>
 		</DetailPage>
+	);
+}
+
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
+
+function GuidePhoneForm({ userId, phone }: { userId: string; phone: string }) {
+	const updatePhone = useMutation(api.userProfiles.updatePhone);
+	const form = useForm({
+		defaultValues: { phone },
+		onSubmit: async ({ value }) => {
+			const err = validatePhoneOptional(value.phone);
+			if (err) {
+				form.setFieldMeta("phone", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: err },
+				}));
+				return;
+			}
+			try {
+				await updatePhone({ userId, phone: value.phone.trim() });
+				toast.success("Phone updated");
+			} catch (e) {
+				toast.error(getErrorMessage(e));
+			}
+		},
+	});
+
+	useEffect(() => {
+		form.reset({ phone });
+	}, [form.reset, phone]);
+
+	return (
+		<form
+			className="max-w-md"
+			onSubmit={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void form.handleSubmit();
+			}}
+		>
+			<FieldGroup className="flex flex-col gap-3 sm:flex-row sm:items-end">
+				<form.Field name="phone">
+					{(field) => (
+						<Field className="flex-1" data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="guide-phone">Phone</FieldLabel>
+							<Input
+								id="guide-phone"
+								type="tel"
+								placeholder="+1 555 0100"
+								maxLength={MAX_PHONE_LEN}
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								autoComplete="tel"
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Subscribe
+					selector={(state) =>
+						[state.canSubmit, state.isSubmitting, state.values.phone] as const
+					}
+				>
+					{([canSubmit, isSubmitting, draft]) => (
+						<Button
+							type="submit"
+							disabled={
+								!canSubmit || isSubmitting || draft.trim() === phone.trim()
+							}
+						>
+							{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+							{isSubmitting ? "Saving…" : "Save"}
+						</Button>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
+		</form>
 	);
 }

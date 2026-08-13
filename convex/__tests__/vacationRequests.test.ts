@@ -1,10 +1,72 @@
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import schema from "../schema";
 import { internal, api } from "../_generated/api";
 import { calculateVacationDays } from "../vacationRequests";
 
+type MockUser = {
+	_id: string;
+	name: string;
+	email: string;
+};
+
+type MockMember = { userId: string; role: string };
+
+type MockOrg = {
+	id: string;
+	name: string;
+	slug: string;
+	createdAt: number;
+	members: MockMember[];
+};
+
+const { mockState } = vi.hoisted(() => ({
+	mockState: {
+		user: null as MockUser | null,
+		session: null as { activeOrganizationId?: string | null } | null,
+		orgs: [] as MockOrg[],
+	},
+}));
+
+vi.mock("../auth", () => ({
+	authComponent: {
+		getAuthUser: async () => mockState.user,
+		safeGetAuthUser: async () => mockState.user ?? undefined,
+		getAuth: async () => ({
+			auth: {
+				api: {
+					getSession: async () =>
+						mockState.session
+							? { session: mockState.session, user: mockState.user }
+							: null,
+					getFullOrganization: async (args: {
+						query: { organizationId: string };
+					}) =>
+						mockState.orgs.find((o) => o.id === args.query.organizationId) ??
+						null,
+					listOrganizations: async () => mockState.orgs,
+					listMembers: async (args: {
+						query: { organizationId: string };
+					}) => ({
+						members:
+							mockState.orgs.find((o) => o.id === args.query.organizationId)
+								?.members ?? [],
+					}),
+				},
+			},
+			headers: new Headers(),
+		}),
+	},
+	createAuth: (() => ({})) as never,
+}));
+
 const modules = import.meta.glob("../**/*.{ts,tsx}");
+
+beforeEach(() => {
+	mockState.user = null;
+	mockState.session = null;
+	mockState.orgs = [];
+});
 
 describe("calculateVacationDays", () => {
 	it("counts inclusive days within a single year", () => {
@@ -325,6 +387,32 @@ describe("vacationRequests — length validation", () => {
 		).rejects.toThrow(/Reason is too long/);
 	});
 
+	it("internalApprove rejects reason over MAX_NOTES_LEN", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_vac_approve_len";
+		const requestId = await t.run(async (ctx) =>
+			ctx.db.insert("vacationRequests", {
+				organizationId: orgId,
+				userId: "guide-1",
+				startDate: "2026-08-01",
+				endDate: "2026-08-05",
+				reason: "",
+				status: "pending",
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+
+		await expect(
+			t.mutation(internal.vacationRequests.internalApprove, {
+				organizationId: orgId,
+				userId: "admin-1",
+				requestId,
+				reason: "r".repeat(1001),
+			}),
+		).rejects.toThrow(/Reason is too long/);
+	});
+
 	it("internalCreate accepts reason at exactly MAX_NOTES_LEN (boundary)", async () => {
 		const t = convexTest(schema, modules);
 		const id = await t.mutation(internal.vacationRequests.internalCreate, {
@@ -356,3 +444,157 @@ describe("vacationRequests — length validation", () => {
 		expect(id2).toBeDefined();
 	});
 });
+
+describe("vacationRequests — approved on behalf", () => {
+	it("internalCreate persists approved status and reviewer", async () => {
+		const t = convexTest(schema, modules);
+		const id = await t.mutation(internal.vacationRequests.internalCreate, {
+			organizationId: "org_vac_approved",
+			userId: "guide-1",
+			startDate: "2026-10-01",
+			endDate: "2026-10-05",
+			reason: "Family trip",
+			status: "approved",
+			reviewedBy: "admin-1",
+		});
+		const vr = await t.run(async (ctx) => ctx.db.get(id));
+		expect(vr?.status).toBe("approved");
+		expect(vr?.reviewedBy).toBe("admin-1");
+		expect(vr?.reviewedAt).toBeDefined();
+	});
+
+	it("internalCreate overlap still rejects an approved request", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_vac_overlap_approved";
+		await t.mutation(internal.vacationRequests.internalCreate, {
+			organizationId: orgId,
+			userId: "guide-1",
+			startDate: "2026-10-01",
+			endDate: "2026-10-05",
+			status: "approved",
+			reviewedBy: "admin-1",
+		});
+		await expect(
+			t.mutation(internal.vacationRequests.internalCreate, {
+				organizationId: orgId,
+				userId: "guide-1",
+				startDate: "2026-10-04",
+				endDate: "2026-10-08",
+			}),
+		).rejects.toThrow(/overlaps/);
+	});
+
+	it("internalCreate audit log omits reason", async () => {
+		const t = convexTest(schema, modules);
+		const id = await t.mutation(internal.vacationRequests.internalCreate, {
+			organizationId: "org_vac_audit",
+			userId: "guide-1",
+			startDate: "2026-11-01",
+			endDate: "2026-11-03",
+			reason: "secret family matter",
+			status: "approved",
+			reviewedBy: "admin-1",
+		});
+		const logs = await t.run(async (ctx) =>
+			ctx.db
+				.query("auditLogs")
+				.filter((q) => q.eq(q.field("resourceId"), id))
+				.collect(),
+		);
+		expect(logs).toHaveLength(1);
+		expect(logs[0]?.newValues).toMatchObject({
+			startDate: "2026-11-01",
+			endDate: "2026-11-03",
+			status: "approved",
+			onBehalf: true,
+		});
+		expect(logs[0]?.newValues).not.toHaveProperty("reason");
+	});
+});
+
+describe("vacationRequests.create — on behalf of staff", () => {
+	const ORG: MockOrg = {
+		id: "org_vac_public",
+		name: "Vac Org",
+		slug: "vac-org",
+		createdAt: 1,
+		members: [
+			{ userId: "u_owner", role: "owner" },
+			{ userId: "u_admin", role: "admin" },
+			{ userId: "u_member", role: "member" },
+			{ userId: "u_guide", role: "guide" },
+		],
+	};
+
+	function signIn(userId: string) {
+		const member = ORG.members.find((m) => m.userId === userId);
+		if (!member) throw new Error("unknown user");
+		mockState.user = {
+			_id: userId,
+			name: userId,
+			email: `${userId}@example.com`,
+		};
+		mockState.session = { activeOrganizationId: ORG.id };
+		mockState.orgs = [ORG];
+	}
+
+	it("owner filing for another member stores an approved request", async () => {
+		const t = convexTest(schema, modules);
+		signIn("u_owner");
+		const id = await t.mutation(api.vacationRequests.create, {
+			startDate: "2026-12-01",
+			endDate: "2026-12-03",
+			reason: "guide PTO",
+			userId: "u_guide",
+		});
+		const vr = (await t.run(async (ctx) => ctx.db.get(id))) as {
+			userId: string;
+			status: string;
+			reviewedBy?: string;
+		} | null;
+		expect(vr?.userId).toBe("u_guide");
+		expect(vr?.status).toBe("approved");
+		expect(vr?.reviewedBy).toBe("u_owner");
+	});
+
+	it("self-request stays pending even when userId is the caller", async () => {
+		const t = convexTest(schema, modules);
+		signIn("u_owner");
+		const id = await t.mutation(api.vacationRequests.create, {
+			startDate: "2026-12-10",
+			endDate: "2026-12-12",
+			userId: "u_owner",
+		});
+		const vr = (await t.run(async (ctx) => ctx.db.get(id))) as {
+			status: string;
+			reviewedBy?: string;
+		} | null;
+		expect(vr?.status).toBe("pending");
+		expect(vr?.reviewedBy).toBeUndefined();
+	});
+
+	it("member cannot file for another person", async () => {
+		const t = convexTest(schema, modules);
+		signIn("u_member");
+		await expect(
+			t.mutation(api.vacationRequests.create, {
+				startDate: "2026-12-01",
+				endDate: "2026-12-03",
+				userId: "u_guide",
+			}),
+		).rejects.toThrow(/Forbidden/);
+	});
+
+	it("rejects a userId that is not in the org", async () => {
+		const t = convexTest(schema, modules);
+		signIn("u_owner");
+		await expect(
+			t.mutation(api.vacationRequests.create, {
+				startDate: "2026-12-01",
+				endDate: "2026-12-03",
+				userId: "u_stranger",
+			}),
+		).rejects.toThrow(/not a member/);
+	});
+});
+

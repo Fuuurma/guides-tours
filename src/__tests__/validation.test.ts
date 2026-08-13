@@ -13,6 +13,7 @@ import {
 	MAX_NOTES_LEN,
 	MAX_PHONE_LEN,
 	parseUsdToCents,
+	validateCurrency,
 	validateDescriptionOptional,
 	validateEmail,
 	validateName,
@@ -151,6 +152,20 @@ describe("validatePositiveNumber", () => {
 	test("rejects zero / negative", () => {
 		expect(validatePositiveNumber("0", "Hours")).toMatch(/positive number/);
 		expect(validatePositiveNumber("-1", "Hours")).toMatch(/positive number/);
+	});
+});
+
+describe("validateCurrency", () => {
+	test("accepts 3-letter codes", () => {
+		expect(validateCurrency("USD")).toBeNull();
+		expect(validateCurrency("eur")).toBeNull();
+		expect(validateCurrency(" gbp ")).toBeNull();
+	});
+	test("rejects malformed codes", () => {
+		expect(validateCurrency("US")).toMatch(/3-letter/);
+		expect(validateCurrency("USDD")).toMatch(/3-letter/);
+		expect(validateCurrency("US1")).toMatch(/3-letter/);
+		expect(validateCurrency("")).toMatch(/3-letter/);
 	});
 });
 

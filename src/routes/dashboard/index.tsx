@@ -2,10 +2,11 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
+import { CalendarDays, MapPin, Plus } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { MetricCard } from "@/components/metric-card";
+import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -14,8 +15,18 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { useOrgMembers } from "@/hooks/use-org-members";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import { formatCentsWhole } from "@/lib/format";
 import { getErrorMessage } from "@/lib/utils";
@@ -33,8 +44,6 @@ function DashboardIndex() {
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
 	const { data: bookings, error: bookingsError } = useQuery(
-		// The dashboard only renders today's bookings. Keep historical rows
-		// out of this reactive read instead of filtering them client-side.
 		convexQuery(api.bookings.list, { dateFrom: today, dateTo: today }),
 	);
 	const { data: pendingBookingPage, error: pendingBookingsError } = useQuery(
@@ -46,12 +55,7 @@ function DashboardIndex() {
 		}),
 	);
 	const { data: assignments, error: assignmentsError } = useQuery(
-		// The dashboard's assignment card only shows upcoming work. The
-		// date-bound index scan avoids walking historical assignments first.
 		convexQuery(api.assignments.list, { dateFrom: today }),
-	);
-	const { data: vacations, error: vacationsError } = useQuery(
-		convexQuery(api.vacationRequests.list, {}),
 	);
 	const { data: customers, error: customersError } = useQuery(
 		convexQuery(api.customers.list, {}),
@@ -77,13 +81,7 @@ function DashboardIndex() {
 			dateTo: weekTo,
 		}),
 	);
-
-	const { data: overview, error: overviewError } = useQuery(
-		convexQuery(api.analytics.getOverview, {
-			startDate: today,
-			endDate: today,
-		}),
-	);
+	const { displayName } = useOrgMembers();
 
 	const sendPhoneReminders = useMutation(api.phoneReminders.sendReminders);
 	const [remindPending, setRemindPending] = useState(false);
@@ -92,12 +90,10 @@ function DashboardIndex() {
 		bookingsError ??
 		pendingBookingsError ??
 		assignmentsError ??
-		vacationsError ??
 		customersError ??
 		toursError ??
 		staffingError ??
-		missingPhoneError ??
-		overviewError;
+		missingPhoneError;
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
@@ -110,20 +106,26 @@ function DashboardIndex() {
 		(b) => b.date === today,
 	);
 	const pendingBookings = pendingBookingPage?.items ?? [];
-	const upcomingAssignments = (assignments ?? [])
-		.filter((a) => a.status === "scheduled" && a.date >= today)
-		.sort((a, b) => a.date.localeCompare(b.date))
-		.slice(0, 5);
-	const pendingVacations = (vacations ?? []).filter(
-		(v) => v.status === "pending",
-	).length;
-	const totalCustomers = customers?.items?.length ?? 0;
+	const todaysAssignments = (assignments ?? [])
+		.filter((a) => a.status === "scheduled" && a.date === today)
+		.sort((a, b) => a.startTime.localeCompare(b.startTime));
+	const nextAssignments = (assignments ?? [])
+		.filter((a) => a.status === "scheduled" && a.date > today)
+		.sort((a, b) =>
+			a.date === b.date
+				? a.startTime.localeCompare(b.startTime)
+				: a.date.localeCompare(b.date),
+		)
+		.slice(0, 4);
 	const totalTours = (tours ?? []).filter((t) => t.isActive).length;
 	const gaps = staffingGaps ?? [];
-	const gapsToday = gaps.filter((g) => g.date === today).length;
 	const topGaps = gaps.slice(0, 5);
 	const missing = missingPhones ?? [];
 	const topMissing = missing.slice(0, 5);
+	const isFirstRun =
+		totalTours === 0 &&
+		todaysBookings.length === 0 &&
+		pendingBookings.length === 0;
 
 	const onRemindPhones = async () => {
 		setRemindPending(true);
@@ -149,21 +151,21 @@ function DashboardIndex() {
 	};
 
 	return (
-		<div className="space-y-6">
+		<div className="flex flex-col gap-6">
 			{firstError && (
 				<ErrorBanner
 					message={`Some data failed to load: ${firstError.message}`}
 					hint="Cards below may show stale or empty data. Refresh to retry."
 				/>
 			)}
-			<header className="flex items-center justify-between">
+			<header className="flex flex-wrap items-start justify-between gap-4">
 				<motion.div
 					initial={{ opacity: 0, y: 4 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
-					<h1 className="text-2xl font-semibold">Today</h1>
-					<p className="text-muted-foreground text-sm">
+					<h1 className="text-2xl font-semibold tracking-tight">Today</h1>
+					<p className="mt-0.5 text-sm text-muted-foreground">
 						{new Date().toLocaleDateString(undefined, {
 							weekday: "long",
 							month: "long",
@@ -173,414 +175,442 @@ function DashboardIndex() {
 						{org?.name ?? "your workspace"}
 					</p>
 				</motion.div>
-				<Button asChild>
-					<Link to="/dashboard/bookings/new">+ New booking</Link>
-				</Button>
+				<div className="flex flex-wrap gap-2">
+					<Button asChild>
+						<Link to="/dashboard/assignments/new">
+							<Plus data-icon="inline-start" /> Assign
+						</Link>
+					</Button>
+					<Button asChild variant="outline">
+						<Link to="/dashboard/schedules/new">New schedule</Link>
+					</Button>
+				</div>
 			</header>
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<StatCard
-					label="Bookings today"
-					value={todaysBookings.length}
-					link="/dashboard/bookings"
-				/>
-				<StatCard
-					label="Staffing gaps (7d)"
-					value={gaps.length}
-					link="/dashboard/staffing"
-				/>
-				<StatCard
-					label="Gaps today"
-					value={gapsToday}
-					link="/dashboard/staffing"
-				/>
-				<StatCard
-					label="Missing phones (7d)"
-					value={missing.length}
-					link="/dashboard/staffing"
-				/>
-			</div>
-
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<StatCard
-					label="Pending vacations"
-					value={pendingVacations}
-					link="/dashboard/vacations"
-				/>
-				<StatCard
-					label="Upcoming assignments"
-					value={upcomingAssignments.length}
-					link="/dashboard/assignments"
-				/>
-				<StatCard
-					label="Active tours"
-					value={totalTours}
-					link="/dashboard/tours"
-				/>
-				<StatCard
-					label="Total customers"
-					value={totalCustomers}
-					link="/dashboard/customers"
-				/>
-			</div>
-
-			<div className="grid gap-4 md:grid-cols-2">
-				<StatCard
-					label="Completion rate (today)"
-					value={overview ? `${overview.completionRate.toFixed(1)}%` : "—"}
-					link="/dashboard/analytics"
-				/>
-				<StatCard
-					label="Cancellations (today)"
-					value={overview?.cancelledAssignments ?? 0}
-					link="/dashboard/analytics"
-				/>
-			</div>
-
-			{org?.slug && <PublicBookingLinkCard slug={org.slug} />}
-
-			<Card
-				className={pendingBookings.length > 0 ? "border-amber-300" : undefined}
-			>
-				<CardHeader className="flex flex-row items-center justify-between space-y-0">
-					<div>
-						<CardTitle>Pending booking requests</CardTitle>
-						<CardDescription>
-							{pendingBookings.length === 0
-								? "New public requests will wait here until you confirm them."
-								: `${pendingBookingPage?.total ?? pendingBookings.length} request${(pendingBookingPage?.total ?? pendingBookings.length) === 1 ? "" : "s"} waiting for review`}
-						</CardDescription>
+			{isFirstRun ? (
+				<Empty className="border">
+					<EmptyHeader>
+						<EmptyMedia variant="icon">
+							<MapPin />
+						</EmptyMedia>
+						<EmptyTitle>Set up your first tour</EmptyTitle>
+						<EmptyDescription>
+							Create a tour, publish departures on the calendar, then assign
+							guides and vehicles. Direct booking is a channel you can share
+							later.
+						</EmptyDescription>
+					</EmptyHeader>
+					<EmptyContent>
+						<div className="flex flex-wrap justify-center gap-2">
+							<Button asChild>
+								<Link to="/dashboard/tours/new">Create a tour</Link>
+							</Button>
+							<Button asChild variant="outline">
+								<Link to="/dashboard/schedules/new">Add a schedule</Link>
+							</Button>
+						</div>
+					</EmptyContent>
+				</Empty>
+			) : (
+				<>
+					<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+						<LinkedMetric
+							label="Staffing gaps (7d)"
+							value={gaps.length}
+							to="/dashboard/staffing"
+						/>
+						<LinkedMetric
+							label="Bookings today"
+							value={todaysBookings.length}
+							to="/dashboard/bookings"
+						/>
+						<LinkedMetric
+							label="Pending requests"
+							value={pendingBookingPage?.total ?? pendingBookings.length}
+							to="/dashboard/bookings"
+						/>
+						<LinkedMetric
+							label="Active tours"
+							value={totalTours}
+							to="/dashboard/tours"
+						/>
 					</div>
-					<Button asChild variant="outline" size="sm">
-						<Link to="/dashboard/bookings">View bookings</Link>
-					</Button>
-				</CardHeader>
-				<CardContent>
-					{pendingBookings.length === 0 ? (
-						<div className="flex flex-wrap items-center justify-between gap-3">
-							<p className="text-muted-foreground text-sm">
-								Nothing needs confirmation right now.
-							</p>
-							{org?.slug && (
-								<Button asChild size="sm" variant="outline">
-									<Link to="/book/$slug" params={{ slug: org.slug }}>
-										Open public page
-									</Link>
+
+					{org?.slug ? <PublicBookingLinkBar slug={org.slug} /> : null}
+
+					<div className="grid gap-4 lg:grid-cols-2">
+						<Card>
+							<CardHeader className="flex flex-row items-start justify-between gap-3">
+								<div className="min-w-0">
+									<CardTitle>Needs confirmation</CardTitle>
+									<CardDescription>
+										{pendingBookings.length === 0
+											? "Walk-in and channel requests wait here until you confirm them."
+											: `${pendingBookingPage?.total ?? pendingBookings.length} request${(pendingBookingPage?.total ?? pendingBookings.length) === 1 ? "" : "s"} waiting`}
+									</CardDescription>
+								</div>
+								<Button asChild variant="outline" size="sm">
+									<Link to="/dashboard/bookings">Bookings</Link>
 								</Button>
-							)}
-						</div>
-					) : (
-						<ul className="space-y-2">
-							{pendingBookings.map((booking) => (
-								<li
-									key={booking._id}
-									className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"
-								>
-									<div className="min-w-0 flex-1">
-										<p className="font-medium truncate">
-											{customerNameById.get(String(booking.customerId)) ??
-												"Customer request"}
-										</p>
-										<p className="text-muted-foreground text-xs">
-											{tourNameById.get(String(booking.tourId)) ??
-												"Tour request"}
-											{" · "}
-											{booking.date} at {booking.startTime}
-											{" · "}
-											{booking.guests} guest
-											{booking.guests === 1 ? "" : "s"}
-										</p>
-									</div>
-									<Button asChild size="sm" variant="outline">
-										<Link
-											to="/dashboard/bookings/$bookingId"
-											params={{ bookingId: booking._id }}
-										>
-											Review
-										</Link>
-									</Button>
-								</li>
-							))}
-						</ul>
-					)}
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader className="flex flex-row items-center justify-between space-y-0">
-					<div>
-						<CardTitle>Needs staffing</CardTitle>
-						<CardDescription>
-							{gaps.length === 0
-								? "No open gaps in the next 7 days"
-								: `${gaps.length} departure${gaps.length === 1 ? "" : "s"} need guides or fleet`}
-						</CardDescription>
-					</div>
-					<Button asChild variant="outline" size="sm">
-						<Link to="/dashboard/staffing">View all</Link>
-					</Button>
-				</CardHeader>
-				<CardContent>
-					{topGaps.length === 0 ? (
-						<p className="text-muted-foreground text-sm">
-							All set — departures look fully staffed.
-						</p>
-					) : (
-						<ul className="space-y-2">
-							{topGaps.map((g) => (
-								<li
-									key={g.key}
-									className="flex items-center justify-between border-b pb-2 last:border-0"
-								>
-									<div className="min-w-0 flex-1">
-										<p className="font-medium truncate">{g.tourName}</p>
-										<p className="text-muted-foreground text-xs">
-											{g.date} · {g.startTime}
-											{" · "}
-											{g.gaps.join(", ")}
-											{" · "}
-											guides {g.guideCount}/{g.requiredGuides}
-										</p>
-									</div>
-									<Button asChild size="sm" variant="outline">
-										<Link
-											to="/dashboard/assignments/new"
-											search={{
-												date: g.date,
-												...(g.scheduleId ? { scheduleId: g.scheduleId } : {}),
-											}}
-										>
-											Assign
-										</Link>
-									</Button>
-								</li>
-							))}
-						</ul>
-					)}
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader className="flex flex-row items-center justify-between space-y-0">
-					<div>
-						<CardTitle>Missing phones</CardTitle>
-						<CardDescription>
-							{missing.length === 0
-								? "Assigned staff in the next 7 days have phones on file"
-								: `${missing.length} assigned staff won't get SMS until they add a phone`}
-						</CardDescription>
-					</div>
-					<div className="flex flex-wrap gap-2">
-						{missing.length > 0 ? (
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								disabled={
-									remindPending || remindStatus?.canSendManual === false
-								}
-								onClick={() => void onRemindPhones()}
-								title={
-									remindStatus && !remindStatus.orgBulkClear
-										? "Org bulk cooldown — try again later"
-										: remindStatus && remindStatus.eligibleCount === 0
-											? "Everyone eligible was reminded in the last 7 days"
-											: undefined
-								}
-							>
-								{remindPending ? "Sending…" : "Remind all"}
-							</Button>
-						) : null}
-						<Button asChild variant="outline" size="sm">
-							<Link to="/dashboard/staffing">Staffing</Link>
-						</Button>
-					</div>
-				</CardHeader>
-				<CardContent>
-					{topMissing.length === 0 ? (
-						<p className="text-muted-foreground text-sm">
-							No action needed — phones look complete for upcoming assignments.
-						</p>
-					) : (
-						<ul className="space-y-2">
-							{topMissing.map((p) => (
-								<li
-									key={p.userId}
-									className="flex items-center justify-between border-b pb-2 last:border-0"
-								>
-									<div className="min-w-0 flex-1">
-										<p className="font-medium truncate">{p.name}</p>
-										<p className="text-muted-foreground text-xs">
-											{p.roles.join(" · ")} · {p.assignmentCount} assignment
-											{p.assignmentCount === 1 ? "" : "s"}
-										</p>
-									</div>
-									<Button asChild size="sm" variant="outline">
-										<Link
-											to="/dashboard/guides/$userId"
-											params={{ userId: p.userId }}
-										>
-											Add phone
-										</Link>
-									</Button>
-								</li>
-							))}
-						</ul>
-					)}
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader>
-					<CardTitle>Upcoming assignments</CardTitle>
-					<CardDescription>
-						Next {upcomingAssignments.length} scheduled assignments
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{upcomingAssignments.length === 0 ? (
-						<div className="space-y-2">
-							<p className="text-muted-foreground text-sm">
-								No upcoming assignments.
-							</p>
-							<Button asChild variant="outline" size="sm">
-								<Link to="/dashboard/assignments/new">+ Create assignment</Link>
-							</Button>
-						</div>
-					) : (
-						<ul className="space-y-2">
-							{upcomingAssignments.map((a) => {
-								const tourName = tourNameById.get(String(a.tourId));
-								return (
-									<li
-										key={a._id}
-										className="flex items-center justify-between border-b pb-2 last:border-0"
-									>
-										<div className="min-w-0 flex-1">
-											<p className="font-medium truncate">
-												{tourName ? (
+							</CardHeader>
+							<CardContent>
+								{pendingBookings.length === 0 ? (
+									<p className="text-sm text-muted-foreground">
+										Nothing needs confirmation right now.
+									</p>
+								) : (
+									<ul className="flex flex-col gap-2">
+										{pendingBookings.map((booking) => (
+											<li
+												key={booking._id}
+												className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"
+											>
+												<div className="min-w-0 flex-1">
+													<p className="truncate font-medium">
+														{customerNameById.get(String(booking.customerId)) ??
+															"Customer request"}
+													</p>
+													<p className="text-xs text-muted-foreground">
+														{tourNameById.get(String(booking.tourId)) ??
+															"Tour request"}
+														{" · "}
+														{booking.date} at {booking.startTime}
+														{" · "}
+														{booking.guests} guest
+														{booking.guests === 1 ? "" : "s"}
+													</p>
+												</div>
+												<Button asChild size="sm" variant="outline">
 													<Link
-														to="/dashboard/tours/$tourId"
-														params={{ tourId: a.tourId }}
-														className="hover:underline"
+														to="/dashboard/bookings/$bookingId"
+														params={{ bookingId: booking._id }}
 													>
-														{tourName}
+														Review
 													</Link>
-												) : (
-													<span className="text-muted-foreground italic">
-														Unknown tour
-													</span>
-												)}
-											</p>
-											<p className="text-muted-foreground text-xs">
-												{a.date} · {a.startTime}–{a.endTime} · Guide assigned
-											</p>
-										</div>
-										<Link
-											to="/dashboard/assignments/$assignmentId"
-											params={{ assignmentId: a._id as Id<"assignments"> }}
-											className="text-link hover:underline text-xs ml-2"
-										>
-											View →
-										</Link>
-									</li>
-								);
-							})}
-						</ul>
-					)}
-				</CardContent>
-			</Card>
+												</Button>
+											</li>
+										))}
+									</ul>
+								)}
+							</CardContent>
+						</Card>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Today's bookings</CardTitle>
-					<CardDescription>
-						{todaysBookings.length === 0
-							? "No bookings scheduled for today"
-							: `${todaysBookings.length} booking${todaysBookings.length === 1 ? "" : "s"} scheduled for today`}
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{todaysBookings.length === 0 ? (
-						<div className="space-y-2">
-							<p className="text-muted-foreground text-sm">
-								Share your public booking link to start receiving bookings.
-							</p>
-						</div>
-					) : (
-						<ul className="space-y-2">
-							{todaysBookings.slice(0, 5).map((b) => {
-								const tourName = tourNameById.get(String(b.tourId));
-								return (
-									<li
-										key={b._id}
-										className="flex items-center justify-between border-b pb-2 last:border-0"
+						<Card>
+							<CardHeader className="flex flex-row items-start justify-between gap-3">
+								<div className="min-w-0">
+									<CardTitle>Needs staffing</CardTitle>
+									<CardDescription>
+										{gaps.length === 0
+											? "No open gaps in the next 7 days"
+											: `${gaps.length} departure${gaps.length === 1 ? "" : "s"} need guides or fleet`}
+									</CardDescription>
+								</div>
+								<Button asChild variant="outline" size="sm">
+									<Link to="/dashboard/staffing">Staffing</Link>
+								</Button>
+							</CardHeader>
+							<CardContent>
+								{topGaps.length === 0 ? (
+									<p className="text-sm text-muted-foreground">
+										Departures look fully staffed.
+									</p>
+								) : (
+									<ul className="flex flex-col gap-2">
+										{topGaps.map((g) => (
+											<li
+												key={g.key}
+												className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"
+											>
+												<div className="min-w-0 flex-1">
+													<p className="truncate font-medium">{g.tourName}</p>
+													<p className="text-xs text-muted-foreground">
+														{g.date} · {g.startTime}
+														{" · "}
+														{g.gaps.join(", ")}
+														{" · "}
+														guides {g.guideCount}/{g.requiredGuides}
+													</p>
+												</div>
+												<Button asChild size="sm" variant="outline">
+													<Link
+														to="/dashboard/assignments/new"
+														search={{
+															date: g.date,
+															...(g.scheduleId
+																? { scheduleId: g.scheduleId }
+																: {}),
+														}}
+													>
+														Assign
+													</Link>
+												</Button>
+											</li>
+										))}
+									</ul>
+								)}
+							</CardContent>
+						</Card>
+					</div>
+
+					<div className="grid gap-4 lg:grid-cols-2">
+						<Card>
+							<CardHeader>
+								<CardTitle>Today&apos;s bookings</CardTitle>
+								<CardDescription>
+									{todaysBookings.length === 0
+										? "No guests on the books for today"
+										: `${todaysBookings.length} booking${todaysBookings.length === 1 ? "" : "s"} today`}
+								</CardDescription>
+							</CardHeader>
+							<CardContent>
+								{todaysBookings.length === 0 ? (
+									<p className="text-sm text-muted-foreground">
+										Share the direct booking link, or add a booking a guest made
+										by phone.
+									</p>
+								) : (
+									<ul className="flex flex-col gap-2">
+										{todaysBookings.slice(0, 6).map((b) => {
+											const tourName = tourNameById.get(String(b.tourId));
+											const customerName = b.customerId
+												? customerNameById.get(String(b.customerId))
+												: null;
+											return (
+												<li
+													key={b._id}
+													className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"
+												>
+													<div className="min-w-0 flex-1">
+														<p className="truncate font-medium">
+															{customerName ?? tourName ?? (
+																<span className="italic text-muted-foreground">
+																	Unknown booking
+																</span>
+															)}
+														</p>
+														<p className="text-xs text-muted-foreground">
+															{b.startTime}
+															{tourName ? ` · ${tourName}` : ""}
+															{" · "}
+															{b.guests} guest
+															{b.guests === 1 ? "" : "s"}
+															{" · "}
+															{formatCentsWhole(b.totalAmountCents)}
+														</p>
+													</div>
+													<div className="flex shrink-0 items-center gap-2">
+														<StatusBadge status={b.status} />
+														<Button asChild size="sm" variant="ghost">
+															<Link
+																to="/dashboard/bookings/$bookingId"
+																params={{
+																	bookingId: b._id as Id<"bookings">,
+																}}
+															>
+																Open
+															</Link>
+														</Button>
+													</div>
+												</li>
+											);
+										})}
+									</ul>
+								)}
+							</CardContent>
+						</Card>
+
+						<Card>
+							<CardHeader>
+								<CardTitle>Today&apos;s assignments</CardTitle>
+								<CardDescription>
+									{todaysAssignments.length === 0
+										? "No scheduled guides for today"
+										: `${todaysAssignments.length} assignment${todaysAssignments.length === 1 ? "" : "s"} on the board`}
+								</CardDescription>
+							</CardHeader>
+							<CardContent>
+								{todaysAssignments.length === 0 ? (
+									<div className="flex flex-col gap-3">
+										{nextAssignments.length === 0 ? (
+											<p className="text-sm text-muted-foreground">
+												Nothing scheduled. Assign a guide when a departure is
+												staffed.
+											</p>
+										) : (
+											<>
+												<p className="text-sm text-muted-foreground">
+													Nothing today. Next up:
+												</p>
+												<ul className="flex flex-col gap-2">
+													{nextAssignments.map((a) => (
+														<AssignmentRow
+															key={a._id}
+															assignmentId={a._id as Id<"assignments">}
+															tourId={a.tourId}
+															tourName={tourNameById.get(String(a.tourId))}
+															guideName={displayName(a.guideId)}
+															when={`${a.date} · ${a.startTime}–${a.endTime}`}
+														/>
+													))}
+												</ul>
+											</>
+										)}
+										<Button asChild variant="outline" size="sm">
+											<Link to="/dashboard/assignments/new">
+												Create assignment
+											</Link>
+										</Button>
+									</div>
+								) : (
+									<ul className="flex flex-col gap-2">
+										{todaysAssignments.map((a) => (
+											<AssignmentRow
+												key={a._id}
+												assignmentId={a._id as Id<"assignments">}
+												tourId={a.tourId}
+												tourName={tourNameById.get(String(a.tourId))}
+												guideName={displayName(a.guideId)}
+												when={`${a.startTime}–${a.endTime}`}
+											/>
+										))}
+									</ul>
+								)}
+							</CardContent>
+						</Card>
+					</div>
+
+					{missing.length > 0 ? (
+						<Card>
+							<CardHeader className="flex flex-row items-start justify-between gap-3">
+								<div className="min-w-0">
+									<CardTitle>Missing phones</CardTitle>
+									<CardDescription>
+										{missing.length} assigned staff won&apos;t get SMS until
+										they add a phone
+									</CardDescription>
+								</div>
+								<div className="flex flex-wrap gap-2">
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										disabled={
+											remindPending || remindStatus?.canSendManual === false
+										}
+										onClick={() => void onRemindPhones()}
 									>
-										<div className="min-w-0 flex-1">
-											<p className="font-medium truncate">
-												{tourName ?? (
-													<span className="text-muted-foreground italic">
-														Unknown tour
-													</span>
-												)}
-											</p>
-											<p className="text-muted-foreground text-xs">
-												{b.startTime} · {b.guests} guest
-												{b.guests === 1 ? "" : "s"} ·{" "}
-												{formatCentsWhole(b.totalAmountCents)}
-											</p>
-										</div>
-										<Link
-											to="/dashboard/bookings/$bookingId"
-											params={{ bookingId: b._id as Id<"bookings"> }}
-											className="text-link hover:underline text-xs ml-2"
+										{remindPending ? (
+											<Spinner data-icon="inline-start" />
+										) : null}
+										{remindPending ? "Sending…" : "Remind all"}
+									</Button>
+									<Button asChild variant="outline" size="sm">
+										<Link to="/dashboard/staffing">Staffing</Link>
+									</Button>
+								</div>
+							</CardHeader>
+							<CardContent>
+								<ul className="flex flex-col gap-2">
+									{topMissing.map((p) => (
+										<li
+											key={p.userId}
+											className="flex items-center justify-between gap-3 border-b pb-2 last:border-0"
 										>
-											View →
-										</Link>
-									</li>
-								);
-							})}
-							{todaysBookings.length > 5 && (
-								<li className="text-xs text-muted-foreground pt-1">
-									+ {todaysBookings.length - 5} more —{" "}
-									<Link
-										to="/dashboard/bookings"
-										className="text-link hover:underline"
-									>
-										view all bookings
-									</Link>
-								</li>
-							)}
-						</ul>
-					)}
-				</CardContent>
-			</Card>
+											<div className="min-w-0 flex-1">
+												<p className="truncate font-medium">{p.name}</p>
+												<p className="text-xs text-muted-foreground">
+													{p.roles.join(" · ")} · {p.assignmentCount} assignment
+													{p.assignmentCount === 1 ? "" : "s"}
+												</p>
+											</div>
+											<Button asChild size="sm" variant="outline">
+												<Link
+													to="/dashboard/guides/$userId"
+													params={{ userId: p.userId }}
+												>
+													Add phone
+												</Link>
+											</Button>
+										</li>
+									))}
+								</ul>
+							</CardContent>
+						</Card>
+					) : null}
+				</>
+			)}
 		</div>
 	);
 }
 
-function StatCard({
+function LinkedMetric({
 	label,
 	value,
-	link,
+	to,
 }: {
 	label: string;
 	value: number | string;
-	link: string;
+	to: string;
 }) {
 	return (
-		<motion.div whileHover={{ y: -2 }} transition={{ duration: 0.15 }}>
-			<Link
-				to={link}
-				className="block transition-colors hover:bg-muted rounded-md"
-			>
-				<MetricCard label={label} value={value} />
-			</Link>
-		</motion.div>
+		<Link
+			to={to}
+			className="block rounded-xl border bg-card p-5 transition-colors hover:bg-muted/40"
+		>
+			<p className="text-sm text-muted-foreground">{label}</p>
+			<p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
+				{value}
+			</p>
+		</Link>
 	);
 }
 
-function PublicBookingLinkCard({ slug }: { slug: string }) {
+function AssignmentRow({
+	assignmentId,
+	tourId,
+	tourName,
+	guideName,
+	when,
+}: {
+	assignmentId: Id<"assignments">;
+	tourId: string;
+	tourName: string | undefined;
+	guideName: string;
+	when: string;
+}) {
+	return (
+		<li className="flex items-center justify-between gap-3 border-b pb-2 last:border-0">
+			<div className="min-w-0 flex-1">
+				<p className="truncate font-medium">
+					{tourName ? (
+						<Link
+							to="/dashboard/tours/$tourId"
+							params={{ tourId: tourId as Id<"tours"> }}
+							className="hover:underline"
+						>
+							{tourName}
+						</Link>
+					) : (
+						<span className="italic text-muted-foreground">Unknown tour</span>
+					)}
+				</p>
+				<p className="text-xs text-muted-foreground">
+					{when} · {guideName}
+				</p>
+			</div>
+			<Button asChild size="sm" variant="ghost">
+				<Link
+					to="/dashboard/assignments/$assignmentId"
+					params={{ assignmentId }}
+				>
+					Open
+				</Link>
+			</Button>
+		</li>
+	);
+}
+
+function PublicBookingLinkBar({ slug }: { slug: string }) {
 	const url =
 		typeof window !== "undefined"
 			? `${window.location.origin}/book/${slug}`
@@ -599,32 +629,28 @@ function PublicBookingLinkCard({ slug }: { slug: string }) {
 	};
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>Public booking page</CardTitle>
-				<CardDescription>
-					Share this link with your customers — no account required to book.
-				</CardDescription>
-			</CardHeader>
-			<CardContent>
-				<div className="flex gap-2">
-					<Input
-						readOnly
-						value={url}
-						onClick={(e) => e.currentTarget.select()}
-						className="font-mono text-xs"
-						aria-label="Public booking URL"
-					/>
-					<Button onClick={handleCopy} disabled={!url} className="shrink-0">
-						{copied ? "Copied!" : "Copy"}
-					</Button>
-					<Button variant="outline" asChild className="shrink-0">
-						<Link to="/book/$slug" params={{ slug }}>
-							Open
-						</Link>
-					</Button>
-				</div>
-			</CardContent>
-		</Card>
+		<div className="flex flex-col gap-2 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
+			<div className="flex min-w-0 items-center gap-2 text-sm">
+				<CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+				<span className="shrink-0 font-medium">Direct booking link</span>
+			</div>
+			<Input
+				readOnly
+				value={url}
+				onClick={(e) => e.currentTarget.select()}
+				className="min-w-0 font-mono text-xs"
+				aria-label="Direct booking URL"
+			/>
+			<div className="flex shrink-0 gap-2">
+				<Button onClick={handleCopy} disabled={!url} size="sm">
+					{copied ? "Copied" : "Copy"}
+				</Button>
+				<Button variant="outline" asChild size="sm">
+					<Link to="/book/$slug" params={{ slug }}>
+						Open
+					</Link>
+				</Button>
+			</div>
+		</div>
 	);
 }

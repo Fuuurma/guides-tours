@@ -1,6 +1,5 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { AuthShell } from "@/components/auth/auth-shell";
@@ -9,6 +8,8 @@ import { PasswordInput } from "@/components/auth/password-field";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { FieldGroup } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/sign-up")({
@@ -64,7 +65,7 @@ function SignUpPage() {
 		<AuthShell
 			title="Create your account"
 			serifAccent=""
-			description="Start managing tours, bookings, and your team in one place."
+			description="Start staffing this week's tours, crew, and departures from one board."
 		>
 			<form
 				onSubmit={(e) => {
@@ -72,102 +73,105 @@ function SignUpPage() {
 					e.stopPropagation();
 					void form.handleSubmit();
 				}}
-				className="space-y-4"
 			>
-				<form.Field name="name">
-					{(field) => (
-						<FormField
-							field={field}
-							label="Name"
-							inputProps={{
-								type: "text",
-								autoComplete: "name",
-								autoFocus: true,
-							}}
-						/>
-					)}
-				</form.Field>
-
-				<form.Field name="email">
-					{(field) => (
-						<FormField
-							field={field}
-							label="Email"
-							inputProps={{
-								type: "email",
-								autoComplete: "email",
-							}}
-						/>
-					)}
-				</form.Field>
-
-				<form.Field name="password">
-					{(field) => (
-						<FormField
-							field={field}
-							label="Password"
-							hint="At least 8 characters"
-						>
-							<PasswordInput
-								id="password"
-								name="password"
-								value={(field.state.value as string) ?? ""}
-								onChange={(v) =>
-									(field.handleChange as (v: unknown) => void)(v)
-								}
-								onBlur={field.handleBlur}
-								autoComplete="new-password"
-								showStrength
-								invalid={!field.state.meta.isValid}
-								aria-invalid={!field.state.meta.isValid}
+				<FieldGroup className="gap-4">
+					<form.Field name="name">
+						{(field) => (
+							<FormField
+								field={field}
+								label="Name"
+								inputProps={{
+									type: "text",
+									autoComplete: "name",
+									autoFocus: true,
+								}}
 							/>
-						</FormField>
-					)}
-				</form.Field>
+						)}
+					</form.Field>
 
-				{serverError ? <ErrorBanner message={serverError} /> : null}
+					<form.Field name="email">
+						{(field) => (
+							<FormField
+								field={field}
+								label="Email"
+								inputProps={{
+									type: "email",
+									autoComplete: "email",
+								}}
+							/>
+						)}
+					</form.Field>
 
-				<form.Subscribe
-					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
-				>
-					{([canSubmit, isSubmitting]) => (
-						<Button
-							type="submit"
-							size="lg"
-							className="h-11 w-full rounded-full"
-							disabled={!canSubmit || isSubmitting}
+					<form.Field name="password">
+						{(field) => (
+							<FormField
+								field={field}
+								label="Password"
+								hint="At least 8 characters"
+							>
+								<PasswordInput
+									id="password"
+									name="password"
+									value={(field.state.value as string) ?? ""}
+									onChange={(v) =>
+										(field.handleChange as (v: unknown) => void)(v)
+									}
+									onBlur={field.handleBlur}
+									autoComplete="new-password"
+									showStrength
+									invalid={!field.state.meta.isValid}
+									aria-invalid={!field.state.meta.isValid}
+								/>
+							</FormField>
+						)}
+					</form.Field>
+
+					{serverError ? <ErrorBanner message={serverError} /> : null}
+
+					<form.Subscribe
+						selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+					>
+						{([canSubmit, isSubmitting]) => (
+							<Button
+								type="submit"
+								size="lg"
+								className="h-11 w-full rounded-full"
+								disabled={!canSubmit || isSubmitting}
+							>
+								{isSubmitting ? (
+									<>
+										<Spinner data-icon="inline-start" /> Creating account...
+									</>
+								) : (
+									"Create account"
+								)}
+							</Button>
+						)}
+					</form.Subscribe>
+
+					<div className="relative">
+						<div className="absolute inset-0 flex items-center">
+							<span className="w-full border-t" />
+						</div>
+						<div className="relative flex justify-center">
+							<span className="bg-background px-3 text-xs text-muted-foreground">
+								or
+							</span>
+						</div>
+					</div>
+
+					<GoogleSignInButton callbackURL="/onboarding" />
+
+					<p className="pt-2 text-center text-sm text-muted-foreground">
+						Already have an account?{" "}
+						<Link
+							to="/sign-in"
+							className="font-medium text-foreground underline"
 						>
-							{isSubmitting ? (
-								<>
-									<Loader2 className="size-4 animate-spin" /> Creating
-									account...
-								</>
-							) : (
-								"Create account"
-							)}
-						</Button>
-					)}
-				</form.Subscribe>
-
-				<div className="relative">
-					<div className="absolute inset-0 flex items-center">
-						<span className="w-full border-t" />
-					</div>
-					<div className="relative flex justify-center">
-						<span className="bg-background px-3 text-xs text-muted-foreground">
-							or
-						</span>
-					</div>
-				</div>
-
-				<GoogleSignInButton callbackURL="/onboarding" />
-
-				<p className="pt-2 text-center text-sm text-muted-foreground">
-					Already have an account?{" "}
-					<Link to="/sign-in" className="font-medium text-foreground underline">
-						Sign in
-					</Link>
-				</p>
+							Sign in
+						</Link>
+					</p>
+				</FieldGroup>
 			</form>
 		</AuthShell>
 	);

@@ -36,6 +36,14 @@ describe("auth security configuration", () => {
 		expect(prodOptions.emailAndPassword?.requireEmailVerification).toBe(true);
 	});
 
+	it("missing SITE_URL does not disable email verification", () => {
+		delete process.env.SITE_URL;
+		const optionsWithoutSiteUrl = createAuthOptions({} as any);
+		expect(
+			optionsWithoutSiteUrl.emailAndPassword?.requireEmailVerification,
+		).toBe(true);
+	});
+
 	it("requireEmailVerification is false in local dev (unblocks onboarding)", () => {
 		process.env.SITE_URL = "http://127.0.0.1:3020";
 		const devOptions = createAuthOptions({} as any);

@@ -1,9 +1,11 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
@@ -16,11 +18,19 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import {
+	Field,
+	FieldDescription,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
 import { getErrorMessage } from "@/lib/utils";
+import { MAX_NAME_LEN, validateName } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { FormActions, FormField } from "../../components/form";
 
 export const Route = createFileRoute("/dashboard/categories")({
 	component: CategoriesPage,
@@ -42,20 +52,25 @@ function ActionsCell({
 	onToggle,
 	onDelete,
 	isBusy,
+	toggling,
+	deleting,
 }: {
 	category: Category;
 	onToggle: (id: string, current: boolean) => void;
 	onDelete: (id: string, label: string) => void;
 	isBusy: boolean;
+	toggling: boolean;
+	deleting: boolean;
 }) {
 	return (
-		<div className="flex items-center gap-1 justify-end">
+		<div className="flex items-center justify-end gap-1">
 			<Button
 				size="sm"
 				variant="outline"
 				onClick={() => onToggle(category._id, category.isActive)}
 				disabled={isBusy}
 			>
+				{toggling ? <Spinner data-icon="inline-start" /> : null}
 				{category.isActive ? "Disable" : "Enable"}
 			</Button>
 			<Button
@@ -64,6 +79,7 @@ function ActionsCell({
 				onClick={() => onDelete(category._id, category.name)}
 				disabled={isBusy}
 			>
+				{deleting ? <Spinner data-icon="inline-start" /> : null}
 				Delete
 			</Button>
 		</div>
@@ -78,10 +94,14 @@ function CategoriesPage() {
 	} = useQuery(convexQuery(api.tourCategories.list, {}));
 	const updateCategory = useMutation(api.tourCategories.update);
 	const removeCategory = useMutation(api.tourCategories.remove);
-	const [pendingId, setPendingId] = useState<string | null>(null);
+	const confirm = useConfirm();
+	const [pending, setPending] = useState<{
+		id: string;
+		kind: "toggle" | "delete";
+	} | null>(null);
 
 	const toggleActive = async (id: string, currentActive: boolean) => {
-		setPendingId(id);
+		setPending({ id, kind: "toggle" });
 		try {
 			await updateCategory({
 				categoryId: id as Id<"tourCategories">,
@@ -91,25 +111,26 @@ function CategoriesPage() {
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 	const onDelete = async (id: string, label: string) => {
-		if (
-			!window.confirm(
-				`Delete the "${label}" category? Tours in this category will be uncategorized.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete the "${label}" category?`,
+			description: "Tours in this category will be uncategorized.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
-		setPendingId(id);
+		setPending({ id, kind: "delete" });
 		try {
 			await removeCategory({ categoryId: id as Id<"tourCategories"> });
 			toast.success("Category deleted");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 
@@ -145,7 +166,9 @@ function CategoriesPage() {
 					category={c}
 					onToggle={toggleActive}
 					onDelete={onDelete}
-					isBusy={pendingId === c._id}
+					isBusy={pending?.id === c._id}
+					toggling={pending?.id === c._id && pending.kind === "toggle"}
+					deleting={pending?.id === c._id && pending.kind === "delete"}
 				/>
 			),
 		},
@@ -156,7 +179,7 @@ function CategoriesPage() {
 	return (
 		<ListPage
 			title="Tour categories"
-			description={`${itemCount} category${itemCount === 1 ? "" : "ies"} — group tours for the public booking page.`}
+			description={`${itemCount} categor${itemCount === 1 ? "y" : "ies"} — group tours in your catalog`}
 		>
 			<NewCategoryForm />
 			<DataTable
@@ -165,106 +188,176 @@ function CategoriesPage() {
 				rowKey={(c) => c._id}
 				isPending={isPending}
 				error={error}
-				emptyMessage="No categories yet. Add one below."
+				emptyMessage="No categories yet"
+				emptyDescription="Group tours in the catalog so operators can filter and staff by type."
 				searchPlaceholder="Search by name or slug…"
 			/>
 		</ListPage>
 	);
 }
 
+function slugify(name: string) {
+	return name
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "");
+}
+
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
+
 /**
  * Quick create form for new categories. Categories are simple —
  * name + slug — so we don't need a dedicated /new route for them.
- * Operators can iterate quickly from the list page.
  */
 function NewCategoryForm() {
 	const create = useMutation(api.tourCategories.create);
-	const [name, setName] = useState("");
-	const [slug, setSlug] = useState("");
-	const [icon, setIcon] = useState("");
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const [submitErr, setSubmitErr] = useState<string | null>(null);
+	const [slugTouched, setSlugTouched] = useState(false);
 
-	// Auto-derive slug from name when user hasn't typed one yet
-	const slugValue =
-		slug ||
-		name
-			.toLowerCase()
-			.replace(/[^a-z0-9]+/g, "-")
-			.replace(/^-|-$/g, "");
-
-	const onSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setPending(true);
-		setError(null);
-		try {
-			await create({
-				name,
-				slug: slugValue,
-				icon: icon || undefined,
-			});
-			toast.success("Category created");
-			setName("");
-			setSlug("");
-			setIcon("");
-		} catch (err) {
-			setError(getErrorMessage(err));
-			toast.error(getErrorMessage(err));
-		} finally {
-			setPending(false);
-		}
-	};
+	const form = useForm({
+		defaultValues: { name: "", slug: "", icon: "" },
+		onSubmit: async ({ value }) => {
+			setSubmitErr(null);
+			let invalid = false;
+			const fail = (name: "name" | "slug", message: string) => {
+				form.setFieldMeta(name, (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: message },
+				}));
+				invalid = true;
+			};
+			const nameErr = validateName(value.name);
+			if (nameErr) fail("name", nameErr);
+			const slug = value.slug.trim() || slugify(value.name);
+			if (!slug) fail("slug", "Slug is required");
+			else if (slug.length > MAX_NAME_LEN) {
+				fail("slug", `Slug is too long (max ${MAX_NAME_LEN} characters)`);
+			}
+			if (invalid) return;
+			try {
+				await create({
+					name: value.name.trim(),
+					slug,
+					icon: value.icon.trim() || undefined,
+				});
+				toast.success("Category created");
+				form.reset();
+				setSlugTouched(false);
+			} catch (err) {
+				setSubmitErr(getErrorMessage(err));
+				toast.error(getErrorMessage(err));
+			}
+		},
+	});
 
 	return (
 		<Card>
 			<CardHeader>
 				<CardTitle>Add category</CardTitle>
 				<CardDescription>
-					Categories appear as filter chips on the public booking page. Slug
-					must be unique within your organization.
+					Categories group tours in the catalog. Slug must be unique within your
+					organization.
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<form onSubmit={onSubmit} className="space-y-4">
-					<div className="grid gap-4 md:grid-cols-3">
-						<FormField label="Name *" htmlFor="cat-name">
-							<Input
-								id="cat-name"
-								required
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								placeholder="Walking Tours"
-							/>
-						</FormField>
-						<FormField
-							label="Slug *"
-							htmlFor="cat-slug"
-							hint="Auto-derived from name"
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						void form.handleSubmit();
+					}}
+				>
+					<FieldGroup className="gap-4">
+						<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
+							<form.Field name="name">
+								{(field) => (
+									<Field data-invalid={!field.state.meta.isValid}>
+										<FieldLabel htmlFor="cat-name">Name *</FieldLabel>
+										<Input
+											id="cat-name"
+											required
+											maxLength={MAX_NAME_LEN}
+											value={field.state.value}
+											onBlur={field.handleBlur}
+											onChange={(e) => {
+												field.handleChange(e.target.value);
+												if (!slugTouched) {
+													form.setFieldValue("slug", slugify(e.target.value));
+												}
+											}}
+											placeholder="Walking Tours"
+											aria-invalid={!field.state.meta.isValid}
+										/>
+										<FieldError errors={metaErrors(field.state.meta.errors)} />
+									</Field>
+								)}
+							</form.Field>
+							<form.Field name="slug">
+								{(field) => (
+									<Field data-invalid={!field.state.meta.isValid}>
+										<FieldLabel htmlFor="cat-slug">Slug *</FieldLabel>
+										<Input
+											id="cat-slug"
+											required
+											maxLength={MAX_NAME_LEN}
+											value={field.state.value}
+											onBlur={field.handleBlur}
+											onChange={(e) => {
+												setSlugTouched(true);
+												field.handleChange(e.target.value);
+											}}
+											placeholder="walking-tours"
+											aria-invalid={!field.state.meta.isValid}
+										/>
+										<FieldDescription>Auto-derived from name</FieldDescription>
+										<FieldError errors={metaErrors(field.state.meta.errors)} />
+									</Field>
+								)}
+							</form.Field>
+							<form.Field name="icon">
+								{(field) => (
+									<Field>
+										<FieldLabel htmlFor="cat-icon">Icon</FieldLabel>
+										<Input
+											id="cat-icon"
+											value={field.state.value}
+											onBlur={field.handleBlur}
+											onChange={(e) => field.handleChange(e.target.value)}
+											placeholder="🚶"
+											maxLength={4}
+										/>
+										<FieldDescription>Emoji or short text</FieldDescription>
+									</Field>
+								)}
+							</form.Field>
+						</FieldGroup>
+						{submitErr ? <ErrorBanner message={submitErr} /> : null}
+						<form.Subscribe
+							selector={(state) =>
+								[state.canSubmit, state.isSubmitting] as const
+							}
 						>
-							<Input
-								id="cat-slug"
-								required
-								value={slugValue}
-								onChange={(e) => setSlug(e.target.value)}
-								placeholder="walking-tours"
-							/>
-						</FormField>
-						<FormField
-							label="Icon"
-							htmlFor="cat-icon"
-							hint="Emoji or short text"
-						>
-							<Input
-								id="cat-icon"
-								value={icon}
-								onChange={(e) => setIcon(e.target.value)}
-								placeholder="🚶"
-								maxLength={4}
-							/>
-						</FormField>
-					</div>
-					{error && <ErrorBanner message={error} />}
-					<FormActions pending={pending} submitLabel="Add category" />
+							{([canSubmit, isSubmitting]) => (
+								<div className="flex justify-end">
+									<Button type="submit" disabled={!canSubmit || isSubmitting}>
+										{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+										{isSubmitting ? "Saving…" : "Add category"}
+									</Button>
+								</div>
+							)}
+						</form.Subscribe>
+					</FieldGroup>
 				</form>
 			</CardContent>
 		</Card>

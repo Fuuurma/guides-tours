@@ -8,7 +8,6 @@ import {
 	ChevronRight,
 	ClipboardList,
 	CreditCard,
-	Globe2,
 	LayoutDashboard,
 	LifeBuoy,
 	LineChart,
@@ -17,7 +16,6 @@ import {
 	Menu,
 	MessageCircle,
 	Radio,
-	ReceiptText,
 	Route as RouteIcon,
 	ShieldCheck,
 	Sparkles,
@@ -68,7 +66,7 @@ const FAQ_ITEMS = [
 	{
 		question: "How long does it take to get set up?",
 		answer:
-			"Create your organization, add your first tour, and publish a booking page in one sitting. There is no migration project and no onboarding call required — you can start with the tour you are running this week and grow from there.",
+			"Create your organization, add your first tour, and staff this week's departures in one sitting. There is no migration project and no onboarding call required — start with the tour you are running this week and grow from there.",
 	},
 	{
 		question: "Can I keep selling through my OTA channels?",
@@ -100,11 +98,11 @@ const FAQ_ITEMS = [
 export const Route = createFileRoute("/")({
 	head: () => ({
 		meta: [
-			{ title: "guides.tours | Run the day. Sell the experience." },
+			{ title: "guides.tours | Run the day. Staff the week." },
 			{
 				name: "description",
 				content:
-					"The calm operating system for tour operators. Manage tours, bookings, schedules, teams, vehicles, payments, and OTA channels in one connected workspace.",
+					"The operator console for tour companies. Staff this week's departures, assign crew and vehicles, and keep bookings from every channel on one board.",
 			},
 		],
 		links: [{ rel: "preload", as: "image", href: TOUR_IMAGES.hero }],
@@ -330,8 +328,8 @@ function Home() {
 							transition={{ duration: 0.5, ease: "easeOut" }}
 							className="mt-6 max-w-xl text-lg leading-8 text-primary-foreground/68 sm:text-xl"
 						>
-							The calm, connected workspace for tour operators who want fewer
-							tabs, fewer surprises, and more time with their guests.
+							The operator console for tour companies. Staff this week's
+							departures, assign crew, and keep fleet and bookings on one board.
 						</motion.p>
 						<motion.div
 							variants={FADE_UP}
@@ -382,17 +380,20 @@ function Home() {
 			<section className="border-b bg-card py-10">
 				<div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
 					<p className="text-center text-xs font-semibold tracking-[0.2em] text-muted-foreground uppercase">
-						Works with the channels your guests already use
+						Reservations from OTAs land in the same week board
 					</p>
 					<ProviderMarquee />
 					<div className="mx-auto mt-10 grid max-w-3xl grid-cols-3 divide-x">
-						<TrustMetric value={7} label="OTA channels connected" />
-						<TrustMetric value={1} label="workspace for the whole team" />
-						<TrustMetric
-							value={100}
-							suffix="%"
-							label="of the day in one view"
-						/>
+						<TrustMetric value={7} label="OTA channels into one board" />
+						<TrustMetric value={1} label="workspace for the dispatch desk" />
+						<div className="flex flex-col items-center gap-1 px-3 text-center first:pl-0 last:pr-0">
+							<p className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
+								Today
+							</p>
+							<p className="max-w-32 text-xs text-muted-foreground sm:text-sm">
+								departures, gaps, and assignments
+							</p>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -401,16 +402,17 @@ function Home() {
 				<div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-32 lg:px-10">
 					<SectionIntro
 						eyebrow="A better operating rhythm"
-						title="The operational layer your guests never have to see."
-						description="guides.tours keeps the moving pieces of your business connected, so the experience feels effortless on the outside because the details are handled on the inside."
+						title="The board your dispatch desk actually uses."
+						description="guides.tours keeps tours, crew, vehicles, and this week's departures connected, so the day holds together before the first guest arrives."
 					/>
-					<div className="mt-16 grid gap-5 lg:grid-cols-3">
+					<div className="mt-16 grid gap-5 lg:grid-cols-[1.35fr_1fr_0.85fr]">
 						<FeatureCard
 							icon={LayoutDashboard}
 							number="01"
 							title="See the whole operation"
-							description="Tours, bookings, customers, and revenue stay connected instead of scattered across tabs."
+							description="Tours, crew, vehicles, and today's board stay connected instead of scattered across tabs."
 							tone="ocean"
+							proof="Today's departures in one view"
 						/>
 						<FeatureCard
 							icon={CalendarCheck2}
@@ -418,13 +420,15 @@ function Home() {
 							title="Keep every departure ready"
 							description="Assign the right guides and vehicles, spot conflicts early, and give the team a clear plan for the day."
 							tone="sun"
+							proof="Crew named before departure"
 						/>
 						<FeatureCard
-							icon={Globe2}
+							icon={ClipboardList}
 							number="03"
-							title="Turn demand into bookings"
-							description="Publish direct booking pages and keep availability consistent across the channels guests already use."
+							title="Spot staffing gaps first"
+							description="See who is missing on this week's slots before the scramble. Direct and OTA bookings land in the same queue."
 							tone="coral"
+							proof="Gaps before they become a scramble"
 						/>
 					</div>
 				</div>
@@ -580,7 +584,7 @@ function Home() {
 								</h3>
 								<div className="mt-8 flex flex-col gap-5">
 									<NewWayItem>
-										Live availability shared by your booking page and every OTA
+										This week's board: departures, crew, and fleet in one place
 									</NewWayItem>
 									<NewWayItem>
 										Assignments with a name attached, visible to the whole team
@@ -607,8 +611,8 @@ function Home() {
 					<div>
 						<SectionIntro
 							eyebrow="How it works"
-							title="From first click to final wave goodbye."
-							description="Every step is designed to make the next one obvious. Your team always knows what is happening, what is next, and who owns it."
+							title="From this week's board to the last departure."
+							description="Staff the week first. Bookings from your page and your OTAs land in the same queue. The team always knows what is happening, what is next, and who owns it."
 							invert
 						/>
 						<Button
@@ -631,21 +635,21 @@ function Home() {
 					>
 						<FlowStep
 							step="01"
-							icon={Globe2}
-							title="Publish your tours"
-							description="Give guests a simple, beautiful way to discover and book your experiences."
+							icon={ClipboardList}
+							title="Put this week's tours on the board"
+							description="Publish the departures you are actually running, with capacity and timing already set."
 						/>
 						<FlowStep
 							step="02"
-							icon={ReceiptText}
-							title="Capture every booking"
-							description="Keep direct bookings, OTA reservations, payments, and customer details in sync."
+							icon={UsersRound}
+							title="Assign guides, drivers, and vehicles"
+							description="Name the crew, spot conflicts and vacations, and close staffing gaps before the morning scramble."
 						/>
 						<FlowStep
 							step="03"
-							icon={UsersRound}
-							title="Run the day with confidence"
-							description="Your guides, drivers, vehicles, and schedules are ready before the first guest arrives."
+							icon={CalendarDays}
+							title="Let bookings land in the same queue"
+							description="Direct requests and OTA reservations share one board with the assignments you already made."
 						/>
 					</motion.div>
 				</div>
@@ -751,14 +755,14 @@ function Home() {
 							<SectionIntro
 								eyebrow="Questions, answered"
 								title="Everything operators ask before switching."
-								description="The short version: it is fast to start, it works with the channels you already use, and your team will actually read it."
+								description="The short version: it is fast to start, it staffs this week's departures, and your team will actually read it."
 							/>
 							<div className="mt-8 rounded-2xl border bg-muted/40 p-6">
 								<p className="text-sm font-semibold">
-									Want to see it with your own tours?
+									Want to see it with this week's tours?
 								</p>
 								<p className="mt-2 text-sm leading-6 text-muted-foreground">
-									Create a free account and build your first booking page in one
+									Create a free account and staff this week's departures in one
 									sitting.
 								</p>
 								<Button className="mt-5 rounded-full px-5" asChild>
@@ -1209,12 +1213,14 @@ function FeatureCard({
 	title,
 	description,
 	tone,
+	proof,
 }: {
 	icon: LucideIcon;
 	number: string;
 	title: string;
 	description: string;
 	tone: "ocean" | "sun" | "coral";
+	proof: string;
 }) {
 	const toneClasses = {
 		ocean: "bg-chart-2/10 text-chart-2",
@@ -1247,7 +1253,7 @@ function FeatureCard({
 			<p className="mt-3 leading-7 text-muted-foreground">{description}</p>
 			<div className="mt-7 flex items-center gap-2 text-sm font-semibold text-primary">
 				<Check className="size-4" />
-				One clear source of truth
+				{proof}
 			</div>
 		</motion.article>
 	);

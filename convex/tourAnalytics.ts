@@ -18,6 +18,12 @@ import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { utcYmd, addDaysYmd } from "./lib/staffingGaps";
 
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
+
 const MAX_TOURS = 500;
 const MAX_BOOKINGS = 5_000;
 const MAX_ORGS = 100;
@@ -121,7 +127,7 @@ export const upsert = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalUpsert as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourAnalytics.internalUpsert,
 			{ organizationId: member.organizationId, userId: member.userId, ...args },
 		);
 	},
@@ -236,7 +242,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourAnalytics.internalRemove,
 			{ organizationId: member.organizationId, userId: member.userId, analyticsId: args.analyticsId },
 		);
 	},

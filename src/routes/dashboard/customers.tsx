@@ -4,10 +4,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { getErrorMessage } from "@/lib/utils";
 import type { Customer } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -30,10 +33,14 @@ function CustomersPage() {
 	} = useQuery(convexQuery(api.customers.list, args));
 	const updateCustomer = useMutation(api.customers.update);
 	const removeCustomer = useMutation(api.customers.remove);
-	const [pendingId, setPendingId] = useState<string | null>(null);
+	const confirm = useConfirm();
+	const [pending, setPending] = useState<{
+		id: string;
+		kind: "vip" | "delete";
+	} | null>(null);
 
 	const toggleVip = async (id: string, currentVip: boolean) => {
-		setPendingId(id);
+		setPending({ id, kind: "vip" });
 		try {
 			await updateCustomer({
 				customerId: id as Id<"customers">,
@@ -43,25 +50,26 @@ function CustomersPage() {
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 	const onDelete = async (id: string, label: string) => {
-		if (
-			!window.confirm(
-				`Delete customer "${label}"? Their booking history will be removed from the dashboard.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete customer "${label}"?`,
+			description: "Their booking history will be removed from the dashboard.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
-		setPendingId(id);
+		setPending({ id, kind: "delete" });
 		try {
 			await removeCustomer({ customerId: id as Id<"customers"> });
 			toast.success("Customer deleted");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 
@@ -103,23 +111,27 @@ function CustomersPage() {
 			key: "actions",
 			header: "",
 			render: (c) => {
-				const isBusy = pendingId === c._id;
+				const rowBusy = pending?.id === c._id;
+				const toggling = rowBusy && pending?.kind === "vip";
+				const deleting = rowBusy && pending?.kind === "delete";
 				return (
-					<div className="flex items-center gap-1 justify-end">
+					<div className="flex items-center justify-end gap-1">
 						<Button
 							size="sm"
 							variant="outline"
 							onClick={() => toggleVip(c._id, c.vipStatus)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{toggling ? <Spinner data-icon="inline-start" /> : null}
 							{c.vipStatus ? "Un-VIP" : "Mark VIP"}
 						</Button>
 						<Button
 							size="sm"
 							variant="destructive"
 							onClick={() => onDelete(c._id, c.name)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{deleting ? <Spinner data-icon="inline-start" /> : null}
 							Delete
 						</Button>
 					</div>
@@ -133,34 +145,26 @@ function CustomersPage() {
 	return (
 		<ListPage
 			title="Customers"
-			description={`${itemCount} customer${itemCount === 1 ? "" : "s"}${
-				vipOnly === true ? " · VIP only" : vipOnly === false ? " · non-VIP" : ""
-			}`}
+			description={`${itemCount} customer${itemCount === 1 ? "" : "s"} — people you book onto departures`}
 			newTo="/dashboard/customers/new"
 			newLabel="+ New customer"
 		>
 			<div className="mb-4 flex flex-wrap items-center gap-2">
-				<span className="text-muted-foreground text-sm">Status:</span>
-				{(["vip", "regular"] as const).map((s) => {
-					const targetValue = s === "vip";
-					const active = vipOnly === targetValue;
-					return (
-						<Button
-							key={s}
-							variant={active ? "default" : "outline"}
-							size="sm"
-							onClick={() => setVipOnly(active ? null : targetValue)}
-							aria-pressed={active}
-						>
-							{s === "vip" ? "VIP" : "Regular"}
-						</Button>
-					);
-				})}
-				{vipOnly !== null && (
-					<Button variant="ghost" size="sm" onClick={() => setVipOnly(null)}>
-						Clear
-					</Button>
-				)}
+				<span className="text-muted-foreground text-sm">Status</span>
+				<ToggleGroup
+					type="single"
+					variant="outline"
+					size="sm"
+					value={vipOnly === true ? "vip" : vipOnly === false ? "regular" : ""}
+					onValueChange={(v) => {
+						if (v === "vip") setVipOnly(true);
+						else if (v === "regular") setVipOnly(false);
+						else setVipOnly(null);
+					}}
+				>
+					<ToggleGroupItem value="vip">VIP</ToggleGroupItem>
+					<ToggleGroupItem value="regular">Regular</ToggleGroupItem>
+				</ToggleGroup>
 			</div>
 			<DataTable
 				data={customers?.items as Customer[] | undefined}
@@ -170,10 +174,15 @@ function CustomersPage() {
 				error={error}
 				emptyMessage={
 					vipOnly === true
-						? "No VIP customers yet."
+						? "No VIP customers"
 						: vipOnly === false
-							? "No regular customers yet."
-							: "No customers yet."
+							? "No regular customers"
+							: "No customers yet"
+				}
+				emptyDescription={
+					vipOnly === null
+						? "Add them before a walk-up booking so you can attach the party to a departure."
+						: undefined
 				}
 				emptyAction={
 					vipOnly === null ? (

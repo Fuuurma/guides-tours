@@ -24,7 +24,7 @@ function VacationsPage() {
 	const columns: DataTableColumn<Vacation>[] = [
 		{
 			key: "userId",
-			header: "Guide",
+			header: "Staff",
 			render: (v) => (
 				<Link
 					to="/dashboard/vacations/$vacationId"
@@ -77,7 +77,7 @@ function VacationsPage() {
 	return (
 		<ListPage
 			title="Vacation requests"
-			description={`${itemCount} request${itemCount === 1 ? "" : "s"}`}
+			description={`${itemCount} request${itemCount === 1 ? "" : "s"} — time off that blocks overlapping assignments`}
 			newTo="/dashboard/vacations/new"
 			newLabel="+ New request"
 		>
@@ -87,13 +87,14 @@ function VacationsPage() {
 				rowKey={(v) => v._id}
 				isPending={isPending}
 				error={error}
-				emptyMessage="No vacation requests yet."
+				emptyMessage="No vacation requests yet"
+				emptyDescription="Record time off so assignments don't overlap a guide who is away."
 				emptyAction={
 					<Button asChild size="sm">
 						<Link to="/dashboard/vacations/new">Create a request</Link>
 					</Button>
 				}
-				searchPlaceholder="Search by guide, dates, reason, or status…"
+				searchPlaceholder="Search by staff, dates, reason, or status…"
 			/>
 		</ListPage>
 	);

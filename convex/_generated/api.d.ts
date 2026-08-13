@@ -41,6 +41,7 @@ import type * as notificationTemplates from "../notificationTemplates.js";
 import type * as notification_dispatch from "../notification_dispatch.js";
 import type * as notification_sms from "../notification_sms.js";
 import type * as notifications from "../notifications.js";
+import type * as ops from "../ops.js";
 import type * as organizations from "../organizations.js";
 import type * as ota_airbnb from "../ota/airbnb.js";
 import type * as ota_airbnb_webhook from "../ota/airbnb_webhook.js";
@@ -126,6 +127,7 @@ declare const fullApi: ApiFromModules<{
   notification_dispatch: typeof notification_dispatch;
   notification_sms: typeof notification_sms;
   notifications: typeof notifications;
+  ops: typeof ops;
   organizations: typeof organizations;
   "ota/airbnb": typeof ota_airbnb;
   "ota/airbnb_webhook": typeof ota_airbnb_webhook;

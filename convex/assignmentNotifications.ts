@@ -222,7 +222,7 @@ async function deliverToUser(
 		components.betterAuth.adapter.findOne as never,
 		{
 			model: "user" as never,
-			where: [{ field: "id", value: args.userId }] as never,
+			where: [{ field: "_id", value: args.userId }] as never,
 		},
 	)) as {
 		email?: string | null;
@@ -335,7 +335,7 @@ export const notifyGuide = internalAction({
 			components.betterAuth.adapter.findOne as never,
 			{
 				model: "user" as never,
-				where: [{ field: "id", value: args.guideId }] as never,
+				where: [{ field: "_id", value: args.guideId }] as never,
 			},
 		)) as {
 			email?: string | null;
@@ -421,7 +421,7 @@ export const notifyDriver = internalAction({
 			components.betterAuth.adapter.findOne as never,
 			{
 				model: "user" as never,
-				where: [{ field: "id", value: driver.userId }] as never,
+				where: [{ field: "_id", value: driver.userId }] as never,
 			},
 		)) as {
 			email?: string | null;
@@ -603,7 +603,7 @@ export const sendTestInternal = internalAction({
 			components.betterAuth.adapter.findOne as never,
 			{
 				model: "user" as never,
-				where: [{ field: "id", value: args.userId }] as never,
+				where: [{ field: "_id", value: args.userId }] as never,
 			},
 		)) as {
 			email?: string | null;

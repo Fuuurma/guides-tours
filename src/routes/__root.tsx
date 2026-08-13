@@ -13,6 +13,7 @@ import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
 import type * as React from "react";
 import { useEffect } from "react";
+import { ConfirmProvider } from "@/components/confirm-dialog";
 import { Toaster } from "@/components/ui/sonner";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
@@ -55,7 +56,7 @@ export const Route = createRootRouteWithContext<{
 			},
 			{
 				rel: "stylesheet",
-				href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap",
+				href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap",
 			},
 		],
 	}),
@@ -99,8 +100,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 		<html lang="en">
 			<HeadContent />
 			<body>
-				{children}
-				<Toaster />
+				<ConfirmProvider>
+					{children}
+					<Toaster />
+				</ConfirmProvider>
 				{/* Devtools are dev-only — the strategy doc says
 				    "Never ship as a product/runtime dependency." Vite's
 				    import.meta.env.DEV is statically replaced at build

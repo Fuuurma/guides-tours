@@ -8,6 +8,7 @@ import { v } from "convex/values";
 import { ConvexError } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import {
 	MAX_DESCRIPTION_LEN,
@@ -16,6 +17,11 @@ import {
 } from "./lib/validation";
 import { logAudit } from "./lib/audit";
 import { normalizeTourType, resolveTourStaffing } from "./lib/staffing";
+
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const createRef = internal.tours.internalCreate as unknown as InternalMutationRef;
+const updateRef = internal.tours.internalUpdate as unknown as InternalMutationRef;
+const removeRef = internal.tours.internalRemove as unknown as InternalMutationRef;
 
 // ----- Queries -----
 
@@ -94,7 +100,7 @@ export const create = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			createRef,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -293,7 +299,7 @@ export const update = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			updateRef,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -445,7 +451,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			removeRef,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,

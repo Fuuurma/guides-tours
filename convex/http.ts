@@ -64,10 +64,22 @@ http.route({
 //   repeatedly with different slugs.
 http.route({
 	pathPrefix: "/api/public/book/",
+	method: "OPTIONS",
+	handler: httpAction(async (_ctx, request) => {
+		if (!isAllowedBookingOrigin(request.headers.get("origin"))) {
+			return bookingResponse("origin not allowed", 403, request);
+		}
+		return bookingResponse(null, 204, request);
+	}),
+});
+
+http.route({
+	pathPrefix: "/api/public/book/",
 	method: "POST",
 	handler: httpAction(async (ctx, request) => {
+		const origin = request.headers.get("origin");
 		if (request.method !== "POST") {
-			return new Response("method not allowed", { status: 405 });
+			return bookingResponse("method not allowed", 405, request);
 		}
 
 		// Origin check (only if explicitly configured).
@@ -75,18 +87,8 @@ http.route({
 		// header — browsers always send Origin for cross-origin POSTs,
 		// so a missing header means a non-browser client or a
 		// same-origin request from a compromised subdomain.
-		const origin = request.headers.get("origin");
-		const allowedOriginsRaw = process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS;
-		if (allowedOriginsRaw) {
-			const allowed = allowedOriginsRaw
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean);
-			if (allowed.length > 0) {
-				if (!origin || !allowed.includes(origin)) {
-					return new Response("origin not allowed", { status: 403 });
-				}
-			}
+		if (!isAllowedBookingOrigin(origin)) {
+			return bookingResponse("origin not allowed", 403, request);
 		}
 
 		// Content-Type must be JSON — reject anything else so a
@@ -94,16 +96,18 @@ http.route({
 		// parser below.
 		const ct = request.headers.get("content-type") ?? "";
 		if (!ct.toLowerCase().startsWith("application/json")) {
-			return new Response("content-type must be application/json", {
-				status: 415,
-			});
+			return bookingResponse(
+				"content-type must be application/json",
+				415,
+				request,
+			);
 		}
 
 		const url = new URL(request.url);
 		const segments = url.pathname.split("/").filter(Boolean);
 		const slugIdx = segments.indexOf("book");
 		if (slugIdx < 0 || slugIdx === segments.length - 1) {
-			return new Response("missing slug", { status: 400 });
+			return bookingResponse("missing slug", 400, request);
 		}
 		const slug = segments[slugIdx + 1];
 
@@ -111,7 +115,7 @@ http.route({
 		// Prevents path traversal and limits slug length.
 		const SLUG_RE = /^[a-zA-Z0-9_-]{1,100}$/;
 		if (!slug || !SLUG_RE.test(slug)) {
-			return new Response("invalid slug", { status: 400 });
+			return bookingResponse("invalid slug", 400, request);
 		}
 
 		// Cap the request body at 8 KB — the booking payload is tiny
@@ -124,20 +128,20 @@ http.route({
 		try {
 			rawBody = await request.text();
 		} catch {
-			return new Response("failed to read body", { status: 400 });
+			return bookingResponse("failed to read body", 400, request);
 		}
 		if (rawBody.length > MAX_BODY_BYTES) {
-			return new Response("payload too large", { status: 413 });
+			return bookingResponse("payload too large", 413, request);
 		}
 
 		let payload: unknown;
 		try {
 			payload = JSON.parse(rawBody);
 		} catch {
-			return new Response("invalid JSON", { status: 400 });
+			return bookingResponse("invalid JSON", 400, request);
 		}
 		if (!isRecord(payload)) {
-			return new Response("invalid payload", { status: 400 });
+			return bookingResponse("invalid payload", 400, request);
 		}
 
 		const tourId = typeof payload.tourId === "string" ? payload.tourId : null;
@@ -188,9 +192,10 @@ http.route({
 			!startTime ||
 			guests === null
 		) {
-			return new Response(
+			return bookingResponse(
 				"missing or invalid required fields: tourId, customerName, customerEmail, date, startTime, guests (positive integer <= 200)",
-				{ status: 400 },
+				400,
+				request,
 			);
 		}
 
@@ -221,16 +226,15 @@ http.route({
 					ip,
 				},
 			);
-			return new Response(
+			return bookingResponse(
 				JSON.stringify(
 					typeof result === "string"
 						? { bookingId: result, status: "confirmed" }
 						: result,
 				),
-				{
-					status: 200,
-					headers: { "content-type": "application/json" },
-				},
+				200,
+				request,
+				"application/json",
 			);
 		} catch (err) {
 			// Log full error server-side for debugging.
@@ -272,10 +276,12 @@ http.route({
 				message = "Invalid request data";
 				status = 400;
 			}
-			return new Response(JSON.stringify({ error: message }), {
+			return bookingResponse(
+				JSON.stringify({ error: message }),
 				status,
-				headers: { "content-type": "application/json" },
-			});
+				request,
+				"application/json",
+			);
 		}
 	}),
 });
@@ -284,4 +290,32 @@ export default http;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function isAllowedBookingOrigin(origin: string | null): boolean {
+	const allowedOriginsRaw = process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS;
+	if (!allowedOriginsRaw) return true;
+	const allowed = allowedOriginsRaw
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
+	return allowed.length === 0 ? true : origin !== null && allowed.includes(origin);
+}
+
+function bookingResponse(
+	body: string | null,
+	status: number,
+	request: Request,
+	contentType?: string,
+): Response {
+	const headers = new Headers();
+	if (contentType) headers.set("content-type", contentType);
+	headers.set("access-control-allow-methods", "POST, OPTIONS");
+	headers.set("access-control-allow-headers", "content-type");
+	const origin = request.headers.get("origin");
+	if (origin && isAllowedBookingOrigin(origin)) {
+		headers.set("access-control-allow-origin", origin);
+		headers.set("vary", "Origin");
+	}
+	return new Response(body, { status, headers });
 }

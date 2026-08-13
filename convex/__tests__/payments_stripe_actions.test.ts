@@ -41,7 +41,7 @@ const { mockState } = vi.hoisted(() => ({
 			json: () => Promise<unknown>;
 			text: () => Promise<string>;
 		} | null,
-		fetchCalls: [] as Array<{ url: string; method: string }>,
+		fetchCalls: [] as Array<{ url: string; method: string; body?: string }>,
 	},
 }));
 
@@ -261,8 +261,12 @@ describe("payments_stripe_actions — createCheckoutSession", () => {
 		mockState.fetchCalls = [];
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async (url: string, opts: { method: string }) => {
-				mockState.fetchCalls.push({ url: String(url), method: opts?.method ?? "GET" });
+			vi.fn(async (url: string, opts: { method?: string; body?: unknown }) => {
+				mockState.fetchCalls.push({
+					url: String(url),
+					method: opts?.method ?? "GET",
+					body: typeof opts?.body === "string" ? opts.body : undefined,
+				});
 				if (!mockState.fetchResponse) throw new Error("fetch response not set");
 				return mockState.fetchResponse;
 			}),
@@ -411,8 +415,12 @@ describe("payments_stripe_actions — createPublicPaymentIntent", () => {
 		mockState.fetchCalls = [];
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async (url: string, opts: { method: string }) => {
-				mockState.fetchCalls.push({ url: String(url), method: opts?.method ?? "GET" });
+			vi.fn(async (url: string, opts: { method?: string; body?: unknown }) => {
+				mockState.fetchCalls.push({
+					url: String(url),
+					method: opts?.method ?? "GET",
+					body: typeof opts?.body === "string" ? opts.body : undefined,
+				});
 				if (!mockState.fetchResponse) throw new Error("fetch response not set");
 				return mockState.fetchResponse;
 			}),
@@ -513,11 +521,16 @@ describe("payments_stripe_actions — createPublicPaymentIntent", () => {
 
 describe("payments_stripe_actions — createHostedCheckout", () => {
 	beforeEach(() => {
+		vi.stubEnv("SITE_URL", "https://guides-tours.example");
 		mockState.fetchCalls = [];
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async (url: string, opts: { method: string }) => {
-				mockState.fetchCalls.push({ url: String(url), method: opts?.method ?? "GET" });
+			vi.fn(async (url: string, opts: { method?: string; body?: unknown }) => {
+				mockState.fetchCalls.push({
+					url: String(url),
+					method: opts?.method ?? "GET",
+					body: typeof opts?.body === "string" ? opts.body : undefined,
+				});
 				if (!mockState.fetchResponse) throw new Error("fetch response not set");
 				return mockState.fetchResponse;
 			}),
@@ -525,6 +538,7 @@ describe("payments_stripe_actions — createHostedCheckout", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 		mockState.member = null;
 		mockState.fetchResponse = null;
 	});
@@ -552,6 +566,33 @@ describe("payments_stripe_actions — createHostedCheckout", () => {
 		expect(result.url).toBe("https://checkout.stripe.com/c/pay/cs_test_1");
 		expect(result.sessionId).toBe("cs_test_1");
 		expect(mockState.fetchCalls[0]?.url).toContain("/checkout/sessions");
+		const body = new URLSearchParams(mockState.fetchCalls[0]?.body);
+		expect(body.get("success_url")).toBe(
+			`https://guides-tours.example/dashboard/bookings/${bookingId}?paid=1`,
+		);
+		expect(body.get("cancel_url")).toBe(
+			`https://guides-tours.example/dashboard/bookings/${bookingId}`,
+		);
+	});
+
+	it("rejects hosted Checkout return URLs that are not same-site paths", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_hosted_return_url";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+		mockState.member = { userId: "u1", organizationId: orgId, role: "owner" };
+
+		await expect(
+			t.action(api.payments_stripe_actions.createHostedCheckout, {
+				bookingId,
+				successPath: "https://evil.example/done",
+			}),
+		).rejects.toThrow(/same-site path/i);
+		expect(mockState.fetchCalls).toHaveLength(0);
 	});
 
 	it("rejects when session has no URL", async () => {
@@ -576,11 +617,16 @@ describe("payments_stripe_actions — createHostedCheckout", () => {
 
 describe("payments_stripe_actions — createPublicHostedCheckout", () => {
 	beforeEach(() => {
+		vi.stubEnv("SITE_URL", "https://guides-tours.example");
 		mockState.fetchCalls = [];
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async (url: string, opts: { method: string }) => {
-				mockState.fetchCalls.push({ url: String(url), method: opts?.method ?? "GET" });
+			vi.fn(async (url: string, opts: { method?: string; body?: unknown }) => {
+				mockState.fetchCalls.push({
+					url: String(url),
+					method: opts?.method ?? "GET",
+					body: typeof opts?.body === "string" ? opts.body : undefined,
+				});
 				if (!mockState.fetchResponse) throw new Error("fetch response not set");
 				return mockState.fetchResponse;
 			}),
@@ -588,6 +634,7 @@ describe("payments_stripe_actions — createPublicHostedCheckout", () => {
 	});
 	afterEach(() => {
 		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 		mockState.member = null;
 		mockState.fetchResponse = null;
 	});
@@ -616,6 +663,35 @@ describe("payments_stripe_actions — createPublicHostedCheckout", () => {
 
 		expect(result.url).toBe("https://checkout.stripe.com/c/pay/cs_pub_1");
 		expect(result.sessionId).toBe("cs_pub_1");
+		const body = new URLSearchParams(mockState.fetchCalls[0]?.body);
+		expect(body.get("success_url")).toBe(
+			`https://guides-tours.example/book/paid?bookingId=${bookingId}`,
+		);
+		expect(body.get("cancel_url")).toBe(
+			`https://guides-tours.example/book/paid?bookingId=${bookingId}&cancelled=1`,
+		);
+	});
+
+	it("rejects public Checkout protocol-relative return URLs", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_hosted_return_url";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				customerEmail: "guest@example.com",
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+
+		await expect(
+			t.action(api.payments_stripe_actions.createPublicHostedCheckout, {
+				bookingId,
+				customerEmail: "guest@example.com",
+				cancelPath: "//evil.example/cancel",
+			}),
+		).rejects.toThrow(/same-site path/i);
+		expect(mockState.fetchCalls).toHaveLength(0);
 	});
 
 	it("rejects when email does not match", async () => {
@@ -644,8 +720,12 @@ describe("payments_stripe_actions — refundViaStripe", () => {
 		mockState.fetchCalls = [];
 		vi.stubGlobal(
 			"fetch",
-			vi.fn(async (url: string, opts: { method: string }) => {
-				mockState.fetchCalls.push({ url: String(url), method: opts?.method ?? "GET" });
+			vi.fn(async (url: string, opts: { method?: string; body?: unknown }) => {
+				mockState.fetchCalls.push({
+					url: String(url),
+					method: opts?.method ?? "GET",
+					body: typeof opts?.body === "string" ? opts.body : undefined,
+				});
 				if (!mockState.fetchResponse) throw new Error("fetch response not set");
 				return mockState.fetchResponse;
 			}),

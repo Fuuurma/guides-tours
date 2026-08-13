@@ -1,7 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { Link, Outlet, useLocation } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import type * as React from "react";
 
-import { Button } from "@/components/ui/button";
 import {
 	Card,
 	CardContent,
@@ -37,30 +37,59 @@ export interface DetailPageProps {
 	className?: string;
 }
 
+export function PageBackLink({
+	to,
+	label = "Back",
+}: {
+	to: string;
+	label?: string;
+}) {
+	return (
+		<Link
+			to={to}
+			className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+		>
+			<ArrowLeft aria-hidden="true" className="size-4" />
+			{label}
+		</Link>
+	);
+}
+
 export function DetailPage({
 	title,
 	subtitle,
 	backTo,
-	backLabel = "← Back",
+	backLabel = "Back",
 	actions,
 	children,
 	className,
 }: DetailPageProps) {
+	const { pathname } = useLocation();
+
+	// Detail edit routes are children of the detail route. Keep the shared
+	// shell responsible for forwarding them so every entity gets the same
+	// nested-route behavior without duplicating an <Outlet /> in each page.
+	if (pathname.endsWith("/edit")) {
+		return <Outlet />;
+	}
+
 	return (
 		<div className={cn("space-y-6", className)}>
-			<header className="flex flex-wrap items-center justify-between gap-4">
-				<div>
-					<h1 className="text-2xl font-semibold">{title}</h1>
+			<PageBackLink to={backTo} label={backLabel} />
+			<header className="flex flex-wrap items-start justify-between gap-5">
+				<div className="min-w-0">
+					<h1 className="text-balance text-2xl font-semibold tracking-tight">
+						{title}
+					</h1>
 					{subtitle && (
-						<p className="text-muted-foreground text-sm">{subtitle}</p>
+						<p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
 					)}
 				</div>
-				<div className="flex gap-2">
-					{actions}
-					<Button asChild variant="outline">
-						<Link to={backTo}>{backLabel}</Link>
-					</Button>
-				</div>
+				{actions && (
+					<div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+						{actions}
+					</div>
+				)}
 			</header>
 			{children}
 		</div>
@@ -88,14 +117,14 @@ export function DetailSection({
 }: DetailSectionProps) {
 	return (
 		<Card className={className}>
-			<CardHeader className="flex flex-row items-center justify-between space-y-0">
-				<div>
+			<CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 border-b pb-5">
+				<div className="min-w-0">
 					<CardTitle>{title}</CardTitle>
 					{description && <CardDescription>{description}</CardDescription>}
 				</div>
-				{actions}
+				{actions && <div className="shrink-0">{actions}</div>}
 			</CardHeader>
-			<CardContent className="space-y-2 text-sm">{children}</CardContent>
+			<CardContent className="space-y-3 text-sm">{children}</CardContent>
 		</Card>
 	);
 }

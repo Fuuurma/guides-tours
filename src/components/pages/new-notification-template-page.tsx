@@ -1,17 +1,40 @@
+import { useForm, useStore } from "@tanstack/react-form";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { EntityFormPage, useEntityForm } from "@/components/entity-form";
+import { useState } from "react";
+import { toast } from "sonner";
+import { PageBackLink } from "@/components/detail-page";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import {
+	Field,
+	FieldDescription,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { MAX_NAME_LEN, validateNonNegativeNumber } from "@/lib/validation";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { getErrorMessage } from "@/lib/utils";
+import {
+	MAX_EMAIL_SUBJECT_LEN,
+	MAX_NAME_LEN,
+	MAX_SMS_BODY_LEN,
+	validateName,
+	validateNonNegativeNumber,
+} from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
-import { FormField } from "../form";
 
 const TEMPLATE_TYPES = [
 	"booking_confirmation",
@@ -35,7 +58,7 @@ const SEND_TIMINGS = [
 	"custom",
 ] as const;
 
-interface FormValues extends Record<string, unknown> {
+type NotifyValues = {
 	name: string;
 	templateType: string;
 	channel: string;
@@ -44,177 +67,331 @@ interface FormValues extends Record<string, unknown> {
 	smsBody: string;
 	sendTiming: string;
 	retryCount: string;
-}
-
-const INITIAL: FormValues = {
-	name: "",
-	templateType: "booking_confirmation",
-	channel: "email",
-	emailSubject: "",
-	emailBodyText: "",
-	smsBody: "",
-	sendTiming: "immediate",
-	retryCount: "3",
 };
 
-export function NewNotificationTemplatePage() {
-	const create = useMutation(api.notificationTemplates.create);
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
 
-	const form = useEntityForm<FormValues, string>({
-		mutation: async (v) => {
-			const id = await create({
-				name: v.name.trim(),
-				templateType: v.templateType,
-				channel: v.channel,
-				emailSubject: v.emailSubject.trim(),
-				emailBodyText: v.emailBodyText.trim(),
-				smsBody: v.smsBody.trim() || undefined,
-				sendTiming: v.sendTiming,
-				retryCount: Number(v.retryCount),
-			});
-			return id;
+export function NewNotificationTemplatePage() {
+	const navigate = useNavigate();
+	const create = useMutation(api.notificationTemplates.create);
+	const [submitErr, setSubmitErr] = useState<string | null>(null);
+
+	const form = useForm({
+		defaultValues: {
+			name: "",
+			templateType: "booking_confirmation",
+			channel: "email",
+			emailSubject: "",
+			emailBodyText: "",
+			smsBody: "",
+			sendTiming: "immediate",
+			retryCount: "3",
+		} satisfies NotifyValues,
+		onSubmit: async ({ value }) => {
+			setSubmitErr(null);
+			let invalid = false;
+			const fail = (name: keyof NotifyValues, message: string) => {
+				form.setFieldMeta(name, (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: message },
+				}));
+				invalid = true;
+			};
+
+			const nameErr = validateName(value.name);
+			if (nameErr) fail("name", nameErr);
+			const wantsEmail = value.channel === "email" || value.channel === "both";
+			const wantsSms = value.channel === "sms" || value.channel === "both";
+			if (wantsEmail && !value.emailSubject.trim()) {
+				fail("emailSubject", "Email subject is required");
+			}
+			if (wantsEmail && !value.emailBodyText.trim()) {
+				fail("emailBodyText", "Email body is required");
+			}
+			if (wantsSms && !value.smsBody.trim()) {
+				fail("smsBody", "SMS body is required");
+			}
+			const retriesErr = validateNonNegativeNumber(value.retryCount, "Retries");
+			if (retriesErr) fail("retryCount", retriesErr);
+			if (invalid) return;
+
+			try {
+				const id = await create({
+					name: value.name.trim(),
+					templateType: value.templateType,
+					channel: value.channel,
+					emailSubject: value.emailSubject.trim(),
+					emailBodyText: value.emailBodyText.trim(),
+					smsBody: value.smsBody.trim() || undefined,
+					sendTiming: value.sendTiming,
+					retryCount: Number(value.retryCount),
+				});
+				toast.success("Notification template created");
+				void navigate({
+					to: "/dashboard/notifications/$templateId",
+					params: { templateId: id },
+				});
+			} catch (err) {
+				setSubmitErr(getErrorMessage(err));
+			}
 		},
-		validate: (v) => {
-			const errs: Record<string, string> = {};
-			const retriesErr = validateNonNegativeNumber(v.retryCount, "Retries");
-			if (retriesErr) errs.retryCount = retriesErr;
-			return Object.keys(errs).length > 0 ? errs : null;
-		},
-		initialValues: INITIAL,
-		redirectTo: (id) => `/dashboard/notifications/${id}`,
-		successMessage: "Notification template created",
 	});
 
-	const channel = form.values.channel;
+	const channel = useStore(form.store, (s) => s.values.channel);
+	const wantsEmail = channel === "email" || channel === "both";
+	const wantsSms = channel === "sms" || channel === "both";
 
 	return (
-		<EntityFormPage
-			form={form}
-			title="New notification template"
-			description="Template for booking-related messages"
-			backTo="/dashboard/notifications"
-			submitLabel="Create template"
-		>
-			<FormField label="Name *" htmlFor="name">
-				<Input
-					id="name"
-					required
-					maxLength={MAX_NAME_LEN}
-					value={form.values.name}
-					onChange={(e) => form.set("name", e.target.value)}
-					placeholder="Booking confirmation"
-				/>
-			</FormField>
-
-			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Template type" htmlFor="type">
-					<Select
-						value={form.values.templateType}
-						onValueChange={(v) => form.set("templateType", v)}
-					>
-						<SelectTrigger id="type">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{TEMPLATE_TYPES.map((t) => (
-								<SelectItem key={t} value={t}>
-									{t}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</FormField>
-				<FormField label="Channel" htmlFor="channel">
-					<Select value={channel} onValueChange={(v) => form.set("channel", v)}>
-						<SelectTrigger id="channel">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{CHANNELS.map((c) => (
-								<SelectItem key={c} value={c}>
-									{c}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</FormField>
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<div>
+				<PageBackLink to="/dashboard/notifications" />
+				<h1 className="mt-2 text-2xl font-semibold tracking-tight">
+					New notification template
+				</h1>
+				<p className="mt-1 text-sm text-muted-foreground">
+					Copy sent when a booking is confirmed, reminded, or cancelled.
+				</p>
 			</div>
-
-			<FormField label="Email subject *" htmlFor="subject">
-				<Input
-					id="subject"
-					required
-					maxLength={200}
-					value={form.values.emailSubject}
-					onChange={(e) => form.set("emailSubject", e.target.value)}
-					placeholder="Your booking is confirmed"
-				/>
-			</FormField>
-
-			<FormField
-				label="Email body (text) *"
-				hint="Plain text — supports variables like {customerName}, {tourName}, {date}"
-				htmlFor="body"
-			>
-				<Textarea
-					id="body"
-					required
-					maxLength={10000}
-					value={form.values.emailBodyText}
-					onChange={(e) => form.set("emailBodyText", e.target.value)}
-					rows={6}
-					className="font-mono"
-				/>
-			</FormField>
-
-			{(channel === "sms" || channel === "both") && (
-				<FormField
-					label="SMS body"
-					hint="Plain text — keep under 160 chars"
-					htmlFor="sms"
-				>
-					<Textarea
-						id="sms"
-						maxLength={1600}
-						value={form.values.smsBody}
-						onChange={(e) => form.set("smsBody", e.target.value)}
-						rows={3}
-					/>
-				</FormField>
-			)}
-
-			<div className="grid gap-4 md:grid-cols-2">
-				<FormField label="Send timing" htmlFor="timing">
-					<Select
-						value={form.values.sendTiming}
-						onValueChange={(v) => form.set("sendTiming", v)}
+			<Card>
+				<CardContent className="pt-6">
+					<form
+						onSubmit={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							void form.handleSubmit();
+						}}
 					>
-						<SelectTrigger id="timing">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							{SEND_TIMINGS.map((s) => (
-								<SelectItem key={s} value={s}>
-									{s}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
-				</FormField>
-				<FormField
-					label="Retries"
-					htmlFor="retries"
-					error={form.fieldErrors.retryCount}
-				>
-					<Input
-						id="retries"
-						type="number"
-						min="0"
-						value={form.values.retryCount}
-						onChange={(e) => form.set("retryCount", e.target.value)}
-					/>
-				</FormField>
-			</div>
-		</EntityFormPage>
+						<FieldGroup className="gap-4">
+							<form.Field name="name">
+								{(field) => (
+									<Field data-invalid={!field.state.meta.isValid}>
+										<FieldLabel htmlFor="name">Name *</FieldLabel>
+										<Input
+											id="name"
+											required
+											maxLength={MAX_NAME_LEN}
+											value={field.state.value}
+											onBlur={field.handleBlur}
+											onChange={(e) => field.handleChange(e.target.value)}
+											placeholder="Booking confirmation"
+											aria-invalid={!field.state.meta.isValid}
+										/>
+										<FieldError errors={metaErrors(field.state.meta.errors)} />
+									</Field>
+								)}
+							</form.Field>
+
+							<form.Field name="templateType">
+								{(field) => (
+									<Field>
+										<FieldLabel htmlFor="type">Template type</FieldLabel>
+										<Select
+											value={field.state.value}
+											onValueChange={(v) => field.handleChange(v)}
+										>
+											<SelectTrigger id="type">
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectGroup>
+													{TEMPLATE_TYPES.map((t) => (
+														<SelectItem key={t} value={t}>
+															{t.replaceAll("_", " ")}
+														</SelectItem>
+													))}
+												</SelectGroup>
+											</SelectContent>
+										</Select>
+									</Field>
+								)}
+							</form.Field>
+
+							<form.Field name="channel">
+								{(field) => (
+									<Field>
+										<FieldLabel htmlFor="channel">Channel</FieldLabel>
+										<ToggleGroup
+											id="channel"
+											type="single"
+											variant="outline"
+											size="sm"
+											value={field.state.value}
+											onValueChange={(v) => {
+												if (v) field.handleChange(v);
+											}}
+										>
+											{CHANNELS.map((c) => (
+												<ToggleGroupItem key={c} value={c}>
+													{c}
+												</ToggleGroupItem>
+											))}
+										</ToggleGroup>
+									</Field>
+								)}
+							</form.Field>
+
+							{wantsEmail ? (
+								<>
+									<form.Field name="emailSubject">
+										{(field) => (
+											<Field data-invalid={!field.state.meta.isValid}>
+												<FieldLabel htmlFor="subject">
+													Email subject *
+												</FieldLabel>
+												<Input
+													id="subject"
+													required
+													maxLength={MAX_EMAIL_SUBJECT_LEN}
+													value={field.state.value}
+													onBlur={field.handleBlur}
+													onChange={(e) => field.handleChange(e.target.value)}
+													placeholder="Your booking is confirmed"
+													aria-invalid={!field.state.meta.isValid}
+												/>
+												<FieldError
+													errors={metaErrors(field.state.meta.errors)}
+												/>
+											</Field>
+										)}
+									</form.Field>
+									<form.Field name="emailBodyText">
+										{(field) => (
+											<Field data-invalid={!field.state.meta.isValid}>
+												<FieldLabel htmlFor="body">
+													Email body (text) *
+												</FieldLabel>
+												<Textarea
+													id="body"
+													required
+													maxLength={10000}
+													value={field.state.value}
+													onBlur={field.handleBlur}
+													onChange={(e) => field.handleChange(e.target.value)}
+													rows={6}
+													className="font-mono"
+													aria-invalid={!field.state.meta.isValid}
+												/>
+												<FieldDescription>
+													{
+														"Plain text — variables like {customerName}, {tourName}, {date}"
+													}
+												</FieldDescription>
+												<FieldError
+													errors={metaErrors(field.state.meta.errors)}
+												/>
+											</Field>
+										)}
+									</form.Field>
+								</>
+							) : null}
+
+							{wantsSms ? (
+								<form.Field name="smsBody">
+									{(field) => (
+										<Field data-invalid={!field.state.meta.isValid}>
+											<FieldLabel htmlFor="sms">SMS body *</FieldLabel>
+											<Textarea
+												id="sms"
+												maxLength={MAX_SMS_BODY_LEN}
+												value={field.state.value}
+												onBlur={field.handleBlur}
+												onChange={(e) => field.handleChange(e.target.value)}
+												rows={3}
+												aria-invalid={!field.state.meta.isValid}
+											/>
+											<FieldDescription>
+												Plain text — keep under 160 characters when possible.
+											</FieldDescription>
+											<FieldError
+												errors={metaErrors(field.state.meta.errors)}
+											/>
+										</Field>
+									)}
+								</form.Field>
+							) : null}
+
+							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
+								<form.Field name="sendTiming">
+									{(field) => (
+										<Field>
+											<FieldLabel htmlFor="timing">Send timing</FieldLabel>
+											<Select
+												value={field.state.value}
+												onValueChange={(v) => field.handleChange(v)}
+											>
+												<SelectTrigger id="timing">
+													<SelectValue />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectGroup>
+														{SEND_TIMINGS.map((s) => (
+															<SelectItem key={s} value={s}>
+																{s.replaceAll("_", " ")}
+															</SelectItem>
+														))}
+													</SelectGroup>
+												</SelectContent>
+											</Select>
+										</Field>
+									)}
+								</form.Field>
+								<form.Field name="retryCount">
+									{(field) => (
+										<Field data-invalid={!field.state.meta.isValid}>
+											<FieldLabel htmlFor="retries">Retries</FieldLabel>
+											<Input
+												id="retries"
+												type="number"
+												min="0"
+												value={field.state.value}
+												onBlur={field.handleBlur}
+												onChange={(e) => field.handleChange(e.target.value)}
+												aria-invalid={!field.state.meta.isValid}
+											/>
+											<FieldError
+												errors={metaErrors(field.state.meta.errors)}
+											/>
+										</Field>
+									)}
+								</form.Field>
+							</FieldGroup>
+
+							{submitErr ? <ErrorBanner message={submitErr} /> : null}
+
+							<form.Subscribe
+								selector={(state) =>
+									[state.canSubmit, state.isSubmitting] as const
+								}
+							>
+								{([canSubmit, isSubmitting]) => (
+									<div className="flex justify-end gap-2 pt-2">
+										<Button type="button" variant="outline" asChild>
+											<Link to="/dashboard/notifications">Back</Link>
+										</Button>
+										<Button type="submit" disabled={!canSubmit || isSubmitting}>
+											{isSubmitting ? (
+												<Spinner data-icon="inline-start" />
+											) : null}
+											{isSubmitting ? "Saving…" : "Create template"}
+										</Button>
+									</div>
+								)}
+							</form.Subscribe>
+						</FieldGroup>
+					</form>
+				</CardContent>
+			</Card>
+		</div>
 	);
 }

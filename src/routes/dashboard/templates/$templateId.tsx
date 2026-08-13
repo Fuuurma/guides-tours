@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { resolveTourStaffing } from "@/lib/staffing";
 import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
@@ -89,14 +90,13 @@ function TemplateDetailPage() {
 						</Link>
 					</Button>
 					<Button onClick={() => void handleInstantiate()} disabled={creating}>
+						{creating ? <Spinner data-icon="inline-start" /> : null}
 						{creating ? "Creating tour…" : "Use template"}
 					</Button>
 				</>
 			}
 		>
-			{instantiateErr && (
-				<p className="text-destructive text-sm mb-2">{instantiateErr}</p>
-			)}
+			{instantiateErr ? <ErrorBanner message={instantiateErr} /> : null}
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				<MetricCard

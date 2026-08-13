@@ -5,8 +5,7 @@
 // plus dashboard-specific validators (US-style currency, integer).
 //
 // All helpers return a string error message or null. Use with
-// useEntityForm's `validate` option or render inline via the
-// `error` prop on <FormField>.
+// TanStack Form field validators.
 
 /**
  * RFC 5322-lite email regex — rejects "a@b" but accepts the common
@@ -20,6 +19,23 @@ export const MAX_EMAIL_LEN = 254;
 export const MAX_PHONE_LEN = 30;
 export const MAX_NOTES_LEN = 1000;
 export const MAX_DESCRIPTION_LEN = 2000;
+export const MAX_LICENSE_LEN = 200;
+export const MAX_GUEST_NAMES_LEN = 2000;
+export const MAX_SHORT_FIELD_LEN = 50;
+export const MAX_PAYMENT_METHOD_LEN = 50;
+export const MAX_EMAIL_SUBJECT_LEN = 200;
+export const MAX_SMS_BODY_LEN = 1000;
+
+/**
+ * ISO 4217 currency code: exactly 3 uppercase letters.
+ */
+export function validateCurrency(code: string): string | null {
+	const trimmed = code.trim().toUpperCase();
+	if (!/^[A-Z]{3}$/.test(trimmed)) {
+		return "Use a 3-letter code like USD";
+	}
+	return null;
+}
 
 /**
  * Validate a name. Required, 2-100 chars after trim.

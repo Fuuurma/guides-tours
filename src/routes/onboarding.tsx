@@ -1,13 +1,14 @@
 import { useForm } from "@tanstack/react-form";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { createFileRoute } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { FieldGroup } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -97,7 +98,7 @@ function OnboardingPage() {
 		<AuthShell
 			title="Set up your company"
 			serifAccent=""
-			description="Create the organization your team will share."
+			description="Create the organization your dispatch desk will share."
 		>
 			<form
 				onSubmit={(e) => {
@@ -105,60 +106,61 @@ function OnboardingPage() {
 					e.stopPropagation();
 					void form.handleSubmit();
 				}}
-				className="space-y-4"
 			>
-				<form.Field name="name">
-					{(field) => (
-						<FormField
-							field={field}
-							label="Company name"
-							inputProps={{
-								type: "text",
-								placeholder: "Acme Tours Barcelona",
-								autoComplete: "organization",
-								autoFocus: true,
-							}}
-						/>
-					)}
-				</form.Field>
+				<FieldGroup className="gap-4">
+					<form.Field name="name">
+						{(field) => (
+							<FormField
+								field={field}
+								label="Company name"
+								inputProps={{
+									type: "text",
+									placeholder: "Harbor Walks",
+									autoComplete: "organization",
+									autoFocus: true,
+								}}
+							/>
+						)}
+					</form.Field>
 
-				<form.Field name="slug">
-					{(field) => (
-						<FormField
-							field={field}
-							label="URL slug"
-							hint="Used in invite links and your public booking page."
-							inputProps={{
-								type: "text",
-								placeholder: "acme-tours",
-								autoComplete: "url",
-							}}
-						/>
-					)}
-				</form.Field>
+					<form.Field name="slug">
+						{(field) => (
+							<FormField
+								field={field}
+								label="URL slug"
+								hint="Used in invite links and your optional booking page."
+								inputProps={{
+									type: "text",
+									placeholder: "harbor-walks",
+									autoComplete: "url",
+								}}
+							/>
+						)}
+					</form.Field>
 
-				{serverError ? <ErrorBanner message={serverError} /> : null}
+					{serverError ? <ErrorBanner message={serverError} /> : null}
 
-				<form.Subscribe
-					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
-				>
-					{([canSubmit, isSubmitting]) => (
-						<Button
-							type="submit"
-							size="lg"
-							className="h-11 w-full rounded-full"
-							disabled={!canSubmit || isSubmitting}
-						>
-							{isSubmitting ? (
-								<>
-									<Loader2 className="size-4 animate-spin" /> Creating...
-								</>
-							) : (
-								"Create organization"
-							)}
-						</Button>
-					)}
-				</form.Subscribe>
+					<form.Subscribe
+						selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+					>
+						{([canSubmit, isSubmitting]) => (
+							<Button
+								type="submit"
+								size="lg"
+								className="h-11 w-full rounded-full"
+								disabled={!canSubmit || isSubmitting}
+							>
+								{isSubmitting ? (
+									<>
+										<Spinner data-icon="inline-start" /> Creating...
+									</>
+								) : (
+									"Create organization"
+								)}
+							</Button>
+						)}
+					</form.Subscribe>
+				</FieldGroup>
 			</form>
 		</AuthShell>
 	);

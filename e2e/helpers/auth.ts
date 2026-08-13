@@ -106,6 +106,11 @@ export async function createTourViaUi(
 		await maxGuests.fill("12");
 	}
 	await page.getByRole("button", { name: /create tour/i }).click();
-	await page.waitForURL(/\/dashboard\/tours\/[^/]+$/, { timeout: 60_000 });
+	await page.waitForURL(
+		(url) =>
+			/^\/dashboard\/tours\/[^/]+$/.test(url.pathname) &&
+			url.pathname !== "/dashboard/tours/new",
+		{ timeout: 60_000 },
+	);
 	return page.url();
 }

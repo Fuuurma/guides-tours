@@ -4,10 +4,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { getErrorMessage } from "@/lib/utils";
 import type { NotificationTemplate } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -25,10 +27,14 @@ function NotificationTemplatesPage() {
 	} = useQuery(convexQuery(api.notificationTemplates.list, {}));
 	const updateTemplate = useMutation(api.notificationTemplates.update);
 	const removeTemplate = useMutation(api.notificationTemplates.remove);
-	const [pendingId, setPendingId] = useState<string | null>(null);
+	const confirm = useConfirm();
+	const [pending, setPending] = useState<{
+		id: string;
+		kind: "toggle" | "delete";
+	} | null>(null);
 
 	const toggleActive = async (id: string, currentActive: boolean) => {
-		setPendingId(id);
+		setPending({ id, kind: "toggle" });
 		try {
 			await updateTemplate({
 				templateId: id as Id<"notificationTemplates">,
@@ -38,25 +44,27 @@ function NotificationTemplatesPage() {
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 	const onDelete = async (id: string, label: string) => {
-		if (
-			!window.confirm(
-				`Delete notification template "${label}"? Booking reminders and confirmations will stop sending for this template type.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete notification template "${label}"?`,
+			description:
+				"Booking reminders and confirmations will stop sending for this template type.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
-		setPendingId(id);
+		setPending({ id, kind: "delete" });
 		try {
 			await removeTemplate({ templateId: id as Id<"notificationTemplates"> });
 			toast.success("Template deleted");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 
@@ -118,23 +126,27 @@ function NotificationTemplatesPage() {
 			key: "actions",
 			header: "",
 			render: (t) => {
-				const isBusy = pendingId === t._id;
+				const rowBusy = pending?.id === t._id;
+				const toggling = rowBusy && pending?.kind === "toggle";
+				const deleting = rowBusy && pending?.kind === "delete";
 				return (
-					<div className="flex items-center gap-1 justify-end">
+					<div className="flex items-center justify-end gap-1">
 						<Button
 							size="sm"
 							variant="outline"
 							onClick={() => toggleActive(t._id, t.isActive)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{toggling ? <Spinner data-icon="inline-start" /> : null}
 							{t.isActive ? "Disable" : "Enable"}
 						</Button>
 						<Button
 							size="sm"
 							variant="destructive"
 							onClick={() => onDelete(t._id, t.name)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{deleting ? <Spinner data-icon="inline-start" /> : null}
 							Delete
 						</Button>
 					</div>
@@ -146,38 +158,36 @@ function NotificationTemplatesPage() {
 	const itemCount = templates?.length ?? 0;
 
 	return (
-		<>
-			<ListPage
-				title="Notification templates"
-				description={`${itemCount} template${itemCount === 1 ? "" : "s"} — these control which messages go out for booking events.`}
-				newTo="/dashboard/notifications/new"
-				newLabel="+ New template"
-				actions={
-					<Button asChild variant="outline">
-						<Link to="/dashboard/notifications/settings">Settings</Link>
+		<ListPage
+			title="Notifications"
+			description={`${itemCount} template${itemCount === 1 ? "" : "s"} — notification templates control which messages go out for booking events.`}
+			newTo="/dashboard/notifications/new"
+			newLabel="+ New template"
+			actions={
+				<Button asChild variant="outline">
+					<Link to="/dashboard/notifications/settings">Settings</Link>
+				</Button>
+			}
+			below={<DeliveryLogsSection />}
+		>
+			<DataTable
+				data={templates as NotificationTemplate[] | undefined}
+				columns={columns}
+				rowKey={(t) => t._id}
+				isPending={isPending}
+				error={error}
+				emptyMessage="No notification templates yet"
+				emptyDescription="These control confirmation, reminder, and cancellation messages for bookings."
+				emptyAction={
+					<Button asChild size="sm">
+						<Link to="/dashboard/notifications/new">
+							Create a booking message
+						</Link>
 					</Button>
 				}
-			>
-				<DataTable
-					data={templates as NotificationTemplate[] | undefined}
-					columns={columns}
-					rowKey={(t) => t._id}
-					isPending={isPending}
-					error={error}
-					emptyMessage="No notification templates yet."
-					emptyAction={
-						<Button asChild size="sm">
-							<Link to="/dashboard/notifications/new">
-								Create a booking message
-							</Link>
-						</Button>
-					}
-					searchPlaceholder="Search by name, type, subject, or status…"
-				/>
-			</ListPage>
-
-			<DeliveryLogsSection />
-		</>
+				searchPlaceholder="Search by name, type, subject, or status…"
+			/>
+		</ListPage>
 	);
 }
 

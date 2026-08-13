@@ -11,10 +11,18 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
 	Select,
 	SelectContent,
+	SelectGroup,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
@@ -70,8 +78,8 @@ type SlotFleet = {
 };
 
 function CalendarPage() {
-	const [cursor, setCursor] = useState(() => startOfMonthLocal(new Date()));
-	const [view, setView] = useState<"month" | "week">("month");
+	const [cursor, setCursor] = useState(() => new Date());
+	const [view, setView] = useState<"month" | "week">("week");
 	const [guideFilter, setGuideFilter] = useState(ALL);
 	const [tourFilter, setTourFilter] = useState(ALL);
 	const [statusFilter, setStatusFilter] = useState(ALL);
@@ -265,12 +273,12 @@ function CalendarPage() {
 				<div>
 					<h1 className="text-2xl font-semibold">Calendar</h1>
 					<p className="text-muted-foreground text-sm">
-						Ops view of guide assignments ·{" "}
+						Who is out this week — guides, vehicles, and open gaps ·{" "}
 						<Link
 							to="/dashboard/staffing"
 							className="text-link hover:underline"
 						>
-							Staffing gaps
+							Staffing
 						</Link>
 					</p>
 				</div>
@@ -309,12 +317,14 @@ function CalendarPage() {
 						<SelectValue placeholder="Guide" />
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value={ALL}>All guides</SelectItem>
-						{(members ?? []).map((m) => (
-							<SelectItem key={m.userId} value={m.userId}>
-								{m.name}
-							</SelectItem>
-						))}
+						<SelectGroup>
+							<SelectItem value={ALL}>All guides</SelectItem>
+							{(members ?? []).map((m) => (
+								<SelectItem key={m.userId} value={m.userId}>
+									{m.name}
+								</SelectItem>
+							))}
+						</SelectGroup>
 					</SelectContent>
 				</Select>
 				<Select value={tourFilter} onValueChange={setTourFilter}>
@@ -322,12 +332,14 @@ function CalendarPage() {
 						<SelectValue placeholder="Tour" />
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value={ALL}>All tours</SelectItem>
-						{(tours ?? []).map((t) => (
-							<SelectItem key={t._id} value={t._id}>
-								{t.name}
-							</SelectItem>
-						))}
+						<SelectGroup>
+							<SelectItem value={ALL}>All tours</SelectItem>
+							{(tours ?? []).map((t) => (
+								<SelectItem key={t._id} value={t._id}>
+									{t.name}
+								</SelectItem>
+							))}
+						</SelectGroup>
 					</SelectContent>
 				</Select>
 				<Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -335,10 +347,12 @@ function CalendarPage() {
 						<SelectValue placeholder="Status" />
 					</SelectTrigger>
 					<SelectContent>
-						<SelectItem value={ALL}>All statuses</SelectItem>
-						<SelectItem value="scheduled">Scheduled</SelectItem>
-						<SelectItem value="completed">Completed</SelectItem>
-						<SelectItem value="cancelled">Cancelled</SelectItem>
+						<SelectGroup>
+							<SelectItem value={ALL}>All statuses</SelectItem>
+							<SelectItem value="scheduled">Scheduled</SelectItem>
+							<SelectItem value="completed">Completed</SelectItem>
+							<SelectItem value="cancelled">Cancelled</SelectItem>
+						</SelectGroup>
 					</SelectContent>
 				</Select>
 			</div>
@@ -347,8 +361,8 @@ function CalendarPage() {
 
 			<Tabs value={view} onValueChange={onViewChange}>
 				<TabsList>
-					<TabsTrigger value="month">Month</TabsTrigger>
 					<TabsTrigger value="week">Week</TabsTrigger>
+					<TabsTrigger value="month">Month</TabsTrigger>
 				</TabsList>
 
 				<TabsContent value="month" className="mt-4">
@@ -447,11 +461,11 @@ function AssignmentChip({
 				a.status === "completed" && "border-primary/30 bg-primary/5",
 				fleetGap &&
 					a.status === "scheduled" &&
-					"border-amber-400/70 bg-amber-50/60 dark:bg-amber-950/30",
+					"border-destructive/50 bg-destructive/5",
 				!fleetGap &&
 					a.status === "scheduled" &&
 					(a.vehicleId || a.driverId) &&
-					"border-emerald-400/50 bg-emerald-50/40 dark:bg-emerald-950/20",
+					"border-primary/30 bg-primary/5",
 			)}
 			title={`${a.startTime} ${tourName} · ${guideName}${markers.length ? ` · ${markers.join(" ")}` : ""}`}
 			onClick={(e) => e.stopPropagation()}
@@ -518,7 +532,7 @@ function MonthGrid({
 							className={cn(
 								"bg-background min-h-24 p-1 flex flex-col gap-0.5",
 								isToday && "ring-1 ring-inset ring-primary",
-								gaps > 0 && "bg-amber-50/40 dark:bg-amber-950/20",
+								gaps > 0 && "bg-destructive/5",
 							)}
 						>
 							<div className="flex items-center justify-between gap-1 px-0.5">
@@ -536,7 +550,7 @@ function MonthGrid({
 								<div className="flex items-center gap-1">
 									{gaps > 0 && (
 										<span
-											className="text-[10px] font-medium text-amber-700 dark:text-amber-400"
+											className="text-[10px] font-medium text-destructive"
 											title={`${gaps} departure(s) need staffing`}
 										>
 											{gaps}!
@@ -618,7 +632,7 @@ function WeekAgenda({
 				});
 				return (
 					<Card key={date} className={cn(date === today && "border-primary")}>
-						<CardHeader className="flex flex-row items-center justify-between space-y-0 py-3">
+						<CardHeader className="flex flex-row items-center justify-between gap-0 py-3">
 							<div>
 								<CardTitle className="text-base">{label}</CardTitle>
 								<CardDescription>
@@ -644,11 +658,36 @@ function WeekAgenda({
 						</CardHeader>
 						<CardContent className="pb-3">
 							{items.length === 0 ? (
-								<p className="text-muted-foreground text-sm">
-									{gaps > 0
-										? `${gaps} departure(s) still need staffing`
-										: "No assignments"}
-								</p>
+								<Empty className="min-h-0 border-dashed p-4 md:p-6">
+									<EmptyHeader>
+										<EmptyTitle className="text-base">
+											{scheduleCount > 0
+												? "Published, not assigned"
+												: "No departures"}
+										</EmptyTitle>
+										<EmptyDescription>
+											{scheduleCount > 0
+												? `${scheduleCount} schedule${scheduleCount === 1 ? "" : "s"} on this day still need a guide.`
+												: gaps > 0
+													? `${gaps} departure${gaps === 1 ? "" : "s"} still need staffing.`
+													: "Assign a guide or publish a schedule for this day."}
+										</EmptyDescription>
+									</EmptyHeader>
+									<EmptyContent>
+										<div className="flex flex-wrap justify-center gap-2">
+											<Button asChild size="sm">
+												<Link to="/dashboard/assignments/new" search={{ date }}>
+													Assign guide
+												</Link>
+											</Button>
+											<Button asChild size="sm" variant="outline">
+												<Link to="/dashboard/schedules/new" search={{ date }}>
+													New schedule
+												</Link>
+											</Button>
+										</div>
+									</EmptyContent>
+								</Empty>
 							) : (
 								<ul className="flex flex-col gap-2">
 									{items.map((a) => {
@@ -693,9 +732,7 @@ function WeekAgenda({
 												</Link>
 												<div className="flex items-center gap-2">
 													{incomplete ? (
-														<Badge variant="outline" className="text-amber-700">
-															Incomplete
-														</Badge>
+														<Badge variant="destructive">Incomplete</Badge>
 													) : null}
 													<Badge variant="secondary">{a.status}</Badge>
 												</div>

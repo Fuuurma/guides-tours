@@ -24,6 +24,7 @@ import {
 } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { encrypt } from "./lib/crypto";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 
@@ -81,6 +82,19 @@ import {
 	MAX_DEPOSIT_PERCENTAGE,
 	assertFieldWithinLimit,
 } from "./lib/validation";
+
+const SECRET_PLACEHOLDER = "placeholder-no-change";
+
+async function nextEncryptedSecret(
+	existingCiphertext: string | undefined,
+	value: string,
+): Promise<string> {
+	const trimmed = value.trim();
+	if (!trimmed || trimmed === SECRET_PLACEHOLDER) {
+		return existingCiphertext ?? "";
+	}
+	return await encrypt(trimmed);
+}
 
 // ----- Queries -----
 
@@ -448,8 +462,6 @@ export const upsertSettings = mutation({
 		if (!CURRENCY_REGEX.test(args.defaultCurrency)) {
 			throw new ConvexError("Invalid currency: must be 3 uppercase letters (e.g. USD)");
 		}
-		const { encrypt } = await import("./lib/crypto");
-
 		const now = Date.now();
 		const existing = await ctx.db
 			.query("paymentSettings")
@@ -458,20 +470,14 @@ export const upsertSettings = mutation({
 			)
 			.unique();
 
-		// When the FE can't read back secrets it sends the literal
-		// "placeholder-no-change".  Keep the existing ciphertext so we
-		// don't overwrite a real secret with junk.
-		const SECRET_PLACEHOLDER = "placeholder-no-change";
-		const secretEnc =
-			existing &&
-			args.stripeSecretKey === SECRET_PLACEHOLDER
-				? existing.stripeSecretKey
-				: await encrypt(args.stripeSecretKey);
-		const webhookEnc =
-			existing &&
-			args.stripeWebhookSecret === SECRET_PLACEHOLDER
-				? existing.stripeWebhookSecret
-				: await encrypt(args.stripeWebhookSecret);
+		const secretEnc = await nextEncryptedSecret(
+			existing?.stripeSecretKey,
+			args.stripeSecretKey,
+		);
+		const webhookEnc = await nextEncryptedSecret(
+			existing?.stripeWebhookSecret,
+			args.stripeWebhookSecret,
+		);
 
 		if (existing) {
 			await ctx.db.patch(existing._id, {
@@ -569,23 +575,20 @@ export const upsertSettingsInternal = internalMutation({
 			throw new ConvexError("Invalid currency: must be 3 uppercase letters (e.g. USD)");
 		}
 
-		const { encrypt } = await import("./lib/crypto");
-
 		const now = Date.now();
 		const existing = await ctx.db
 			.query("paymentSettings")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
 			.unique();
 
-		const SECRET_PLACEHOLDER = "placeholder-no-change";
-		const secretEnc =
-			existing && args.stripeSecretKey === SECRET_PLACEHOLDER
-				? existing.stripeSecretKey
-				: await encrypt(args.stripeSecretKey);
-		const webhookEnc =
-			existing && args.stripeWebhookSecret === SECRET_PLACEHOLDER
-				? existing.stripeWebhookSecret
-				: await encrypt(args.stripeWebhookSecret);
+		const secretEnc = await nextEncryptedSecret(
+			existing?.stripeSecretKey,
+			args.stripeSecretKey,
+		);
+		const webhookEnc = await nextEncryptedSecret(
+			existing?.stripeWebhookSecret,
+			args.stripeWebhookSecret,
+		);
 
 		if (existing) {
 			await ctx.db.patch(existing._id, {

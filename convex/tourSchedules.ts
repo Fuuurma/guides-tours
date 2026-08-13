@@ -14,12 +14,19 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { assertFieldWithinLimit } from "./lib/validation";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { parseBookingTime } from "./lib/time";
+
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
 
 const SCHEDULE_STATUSES = ["available", "full", "cancelled"] as const;
 type ScheduleStatus = (typeof SCHEDULE_STATUSES)[number];
@@ -164,7 +171,7 @@ export const create = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourSchedules.internalCreate,
 			{ organizationId: member.organizationId, userId: member.userId, ...args },
 		);
 	},
@@ -269,7 +276,7 @@ export const update = mutation({
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		const { scheduleId, ...rest } = args;
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourSchedules.internalUpdate,
 			{ organizationId: member.organizationId, userId: member.userId, scheduleId, ...rest },
 		);
 	},
@@ -484,7 +491,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourSchedules.internalRemove,
 			{ organizationId: member.organizationId, userId: member.userId, scheduleId: args.scheduleId },
 		);
 	},

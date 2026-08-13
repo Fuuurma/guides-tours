@@ -1,10 +1,10 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
-import { FormField } from "@/components/form";
 import { ListPage } from "@/components/list-page";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,16 +17,19 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+	Field,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Spinner } from "@/components/ui/spinner";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { organization } from "@/lib/auth-client";
 import { getErrorMessage } from "@/lib/utils";
+import { MAX_EMAIL_LEN, validateEmail } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/guides")({
@@ -71,78 +74,136 @@ const columns: DataTableColumn<GuideRow>[] = [
 	},
 ];
 
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
+
 function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 	const [open, setOpen] = useState(false);
-	const [email, setEmail] = useState("");
-	const [role, setRole] = useState("guide");
-	const [pending, setPending] = useState(false);
+	const [submitErr, setSubmitErr] = useState<string | null>(null);
 
-	const onInvite = async (e: React.FormEvent) => {
-		e.preventDefault();
-		const trimmed = email.trim().toLowerCase();
-		if (!trimmed.includes("@")) {
-			toast.error("Enter a valid email");
-			return;
-		}
-		setPending(true);
-		try {
-			const { error } = await organization.inviteMember({
-				email: trimmed,
-				role: role as "guide" | "member" | "admin",
-			});
-			if (error) throw new Error(error.message ?? "Invite failed");
-			toast.success(`Invitation sent to ${trimmed}`);
-			setEmail("");
-			setOpen(false);
-			onInvited();
-		} catch (err) {
-			toast.error(getErrorMessage(err));
-		} finally {
-			setPending(false);
-		}
-	};
+	const form = useForm({
+		defaultValues: { email: "", role: "guide" },
+		onSubmit: async ({ value }) => {
+			setSubmitErr(null);
+			const emailErr = validateEmail(value.email);
+			if (emailErr) {
+				form.setFieldMeta("email", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: emailErr },
+				}));
+				return;
+			}
+			const role = value.role as "guide" | "member" | "admin";
+			try {
+				const { error } = await organization.inviteMember({
+					email: value.email.trim().toLowerCase(),
+					role,
+				});
+				if (error) throw new Error(error.message ?? "Invite failed");
+				toast.success(`Invitation sent to ${value.email.trim().toLowerCase()}`);
+				form.reset();
+				setOpen(false);
+				onInvited();
+			} catch (err) {
+				setSubmitErr(getErrorMessage(err));
+			}
+		},
+	});
 
 	return (
-		<Dialog open={open} onOpenChange={setOpen}>
+		<Dialog
+			open={open}
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) {
+					form.reset();
+					setSubmitErr(null);
+				}
+			}}
+		>
 			<DialogTrigger asChild>
 				<Button size="sm">Invite guide</Button>
 			</DialogTrigger>
 			<DialogContent>
-				<form onSubmit={onInvite}>
+				<form
+					onSubmit={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						void form.handleSubmit();
+					}}
+				>
 					<DialogHeader>
 						<DialogTitle>Invite a guide</DialogTitle>
 						<DialogDescription>
 							Sends an email with a link to join this organization.
 						</DialogDescription>
 					</DialogHeader>
-					<div className="grid gap-4 py-4">
-						<FormField label="Email *" htmlFor="invite-email">
-							<Input
-								id="invite-email"
-								type="email"
-								required
-								value={email}
-								onChange={(e) => setEmail(e.target.value)}
-								placeholder="guide@example.com"
-							/>
-						</FormField>
-						<FormField label="Role" htmlFor="invite-role">
-							<Select value={role} onValueChange={setRole}>
-								<SelectTrigger id="invite-role">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="guide">Guide</SelectItem>
-									<SelectItem value="member">Member</SelectItem>
-									<SelectItem value="admin">Admin</SelectItem>
-								</SelectContent>
-							</Select>
-						</FormField>
-					</div>
+					<FieldGroup className="gap-4 py-4">
+						<form.Field name="email">
+							{(field) => (
+								<Field data-invalid={!field.state.meta.isValid}>
+									<FieldLabel htmlFor="invite-email">Email *</FieldLabel>
+									<Input
+										id="invite-email"
+										type="email"
+										required
+										maxLength={MAX_EMAIL_LEN}
+										value={field.state.value}
+										onBlur={field.handleBlur}
+										onChange={(e) => field.handleChange(e.target.value)}
+										placeholder="guide@example.com"
+										aria-invalid={!field.state.meta.isValid}
+									/>
+									<FieldError errors={metaErrors(field.state.meta.errors)} />
+								</Field>
+							)}
+						</form.Field>
+						<form.Field name="role">
+							{(field) => (
+								<Field>
+									<FieldLabel htmlFor="invite-role">Role</FieldLabel>
+									<ToggleGroup
+										id="invite-role"
+										type="single"
+										variant="outline"
+										size="sm"
+										value={field.state.value}
+										onValueChange={(v) => {
+											if (v) field.handleChange(v);
+										}}
+									>
+										<ToggleGroupItem value="guide">Guide</ToggleGroupItem>
+										<ToggleGroupItem value="member">Member</ToggleGroupItem>
+										<ToggleGroupItem value="admin">Admin</ToggleGroupItem>
+									</ToggleGroup>
+								</Field>
+							)}
+						</form.Field>
+						{submitErr ? <ErrorBanner message={submitErr} /> : null}
+					</FieldGroup>
 					<DialogFooter>
-						<Button type="submit" disabled={pending}>
-							{pending ? "Sending…" : "Send invite"}
-						</Button>
+						<form.Subscribe
+							selector={(state) =>
+								[state.canSubmit, state.isSubmitting] as const
+							}
+						>
+							{([canSubmit, isSubmitting]) => (
+								<Button type="submit" disabled={!canSubmit || isSubmitting}>
+									{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+									{isSubmitting ? "Sending…" : "Send invite"}
+								</Button>
+							)}
+						</form.Subscribe>
 					</DialogFooter>
 				</form>
 			</DialogContent>
@@ -165,11 +226,29 @@ function GuidesPage() {
 	const itemCount = guides.length;
 
 	return (
-		<>
-			<ListPage
-				title="Guides"
-				description={`${itemCount} guide-capable member${itemCount === 1 ? "" : "s"}`}
-				actions={
+		<ListPage
+			title="Guides"
+			description={`${itemCount} guide-capable member${itemCount === 1 ? "" : "s"} — people who can lead a tour`}
+			basePath="/dashboard/guides"
+			actions={
+				<InviteGuideDialog
+					onInvited={() => {
+						setInviteTick((n) => n + 1);
+						void refetchMembers();
+					}}
+				/>
+			}
+			below={<PendingInvitesSection key={inviteTick} />}
+		>
+			<DataTable
+				data={guides}
+				columns={columns}
+				rowKey={(g) => g.userId}
+				isPending={isPending}
+				error={error}
+				emptyMessage="No guides yet"
+				emptyDescription="Invite your team with the guide role so you can assign them to departures."
+				emptyAction={
 					<InviteGuideDialog
 						onInvited={() => {
 							setInviteTick((n) => n + 1);
@@ -177,27 +256,9 @@ function GuidesPage() {
 						}}
 					/>
 				}
-			>
-				<DataTable
-					data={guides}
-					columns={columns}
-					rowKey={(g) => g.userId}
-					isPending={isPending}
-					error={error}
-					emptyMessage="No guides yet. Invite members with the guide role."
-					emptyAction={
-						<InviteGuideDialog
-							onInvited={() => {
-								setInviteTick((n) => n + 1);
-								void refetchMembers();
-							}}
-						/>
-					}
-					searchPlaceholder="Search by name, email, or role…"
-				/>
-			</ListPage>
-			<PendingInvitesSection key={inviteTick} />
-		</>
+				searchPlaceholder="Search by name, email, or role…"
+			/>
+		</ListPage>
 	);
 }
 
@@ -268,7 +329,7 @@ function PendingInvitesSection() {
 	};
 
 	return (
-		<section className="mt-10 space-y-3">
+		<section className="mt-10 flex flex-col gap-3">
 			<div className="flex items-center justify-between gap-2">
 				<div>
 					<h2 className="text-lg font-semibold">Pending invites</h2>
@@ -313,6 +374,9 @@ function PendingInvitesSection() {
 								disabled={busyId === inv.id}
 								onClick={() => void onCancel(inv.id)}
 							>
+								{busyId === inv.id ? (
+									<Spinner data-icon="inline-start" />
+								) : null}
 								{busyId === inv.id ? "Cancelling…" : "Cancel"}
 							</Button>
 						</li>

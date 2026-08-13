@@ -1,14 +1,8 @@
-import { Link, Outlet } from "@tanstack/react-router";
+import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import type * as React from "react";
 
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 
 /**
  * Standard shell for list/index pages. Replaces the duplicated
@@ -30,8 +24,12 @@ export interface ListPageProps {
 	description?: string;
 	newTo?: string;
 	newLabel?: string;
+	/** Base path used to hide the list while a nested route is active. */
+	basePath?: string;
 	/** Extra actions to render next to the New button. */
 	actions?: React.ReactNode;
+	/** Content shown below the list card, only on the list route. */
+	below?: React.ReactNode;
 	children: React.ReactNode;
 }
 
@@ -40,23 +38,32 @@ export function ListPage({
 	description,
 	newTo,
 	newLabel,
+	basePath,
 	actions,
+	below,
 	children,
 }: ListPageProps) {
+	const { pathname } = useLocation();
+	const listPath = basePath ?? newTo?.replace(/\/new$/, "");
+	const isListRoute =
+		!listPath || pathname === listPath || pathname === `${listPath}/`;
+
 	return (
 		<>
-			{/* Child routes (e.g. /dashboard/tours/new, /dashboard/tours/$tourId)
-			    render here instead of the list. When no child route matches,
-			    the list below is shown. */}
-			<Outlet />
-			{children ? (
-				<Card>
-					<CardHeader className="flex flex-row items-center justify-between space-y-0">
-						<div>
-							<CardTitle>{title}</CardTitle>
-							{description && <CardDescription>{description}</CardDescription>}
+			{isListRoute ? (
+				<div className="flex flex-col gap-4">
+					<div className="flex flex-wrap items-start justify-between gap-4">
+						<div className="min-w-0">
+							<h1 className="text-balance text-2xl font-semibold tracking-tight">
+								{title}
+							</h1>
+							{description && (
+								<p className="mt-1 text-sm text-muted-foreground">
+									{description}
+								</p>
+							)}
 						</div>
-						<div className="flex gap-2">
+						<div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
 							{actions}
 							{newTo && (
 								<Button asChild>
@@ -64,10 +71,15 @@ export function ListPage({
 								</Button>
 							)}
 						</div>
-					</CardHeader>
-					<CardContent>{children}</CardContent>
-				</Card>
-			) : null}
+					</div>
+					<Card className="overflow-hidden">
+						<CardContent className="pt-6">{children}</CardContent>
+					</Card>
+					{below}
+				</div>
+			) : (
+				<Outlet />
+			)}
 		</>
 	);
 }

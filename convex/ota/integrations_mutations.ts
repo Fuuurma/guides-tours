@@ -7,10 +7,18 @@
 import { v, ConvexError } from "convex/values";
 import type { FunctionReference } from "convex/server";
 import { internalMutation, internalQuery, mutation } from "../_generated/server";
+import { internal } from "../_generated/api";
 import { requireRole } from "../lib/authz";
 import { decrypt, encrypt } from "../lib/crypto";
 import { logAudit } from "../lib/audit";
 import { assertFieldWithinLimit } from "../lib/validation";
+
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as {
+	ota: {
+		integrations_mutations: Record<string, InternalMutationRef>;
+	};
+};
 
 const PROVIDERS = [
 	"viator",
@@ -40,10 +48,7 @@ export const create = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			createInternal as unknown as FunctionReference<
-				"mutation",
-				"public" | "internal"
-			>,
+			internalRefs.ota.integrations_mutations.createInternal,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -70,10 +75,7 @@ export const update = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			updateInternal as unknown as FunctionReference<
-				"mutation",
-				"public" | "internal"
-			>,
+			internalRefs.ota.integrations_mutations.updateInternal,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -88,10 +90,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			removeInternal as unknown as FunctionReference<
-				"mutation",
-				"public" | "internal"
-			>,
+			internalRefs.ota.integrations_mutations.removeInternal,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,

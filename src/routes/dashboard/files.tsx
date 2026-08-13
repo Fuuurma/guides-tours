@@ -4,6 +4,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +51,7 @@ function FilesPage() {
 		error,
 	} = useQuery(convexQuery(api.files.list, {}));
 	const removeFile = useMutation(api.files.remove);
+	const confirm = useConfirm();
 
 	const items = (files ?? []) as FileRow[];
 
@@ -67,11 +69,12 @@ function FilesPage() {
 	}, [items, purpose]);
 
 	const onDelete = async (id: Id<"files">, label: string) => {
-		if (
-			!window.confirm(
-				`Delete "${label}"? This removes the stored file and linked gallery images.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete "${label}"?`,
+			description: "This removes the stored file and linked gallery images.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
 		setPendingId(id);

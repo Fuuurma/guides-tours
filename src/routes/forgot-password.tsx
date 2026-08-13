@@ -1,12 +1,14 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Loader2, MailCheck } from "lucide-react";
+import { MailCheck } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { FieldGroup } from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -84,51 +86,55 @@ function ForgotPasswordPage() {
 					e.stopPropagation();
 					void form.handleSubmit();
 				}}
-				className="space-y-4"
 			>
-				<form.Field name="email">
-					{(field) => (
-						<FormField
-							field={field}
-							label="Email"
-							inputProps={{
-								type: "email",
-								autoComplete: "email",
-								autoFocus: true,
-							}}
-						/>
-					)}
-				</form.Field>
+				<FieldGroup className="gap-4">
+					<form.Field name="email">
+						{(field) => (
+							<FormField
+								field={field}
+								label="Email"
+								inputProps={{
+									type: "email",
+									autoComplete: "email",
+									autoFocus: true,
+								}}
+							/>
+						)}
+					</form.Field>
 
-				{serverError ? <ErrorBanner message={serverError} /> : null}
+					{serverError ? <ErrorBanner message={serverError} /> : null}
 
-				<form.Subscribe
-					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
-				>
-					{([canSubmit, isSubmitting]) => (
-						<Button
-							type="submit"
-							size="lg"
-							className="h-11 w-full rounded-full"
-							disabled={!canSubmit || isSubmitting}
+					<form.Subscribe
+						selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+					>
+						{([canSubmit, isSubmitting]) => (
+							<Button
+								type="submit"
+								size="lg"
+								className="h-11 w-full rounded-full"
+								disabled={!canSubmit || isSubmitting}
+							>
+								{isSubmitting ? (
+									<>
+										<Spinner data-icon="inline-start" /> Sending...
+									</>
+								) : (
+									"Send reset link"
+								)}
+							</Button>
+						)}
+					</form.Subscribe>
+
+					<p className="pt-2 text-center text-sm text-muted-foreground">
+						Remembered your password?{" "}
+						<Link
+							to="/sign-in"
+							className="font-medium text-foreground underline"
 						>
-							{isSubmitting ? (
-								<>
-									<Loader2 className="size-4 animate-spin" /> Sending...
-								</>
-							) : (
-								"Send reset link"
-							)}
-						</Button>
-					)}
-				</form.Subscribe>
-
-				<p className="pt-2 text-center text-sm text-muted-foreground">
-					Remembered your password?{" "}
-					<Link to="/sign-in" className="font-medium text-foreground underline">
-						Sign in
-					</Link>
-				</p>
+							Sign in
+						</Link>
+					</p>
+				</FieldGroup>
 			</form>
 		</AuthShell>
 	);

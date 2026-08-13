@@ -9,8 +9,15 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
 
 // ---- queries ----
 
@@ -130,7 +137,7 @@ export const create = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourBlackoutDates.internalCreate,
 			{ organizationId: member.organizationId, userId: member.userId, ...args },
 		);
 	},
@@ -194,7 +201,7 @@ export const update = mutation({
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		const { blackoutId, ...rest } = args;
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourBlackoutDates.internalUpdate,
 			{ organizationId: member.organizationId, userId: member.userId, blackoutId, ...rest },
 		);
 	},
@@ -263,7 +270,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.tourBlackoutDates.internalRemove,
 			{ organizationId: member.organizationId, userId: member.userId, blackoutId: args.blackoutId },
 		);
 	},

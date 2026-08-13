@@ -10,6 +10,12 @@ import {
 	waitForHydration,
 } from "./helpers/auth";
 
+function daysFromToday(days: number): string {
+	const date = new Date();
+	date.setDate(date.getDate() + days);
+	return localYmd(date);
+}
+
 test.describe("authenticated ops", () => {
 	test.setTimeout(240_000);
 
@@ -181,7 +187,12 @@ test.describe("authenticated ops", () => {
 		await reqGuides.waitFor({ state: "visible" });
 		await reqGuides.fill("2");
 		await page.getByRole("button", { name: /create tour/i }).click();
-		await page.waitForURL(/\/dashboard\/tours\/[^/]+$/, { timeout: 60_000 });
+		await page.waitForURL(
+			(url) =>
+				/^\/dashboard\/tours\/[^/]+$/.test(url.pathname) &&
+				url.pathname !== "/dashboard/tours/new",
+			{ timeout: 60_000 },
+		);
 
 		const today = localYmd(new Date());
 		await page.goto(`/dashboard/assignments/new?date=${today}`);
@@ -193,9 +204,12 @@ test.describe("authenticated ops", () => {
 		await page.getByRole("option").first().click();
 		await page.locator("#start").fill("10:00");
 		await page.getByRole("button", { name: /create assignment/i }).click();
-		await page.waitForURL(/\/dashboard\/assignments\/[^/]+$/, {
-			timeout: 60_000,
-		});
+		await page.waitForURL(
+			(url) =>
+				/^\/dashboard\/assignments\/[^/]+$/.test(url.pathname) &&
+				url.pathname !== "/dashboard/assignments/new",
+			{ timeout: 60_000 },
+		);
 
 		await page.goto("/dashboard/staffing");
 		await waitForHydration(page);
@@ -239,7 +253,7 @@ test.describe("authenticated ops", () => {
 
 		// Save a sandbox publishable key so booking detail can offer Elements.
 		await page.locator("#pubKey").fill("pk_test_e2e_placeholder");
-		await page.getByLabel(/stripe enabled/i).check();
+		await page.getByLabel(/stripe enabled/i).setChecked(true);
 		await page.getByRole("button", { name: /save/i }).click();
 		await expect(page.getByText(/payment settings saved/i)).toBeVisible({
 			timeout: 15_000,
@@ -269,9 +283,7 @@ test.describe("authenticated ops", () => {
 		await page.locator("#pubKey").waitFor({ state: "visible", timeout: 30_000 });
 		await page.locator("#pubKey").fill("pk_test_e2e_placeholder");
 		const enabled = page.getByLabel(/stripe enabled/i);
-		if (!(await enabled.isChecked())) {
-			await enabled.check();
-		}
+		await enabled.setChecked(true);
 		await page.getByRole("button", { name: /save/i }).click();
 		await expect(page.getByText(/payment settings saved/i)).toBeVisible({
 			timeout: 15_000,
@@ -286,9 +298,14 @@ test.describe("authenticated ops", () => {
 		await page.locator("#name").fill(custName);
 		await page.locator("#email").fill(`pay-${Date.now()}@e2e.local`);
 		await page.getByRole("button", { name: /create customer/i }).click();
-		await page.waitForURL(/\/dashboard\/customers\/[^/]+$/, { timeout: 60_000 });
+		await page.waitForURL(
+			(url) =>
+				/^\/dashboard\/customers\/[^/]+$/.test(url.pathname) &&
+				url.pathname !== "/dashboard/customers/new",
+			{ timeout: 60_000 },
+		);
 
-		const today = localYmd(new Date());
+		const futureDate = daysFromToday(14);
 		await page.goto("/dashboard/bookings/new");
 		await waitForHydration(page);
 		await page.locator("#tour").waitFor({ state: "visible", timeout: 30_000 });
@@ -296,11 +313,16 @@ test.describe("authenticated ops", () => {
 		await page.getByRole("option", { name: tourName }).click();
 		await page.locator("#customer").click();
 		await page.getByRole("option", { name: new RegExp(custName) }).click();
-		await page.locator("#date").fill(today);
+		await page.locator("#date").fill(futureDate);
 		await page.locator("#time").fill("11:00");
 		await page.locator("#total").fill("120.00");
 		await page.getByRole("button", { name: /create booking/i }).click();
-		await page.waitForURL(/\/dashboard\/bookings\/[^/]+$/, { timeout: 60_000 });
+		await page.waitForURL(
+			(url) =>
+				/^\/dashboard\/bookings\/[^/]+$/.test(url.pathname) &&
+				url.pathname !== "/dashboard/bookings/new",
+			{ timeout: 60_000 },
+		);
 		await waitForHydration(page);
 
 		await expect(page.getByText(/collect/i).first()).toBeVisible({

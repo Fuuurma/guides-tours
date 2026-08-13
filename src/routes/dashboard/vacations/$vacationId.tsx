@@ -4,12 +4,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
@@ -18,6 +20,8 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 export const Route = createFileRoute("/dashboard/vacations/$vacationId")({
 	component: VacationDetailPage,
 });
+
+type ReviewAction = "approve" | "force" | "reject";
 
 function VacationDetailPage() {
 	const { vacationId } = Route.useParams();
@@ -32,7 +36,8 @@ function VacationDetailPage() {
 	);
 	const approve = useMutation(api.vacationRequests.approve);
 	const reject = useMutation(api.vacationRequests.reject);
-	const [pending, setPending] = useState(false);
+	const confirm = useConfirm();
+	const [reviewAction, setReviewAction] = useState<ReviewAction | null>(null);
 	const [errorMsg, setErrorMsg] = useState<string | null>(null);
 	const { displayName } = useOrgMembers();
 
@@ -53,9 +58,10 @@ function VacationDetailPage() {
 			86_400_000 +
 			1,
 	);
+	const busy = reviewAction !== null;
 
 	const onApprove = async (force = false) => {
-		setPending(true);
+		setReviewAction(force ? "force" : "approve");
 		setErrorMsg(null);
 		try {
 			await approve({ requestId: vacation._id, force: force || undefined });
@@ -65,21 +71,30 @@ function VacationDetailPage() {
 			setErrorMsg(msg);
 			toast.error(msg);
 		} finally {
-			setPending(false);
+			setReviewAction(null);
 		}
 	};
 
 	const onReject = async () => {
-		setPending(true);
+		const ok = await confirm({
+			title: "Reject this vacation request?",
+			description:
+				"The requester will see it as rejected. This cannot be undone from here.",
+			confirmText: "Reject",
+			variant: "destructive",
+		});
+		if (!ok) return;
+		setReviewAction("reject");
 		setErrorMsg(null);
 		try {
 			await reject({ requestId: vacation._id });
 			toast.success("Vacation rejected");
 		} catch (err) {
-			setErrorMsg(getErrorMessage(err));
-			toast.error(getErrorMessage(err));
+			const msg = getErrorMessage(err);
+			setErrorMsg(msg);
+			toast.error(msg);
 		} finally {
-			setPending(false);
+			setReviewAction(null);
 		}
 	};
 
@@ -107,7 +122,7 @@ function VacationDetailPage() {
 			{vacation.status === "pending" && (
 				<DetailSection
 					title="Review"
-					description="Approve or reject this request"
+					description="Approving blocks overlapping assignments for these dates."
 				>
 					{errorMsg && (
 						<ErrorBanner
@@ -118,20 +133,33 @@ function VacationDetailPage() {
 						/>
 					)}
 					<div className="flex flex-wrap gap-2">
-						<Button onClick={() => onApprove(false)} disabled={pending}>
-							{pending ? "Working…" : "Approve"}
+						<Button onClick={() => void onApprove(false)} disabled={busy}>
+							{reviewAction === "approve" ? (
+								<Spinner data-icon="inline-start" />
+							) : null}
+							{reviewAction === "approve" ? "Working…" : "Approve"}
 						</Button>
 						{errorMsg?.includes("VACATION_ASSIGNMENT_CONFLICT") && (
 							<Button
 								variant="outline"
-								onClick={() => onApprove(true)}
-								disabled={pending}
+								onClick={() => void onApprove(true)}
+								disabled={busy}
 							>
+								{reviewAction === "force" ? (
+									<Spinner data-icon="inline-start" />
+								) : null}
 								Approve anyway
 							</Button>
 						)}
-						<Button onClick={onReject} disabled={pending} variant="destructive">
-							{pending ? "Working…" : "Reject"}
+						<Button
+							onClick={() => void onReject()}
+							disabled={busy}
+							variant="destructive"
+						>
+							{reviewAction === "reject" ? (
+								<Spinner data-icon="inline-start" />
+							) : null}
+							{reviewAction === "reject" ? "Working…" : "Reject"}
 						</Button>
 					</div>
 				</DetailSection>

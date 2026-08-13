@@ -1,8 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,100 +14,156 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import {
+	Field,
+	FieldDescription,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { getErrorMessage } from "@/lib/utils";
+import { validateCurrency, validateNonNegativeNumber } from "@/lib/validation";
 import { api } from "../../../../convex/_generated/api";
-import { FormActions, FormField } from "../../../components/form";
 
 export const Route = createFileRoute("/dashboard/settings/payments")({
 	component: PaymentSettingsPage,
 });
 
+type PublicPaymentSettings = {
+	stripeEnabled: boolean;
+	stripePublishableKey: string;
+	stripeIsSandbox: boolean;
+	acceptDeposits: boolean;
+	depositPercentage: number;
+	defaultCurrency: string;
+};
+
+type PaymentFormValues = {
+	stripeEnabled: boolean;
+	stripePublishableKey: string;
+	stripeSecretKey: string;
+	stripeWebhookSecret: string;
+	stripeIsSandbox: boolean;
+	acceptDeposits: boolean;
+	depositPercentage: string;
+	defaultCurrency: string;
+};
+
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
+
 function PaymentSettingsPage() {
 	const { data: settings, isPending } = useQuery(
 		convexQuery(api.payments.getPublicSettings, {}),
 	);
-	const upsert = useMutation(api.payments.upsertSettings);
-
-	const [stripeEnabled, setStripeEnabled] = useState(false);
-	const [stripePublishableKey, setStripePublishableKey] = useState("");
-	const [stripeSecretKey, setStripeSecretKey] = useState("");
-	const [stripeWebhookSecret, setStripeWebhookSecret] = useState("");
-	const [stripeIsSandbox, setStripeIsSandbox] = useState(true);
-	const [acceptDeposits, setAcceptDeposits] = useState(false);
-	const [depositPercentage, setDepositPercentage] = useState("20");
-	const [defaultCurrency, setDefaultCurrency] = useState("USD");
-	const [pending, setPending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const stripeWebhookUrl =
-		typeof window !== "undefined"
-			? `${((import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ?? "").replace(/\/$/, "") || window.location.origin}/api/payments/stripe/webhook`
-			: "/api/payments/stripe/webhook";
-
-	useEffect(() => {
-		if (settings) {
-			const s = settings as {
-				stripeEnabled: boolean;
-				stripePublishableKey: string;
-				stripeIsSandbox: boolean;
-				acceptDeposits: boolean;
-				depositPercentage: number;
-				defaultCurrency: string;
-			};
-			setStripeEnabled(s.stripeEnabled);
-			setStripePublishableKey(s.stripePublishableKey);
-			setStripeIsSandbox(s.stripeIsSandbox);
-			setAcceptDeposits(s.acceptDeposits);
-			setDepositPercentage(s.depositPercentage.toString());
-			setDefaultCurrency(s.defaultCurrency);
-		}
-	}, [settings]);
-
-	const onSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
-		setPending(true);
-		setError(null);
-
-		const deposit = Number(depositPercentage);
-		if (deposit < 0 || deposit > 100) {
-			setError("Deposit percentage must be between 0 and 100");
-			setPending(false);
-			return;
-		}
-
-		try {
-			await upsert({
-				stripeEnabled,
-				stripePublishableKey,
-				stripeSecretKey: stripeSecretKey || "placeholder-no-change",
-				stripeWebhookSecret: stripeWebhookSecret || "placeholder-no-change",
-				stripeIsSandbox,
-				acceptDeposits,
-				depositPercentage: deposit,
-				defaultCurrency,
-			});
-			setStripeSecretKey("");
-			setStripeWebhookSecret("");
-			toast.success("Payment settings saved");
-		} catch (err) {
-			setError(getErrorMessage(err));
-			toast.error(getErrorMessage(err));
-		} finally {
-			setPending(false);
-		}
-	};
 
 	if (isPending) {
 		return <DetailSkeleton />;
 	}
 
 	return (
-		<div className="mx-auto max-w-2xl space-y-6">
-			<header className="flex items-center justify-between">
+		<PaymentSettingsForm
+			settings={(settings as PublicPaymentSettings) ?? null}
+		/>
+	);
+}
+
+function PaymentSettingsForm({
+	settings,
+}: {
+	settings: PublicPaymentSettings | null;
+}) {
+	const upsert = useMutation(api.payments.upsertSettings);
+	const [submitErr, setSubmitErr] = useState<string | null>(null);
+
+	const stripeWebhookUrl =
+		typeof window !== "undefined"
+			? `${((import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ?? "").replace(/\/$/, "") || window.location.origin}/api/payments/stripe/webhook`
+			: "/api/payments/stripe/webhook";
+
+	const form = useForm({
+		defaultValues: {
+			stripeEnabled: settings?.stripeEnabled ?? false,
+			stripePublishableKey: settings?.stripePublishableKey ?? "",
+			stripeSecretKey: "",
+			stripeWebhookSecret: "",
+			stripeIsSandbox: settings?.stripeIsSandbox ?? true,
+			acceptDeposits: settings?.acceptDeposits ?? false,
+			depositPercentage: String(settings?.depositPercentage ?? 20),
+			defaultCurrency: settings?.defaultCurrency ?? "USD",
+		} satisfies PaymentFormValues,
+		onSubmit: async ({ value }) => {
+			setSubmitErr(null);
+			let invalid = false;
+			const fail = (name: keyof PaymentFormValues, message: string) => {
+				form.setFieldMeta(name, (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: message },
+				}));
+				invalid = true;
+			};
+
+			const depositErr = validateNonNegativeNumber(
+				value.depositPercentage,
+				"Deposit percentage",
+			);
+			if (depositErr) fail("depositPercentage", depositErr);
+			else {
+				const deposit = Number(value.depositPercentage);
+				if (deposit > 100) {
+					fail(
+						"depositPercentage",
+						"Deposit percentage must be between 0 and 100",
+					);
+				}
+			}
+			const currencyErr = validateCurrency(value.defaultCurrency);
+			if (currencyErr) fail("defaultCurrency", currencyErr);
+			if (invalid) return;
+
+			try {
+				const secretKey = value.stripeSecretKey.trim();
+				const webhookSecret = value.stripeWebhookSecret.trim();
+				await upsert({
+					stripeEnabled: value.stripeEnabled,
+					stripePublishableKey: value.stripePublishableKey.trim(),
+					stripeSecretKey:
+						secretKey || (settings ? "placeholder-no-change" : ""),
+					stripeWebhookSecret:
+						webhookSecret || (settings ? "placeholder-no-change" : ""),
+					stripeIsSandbox: value.stripeIsSandbox,
+					acceptDeposits: value.acceptDeposits,
+					depositPercentage: Number(value.depositPercentage),
+					defaultCurrency: value.defaultCurrency.trim().toUpperCase(),
+				});
+				form.setFieldValue("stripeSecretKey", "");
+				form.setFieldValue("stripeWebhookSecret", "");
+				toast.success("Payment settings saved");
+			} catch (err) {
+				setSubmitErr(getErrorMessage(err));
+				toast.error(getErrorMessage(err));
+			}
+		},
+	});
+
+	return (
+		<div className="mx-auto flex max-w-2xl flex-col gap-6">
+			<header className="flex items-center justify-between gap-4">
 				<div>
 					<h1 className="text-2xl font-semibold">Payment settings</h1>
 					<p className="text-muted-foreground text-sm">
@@ -118,161 +175,231 @@ function PaymentSettingsPage() {
 				</Button>
 			</header>
 
-			<form onSubmit={onSubmit} className="space-y-6">
-				<Card>
-					<CardHeader>
-						<CardTitle>Stripe</CardTitle>
-						<CardDescription>Online card payments via Stripe</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						<label
-							htmlFor="stripe-enabled"
-							className="flex items-center gap-2 text-sm"
-						>
-							<Checkbox
-								id="stripe-enabled"
-								checked={stripeEnabled}
-								onCheckedChange={(c) => setStripeEnabled(c === true)}
-							/>
-							Stripe enabled
-						</label>
-						<div className="flex items-center gap-2">
-							<Badge variant={stripeIsSandbox ? "secondary" : "default"}>
-								{stripeIsSandbox ? "Sandbox" : "Live"}
-							</Badge>
-							<label
-								htmlFor="stripe-sandbox"
-								className="text-xs text-muted-foreground flex items-center gap-1"
-							>
-								<Checkbox
-									id="stripe-sandbox"
-									checked={stripeIsSandbox}
-									onCheckedChange={(c) => setStripeIsSandbox(c === true)}
-								/>
-								Use sandbox/test mode
-							</label>
-						</div>
-						<FormField
-							label="Publishable key"
-							hint="Required for in-page Payment Element (pk_…)"
-							htmlFor="pubKey"
-						>
-							<Input
-								id="pubKey"
-								value={stripePublishableKey}
-								onChange={(e) => setStripePublishableKey(e.target.value)}
-								placeholder="pk_live_… or pk_test_…"
-								maxLength={200}
-								autoComplete="off"
-							/>
-						</FormField>
-						<FormField
-							label="Secret key"
-							hint={
-								settings ? "Leave blank to keep existing" : "Encrypted at rest"
-							}
-							htmlFor="secretKey"
-						>
-							<Input
-								id="secretKey"
-								type="password"
-								value={stripeSecretKey}
-								onChange={(e) => setStripeSecretKey(e.target.value)}
-								placeholder={settings ? "•••••••" : "sk_live_…"}
-								maxLength={500}
-								autoComplete="off"
-							/>
-						</FormField>
-						<FormField
-							label="Webhook secret"
-							hint="From Stripe dashboard → Webhooks → Signing secret"
-							htmlFor="webhookSecret"
-						>
-							<Input
-								id="webhookSecret"
-								type="password"
-								value={stripeWebhookSecret}
-								onChange={(e) => setStripeWebhookSecret(e.target.value)}
-								placeholder={settings ? "•••••••" : "whsec_…"}
-								maxLength={500}
-								autoComplete="off"
-							/>
-						</FormField>
-						<div className="rounded-md border bg-muted/40 p-3 text-sm">
-							<p className="mb-1 font-medium">Webhook endpoint</p>
-							<p className="text-muted-foreground text-xs mb-2">
-								Point Stripe at this URL (Convex HTTP action).
-							</p>
-							<code className="block break-all font-mono text-xs">
-								{stripeWebhookUrl}
-							</code>
-							<p className="text-muted-foreground text-xs mt-2">
-								Uses <code className="font-mono">VITE_CONVEX_SITE_URL</code>{" "}
-								when set; otherwise falls back to the app origin.
-							</p>
-						</div>
-					</CardContent>
-				</Card>
+			<form
+				onSubmit={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					void form.handleSubmit();
+				}}
+			>
+				<FieldGroup className="gap-6">
+					<Card>
+						<CardHeader>
+							<CardTitle>Stripe</CardTitle>
+							<CardDescription>Online card payments via Stripe</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<FieldGroup className="gap-4">
+								<form.Field name="stripeEnabled">
+									{(field) => (
+										<Field orientation="horizontal">
+											<FieldLabel htmlFor="stripe-enabled">
+												Stripe enabled
+											</FieldLabel>
+											<Switch
+												id="stripe-enabled"
+												checked={field.state.value}
+												onCheckedChange={field.handleChange}
+											/>
+										</Field>
+									)}
+								</form.Field>
+								<form.Field name="stripeIsSandbox">
+									{(field) => (
+										<Field orientation="horizontal">
+											<Badge
+												variant={field.state.value ? "secondary" : "default"}
+											>
+												{field.state.value ? "Sandbox" : "Live"}
+											</Badge>
+											<FieldLabel htmlFor="stripe-sandbox">
+												Use sandbox/test mode
+											</FieldLabel>
+											<Switch
+												id="stripe-sandbox"
+												checked={field.state.value}
+												onCheckedChange={field.handleChange}
+											/>
+										</Field>
+									)}
+								</form.Field>
+								<form.Field name="stripePublishableKey">
+									{(field) => (
+										<Field>
+											<FieldLabel htmlFor="pubKey">Publishable key</FieldLabel>
+											<Input
+												id="pubKey"
+												value={field.state.value}
+												onBlur={field.handleBlur}
+												onChange={(e) => field.handleChange(e.target.value)}
+												placeholder="pk_live_… or pk_test_…"
+												maxLength={200}
+												autoComplete="off"
+											/>
+											<FieldDescription>
+												Required for in-page Payment Element (pk_…)
+											</FieldDescription>
+										</Field>
+									)}
+								</form.Field>
+								<form.Field name="stripeSecretKey">
+									{(field) => (
+										<Field>
+											<FieldLabel htmlFor="secretKey">Secret key</FieldLabel>
+											<Input
+												id="secretKey"
+												type="password"
+												value={field.state.value}
+												onBlur={field.handleBlur}
+												onChange={(e) => field.handleChange(e.target.value)}
+												placeholder={settings ? "•••••••" : "sk_live_…"}
+												maxLength={500}
+												autoComplete="off"
+											/>
+											<FieldDescription>
+												{settings
+													? "Leave blank to keep existing"
+													: "Encrypted at rest"}
+											</FieldDescription>
+										</Field>
+									)}
+								</form.Field>
+								<form.Field name="stripeWebhookSecret">
+									{(field) => (
+										<Field>
+											<FieldLabel htmlFor="webhookSecret">
+												Webhook secret
+											</FieldLabel>
+											<Input
+												id="webhookSecret"
+												type="password"
+												value={field.state.value}
+												onBlur={field.handleBlur}
+												onChange={(e) => field.handleChange(e.target.value)}
+												placeholder={settings ? "•••••••" : "whsec_…"}
+												maxLength={500}
+												autoComplete="off"
+											/>
+											<FieldDescription>
+												From Stripe dashboard → Webhooks → Signing secret
+											</FieldDescription>
+										</Field>
+									)}
+								</form.Field>
+								<div className="rounded-md border bg-muted/40 p-3 text-sm">
+									<p className="mb-1 font-medium">Webhook endpoint</p>
+									<p className="mb-2 text-muted-foreground text-xs">
+										Point Stripe at this URL (Convex HTTP action).
+									</p>
+									<code className="block break-all font-mono text-xs">
+										{stripeWebhookUrl}
+									</code>
+									<p className="mt-2 text-muted-foreground text-xs">
+										Uses <code className="font-mono">VITE_CONVEX_SITE_URL</code>{" "}
+										when set; otherwise falls back to the app origin.
+									</p>
+								</div>
+							</FieldGroup>
+						</CardContent>
+					</Card>
 
-				<Card>
-					<CardHeader>
-						<CardTitle>Deposits</CardTitle>
-						<CardDescription>
-							Charge a partial amount up-front for bookings
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="space-y-4">
-						<label
-							htmlFor="accept-deposits"
-							className="flex items-center gap-2 text-sm"
-						>
-							<Checkbox
-								id="accept-deposits"
-								checked={acceptDeposits}
-								onCheckedChange={(c) => setAcceptDeposits(c === true)}
-							/>
-							Accept deposits
-						</label>
-						<FormField
-							label="Deposit percentage"
-							hint="0-100, applied to total booking amount"
-							htmlFor="deposit"
-						>
-							<Input
-								id="deposit"
-								type="number"
-								min="0"
-								max="100"
-								value={depositPercentage}
-								onChange={(e) => setDepositPercentage(e.target.value)}
-							/>
-						</FormField>
-					</CardContent>
-				</Card>
+					<Card>
+						<CardHeader>
+							<CardTitle>Deposits</CardTitle>
+							<CardDescription>
+								Charge a partial amount up-front for bookings
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<FieldGroup className="gap-4">
+								<form.Field name="acceptDeposits">
+									{(field) => (
+										<Field orientation="horizontal">
+											<FieldLabel htmlFor="accept-deposits">
+												Accept deposits
+											</FieldLabel>
+											<Switch
+												id="accept-deposits"
+												checked={field.state.value}
+												onCheckedChange={field.handleChange}
+											/>
+										</Field>
+									)}
+								</form.Field>
+								<form.Field name="depositPercentage">
+									{(field) => (
+										<Field data-invalid={!field.state.meta.isValid}>
+											<FieldLabel htmlFor="deposit">
+												Deposit percentage
+											</FieldLabel>
+											<Input
+												id="deposit"
+												type="number"
+												min="0"
+												max="100"
+												value={field.state.value}
+												onBlur={field.handleBlur}
+												onChange={(e) => field.handleChange(e.target.value)}
+												aria-invalid={!field.state.meta.isValid}
+											/>
+											<FieldDescription>
+												0-100, applied to total booking amount
+											</FieldDescription>
+											<FieldError
+												errors={metaErrors(field.state.meta.errors)}
+											/>
+										</Field>
+									)}
+								</form.Field>
+							</FieldGroup>
+						</CardContent>
+					</Card>
 
-				<Card>
-					<CardHeader>
-						<CardTitle>Default currency</CardTitle>
-						<CardDescription>ISO 4217 code, e.g. USD, EUR, GBP</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<FormField label="Currency" htmlFor="currency">
-							<Input
-								id="currency"
-								value={defaultCurrency}
-								onChange={(e) =>
-									setDefaultCurrency(e.target.value.toUpperCase())
-								}
-								maxLength={3}
-								placeholder="USD"
-							/>
-						</FormField>
-					</CardContent>
-				</Card>
+					<Card>
+						<CardHeader>
+							<CardTitle>Default currency</CardTitle>
+							<CardDescription>
+								ISO 4217 code, e.g. USD, EUR, GBP
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<form.Field name="defaultCurrency">
+								{(field) => (
+									<Field data-invalid={!field.state.meta.isValid}>
+										<FieldLabel htmlFor="currency">Currency</FieldLabel>
+										<Input
+											id="currency"
+											value={field.state.value}
+											onBlur={field.handleBlur}
+											onChange={(e) =>
+												field.handleChange(e.target.value.toUpperCase())
+											}
+											maxLength={3}
+											placeholder="USD"
+											aria-invalid={!field.state.meta.isValid}
+										/>
+										<FieldError errors={metaErrors(field.state.meta.errors)} />
+									</Field>
+								)}
+							</form.Field>
+						</CardContent>
+					</Card>
 
-				{error && <ErrorBanner message={error} />}
+					{submitErr ? <ErrorBanner message={submitErr} /> : null}
 
-				<FormActions pending={pending} submitLabel="Save settings" />
+					<form.Subscribe
+						selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+					>
+						{([canSubmit, isSubmitting]) => (
+							<div className="flex justify-end">
+								<Button type="submit" disabled={!canSubmit || isSubmitting}>
+									{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+									{isSubmitting ? "Saving…" : "Save settings"}
+								</Button>
+							</div>
+						)}
+					</form.Subscribe>
+				</FieldGroup>
 			</form>
 		</div>
 	);

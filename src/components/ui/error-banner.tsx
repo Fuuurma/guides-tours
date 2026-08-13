@@ -1,4 +1,6 @@
+import { CircleAlert } from "lucide-react";
 import type * as React from "react";
+
 import { cn } from "@/lib/utils";
 
 /**
@@ -23,13 +25,19 @@ export function ErrorBanner({
 		<div
 			role="alert"
 			className={cn(
-				"rounded-md border border-destructive/50 bg-destructive/10 p-3",
+				"flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-4",
 				className,
 			)}
 		>
-			<p className="text-destructive text-sm font-medium">{message}</p>
-			{hint && <p className="text-muted-foreground text-sm mt-1">{hint}</p>}
-			{action && <div className="mt-2">{action}</div>}
+			<CircleAlert
+				aria-hidden="true"
+				className="mt-0.5 size-5 shrink-0 text-destructive"
+			/>
+			<div className="min-w-0">
+				<p className="text-destructive text-sm font-medium">{message}</p>
+				{hint && <p className="mt-1 text-sm text-muted-foreground">{hint}</p>}
+				{action && <div className="mt-3 flex flex-wrap gap-2">{action}</div>}
+			</div>
 		</div>
 	);
 }

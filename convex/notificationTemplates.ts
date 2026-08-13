@@ -33,6 +33,12 @@ import {
 } from "./lib/notificationRender";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { sendTwilioSms } from "./notification_sms";
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
+
 
 // ---- queries ----
 
@@ -122,7 +128,7 @@ export const create = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.notificationTemplates.internalCreate,
 			{ organizationId: member.organizationId, createdBy: member.userId, ...args },
 		);
 	},
@@ -239,7 +245,7 @@ export const update = mutation({
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		const { templateId, ...rest } = args;
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.notificationTemplates.internalUpdate,
 			{ organizationId: member.organizationId, userId: member.userId, templateId, ...rest },
 		);
 	},
@@ -356,7 +362,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.notificationTemplates.internalRemove,
 			{ organizationId: member.organizationId, userId: member.userId, templateId: args.templateId },
 		);
 	},
@@ -449,7 +455,7 @@ export const sendTest = mutation({
 		to: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireRole(ctx, ["owner", "admin"]);
 		const t = await ctx.db.get(args.templateId);
 		if (!t) throw new ConvexError("Template not found");
 		if (t.organizationId !== member.organizationId) {

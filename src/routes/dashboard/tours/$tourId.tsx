@@ -2,9 +2,10 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { AlertCircle, CheckCircle2, LoaderCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
 import { StatusBadge } from "@/components/status-badge";
@@ -15,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import { lastNDays } from "@/lib/date-range";
 import { formatCents } from "@/lib/format";
@@ -31,6 +33,7 @@ function TourDetailPage() {
 	const { tourId } = Route.useParams();
 	const navigate = useNavigate();
 	const removeTour = useMutation(api.tours.remove);
+	const confirm = useConfirm();
 	const [deleting, setDeleting] = useState(false);
 	const {
 		data: tour,
@@ -57,11 +60,12 @@ function TourDetailPage() {
 	);
 
 	const onDelete = async () => {
-		if (
-			!window.confirm(
-				`Delete "${tour?.name ?? "this tour"}"? It will be soft-deleted and hidden from lists.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete "${tour?.name ?? "this tour"}"?`,
+			description: "It will be soft-deleted and hidden from lists.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
 		setDeleting(true);
@@ -104,19 +108,19 @@ function TourDetailPage() {
 	);
 	const readinessItems = [
 		{
-			label: "Public visibility",
+			label: "Direct booking",
 			detail: tour.isActive
-				? "Customers can see this tour on the booking page."
-				: "Inactive tours are hidden from the public booking page.",
+				? "This tour appears on your direct booking link."
+				: "Inactive tours stay off the direct booking link.",
 			ready: tour.isActive,
 			action: tour.isActive ? null : "Edit tour",
 			recommended: false,
 		},
 		{
-			label: "Customer-facing description",
+			label: "Description",
 			detail: tour.description?.trim()
-				? "The public page has useful context for choosing this tour."
-				: "Add a short description so customers know what they are requesting.",
+				? "Staff and the booking link have context for this tour."
+				: "Add a short description so the team knows what this tour is.",
 			ready: Boolean(tour.description?.trim()),
 			action: tour.description?.trim() ? null : "Add description",
 			recommended: false,
@@ -127,8 +131,8 @@ function TourDetailPage() {
 				upcomingSchedules === undefined
 					? "Checking the next 90 days…"
 					: hasUpcomingAvailability
-						? "At least one future slot has room for new requests."
-						: "Create an available schedule before sharing this booking page.",
+						? "At least one future departure has open seats."
+						: "Publish a schedule so this tour can actually run.",
 			ready: upcomingSchedules === undefined ? null : hasUpcomingAvailability,
 			action: hasUpcomingAvailability ? null : "Create schedule",
 			recommended: false,
@@ -137,8 +141,8 @@ function TourDetailPage() {
 			label: "Price",
 			detail:
 				tour.basePriceCents !== undefined
-					? "Customers can see the per-person price when requesting."
-					: "No price is shown publicly — useful for quote-based bookings.",
+					? "A per-person price is set for this tour."
+					: "No list price — useful for quote-based or private tours.",
 			ready: tour.basePriceCents !== undefined,
 			action: null,
 			recommended: true,
@@ -157,6 +161,16 @@ function TourDetailPage() {
 			actions={
 				<>
 					<Button asChild>
+						<Link to="/dashboard/schedules/new" search={{ tourId: tour._id }}>
+							New schedule
+						</Link>
+					</Button>
+					<Button asChild variant="outline">
+						<Link to="/dashboard/assignments/new" search={{ tourId: tour._id }}>
+							Assign
+						</Link>
+					</Button>
+					<Button asChild variant="outline">
 						<Link
 							to="/dashboard/tours/$tourId/edit"
 							params={{ tourId: tour._id }}
@@ -169,6 +183,7 @@ function TourDetailPage() {
 						disabled={deleting}
 						onClick={() => void onDelete()}
 					>
+						{deleting ? <Spinner data-icon="inline-start" /> : null}
 						{deleting ? "Deleting…" : "Delete"}
 					</Button>
 				</>
@@ -190,13 +205,13 @@ function TourDetailPage() {
 			</div>
 
 			<DetailSection
-				title="Booking readiness"
+				title="Ops readiness"
 				description={
 					readinessLoading
-						? "Checking public availability and tour setup…"
+						? "Checking upcoming dates and tour setup…"
 						: requiredIssues === 0
-							? "The key pieces for accepting public requests are in place."
-							: `${requiredIssues} item${requiredIssues === 1 ? "" : "s"} needs attention before customers can book confidently.`
+							? "This tour can go on the calendar and be assigned."
+							: `${requiredIssues} item${requiredIssues === 1 ? "" : "s"} still need attention before you can run this tour.`
 				}
 			>
 				<div className="grid gap-3 md:grid-cols-2">
@@ -208,19 +223,16 @@ function TourDetailPage() {
 							<div className="flex min-w-0 gap-3">
 								<div className="pt-0.5">
 									{item.ready === null ? (
-										<LoaderCircle
-											aria-hidden="true"
-											className="size-4 animate-spin text-muted-foreground"
-										/>
+										<Spinner className="text-muted-foreground" />
 									) : item.ready ? (
 										<CheckCircle2
 											aria-hidden="true"
-											className="size-4 text-emerald-600"
+											className="size-4 text-chart-2"
 										/>
 									) : (
 										<AlertCircle
 											aria-hidden="true"
-											className="size-4 text-amber-600"
+											className="size-4 text-destructive"
 										/>
 									)}
 								</div>
@@ -359,7 +371,10 @@ function TourDetailPage() {
 				)}
 			</DetailSection>
 
-			<DetailSection title="Content" description="Marketing + booking details">
+			<DetailSection
+				title="Content"
+				description="What staff and the booking link show"
+			>
 				<DetailRow
 					label="Description"
 					value={tour.description || "(none)"}
@@ -369,9 +384,9 @@ function TourDetailPage() {
 					<div key={key} className="mb-3">
 						<p className="text-muted-foreground mb-1 capitalize">{key}</p>
 						{tour[key].length === 0 ? (
-							<p className="text-muted-foreground text-xs italic">(none)</p>
+							<p className="text-muted-foreground text-xs">None</p>
 						) : (
-							<ul className="list-disc pl-5 space-y-1">
+							<ul className="flex list-disc flex-col gap-1 pl-5">
 								{tour[key].map((item) => (
 									<li key={item}>{item}</li>
 								))}

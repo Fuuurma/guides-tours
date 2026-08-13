@@ -13,9 +13,17 @@ import {
 } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { MAX_NOTES_LEN } from "./lib/validation";
+import { authComponent, createAuth } from "./auth";
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
+
 
 // ---- helpers ----
 
@@ -215,17 +223,48 @@ export const create = mutation({
 		startDate: v.string(),
 		endDate: v.string(),
 		reason: v.optional(v.string()),
+		// Owner/admin may file for another org member. Omitted or equal
+		// to the caller stays a pending self-request.
+		userId: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member", "guide"]);
+		const targetUserId = args.userId?.trim() || member.userId;
+		const onBehalf = targetUserId !== member.userId;
+		let status: "pending" | "approved" = "pending";
+		let reviewedBy: string | undefined;
+		if (onBehalf) {
+			if (!["owner", "admin"].includes(member.role as "owner" | "admin")) {
+				throw new ConvexError(
+					"Forbidden: only owners and admins can record time off for another person",
+				);
+			}
+			const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+			const memberList = await auth.api.listMembers({
+				headers,
+				query: { organizationId: member.organizationId },
+			});
+			const target = memberList.members.find(
+				(m: { userId: string }) => m.userId === targetUserId,
+			);
+			if (!target) {
+				throw new ConvexError(
+					"That person is not a member of this organization",
+				);
+			}
+			status = "approved";
+			reviewedBy = member.userId;
+		}
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.vacationRequests.internalCreate,
 			{
 				organizationId: member.organizationId,
-				userId: member.userId,
+				userId: targetUserId,
 				startDate: args.startDate,
 				endDate: args.endDate,
 				reason: args.reason,
+				status,
+				reviewedBy,
 			},
 		);
 	},
@@ -238,6 +277,8 @@ export const internalCreate = internalMutation({
 		startDate: v.string(),
 		endDate: v.string(),
 		reason: v.optional(v.string()),
+		status: v.optional(v.union(v.literal("pending"), v.literal("approved"))),
+		reviewedBy: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Date validation (source: vacation_service.py:119-120).
@@ -277,13 +318,16 @@ export const internalCreate = internalMutation({
 		}
 
 		const now = Date.now();
+		const status = args.status ?? "pending";
 		const requestId = await ctx.db.insert("vacationRequests", {
 			organizationId: args.organizationId,
 			userId: args.userId,
 			startDate: args.startDate,
 			endDate: args.endDate,
 			reason: args.reason ?? "",
-			status: "pending",
+			status,
+			reviewedBy: status === "approved" ? args.reviewedBy : undefined,
+			reviewedAt: status === "approved" ? now : undefined,
 			createdAt: now,
 			updatedAt: now,
 		});
@@ -298,7 +342,8 @@ export const internalCreate = internalMutation({
 			newValues: {
 				startDate: args.startDate,
 				endDate: args.endDate,
-				reason: args.reason ?? "",
+				status,
+				onBehalf: status === "approved",
 			},
 		});
 
@@ -313,9 +358,9 @@ export const approve = mutation({
 		force: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalApprove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.vacationRequests.internalApprove,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -344,6 +389,11 @@ export const internalApprove = internalMutation({
 		if (vr.status !== "pending") {
 			throw new ConvexError(
 				`Only pending requests can be approved (current: ${vr.status})`,
+			);
+		}
+		if (args.reason !== undefined && args.reason.length > MAX_NOTES_LEN) {
+			throw new ConvexError(
+				`Reason is too long (max ${MAX_NOTES_LEN} characters)`,
 			);
 		}
 
@@ -393,8 +443,16 @@ export const internalApprove = internalMutation({
 			action: "vacation_request.approved",
 			resourceType: "vacationRequest",
 			resourceId: args.requestId,
-				oldValues: { status: vr.status, reviewedBy: vr.reviewedBy, reviewedAt: vr.reviewedAt },
-			newValues: { status: "approved", reviewedBy: args.userId, reviewedAt: Date.now() },
+			oldValues: {
+				status: vr.status,
+				reviewedBy: vr.reviewedBy,
+				reviewedAt: vr.reviewedAt,
+			},
+			newValues: {
+				status: "approved",
+				reviewedBy: args.userId,
+				reviewedAt: now,
+			},
 		});
 
 		return args.requestId;
@@ -407,9 +465,9 @@ export const reject = mutation({
 		reason: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalReject as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.vacationRequests.internalReject,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -463,8 +521,16 @@ export const internalReject = internalMutation({
 			action: "vacation_request.rejected",
 			resourceType: "vacationRequest",
 			resourceId: args.requestId,
-				oldValues: { status: vr.status, reviewedBy: vr.reviewedBy, reviewedAt: vr.reviewedAt },
-			newValues: { status: "rejected", reviewedBy: args.userId, reviewedAt: Date.now() },
+			oldValues: {
+				status: vr.status,
+				reviewedBy: vr.reviewedBy,
+				reviewedAt: vr.reviewedAt,
+			},
+			newValues: {
+				status: "rejected",
+				reviewedBy: args.userId,
+				reviewedAt: now,
+			},
 		});
 
 		return args.requestId;

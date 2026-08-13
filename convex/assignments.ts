@@ -28,6 +28,12 @@ import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { assertFieldWithinLimit } from "./lib/validation";
 import { logAudit } from "./lib/audit";
+type InternalMutationRef = FunctionReference<"mutation", "internal">;
+const internalRefs = internal as unknown as Record<
+	string,
+	Record<string, InternalMutationRef>
+>;
+
 import { authComponent, createAuth } from "./auth";
 import { parseBookingTime } from "./lib/time";
 import { resolveTourStaffing, evaluateSlotStaffing } from "./lib/staffing";
@@ -579,7 +585,7 @@ export const create = mutation({
 		}
 
 		return await ctx.runMutation(
-			internalCreate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.assignments.internalCreate,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -919,7 +925,7 @@ export const update = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalUpdate as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.assignments.internalUpdate,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -1280,7 +1286,7 @@ export const cancel = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
 		return await ctx.runMutation(
-			internalCancel as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.assignments.internalCancel,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -1385,7 +1391,7 @@ export const complete = mutation({
 			"guide",
 		]);
 		return await ctx.runMutation(
-			internalComplete as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.assignments.internalComplete,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -1437,7 +1443,7 @@ export const remove = mutation({
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
 		return await ctx.runMutation(
-			internalRemove as unknown as FunctionReference<"mutation", "public" | "internal">,
+			internalRefs.assignments.internalRemove,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,

@@ -2,7 +2,7 @@
 //
 // Coverage:
 //   1. activeOrganization — returns the active org for an authenticated user
-//   2. activeOrganization — returns null when no active org is set
+//   2. activeOrganization — falls back to the first org when no active org is set
 //   3. listMyOrganizations — returns every org the user is a member of
 //   4. listMyOrganizations — returns [] when the user has no memberships
 //   5. listMembers — returns members of the active org with role info
@@ -77,6 +77,7 @@ const { mockState } = vi.hoisted(() => ({
 		user: null as MockUser | null,
 		session: null as MockSession | null,
 		orgs: [] as MockOrg[],
+		listOrganizationsCalls: 0,
 	},
 }));
 
@@ -99,7 +100,10 @@ vi.mock("../auth", () => ({
 					}) =>
 						mockState.orgs.find((o) => o.id === args.query.organizationId) ??
 						null,
-					listOrganizations: async () => mockState.orgs,
+					listOrganizations: async () => {
+						mockState.listOrganizationsCalls += 1;
+						return mockState.orgs;
+					},
 					listMembers: async (args: {
 						query: { organizationId: string };
 					}) => ({
@@ -136,6 +140,7 @@ function setState(next: {
 	mockState.user = next.user ?? null;
 	mockState.session = next.session ?? null;
 	mockState.orgs = next.orgs ?? [];
+	mockState.listOrganizationsCalls = 0;
 }
 
 const ALICE: MockUser = {
@@ -190,9 +195,10 @@ describe("convex/organizations — activeOrganization", () => {
 		// Role is resolved from the org's member list for the caller.
 		expect(res?.role).toBe("owner");
 		expect(res?.memberCount).toBe(2);
+		expect(mockState.listOrganizationsCalls).toBe(0);
 	});
 
-	it("returns null when the user has no active organization set", async () => {
+	it("falls back to the first organization when no active organization is set", async () => {
 		setState({
 			user: ALICE,
 			// Authenticated, but session.activeOrganizationId is unset.
@@ -210,8 +216,44 @@ describe("convex/organizations — activeOrganization", () => {
 		});
 
 		const t = convexTest(schema, modules);
-		const res = await t.query(api.organizations.activeOrganization, {});
-		expect(res).toBeNull();
+		const res = (await t.query(api.organizations.activeOrganization, {})) as {
+			id: string;
+			name: string;
+			role: string;
+		} | null;
+		expect(res).not.toBeNull();
+		expect(res?.id).toBe("org_acme");
+		expect(res?.name).toBe("Acme Tours");
+		expect(res?.role).toBe("owner");
+		expect(mockState.listOrganizationsCalls).toBe(1);
+	});
+
+	it("falls back when the session references an organization that is no longer available", async () => {
+		setState({
+			user: ALICE,
+			session: { activeOrganizationId: "org_removed" },
+			orgs: [
+				{
+					id: "org_acme",
+					name: "Acme Tours",
+					slug: "acme",
+					logo: null,
+					createdAt: 1000,
+					members: [{ userId: "u_alice", role: "owner" }],
+				},
+			],
+		});
+
+		const t = convexTest(schema, modules);
+		const res = (await t.query(api.organizations.activeOrganization, {})) as {
+			id: string;
+			name: string;
+			role: string;
+		} | null;
+
+		expect(res?.id).toBe("org_acme");
+		expect(res?.role).toBe("owner");
+		expect(mockState.listOrganizationsCalls).toBe(1);
 	});
 });
 

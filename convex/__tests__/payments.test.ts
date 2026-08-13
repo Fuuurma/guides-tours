@@ -675,6 +675,45 @@ describe("convex/payments — input validation (defense in depth)", () => {
 });
 
 describe("convex/payments — upsertSettings validation", () => {
+	it("allows fresh publishable-only settings without ENCRYPTION_KEY", async () => {
+		const originalKey = process.env.ENCRYPTION_KEY;
+		const { _resetKeyForTest } = await import("../lib/crypto");
+		delete process.env.ENCRYPTION_KEY;
+		_resetKeyForTest();
+
+		try {
+			const t = convexTest(schema, modules);
+			await t.mutation(internal.payments.upsertSettingsInternal, {
+				_organizationId: "org_pub_only",
+				stripeEnabled: true,
+				stripePublishableKey: "pk_test_publishable_only",
+				stripeSecretKey: "",
+				stripeWebhookSecret: "placeholder-no-change",
+				stripeIsSandbox: true,
+				acceptDeposits: false,
+				depositPercentage: 20,
+				defaultCurrency: "USD",
+			});
+
+			const s = await t.run(async (ctx) => {
+				return await ctx.db
+					.query("paymentSettings")
+					.withIndex("by_org", (q) => q.eq("organizationId", "org_pub_only"))
+					.unique();
+			});
+			expect(s?.stripeSecretKey).toBe("");
+			expect(s?.stripeWebhookSecret).toBe("");
+			expect(s?.stripePublishableKey).toBe("pk_test_publishable_only");
+		} finally {
+			if (originalKey === undefined) {
+				delete process.env.ENCRYPTION_KEY;
+			} else {
+				process.env.ENCRYPTION_KEY = originalKey;
+			}
+			_resetKeyForTest();
+		}
+	});
+
 	it("rejects depositPercentage > 100", async () => {
 		const t = convexTest(schema, modules);
 		await expect(

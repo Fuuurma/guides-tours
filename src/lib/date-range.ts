@@ -33,3 +33,15 @@ export function defaultDateRange(): { from: string; to: string } {
 	const { startDate, endDate } = lastNDays();
 	return { from: startDate, to: endDate };
 }
+
+/**
+ * Return today and the next N-1 days as local calendar dates.
+ * Operator lists (schedules, assignments, bookings) are
+ * future-focused — a "last 30 days" window hides the week they
+ * actually need to staff.
+ */
+export function upcomingDateRange(n = 30): { from: string; to: string } {
+	const start = new Date();
+	const end = addDaysLocal(start, n - 1);
+	return { from: localYmd(start), to: localYmd(end) };
+}

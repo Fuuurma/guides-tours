@@ -29,14 +29,15 @@ export function seedMockOrg(opts: {
 	id: string;
 	slug: string;
 	name?: string;
+	idField?: "id" | "_id";
 }): { id: string; name: string; slug: string } {
 	const org = {
-		id: opts.id,
+		...(opts.idField === "_id" ? { _id: opts.id } : { id: opts.id }),
 		slug: opts.slug,
 		name: opts.name ?? `Mock org ${opts.id}`,
 	};
-	_mockOrgsById.set(org.id, org);
-	return org;
+	_mockOrgsById.set(opts.id, org);
+	return { id: opts.id, name: org.name, slug: org.slug };
 }
 
 /**

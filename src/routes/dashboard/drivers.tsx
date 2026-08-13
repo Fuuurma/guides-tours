@@ -4,10 +4,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { getErrorMessage } from "@/lib/utils";
 import type { Driver } from "@/types/entities";
@@ -27,10 +29,14 @@ function DriversPage() {
 	const { displayName } = useOrgMembers();
 	const setActive = useMutation(api.drivers.setActive);
 	const removeDriver = useMutation(api.drivers.remove);
-	const [pendingId, setPendingId] = useState<string | null>(null);
+	const confirm = useConfirm();
+	const [pending, setPending] = useState<{
+		id: string;
+		kind: "toggle" | "delete";
+	} | null>(null);
 
 	const toggleActive = async (id: string, currentActive: boolean) => {
-		setPendingId(id);
+		setPending({ id, kind: "toggle" });
 		try {
 			await setActive({
 				driverId: id as Id<"drivers">,
@@ -40,25 +46,26 @@ function DriversPage() {
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 	const onDelete = async (id: string, label: string) => {
-		if (
-			!window.confirm(
-				`Delete driver "${label}"? Future assignments can't use this driver.`,
-			)
-		) {
+		const ok = await confirm({
+			title: `Delete driver "${label}"?`,
+			description: "Future assignments can't use this driver.",
+			variant: "destructive",
+		});
+		if (!ok) {
 			return;
 		}
-		setPendingId(id);
+		setPending({ id, kind: "delete" });
 		try {
 			await removeDriver({ driverId: id as Id<"drivers"> });
 			toast.success("Driver deleted");
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setPendingId(null);
+			setPending(null);
 		}
 	};
 
@@ -95,24 +102,28 @@ function DriversPage() {
 			key: "actions",
 			header: "",
 			render: (d) => {
-				const isBusy = pendingId === d._id;
+				const rowBusy = pending?.id === d._id;
+				const toggling = rowBusy && pending?.kind === "toggle";
+				const deleting = rowBusy && pending?.kind === "delete";
 				const label = displayName(d.userId);
 				return (
-					<div className="flex items-center gap-1 justify-end">
+					<div className="flex items-center justify-end gap-1">
 						<Button
 							size="sm"
 							variant="outline"
 							onClick={() => toggleActive(d._id, d.isActive)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{toggling ? <Spinner data-icon="inline-start" /> : null}
 							{d.isActive ? "Deactivate" : "Activate"}
 						</Button>
 						<Button
 							size="sm"
 							variant="destructive"
 							onClick={() => onDelete(d._id, label)}
-							disabled={isBusy}
+							disabled={rowBusy}
 						>
+							{deleting ? <Spinner data-icon="inline-start" /> : null}
 							Delete
 						</Button>
 					</div>
@@ -126,7 +137,7 @@ function DriversPage() {
 	return (
 		<ListPage
 			title="Drivers"
-			description={`${itemCount} driver${itemCount === 1 ? "" : "s"}`}
+			description={`${itemCount} driver${itemCount === 1 ? "" : "s"} — people who can drive a vehicle on a departure`}
 			newTo="/dashboard/drivers/new"
 			newLabel="+ New driver"
 		>
@@ -136,7 +147,8 @@ function DriversPage() {
 				rowKey={(d) => d._id}
 				isPending={isPending}
 				error={error}
-				emptyMessage="No drivers yet."
+				emptyMessage="No drivers yet"
+				emptyDescription="Attach a driver profile to a member, then assign them to vehicle-required tours."
 				emptyAction={
 					<Button asChild size="sm">
 						<Link to="/dashboard/drivers/new">Add your first driver</Link>

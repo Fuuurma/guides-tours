@@ -41,6 +41,36 @@ describe("drivers", () => {
 		expect(logs[0]?.action).toBe("driver.created");
 	});
 
+	it("create: accepts documented weekday availability flags", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_d1_availability";
+		const id = await t.mutation(internal.drivers.internalCreate, {
+			organizationId: orgId,
+			createdByUserId: "user-1",
+			userId: "driver-availability",
+			licenseInfo: "license-1",
+			availability: { monday: true, saturday: false },
+		});
+		const driver = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(driver?.availability).toEqual({
+			monday: true,
+			saturday: false,
+		});
+	});
+
+	it("create: rejects malformed availability values", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.drivers.internalCreate, {
+				organizationId: "org_d_bad_availability",
+				createdByUserId: "user-1",
+				userId: "driver-bad-availability",
+				licenseInfo: "license-1",
+				availability: { monday: "yes" } as any,
+			}),
+		).rejects.toThrow();
+	});
+
 	it("create: rejects duplicate driver profile for same user", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_d2";
