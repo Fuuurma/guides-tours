@@ -696,9 +696,9 @@ function Home() {
 				<div className="mx-auto max-w-7xl px-5 py-24 sm:px-8 sm:py-32 lg:px-10">
 					<div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
 						<SectionIntro
-							eyebrow="One home for the details"
-							title="Everything your team needs to keep moving."
-							description="A focused toolkit for the work behind the scenes, from first inquiry to post-tour follow-up."
+							eyebrow="On the same board"
+							title="Crew, fleet, and money without another tab."
+							description="The week board is the product. These are the details it already holds so the desk does not rebuild the day in chat."
 						/>
 						<div className="flex items-center gap-3 text-sm text-muted-foreground">
 							<span className="grid size-9 place-items-center rounded-full bg-chart-2/10 text-chart-2">
@@ -712,37 +712,35 @@ function Home() {
 						whileInView="visible"
 						viewport={{ once: true, amount: 0.15 }}
 						variants={STAGGER}
-						className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+						className="mt-16 grid gap-4 lg:grid-cols-[1.45fr_1fr]"
 					>
 						<FeatureTile
-							icon={BarChart3}
-							title="Know what is working"
-							description="Understand revenue, demand, and tour performance at a glance."
-						/>
-						<FeatureTile
+							featured
 							icon={UsersRound}
-							title="Coordinate your crew"
-							description="Manage guides, drivers, vacations, and availability without guesswork."
+							title="Coordinate the crew"
+							description="Guides, drivers, vacations, and availability sit on this week's slots — not in a group chat nobody can find."
 						/>
-						<FeatureTile
-							icon={WalletCards}
-							title="Get paid smoothly"
-							description="Collect payments through Stripe and keep every transaction attached to its booking."
-						/>
+						<motion.div className="grid gap-4" variants={STAGGER}>
+							<FeatureTile
+								icon={MapPin}
+								title="Keep the fleet on the board"
+								description="Vehicle status and assignments share the same departure as the crew."
+							/>
+							<FeatureTile
+								icon={WalletCards}
+								title="Collect what's owed"
+								description="Stripe stays attached to each booking, so paid versus due is visible at the desk."
+							/>
+						</motion.div>
 						<FeatureTile
 							icon={LifeBuoy}
-							title="Keep guests informed"
-							description="Use notification templates for timely confirmations, reminders, and updates."
+							title="Tell the right people"
+							description="Confirmations, reminders, and staff pings from templates you already run."
 						/>
 						<FeatureTile
-							icon={MapPin}
-							title="Stay ready on the road"
-							description="Keep vehicle details, assignments, and departure information in one place."
-						/>
-						<FeatureTile
-							icon={LineChart}
-							title="Grow with clarity"
-							description="Replace operational noise with a system your whole team can trust."
+							icon={BarChart3}
+							title="See what this week actually did"
+							description="Revenue and demand from the tours you staffed, without opening another product."
 						/>
 					</motion.div>
 				</div>
@@ -1347,22 +1345,51 @@ function FeatureTile({
 	icon: Icon,
 	title,
 	description,
+	featured = false,
+	className,
 }: {
 	icon: LucideIcon;
 	title: string;
 	description: string;
+	featured?: boolean;
+	className?: string;
 }) {
 	return (
 		<motion.div
 			variants={FADE_UP}
 			transition={{ duration: 0.4, ease: "easeOut" }}
-			className="rounded-2xl border bg-card p-6 transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-background hover:shadow-lg hover:shadow-primary/5"
+			className={cn(
+				"rounded-2xl border bg-card transition-[transform,border-color,box-shadow] duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-background hover:shadow-lg hover:shadow-primary/5",
+				featured ? "flex min-h-72 flex-col p-8 sm:p-10" : "p-6",
+				className,
+			)}
 		>
-			<span className="grid size-10 place-items-center rounded-xl bg-primary/5 text-primary">
+			<span
+				className={cn(
+					"grid place-items-center rounded-xl",
+					featured
+						? "size-12 bg-chart-1/10 text-chart-1"
+						: "size-10 bg-primary/5 text-primary",
+				)}
+			>
 				<Icon className="size-5" />
 			</span>
-			<h3 className="mt-5 font-semibold">{title}</h3>
-			<p className="mt-2 text-sm leading-6 text-muted-foreground">
+			<h3
+				className={cn(
+					"font-semibold tracking-tight",
+					featured ? "mt-auto pt-10 text-2xl sm:text-3xl" : "mt-5",
+				)}
+			>
+				{title}
+			</h3>
+			<p
+				className={cn(
+					"text-muted-foreground",
+					featured
+						? "mt-3 max-w-md text-base leading-7"
+						: "mt-2 text-sm leading-6",
+				)}
+			>
 				{description}
 			</p>
 		</motion.div>
