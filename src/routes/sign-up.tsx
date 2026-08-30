@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { PasswordInput } from "@/components/auth/password-field";
 import { FormField } from "@/components/forms/form-field";
@@ -66,6 +66,7 @@ function SignUpPage() {
 			title="Create your account"
 			serifAccent=""
 			description="Start staffing this week's tours, crew, and departures from one board."
+			image={AUTH_PANEL.signUp}
 		>
 			<form
 				onSubmit={(e) => {

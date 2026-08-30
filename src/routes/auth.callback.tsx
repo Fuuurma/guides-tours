@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { Spinner } from "@/components/ui/spinner";
 
 export const Route = createFileRoute("/auth/callback")({
 	validateSearch: (search: Record<string, unknown>) => ({
@@ -49,7 +49,7 @@ function AuthCallback() {
 			role="status"
 			aria-live="polite"
 		>
-			<Loader2 className="h-8 w-8 animate-spin" />
+			<Spinner className="size-8" />
 			<p className="text-muted-foreground text-sm">
 				{ott ? "Completing sign in..." : "Redirecting..."}
 			</p>

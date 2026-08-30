@@ -177,7 +177,7 @@ test.describe("complete operator booking journey", () => {
 		await expect(page.getByText("0 / 4").first()).toBeVisible({
 			timeout: 30_000,
 		});
-		await expect(page.getByText(/No bookings yet for this schedule/i)).toBeVisible();
+		await expect(page.getByText(/No guests yet/i)).toBeVisible();
 		void firstScheduleUrl;
 	});
 });

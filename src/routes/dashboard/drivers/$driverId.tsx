@@ -1,4 +1,5 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
@@ -36,6 +37,7 @@ import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_LICENSE_LEN,
 	MAX_NOTES_LEN,
+	MAX_PHONE_LEN,
 	validateNotesOptional,
 	validatePhoneOptional,
 } from "@/lib/validation";
@@ -80,82 +82,8 @@ function DriverDetailPage() {
 		(tours ?? []).map((t) => [String(t._id), t.name]),
 	);
 
-	const updatePhone = useMutation(api.userProfiles.updatePhone);
-	const updateDriver = useMutation(api.drivers.update);
 	const setActive = useMutation(api.drivers.setActive);
-	const [phoneDraft, setPhoneDraft] = useState("");
-	const [phoneError, setPhoneError] = useState<string | null>(null);
-	const [phoneSaving, setPhoneSaving] = useState(false);
-	const [licenseDraft, setLicenseDraft] = useState("");
-	const [notesDraft, setNotesDraft] = useState("");
-	const [licenseError, setLicenseError] = useState<string | null>(null);
-	const [notesError, setNotesError] = useState<string | null>(null);
-	const [profileSaving, setProfileSaving] = useState(false);
 	const [activeSaving, setActiveSaving] = useState(false);
-
-	useEffect(() => {
-		if (contact) setPhoneDraft(contact.phone);
-	}, [contact]);
-
-	useEffect(() => {
-		if (!driver) return;
-		setLicenseDraft(driver.licenseInfo ?? "");
-		setNotesDraft(driver.notes ?? "");
-	}, [driver]);
-
-	const savePhone = async () => {
-		if (!driver) return;
-		const err = validatePhoneOptional(phoneDraft);
-		if (err) {
-			setPhoneError(err);
-			return;
-		}
-		setPhoneError(null);
-		setPhoneSaving(true);
-		try {
-			await updatePhone({ userId: driver.userId, phone: phoneDraft.trim() });
-			toast.success("Phone updated");
-		} catch (e) {
-			toast.error(getErrorMessage(e));
-		} finally {
-			setPhoneSaving(false);
-		}
-	};
-
-	const saveProfile = async () => {
-		if (!driver) return;
-		const license = licenseDraft.trim();
-		if (!license) {
-			setLicenseError("License info is required");
-			return;
-		}
-		if (license.length > MAX_LICENSE_LEN) {
-			setLicenseError(
-				`License info is too long (max ${MAX_LICENSE_LEN} characters)`,
-			);
-			return;
-		}
-		const notesErr = validateNotesOptional(notesDraft);
-		if (notesErr) {
-			setNotesError(notesErr);
-			return;
-		}
-		setLicenseError(null);
-		setNotesError(null);
-		setProfileSaving(true);
-		try {
-			await updateDriver({
-				driverId: driver._id,
-				licenseInfo: license,
-				notes: notesDraft.trim(),
-			});
-			toast.success("Driver profile updated");
-		} catch (e) {
-			toast.error(getErrorMessage(e));
-		} finally {
-			setProfileSaving(false);
-		}
-	};
 
 	const toggleActive = async (next: boolean) => {
 		if (!driver) return;
@@ -182,9 +110,6 @@ function DriverDetailPage() {
 	const upcomingItems = upcoming ?? [];
 	const phone = (contact?.phone ?? member?.phone ?? "").trim();
 	const smsReady = phone.length > 0;
-	const profileDirty =
-		licenseDraft.trim() !== (driver.licenseInfo ?? "") ||
-		notesDraft.trim() !== (driver.notes ?? "");
 
 	return (
 		<DetailPage title={name} subtitle="Driver" backTo="/dashboard/drivers">
@@ -210,37 +135,7 @@ function DriverDetailPage() {
 				title="Contact"
 				description="Phone is used for driving assignment SMS when Twilio is enabled."
 			>
-				<FieldGroup className="max-w-md">
-					<Field data-invalid={Boolean(phoneError)}>
-						<FieldLabel htmlFor="driver-phone">Phone</FieldLabel>
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-							<Input
-								id="driver-phone"
-								type="tel"
-								placeholder="+1 555 0100"
-								value={phoneDraft}
-								onChange={(e) => {
-									setPhoneDraft(e.target.value);
-									if (phoneError) setPhoneError(null);
-								}}
-								autoComplete="tel"
-								aria-invalid={Boolean(phoneError)}
-								className="flex-1"
-							/>
-							<Button
-								type="button"
-								onClick={() => void savePhone()}
-								disabled={
-									phoneSaving || phoneDraft.trim() === (contact?.phone ?? "")
-								}
-							>
-								{phoneSaving ? <Spinner data-icon="inline-start" /> : null}
-								{phoneSaving ? "Saving…" : "Save"}
-							</Button>
-						</div>
-						{phoneError ? <FieldError>{phoneError}</FieldError> : null}
-					</Field>
-				</FieldGroup>
+				<DriverPhoneForm userId={driver.userId} phone={contact?.phone ?? ""} />
 				{member && (
 					<p className="text-muted-foreground mt-2 text-sm">
 						Email: {member.email || "—"} ·{" "}
@@ -273,46 +168,12 @@ function DriverDetailPage() {
 							departures.
 						</FieldDescription>
 					</Field>
-					<Field data-invalid={Boolean(licenseError)}>
-						<FieldLabel htmlFor="driver-license">License info *</FieldLabel>
-						<Input
-							id="driver-license"
-							value={licenseDraft}
-							onChange={(e) => {
-								setLicenseDraft(e.target.value);
-								if (licenseError) setLicenseError(null);
-							}}
-							placeholder="Class B · expires 2028"
-							maxLength={MAX_LICENSE_LEN}
-							aria-invalid={Boolean(licenseError)}
-						/>
-						{licenseError ? <FieldError>{licenseError}</FieldError> : null}
-					</Field>
-					<Field data-invalid={Boolean(notesError)}>
-						<FieldLabel htmlFor="driver-notes">Notes</FieldLabel>
-						<Textarea
-							id="driver-notes"
-							value={notesDraft}
-							onChange={(e) => {
-								setNotesDraft(e.target.value);
-								if (notesError) setNotesError(null);
-							}}
-							placeholder="Optional"
-							rows={3}
-							maxLength={MAX_NOTES_LEN}
-							aria-invalid={Boolean(notesError)}
-						/>
-						{notesError ? <FieldError>{notesError}</FieldError> : null}
-					</Field>
-					<Button
-						type="button"
-						onClick={() => void saveProfile()}
-						disabled={profileSaving || !profileDirty}
-					>
-						{profileSaving ? <Spinner data-icon="inline-start" /> : null}
-						{profileSaving ? "Saving…" : "Save profile"}
-					</Button>
 				</FieldGroup>
+				<DriverProfileForm
+					driverId={driver._id}
+					licenseInfo={driver.licenseInfo ?? ""}
+					notes={driver.notes ?? ""}
+				/>
 			</DetailSection>
 
 			<DetailSection
@@ -369,5 +230,226 @@ function DriverDetailPage() {
 				/>
 			</DetailSection>
 		</DetailPage>
+	);
+}
+
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
+
+function DriverPhoneForm({ userId, phone }: { userId: string; phone: string }) {
+	const updatePhone = useMutation(api.userProfiles.updatePhone);
+	const form = useForm({
+		defaultValues: { phone },
+		onSubmit: async ({ value }) => {
+			const err = validatePhoneOptional(value.phone);
+			if (err) {
+				form.setFieldMeta("phone", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: err },
+				}));
+				return;
+			}
+			try {
+				await updatePhone({ userId, phone: value.phone.trim() });
+				toast.success("Phone updated");
+			} catch (e) {
+				toast.error(getErrorMessage(e));
+			}
+		},
+	});
+
+	useEffect(() => {
+		form.reset({ phone });
+	}, [form.reset, phone]);
+
+	return (
+		<form
+			className="max-w-md"
+			onSubmit={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void form.handleSubmit();
+			}}
+		>
+			<FieldGroup className="flex flex-col gap-3 sm:flex-row sm:items-end">
+				<form.Field name="phone">
+					{(field) => (
+						<Field className="flex-1" data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="driver-phone">Phone</FieldLabel>
+							<Input
+								id="driver-phone"
+								type="tel"
+								placeholder="+1 555 0100"
+								maxLength={MAX_PHONE_LEN}
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								autoComplete="tel"
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Subscribe
+					selector={(state) =>
+						[state.canSubmit, state.isSubmitting, state.values.phone] as const
+					}
+				>
+					{([canSubmit, isSubmitting, draft]) => (
+						<Button
+							type="submit"
+							disabled={
+								!canSubmit || isSubmitting || draft.trim() === phone.trim()
+							}
+						>
+							{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+							{isSubmitting ? "Saving…" : "Save"}
+						</Button>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
+		</form>
+	);
+}
+
+function DriverProfileForm({
+	driverId,
+	licenseInfo,
+	notes,
+}: {
+	driverId: Id<"drivers">;
+	licenseInfo: string;
+	notes: string;
+}) {
+	const updateDriver = useMutation(api.drivers.update);
+	const form = useForm({
+		defaultValues: { licenseInfo, notes },
+		onSubmit: async ({ value }) => {
+			const license = value.licenseInfo.trim();
+			if (!license) {
+				form.setFieldMeta("licenseInfo", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: "License info is required" },
+				}));
+				return;
+			}
+			if (license.length > MAX_LICENSE_LEN) {
+				form.setFieldMeta("licenseInfo", (prev) => ({
+					...prev,
+					errorMap: {
+						...prev.errorMap,
+						onSubmit: `License info is too long (max ${MAX_LICENSE_LEN} characters)`,
+					},
+				}));
+				return;
+			}
+			const notesErr = validateNotesOptional(value.notes);
+			if (notesErr) {
+				form.setFieldMeta("notes", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: notesErr },
+				}));
+				return;
+			}
+			try {
+				await updateDriver({
+					driverId,
+					licenseInfo: license,
+					notes: value.notes.trim(),
+				});
+				toast.success("Driver profile updated");
+			} catch (e) {
+				toast.error(getErrorMessage(e));
+			}
+		},
+	});
+
+	useEffect(() => {
+		form.reset({ licenseInfo, notes });
+	}, [form.reset, licenseInfo, notes]);
+
+	return (
+		<form
+			className="mt-4 max-w-md"
+			onSubmit={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void form.handleSubmit();
+			}}
+		>
+			<FieldGroup className="gap-4">
+				<form.Field name="licenseInfo">
+					{(field) => (
+						<Field data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="driver-license">License info *</FieldLabel>
+							<Input
+								id="driver-license"
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								placeholder="Class B · expires 2028"
+								maxLength={MAX_LICENSE_LEN}
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Field name="notes">
+					{(field) => (
+						<Field data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="driver-notes">Notes</FieldLabel>
+							<Textarea
+								id="driver-notes"
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								placeholder="Optional"
+								rows={3}
+								maxLength={MAX_NOTES_LEN}
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Subscribe
+					selector={(state) =>
+						[
+							state.canSubmit,
+							state.isSubmitting,
+							state.values.licenseInfo,
+							state.values.notes,
+						] as const
+					}
+				>
+					{([canSubmit, isSubmitting, licenseDraft, notesDraft]) => (
+						<Button
+							type="submit"
+							disabled={
+								!canSubmit ||
+								isSubmitting ||
+								(licenseDraft.trim() === licenseInfo.trim() &&
+									notesDraft.trim() === notes.trim())
+							}
+						>
+							{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+							{isSubmitting ? "Saving…" : "Save profile"}
+						</Button>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
+		</form>
 	);
 }

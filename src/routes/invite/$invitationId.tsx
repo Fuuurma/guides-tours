@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
 import { PasswordInput } from "@/components/auth/password-field";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
@@ -123,6 +123,7 @@ function AcceptInvitePage() {
 					? `You've been invited to join as ${invite.role}. Create your account to accept.`
 					: "Loading invitation details..."
 			}
+			image={AUTH_PANEL.invite}
 		>
 			{loading ? (
 				<div className="flex flex-col gap-4" aria-hidden="true">

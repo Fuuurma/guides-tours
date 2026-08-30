@@ -16,3 +16,5 @@ todos.json
 test-results
 playwright-report
 playwright/.cache
+# IDE / orchestrator state — not part of the project
+.commandcode/

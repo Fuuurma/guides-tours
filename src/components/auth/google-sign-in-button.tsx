@@ -1,8 +1,8 @@
 import { useQuery } from "convex/react";
-import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 import { api } from "../../../convex/_generated/api";
 
@@ -13,9 +13,9 @@ import { api } from "../../../convex/_generated/api";
 // the button appears. Returns null only when the provider is definitively
 // not configured (query resolved to false).
 
-function GoogleIcon({ className }: { className?: string }) {
+function GoogleIcon() {
 	return (
-		<svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+		<svg viewBox="0 0 24 24" aria-hidden="true">
 			<path
 				fill="#4285F4"
 				d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82z"
@@ -73,10 +73,10 @@ export function GoogleSignInButton({ callbackURL }: { callbackURL: string }) {
 			onClick={onClick}
 			disabled={pending || googleEnabled === undefined}
 		>
-			{googleEnabled === undefined ? (
-				<Loader2 className="size-4 animate-spin" />
+			{googleEnabled === undefined || pending ? (
+				<Spinner data-icon="inline-start" />
 			) : (
-				<GoogleIcon className="size-4.5" />
+				<GoogleIcon />
 			)}
 			{googleEnabled === undefined
 				? "Loading..."

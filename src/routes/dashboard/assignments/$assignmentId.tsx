@@ -1,8 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-dialog";
 import { DetailPage, DetailSection } from "@/components/detail-page";
@@ -12,7 +13,12 @@ import { StatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+	Field,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
 import {
 	Select,
 	SelectContent,
@@ -73,24 +79,13 @@ function AssignmentDetailPage() {
 	const complete = useMutation(api.assignments.complete);
 	const cancel = useMutation(api.assignments.cancel);
 	const remove = useMutation(api.assignments.remove);
-	const update = useMutation(api.assignments.update);
 	const resendNotify = useMutation(api.assignmentNotifications.resend);
 	const confirm = useConfirm();
-	const [action, setAction] = useState<
-		"complete" | "cancel" | "remove" | "save" | null
-	>(null);
+	const [action, setAction] = useState<"complete" | "cancel" | "remove" | null>(
+		null,
+	);
 	const [editing, setEditing] = useState(false);
-	const [guideId, setGuideId] = useState("");
-	const [vehicleId, setVehicleId] = useState("");
-	const [driverId, setDriverId] = useState("");
 	const [resendPending, setResendPending] = useState(false);
-
-	useEffect(() => {
-		if (!assignment) return;
-		setGuideId(assignment.guideId);
-		setVehicleId(assignment.vehicleId ?? "");
-		setDriverId(assignment.driverId ?? "");
-	}, [assignment]);
 
 	const staffing = tour
 		? resolveTourStaffing({
@@ -167,38 +162,6 @@ function AssignmentDetailPage() {
 			setAction(null);
 		}
 	};
-	const onSaveStaffing = async () => {
-		if (!guideId.trim()) {
-			toast.error("Guide is required");
-			return;
-		}
-		if (staffing?.requiresVehicle && !vehicleId) {
-			toast.error("This tour requires a vehicle");
-			return;
-		}
-		if (staffing?.requiresDriver && !driverId) {
-			toast.error("This tour requires a driver");
-			return;
-		}
-		setAction("save");
-		try {
-			await update({
-				assignmentId: assignmentId as Id<"assignments">,
-				guideId: guideId.trim(),
-				vehicleId: vehicleId ? (vehicleId as Id<"vehicles">) : undefined,
-				driverId: driverId ? (driverId as Id<"drivers">) : undefined,
-				clearVehicle: !vehicleId,
-				clearDriver: !driverId,
-			});
-			toast.success("Assignment updated");
-			setEditing(false);
-		} catch (err) {
-			toast.error(getErrorMessage(err));
-		} finally {
-			setAction(null);
-		}
-	};
-
 	const onResend = async (target: "guide" | "driver" | "both") => {
 		setResendPending(true);
 		try {
@@ -433,88 +396,17 @@ function AssignmentDetailPage() {
 					title="Edit staffing"
 					description="Change guide, vehicle, or driver for this departure"
 				>
-					<FieldGroup>
-						<div className="grid gap-4 md:grid-cols-3">
-							<Field>
-								<FieldLabel htmlFor="edit-guide">Guide *</FieldLabel>
-								<MemberSelect
-									id="edit-guide"
-									value={guideId}
-									onValueChange={setGuideId}
-									roles={["guide", "owner", "admin"]}
-								/>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="edit-vehicle">
-									{staffing?.requiresVehicle ? "Vehicle *" : "Vehicle"}
-								</FieldLabel>
-								<Select
-									value={vehicleId || "__none__"}
-									onValueChange={(v) => setVehicleId(v === "__none__" ? "" : v)}
-								>
-									<SelectTrigger id="edit-vehicle">
-										<SelectValue placeholder="None" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectGroup>
-											{!staffing?.requiresVehicle && (
-												<SelectItem value="__none__">None</SelectItem>
-											)}
-											{eligibleVehicles.map((v) => (
-												<SelectItem key={v._id} value={v._id}>
-													{v.name}
-													{v.vehicleType ? ` · ${v.vehicleType}` : ""}
-												</SelectItem>
-											))}
-										</SelectGroup>
-									</SelectContent>
-								</Select>
-							</Field>
-							<Field>
-								<FieldLabel htmlFor="edit-driver">
-									{staffing?.requiresDriver ? "Driver *" : "Driver"}
-								</FieldLabel>
-								<Select
-									value={driverId || "__none__"}
-									onValueChange={(v) => setDriverId(v === "__none__" ? "" : v)}
-								>
-									<SelectTrigger id="edit-driver">
-										<SelectValue placeholder="None" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectGroup>
-											{!staffing?.requiresDriver && (
-												<SelectItem value="__none__">None</SelectItem>
-											)}
-											{eligibleDrivers.map((d) => (
-												<SelectItem key={d._id} value={d._id}>
-													{displayName(d.userId)}
-												</SelectItem>
-											))}
-										</SelectGroup>
-									</SelectContent>
-								</Select>
-							</Field>
-						</div>
-					</FieldGroup>
-					<div className="mt-4 flex gap-2">
-						<Button onClick={onSaveStaffing} disabled={busy}>
-							{action === "save" ? <Spinner data-icon="inline-start" /> : null}
-							Save
-						</Button>
-						<Button
-							variant="outline"
-							disabled={busy}
-							onClick={() => {
-								setEditing(false);
-								setGuideId(assignment.guideId);
-								setVehicleId(assignment.vehicleId ?? "");
-								setDriverId(assignment.driverId ?? "");
-							}}
-						>
-							Cancel
-						</Button>
-					</div>
+					<AssignmentStaffingForm
+						assignmentId={assignment._id}
+						guideId={assignment.guideId}
+						vehicleId={assignment.vehicleId ?? ""}
+						driverId={assignment.driverId ?? ""}
+						staffing={staffing}
+						eligibleVehicles={eligibleVehicles}
+						eligibleDrivers={eligibleDrivers}
+						displayName={displayName}
+						onDismiss={() => setEditing(false)}
+					/>
 				</DetailSection>
 			) : (
 				<DetailSection
@@ -556,5 +448,216 @@ function AssignmentDetailPage() {
 				</DetailSection>
 			)}
 		</DetailPage>
+	);
+}
+
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
+
+function AssignmentStaffingForm({
+	assignmentId,
+	guideId,
+	vehicleId,
+	driverId,
+	staffing,
+	eligibleVehicles,
+	eligibleDrivers,
+	displayName,
+	onDismiss,
+}: {
+	assignmentId: Id<"assignments">;
+	guideId: string;
+	vehicleId: string;
+	driverId: string;
+	staffing: ReturnType<typeof resolveTourStaffing> | null;
+	eligibleVehicles: Array<{
+		_id: Id<"vehicles">;
+		name: string;
+		vehicleType?: string;
+	}>;
+	eligibleDrivers: Array<{ _id: Id<"drivers">; userId: string }>;
+	displayName: (userId: string) => string;
+	onDismiss: () => void;
+}) {
+	const update = useMutation(api.assignments.update);
+	const form = useForm({
+		defaultValues: { guideId, vehicleId, driverId },
+		onSubmit: async ({ value }) => {
+			if (!value.guideId.trim()) {
+				form.setFieldMeta("guideId", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: "Guide is required" },
+				}));
+				return;
+			}
+			if (staffing?.requiresVehicle && !value.vehicleId) {
+				form.setFieldMeta("vehicleId", (prev) => ({
+					...prev,
+					errorMap: {
+						...prev.errorMap,
+						onSubmit: "This tour requires a vehicle",
+					},
+				}));
+				return;
+			}
+			if (staffing?.requiresDriver && !value.driverId) {
+				form.setFieldMeta("driverId", (prev) => ({
+					...prev,
+					errorMap: {
+						...prev.errorMap,
+						onSubmit: "This tour requires a driver",
+					},
+				}));
+				return;
+			}
+			try {
+				await update({
+					assignmentId,
+					guideId: value.guideId.trim(),
+					vehicleId: value.vehicleId
+						? (value.vehicleId as Id<"vehicles">)
+						: undefined,
+					driverId: value.driverId
+						? (value.driverId as Id<"drivers">)
+						: undefined,
+					clearVehicle: !value.vehicleId,
+					clearDriver: !value.driverId,
+				});
+				toast.success("Assignment updated");
+				onDismiss();
+			} catch (err) {
+				toast.error(getErrorMessage(err));
+			}
+		},
+	});
+
+	return (
+		<form
+			onSubmit={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void form.handleSubmit();
+			}}
+		>
+			<FieldGroup>
+				<div className="grid gap-4 md:grid-cols-3">
+					<form.Field name="guideId">
+						{(field) => (
+							<Field data-invalid={!field.state.meta.isValid}>
+								<FieldLabel htmlFor="edit-guide">Guide *</FieldLabel>
+								<MemberSelect
+									id="edit-guide"
+									value={field.state.value}
+									onValueChange={field.handleChange}
+									roles={["guide", "owner", "admin"]}
+								/>
+								<FieldError errors={metaErrors(field.state.meta.errors)} />
+							</Field>
+						)}
+					</form.Field>
+					<form.Field name="vehicleId">
+						{(field) => (
+							<Field data-invalid={!field.state.meta.isValid}>
+								<FieldLabel htmlFor="edit-vehicle">
+									{staffing?.requiresVehicle ? "Vehicle *" : "Vehicle"}
+								</FieldLabel>
+								<Select
+									value={field.state.value || "__none__"}
+									onValueChange={(v) =>
+										field.handleChange(v === "__none__" ? "" : v)
+									}
+								>
+									<SelectTrigger
+										id="edit-vehicle"
+										aria-invalid={!field.state.meta.isValid}
+									>
+										<SelectValue placeholder="None" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectGroup>
+											{!staffing?.requiresVehicle && (
+												<SelectItem value="__none__">None</SelectItem>
+											)}
+											{eligibleVehicles.map((v) => (
+												<SelectItem key={v._id} value={v._id}>
+													{v.name}
+													{v.vehicleType ? ` · ${v.vehicleType}` : ""}
+												</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+								<FieldError errors={metaErrors(field.state.meta.errors)} />
+							</Field>
+						)}
+					</form.Field>
+					<form.Field name="driverId">
+						{(field) => (
+							<Field data-invalid={!field.state.meta.isValid}>
+								<FieldLabel htmlFor="edit-driver">
+									{staffing?.requiresDriver ? "Driver *" : "Driver"}
+								</FieldLabel>
+								<Select
+									value={field.state.value || "__none__"}
+									onValueChange={(v) =>
+										field.handleChange(v === "__none__" ? "" : v)
+									}
+								>
+									<SelectTrigger
+										id="edit-driver"
+										aria-invalid={!field.state.meta.isValid}
+									>
+										<SelectValue placeholder="None" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectGroup>
+											{!staffing?.requiresDriver && (
+												<SelectItem value="__none__">None</SelectItem>
+											)}
+											{eligibleDrivers.map((d) => (
+												<SelectItem key={d._id} value={d._id}>
+													{displayName(d.userId)}
+												</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+								<FieldError errors={metaErrors(field.state.meta.errors)} />
+							</Field>
+						)}
+					</form.Field>
+				</div>
+				<form.Subscribe
+					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+				>
+					{([canSubmit, isSubmitting]) => (
+						<div className="flex gap-2">
+							<Button type="submit" disabled={!canSubmit || isSubmitting}>
+								{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+								{isSubmitting ? "Saving…" : "Save"}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								disabled={isSubmitting}
+								onClick={onDismiss}
+							>
+								Cancel
+							</Button>
+						</div>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
+		</form>
 	);
 }

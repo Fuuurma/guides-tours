@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
 import { PasswordInput } from "@/components/auth/password-field";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ function ResetPasswordPage() {
 				title="Reset link invalid"
 				serifAccent=""
 				description="This password reset link is invalid or has expired."
+				image={AUTH_PANEL.forgot}
 			>
 				<ErrorBanner
 					message="Please request a new reset link."
@@ -90,6 +91,7 @@ function ResetPasswordPage() {
 				title="Password updated"
 				serifAccent=""
 				description="Your password has been reset. You can now sign in."
+				image={AUTH_PANEL.forgot}
 			>
 				<Link to="/sign-in">
 					<Button className="h-11 w-full rounded-full" size="lg">
@@ -106,6 +108,7 @@ function ResetPasswordPage() {
 				title="Missing reset token"
 				serifAccent=""
 				description="This link is missing a valid reset token."
+				image={AUTH_PANEL.forgot}
 			>
 				<Link to="/forgot-password">
 					<Button className="h-11 w-full rounded-full" size="lg">
@@ -121,6 +124,7 @@ function ResetPasswordPage() {
 			title="Choose a new password"
 			serifAccent=""
 			description="Pick a strong password for your account."
+			image={AUTH_PANEL.forgot}
 		>
 			<form
 				onSubmit={(e) => {

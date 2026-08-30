@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
@@ -84,6 +84,7 @@ function SignInPage() {
 			title="Welcome back"
 			serifAccent=""
 			description="Sign in to staff this week's departures from one board."
+			image={AUTH_PANEL.signIn}
 		>
 			<form
 				onSubmit={(e) => {

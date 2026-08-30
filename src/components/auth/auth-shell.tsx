@@ -12,7 +12,13 @@ import type * as React from "react";
 // The design mirrors src/routes/index.tsx (landing page) so the auth
 // experience feels like part of the same product, not a bare form.
 
-const BRAND_IMAGE = "/landing/hero.jpg";
+export const AUTH_PANEL = {
+	signIn: "/landing/guides-auth-signin-dispatch.png",
+	signUp: "/landing/guides-auth-signup-trail.png",
+	forgot: "/landing/guides-auth-forgot-path.png",
+	onboard: "/landing/guides-auth-onboard-keys.png",
+	invite: "/landing/guides-auth-invite-crew.png",
+} as const;
 
 const TRUST_BULLETS = [
 	"Live availability shared with every channel",
@@ -26,33 +32,36 @@ export function AuthShell({
 	description,
 	children,
 	backToLanding = true,
+	image = AUTH_PANEL.signIn,
 }: {
 	title: string;
 	serifAccent?: string;
 	description?: string;
 	children: React.ReactNode;
 	backToLanding?: boolean;
+	/** Left-panel photograph. Sign-in and sign-up must not share one plate. */
+	image?: string;
 }) {
 	return (
 		<main className="min-h-screen bg-background font-landing text-foreground antialiased lg:grid lg:grid-cols-[1fr_1fr]">
 			{/* Brand panel — desktop only */}
 			<section className="relative isolate hidden overflow-hidden bg-primary text-primary-foreground lg:block">
 				<img
-					src={BRAND_IMAGE}
+					src={image}
 					alt=""
 					aria-hidden
-					className="absolute inset-0 size-full object-cover"
-					loading="lazy"
-					width={1600}
-					height={1067}
+					className="absolute inset-0 size-full object-cover object-center"
+					loading="eager"
+					width={1200}
+					height={1600}
 				/>
 				<div
 					aria-hidden
-					className="absolute inset-0 bg-gradient-to-r from-primary/95 via-primary/85 to-primary/60"
+					className="absolute inset-0 bg-gradient-to-r from-primary/70 via-primary/35 to-primary/10"
 				/>
 				<div
 					aria-hidden
-					className="absolute inset-0 bg-gradient-to-t from-primary/90 via-transparent to-primary/40"
+					className="absolute inset-0 bg-gradient-to-t from-primary/80 via-transparent to-primary/25"
 				/>
 
 				<div className="relative z-10 flex h-full flex-col justify-between p-10">

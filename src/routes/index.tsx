@@ -46,10 +46,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const TOUR_IMAGES = {
-	hero: "/landing/hero.jpg",
+	hero: "/landing/dispatch-dawn.webp",
 	coast: "/landing/coast.jpg",
 	city: "/landing/city.jpg",
 	guide: "/landing/guide.jpg",
+	trail: "/landing/guest-trail.webp",
 } as const;
 
 const FADE_UP = {
@@ -105,7 +106,14 @@ export const Route = createFileRoute("/")({
 					"The operator console for tour companies. Staff this week's departures, assign crew and vehicles, and keep bookings from every channel on one board.",
 			},
 		],
-		links: [{ rel: "preload", as: "image", href: TOUR_IMAGES.hero }],
+		links: [
+			{
+				rel: "preload",
+				as: "image",
+				href: TOUR_IMAGES.hero,
+				type: "image/webp",
+			},
+		],
 	}),
 	component: Home,
 });
@@ -140,16 +148,16 @@ function Home() {
 						fetchPriority="high"
 						width={1600}
 						height={1067}
-						className="size-full scale-[1.35] object-cover"
+						className="size-full object-cover"
 					/>
 				</motion.div>
 				<div
 					aria-hidden
-					className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/90 via-primary/75 to-primary/45"
+					className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/45 via-primary/37 to-primary/22"
 				/>
 				<div
 					aria-hidden
-					className="absolute inset-0 -z-10 bg-gradient-to-t from-primary/85 via-transparent to-primary/30"
+					className="absolute inset-0 -z-10 bg-gradient-to-t from-primary/42 via-transparent to-primary/15"
 				/>
 
 				<header className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8 lg:px-10">
@@ -793,17 +801,17 @@ function Home() {
 				</div>
 			</section>
 
-			<section className="relative overflow-hidden text-primary-foreground">
+			<section className="relative aspect-[3/2] overflow-hidden text-primary-foreground">
 				<img
-					src={TOUR_IMAGES.city}
+					src={TOUR_IMAGES.trail}
 					alt=""
 					aria-hidden
 					loading="lazy"
-					width={1200}
-					height={800}
+					width={1400}
+					height={933}
 					className="absolute inset-0 size-full object-cover"
 				/>
-				<div className="absolute inset-0 bg-primary/85" />
+				<div className="absolute inset-0 bg-primary/42" />
 				<div className="pointer-events-none absolute -right-32 -top-48 size-[36rem] rounded-full border-[3rem] border-chart-1/10" />
 				<div className="relative mx-auto grid max-w-7xl gap-14 px-5 py-24 sm:px-8 sm:py-32 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:px-10">
 					<div className="max-w-2xl">

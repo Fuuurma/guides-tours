@@ -3,7 +3,7 @@ import { useDebouncedValue } from "@tanstack/react-pacer";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -99,6 +99,7 @@ function OnboardingPage() {
 			title="Set up your company"
 			serifAccent=""
 			description="Create the organization your dispatch desk will share."
+			image={AUTH_PANEL.onboard}
 		>
 			<form
 				onSubmit={(e) => {

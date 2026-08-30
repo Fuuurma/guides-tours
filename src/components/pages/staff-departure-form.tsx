@@ -342,7 +342,7 @@ export function StaffDepartureForm({
 		form.setFieldValue("capacityTotal", String(prefillSchedule.capacityTotal));
 		form.setFieldValue("scheduleId", String(prefillSchedule._id));
 		form.setFieldValue("publish", false);
-	}, [prefillSchedule, form.setFieldValue]);
+	}, [prefillSchedule, form.setFieldValue]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	useEffect(() => {
 		if (tourId || !preselectedTourId || !tours) return;
@@ -424,12 +424,15 @@ export function StaffDepartureForm({
 									<Field data-invalid={!field.state.meta.isValid}>
 										<FieldLabel htmlFor="tour">Tour *</FieldLabel>
 										<Select
-											value={field.state.value}
+											key={tourId}
+											value={tourId}
 											onValueChange={(v) => field.handleChange(v)}
 											disabled={locked}
 										>
 											<SelectTrigger id="tour">
-												<SelectValue placeholder="Select a tour…" />
+												<SelectValue placeholder="Select a tour…">
+													{tour?.name}
+												</SelectValue>
 											</SelectTrigger>
 											<SelectContent>
 												<SelectGroup>

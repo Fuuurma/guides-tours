@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { MailCheck } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -54,6 +54,7 @@ function ForgotPasswordPage() {
 				title="Check your inbox"
 				serifAccent=""
 				description="We've sent a password reset link if an account exists for that email."
+				image={AUTH_PANEL.forgot}
 			>
 				<div className="flex flex-col items-center gap-4 rounded-xl border bg-muted/40 p-6 text-center">
 					<span className="grid size-12 place-items-center rounded-full bg-chart-2/15 text-chart-2">
@@ -79,6 +80,7 @@ function ForgotPasswordPage() {
 			title="Reset your password"
 			serifAccent=""
 			description="Enter your email and we'll send you a link to reset your password."
+			image={AUTH_PANEL.forgot}
 		>
 			<form
 				onSubmit={(e) => {

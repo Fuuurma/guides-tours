@@ -1,8 +1,9 @@
 import { convexQuery } from "@convex-dev/react-query";
+import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction, useMutation, usePaginatedQuery } from "convex/react";
-import { Mail, Phone } from "lucide-react";
+import { Mail, Phone, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, DetailSection } from "@/components/detail-page";
@@ -11,17 +12,31 @@ import { StatusBadge } from "@/components/status-badge";
 import { StripePaymentElement } from "@/components/stripe-payment-element";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import {
+	Field,
+	FieldDescription,
+	FieldError,
+	FieldGroup,
+	FieldLabel,
+} from "@/components/ui/field";
 import { DetailSkeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatCentsCompact } from "@/lib/format";
 import {
+	cn,
 	getErrorMessage,
 	getSafeDisplayMessage,
 	isStripeCheckoutUrl,
 } from "@/lib/utils";
+import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
 import type { BookingDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
+
+const RATINGS = [1, 2, 3, 4, 5] as const;
+const MAX_CANCEL_REASON_LEN = 500;
 
 /** Safe mailto: href — strips anything that looks like a protocol or newline. */
 function safeMailto(email: string): string {
@@ -63,9 +78,6 @@ function BookingDetailPage() {
 	const checkIn = useMutation(api.bookings.checkIn);
 	const confirmBooking = useMutation(api.bookings.confirm);
 	const complete = useMutation(api.bookings.complete);
-	const cancelBooking = useMutation(api.bookings.cancel);
-	const recordReview = useMutation(api.bookings.recordReview);
-	const refundPayment = useAction(api.payments_stripe_actions.refundViaStripe);
 	const createCheckout = useAction(
 		api.payments_stripe_actions.createHostedCheckout,
 	);
@@ -74,12 +86,8 @@ function BookingDetailPage() {
 	);
 	const [pending, setPending] = useState(false);
 	const [showCancelForm, setShowCancelForm] = useState(false);
-	const [cancelReason, setCancelReason] = useState("");
 	const [showReviewForm, setShowReviewForm] = useState(false);
-	const [reviewRating, setReviewRating] = useState("5");
-	const [reviewComment, setReviewComment] = useState("");
 	const [showRefundForm, setShowRefundForm] = useState(false);
-	const [refundReason, setRefundReason] = useState("");
 	const [elementsOpen, setElementsOpen] = useState(false);
 	const [clientSecret, setClientSecret] = useState<string | null>(null);
 	const [publishableKey, setPublishableKey] = useState<string | null>(null);
@@ -124,23 +132,6 @@ function BookingDetailPage() {
 			() => complete({ bookingId: bookingId as Id<"bookings"> }),
 			"Booking completed",
 		);
-	const onCancel = () => {
-		if (!cancelReason.trim()) {
-			toast.error("Please provide a reason");
-			return;
-		}
-		runAction(
-			() =>
-				cancelBooking({
-					bookingId: bookingId as Id<"bookings">,
-					reason: cancelReason,
-				}),
-			"Booking cancelled",
-		).then(() => {
-			setShowCancelForm(false);
-			setCancelReason("");
-		});
-	};
 
 	if (isPending) {
 		return <DetailSkeleton />;
@@ -156,21 +147,6 @@ function BookingDetailPage() {
 
 	const paymentItems = payments.results;
 	const succeededPayment = paymentItems.find((p) => p.status === "succeeded");
-
-	const onRefund = () => {
-		if (!succeededPayment) return;
-		runAction(
-			() =>
-				refundPayment({
-					paymentId: succeededPayment._id as Id<"payments">,
-					reason: refundReason.trim() || undefined,
-				}),
-			"Payment refunded",
-		).then(() => {
-			setShowRefundForm(false);
-			setRefundReason("");
-		});
-	};
 
 	const balanceDue = Number(b.balanceDueCents ?? 0);
 	const canCollect =
@@ -272,62 +248,17 @@ function BookingDetailPage() {
 			}
 		>
 			{showCancelForm && (
-				<div className="flex flex-col gap-4 rounded-md border border-destructive/50 bg-destructive/5 p-4">
-					<p className="text-sm font-medium">
-						Cancel booking — this will be recorded in the audit log.
-					</p>
-					<Textarea
-						value={cancelReason}
-						onChange={(e) => setCancelReason(e.target.value)}
-						placeholder="Reason for cancellation (e.g. customer request, weather, etc.)"
-						rows={2}
-						maxLength={500}
-					/>
-					<div className="flex gap-2">
-						<Button variant="destructive" onClick={onCancel} disabled={pending}>
-							{pending ? "Cancelling…" : "Confirm cancellation"}
-						</Button>
-						<Button
-							variant="outline"
-							onClick={() => {
-								setShowCancelForm(false);
-								setCancelReason("");
-							}}
-						>
-							Keep booking
-						</Button>
-					</div>
-				</div>
+				<CancelBookingForm
+					bookingId={bookingId as Id<"bookings">}
+					onDismiss={() => setShowCancelForm(false)}
+				/>
 			)}
 
 			{showRefundForm && succeededPayment && (
-				<div className="flex flex-col gap-4 rounded-md border border-destructive/50 bg-destructive/5 p-4">
-					<p className="text-sm font-medium">
-						Refund via Stripe — money is returned to the customer and the
-						booking balance is restored.
-					</p>
-					<Textarea
-						value={refundReason}
-						onChange={(e) => setRefundReason(e.target.value)}
-						placeholder="Reason for refund (optional)"
-						rows={2}
-						maxLength={500}
-					/>
-					<div className="flex gap-2">
-						<Button variant="destructive" onClick={onRefund} disabled={pending}>
-							{pending ? "Refunding…" : "Confirm refund"}
-						</Button>
-						<Button
-							variant="outline"
-							onClick={() => {
-								setShowRefundForm(false);
-								setRefundReason("");
-							}}
-						>
-							Cancel
-						</Button>
-					</div>
-				</div>
+				<RefundPaymentForm
+					paymentId={succeededPayment._id as Id<"payments">}
+					onDismiss={() => setShowRefundForm(false)}
+				/>
 			)}
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -540,20 +471,11 @@ function BookingDetailPage() {
 
 			{(b.reviewRating || b.reviewComment) && (
 				<DetailSection title="Customer review">
-					{b.reviewRating && (
-						<p className="text-2xl font-semibold">
-							{"★".repeat(b.reviewRating)}
-							<span className="text-muted-foreground">
-								{"☆".repeat(5 - b.reviewRating)}
-							</span>
-						</p>
-					)}
+					{b.reviewRating ? <ReviewStars rating={b.reviewRating} /> : null}
 					{b.reviewComment && <p>{b.reviewComment}</p>}
 				</DetailSection>
 			)}
 
-			{/* Record-review form: only available for completed bookings
-			    that don't already have a review. */}
 			{b.status === "completed" && !b.reviewRating && (
 				<DetailSection title="Record review">
 					{!showReviewForm ? (
@@ -561,88 +483,369 @@ function BookingDetailPage() {
 							Record review
 						</Button>
 					) : (
-						<div className="flex flex-col gap-3">
-							<label
-								htmlFor="booking-rating"
-								className="text-sm font-medium block"
-							>
-								Rating (1-5)
-							</label>
-							<div className="flex gap-1" role="radiogroup" aria-label="Rating">
-								{[1, 2, 3, 4, 5].map((n) => (
-									<button
-										key={n}
-										type="button"
-										aria-label={`${n} star${n === 1 ? "" : "s"}`}
-										aria-pressed={reviewRating === String(n)}
-										onClick={() => setReviewRating(String(n))}
-										className={`text-3xl leading-none p-1 rounded hover:bg-accent ${
-											reviewRating === String(n)
-												? "text-star"
-												: "text-muted-foreground"
-										}`}
-									>
-										{n <= Number(reviewRating) ? "★" : "☆"}
-									</button>
-								))}
-							</div>
-							<label
-								htmlFor="review-comment"
-								className="text-sm font-medium block"
-							>
-								Comment (optional)
-							</label>
-							<Textarea
-								id="review-comment"
-								value={reviewComment}
-								onChange={(e) => setReviewComment(e.target.value)}
-								rows={3}
-								maxLength={1000}
-								placeholder="What did the customer think?"
-							/>
-							<div className="flex gap-2">
-								<Button
-									onClick={async () => {
-										const r = Number(reviewRating);
-										if (r < 1 || r > 5) {
-											toast.error("Rating must be 1-5");
-											return;
-										}
-										setPending(true);
-										try {
-											await recordReview({
-												bookingId: b._id as Id<"bookings">,
-												rating: r,
-												comment: reviewComment.trim() || undefined,
-											});
-											toast.success("Review recorded");
-											setShowReviewForm(false);
-											setReviewComment("");
-										} catch (err) {
-											toast.error(getErrorMessage(err));
-										} finally {
-											setPending(false);
-										}
-									}}
-									disabled={pending}
-								>
-									{pending ? "Saving…" : "Save review"}
-								</Button>
-								<Button
-									variant="outline"
-									onClick={() => {
-										setShowReviewForm(false);
-										setReviewComment("");
-									}}
-									disabled={pending}
-								>
-									Cancel
-								</Button>
-							</div>
-						</div>
+						<RecordReviewForm
+							bookingId={b._id as Id<"bookings">}
+							onDismiss={() => setShowReviewForm(false)}
+						/>
 					)}
 				</DetailSection>
 			)}
 		</DetailPage>
+	);
+}
+
+function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
+
+function ReviewStars({ rating }: { rating: number }) {
+	return (
+		<p className="flex items-center gap-1">
+			<span className="sr-only">{rating} out of 5</span>
+			{RATINGS.map((n) => (
+				<Star
+					key={n}
+					aria-hidden="true"
+					className={cn(
+						"size-5",
+						n <= rating ? "fill-current text-star" : "text-muted-foreground",
+					)}
+				/>
+			))}
+		</p>
+	);
+}
+
+function CancelBookingForm({
+	bookingId,
+	onDismiss,
+}: {
+	bookingId: Id<"bookings">;
+	onDismiss: () => void;
+}) {
+	const cancelBooking = useMutation(api.bookings.cancel);
+	const form = useForm({
+		defaultValues: { reason: "" },
+		onSubmit: async ({ value }) => {
+			const trimmed = value.reason.trim();
+			if (!trimmed) {
+				form.setFieldMeta("reason", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: "Please provide a reason" },
+				}));
+				return;
+			}
+			if (trimmed.length > MAX_CANCEL_REASON_LEN) {
+				form.setFieldMeta("reason", (prev) => ({
+					...prev,
+					errorMap: {
+						...prev.errorMap,
+						onSubmit: `Cancel reason is too long (max ${MAX_CANCEL_REASON_LEN} characters)`,
+					},
+				}));
+				return;
+			}
+			try {
+				await cancelBooking({ bookingId, reason: trimmed });
+				toast.success("Booking cancelled");
+				onDismiss();
+			} catch (err) {
+				toast.error(getErrorMessage(err));
+			}
+		},
+	});
+
+	return (
+		<form
+			className="rounded-md border border-destructive/50 bg-destructive/5 p-4"
+			onSubmit={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void form.handleSubmit();
+			}}
+		>
+			<FieldGroup className="gap-4">
+				<form.Field name="reason">
+					{(field) => (
+						<Field data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="cancel-reason">Cancel booking</FieldLabel>
+							<FieldDescription>
+								This will be recorded in the audit log.
+							</FieldDescription>
+							<Textarea
+								id="cancel-reason"
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								placeholder="Reason for cancellation (customer request, weather, etc.)"
+								rows={2}
+								maxLength={MAX_CANCEL_REASON_LEN}
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Subscribe
+					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+				>
+					{([canSubmit, isSubmitting]) => (
+						<div className="flex gap-2">
+							<Button
+								type="submit"
+								variant="destructive"
+								disabled={!canSubmit || isSubmitting}
+							>
+								{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+								{isSubmitting ? "Cancelling…" : "Confirm cancellation"}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={onDismiss}
+								disabled={isSubmitting}
+							>
+								Keep booking
+							</Button>
+						</div>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
+		</form>
+	);
+}
+
+function RefundPaymentForm({
+	paymentId,
+	onDismiss,
+}: {
+	paymentId: Id<"payments">;
+	onDismiss: () => void;
+}) {
+	const refundPayment = useAction(api.payments_stripe_actions.refundViaStripe);
+	const form = useForm({
+		defaultValues: { reason: "" },
+		onSubmit: async ({ value }) => {
+			const notesErr = validateNotesOptional(value.reason);
+			if (notesErr) {
+				form.setFieldMeta("reason", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: notesErr },
+				}));
+				return;
+			}
+			try {
+				await refundPayment({
+					paymentId,
+					reason: value.reason.trim() || undefined,
+				});
+				toast.success("Payment refunded");
+				onDismiss();
+			} catch (err) {
+				toast.error(getErrorMessage(err));
+			}
+		},
+	});
+
+	return (
+		<form
+			className="rounded-md border border-destructive/50 bg-destructive/5 p-4"
+			onSubmit={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void form.handleSubmit();
+			}}
+		>
+			<FieldGroup className="gap-4">
+				<form.Field name="reason">
+					{(field) => (
+						<Field data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="refund-reason">Refund via Stripe</FieldLabel>
+							<FieldDescription>
+								Money is returned to the customer and the booking balance is
+								restored.
+							</FieldDescription>
+							<Textarea
+								id="refund-reason"
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								placeholder="Reason for refund (optional)"
+								rows={2}
+								maxLength={MAX_CANCEL_REASON_LEN}
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Subscribe
+					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+				>
+					{([canSubmit, isSubmitting]) => (
+						<div className="flex gap-2">
+							<Button
+								type="submit"
+								variant="destructive"
+								disabled={!canSubmit || isSubmitting}
+							>
+								{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+								{isSubmitting ? "Refunding…" : "Confirm refund"}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={onDismiss}
+								disabled={isSubmitting}
+							>
+								Keep payment
+							</Button>
+						</div>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
+		</form>
+	);
+}
+
+function RecordReviewForm({
+	bookingId,
+	onDismiss,
+}: {
+	bookingId: Id<"bookings">;
+	onDismiss: () => void;
+}) {
+	const recordReview = useMutation(api.bookings.recordReview);
+	const form = useForm({
+		defaultValues: { rating: 5, comment: "" },
+		onSubmit: async ({ value }) => {
+			if (value.rating < 1 || value.rating > 5) {
+				form.setFieldMeta("rating", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: "Rating must be 1-5" },
+				}));
+				return;
+			}
+			const notesErr = validateNotesOptional(value.comment);
+			if (notesErr) {
+				form.setFieldMeta("comment", (prev) => ({
+					...prev,
+					errorMap: { ...prev.errorMap, onSubmit: notesErr },
+				}));
+				return;
+			}
+			try {
+				await recordReview({
+					bookingId,
+					rating: value.rating,
+					comment: value.comment.trim() || undefined,
+				});
+				toast.success("Review recorded");
+				onDismiss();
+			} catch (err) {
+				toast.error(getErrorMessage(err));
+			}
+		},
+	});
+
+	return (
+		<form
+			onSubmit={(e) => {
+				e.preventDefault();
+				e.stopPropagation();
+				void form.handleSubmit();
+			}}
+		>
+			<FieldGroup className="gap-3">
+				<form.Field name="rating">
+					{(field) => (
+						<Field data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="booking-rating">Rating</FieldLabel>
+							<ToggleGroup
+								id="booking-rating"
+								type="single"
+								spacing={1}
+								value={String(field.state.value)}
+								onValueChange={(v) => {
+									if (v) field.handleChange(Number(v));
+								}}
+								aria-label="Rating"
+								aria-invalid={!field.state.meta.isValid}
+							>
+								{RATINGS.map((n) => (
+									<ToggleGroupItem
+										key={n}
+										value={String(n)}
+										aria-label={`${n} star${n === 1 ? "" : "s"}`}
+										className={cn(
+											"size-10 px-0 data-[state=on]:bg-transparent data-[state=on]:text-star",
+											n <= field.state.value
+												? "text-star"
+												: "text-muted-foreground",
+										)}
+									>
+										<Star
+											className={
+												n <= field.state.value ? "fill-current" : undefined
+											}
+										/>
+									</ToggleGroupItem>
+								))}
+							</ToggleGroup>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Field name="comment">
+					{(field) => (
+						<Field data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="review-comment">
+								Comment (optional)
+							</FieldLabel>
+							<Textarea
+								id="review-comment"
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								rows={3}
+								maxLength={MAX_NOTES_LEN}
+								placeholder="What did the customer think?"
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Subscribe
+					selector={(state) => [state.canSubmit, state.isSubmitting] as const}
+				>
+					{([canSubmit, isSubmitting]) => (
+						<div className="flex gap-2">
+							<Button type="submit" disabled={!canSubmit || isSubmitting}>
+								{isSubmitting ? <Spinner data-icon="inline-start" /> : null}
+								{isSubmitting ? "Saving…" : "Save review"}
+							</Button>
+							<Button
+								type="button"
+								variant="outline"
+								onClick={onDismiss}
+								disabled={isSubmitting}
+							>
+								Cancel
+							</Button>
+						</div>
+					)}
+				</form.Subscribe>
+			</FieldGroup>
+		</form>
 	);
 }
