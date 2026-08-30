@@ -330,6 +330,255 @@ async function buildRevenueSummary(
 	};
 }
 
+/**
+ * Revenue + booking count + guests, broken down by booking source.
+ * Uses the `by_org_date` compound index (range-scannable on date).
+ * We need *all* sources aggregated, so the right index here is the
+ * date-leading one — `by_org_source_date` would require binding
+ * `source` first and then making one query per source.
+ *
+ * Excludes cancelled bookings so the revenue totals line up with
+ * the gross-revenue card on the analytics page.
+ *
+ * Returns rows sorted by revenue descending. `source` is whatever
+ * the booking row has in its `source` field (viator, getyourguide,
+ * direct, etc.) — falls back to "direct" for legacy rows that
+ * pre-date the field.
+ */
+async function buildChannelRevenue(
+	ctx: QCtx,
+	orgId: string,
+	startDate: string,
+	endDate: string,
+) {
+	const MAX_ANALYTICS_SCAN = 10_000;
+	const bookings = await ctx.db
+		.query("bookings")
+		.withIndex("by_org_date", (q) =>
+			q
+				.eq("organizationId", orgId)
+				.gte("date", startDate)
+				.lte("date", endDate),
+		)
+		.take(MAX_ANALYTICS_SCAN);
+
+	const active = bookings.filter((b) => b.status !== "cancelled");
+
+	const channelMap = new Map<
+		string,
+		{ bookings: number; guests: number; revenue: number }
+	>();
+	for (const b of active) {
+		const source = b.source ?? "direct";
+		const entry = channelMap.get(source) ?? {
+			bookings: 0,
+			guests: 0,
+			revenue: 0,
+		};
+		entry.bookings++;
+		entry.guests += b.guests;
+		entry.revenue += Number(b.totalAmountCents);
+		channelMap.set(source, entry);
+	}
+
+	return Array.from(channelMap.entries())
+		.map(([source, stats]) => ({
+			source,
+			totalBookings: stats.bookings,
+			totalGuests: stats.guests,
+			totalRevenueCents: stats.revenue,
+		}))
+		.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents);
+}
+
+/**
+ * Tier 4: Financial-health trio for the analytics page. Three
+ * numbers operators care about but no existing query surfaces:
+ *
+ *   1. Refund rate       — sum of refund amounts vs gross payments
+ *                          in the window (succeeded payments only).
+ *   2. Outstanding       — sum of balanceDueCents for active
+ *                          bookings created in the window.
+ *   3. Deposit coverage  — share of bookings in the window that
+ *                          have a deposit paid. Tells the operator
+ *                          whether their deposit policy is being
+ *                          honored.
+ *
+ * Bound to MAX_ANALYTICS_SCAN per query (10K) so a busy org
+ * doesn't OOM. All three scans run in parallel since they
+ * touch distinct tables.
+ */
+async function buildFinancialHealth(
+	ctx: QCtx,
+	orgId: string,
+	startDate: string,
+	endDate: string,
+) {
+	const MAX_ANALYTICS_SCAN = 10_000;
+	const [payments, refunds, bookings] = await Promise.all([
+		ctx.db
+			.query("payments")
+			.withIndex("by_org_status_created", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.eq("status", "succeeded"),
+			)
+			.filter((q) =>
+				q.and(
+					q.gte(q.field("createdAt"), Date.parse(`${startDate}T00:00:00Z`)),
+					q.lte(q.field("createdAt"), Date.parse(`${endDate}T23:59:59Z`)),
+				),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("refunds")
+			.withIndex("by_org_status", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.eq("status", "succeeded"),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("bookings")
+			.withIndex("by_org_date", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", startDate)
+					.lte("date", endDate),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+	]);
+
+	const grossCents = payments.reduce(
+		(s, p) => s + Number(p.amountCents),
+		0,
+	);
+	const refundCents = refunds.reduce(
+		(s, r) => s + Number(r.amountCents),
+		0,
+	);
+	const refundRate =
+		grossCents > 0 ? round1((refundCents / grossCents) * 100) : 0;
+
+	const activeBookings = bookings.filter((b) => b.status !== "cancelled");
+	const outstandingCents = activeBookings.reduce(
+		(s, b) => s + Number(b.balanceDueCents),
+		0,
+	);
+	const bookingsWithDeposit = activeBookings.filter(
+		(b) => Number(b.depositAmountCents) > 0,
+	).length;
+	const depositCoverage =
+		activeBookings.length > 0
+			? round1((bookingsWithDeposit / activeBookings.length) * 100)
+			: 0;
+
+	return {
+		startDate,
+		endDate,
+		grossCents,
+		refundCents,
+		refundRate,
+		outstandingCents,
+		bookingsTotal: activeBookings.length,
+		bookingsWithDeposit,
+		depositCoverage,
+	};
+}
+
+/**
+ * Tier 4: public-booking funnel for the active org. Counts
+ * `publicBookingAttempts` rows in the window by `outcome` and
+ * returns a per-bucket breakdown + the success rate.
+ *
+ * The schema captures every attempt (successful + rejected) so
+ * this query exposes the operator's *true* conversion rate —
+ * not just bookings created, but attempts that actually got a
+ * guest through the rate limit + capacity + validation wall.
+ *
+ * `by_org_created` is the index we use; rows whose
+ * `organizationId` is null (unknown-slug attempts) are skipped
+ * via the filter, so each org only sees its own funnel.
+ */
+async function buildConversions(
+	ctx: QCtx,
+	orgId: string,
+	startDate: string,
+	endDate: string,
+) {
+	const MAX_ANALYTICS_SCAN = 10_000;
+	const startMs = Date.parse(`${startDate}T00:00:00Z`);
+	const endMs = Date.parse(`${endDate}T23:59:59Z`);
+	if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+		return {
+			startDate,
+			endDate,
+			totalAttempts: 0,
+			success: 0,
+			rejectedRateLimit: 0,
+			rejectedValidation: 0,
+			rejectedCapacity: 0,
+			rejectedUnknownSlug: 0,
+			successRate: 0,
+		};
+	}
+	const rows = await ctx.db
+		.query("publicBookingAttempts")
+		.withIndex("by_org_created", (q) =>
+			q.eq("organizationId", orgId),
+		)
+		.filter((q) =>
+			q.and(
+				q.gte(q.field("createdAt"), startMs),
+				q.lte(q.field("createdAt"), endMs),
+			),
+		)
+		.take(MAX_ANALYTICS_SCAN);
+
+	let success = 0;
+	let rejectedRateLimit = 0;
+	let rejectedValidation = 0;
+	let rejectedCapacity = 0;
+	let rejectedUnknownSlug = 0;
+	for (const r of rows) {
+		switch (r.outcome) {
+			case "success":
+				success++;
+				break;
+			case "rejected_rate_limit":
+				rejectedRateLimit++;
+				break;
+			case "rejected_validation":
+				rejectedValidation++;
+				break;
+			case "rejected_capacity":
+				rejectedCapacity++;
+				break;
+			case "rejected_unknown_slug":
+				rejectedUnknownSlug++;
+				break;
+			default:
+				break;
+		}
+	}
+
+	const totalAttempts = rows.length;
+	const successRate =
+		totalAttempts > 0 ? round1((success / totalAttempts) * 100) : 0;
+
+	return {
+		startDate,
+		endDate,
+		totalAttempts,
+		success,
+		rejectedRateLimit,
+		rejectedValidation,
+		rejectedCapacity,
+		rejectedUnknownSlug,
+		successRate,
+	};
+}
+
 async function buildTopTours(
 	ctx: QCtx,
 	orgId: string,
@@ -619,6 +868,70 @@ export const getBookingSources = query({
 	},
 });
 
+/**
+ * Revenue + booking count per source channel for the active org
+ * in the date window. Powers the channel-mix horizontal bar on
+ * `/dashboard/analytics` — replaces the static `<ul>` bookend
+ * block. Uses the `by_org_source_date` compound index.
+ */
+export const getChannelRevenue = query({
+	args: {
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		return await buildChannelRevenue(
+			ctx,
+			member.organizationId,
+			args.startDate,
+			args.endDate,
+		);
+	},
+});
+
+/**
+ * Tier 4: financial-health trio — refund rate, outstanding
+ * balance, and deposit coverage for the analytics page.
+ */
+export const getFinancialHealth = query({
+	args: {
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		return await buildFinancialHealth(
+			ctx,
+			member.organizationId,
+			args.startDate,
+			args.endDate,
+		);
+	},
+});
+
+/**
+ * Tier 4: public-booking funnel — total attempts, success rate,
+ * and per-rejection-bucket counts. Powers the conversions widget
+ * on `/dashboard/analytics`. Excludes unknown-slug attempts
+ * (those don't belong to this org).
+ */
+export const getConversions = query({
+	args: {
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		return await buildConversions(
+			ctx,
+			member.organizationId,
+			args.startDate,
+			args.endDate,
+		);
+	},
+});
+
 // ---- internal queries (for tests + internal callers) ----
 //
 // These accept organizationId directly. They MUST NOT be exposed to
@@ -708,6 +1021,51 @@ export const getTopToursInternal = internalQuery({
 		),
 });
 
+export const getChannelRevenueInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) =>
+		buildChannelRevenue(
+			ctx,
+			args.organizationId,
+			args.startDate,
+			args.endDate,
+		),
+});
+
+export const getFinancialHealthInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) =>
+		buildFinancialHealth(
+			ctx,
+			args.organizationId,
+			args.startDate,
+			args.endDate,
+		),
+});
+
+export const getConversionsInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) =>
+		buildConversions(
+			ctx,
+			args.organizationId,
+			args.startDate,
+			args.endDate,
+		),
+});
+
 export const getBookingSourcesInternal = internalQuery({
 	args: {
 		organizationId: v.string(),
@@ -716,4 +1074,110 @@ export const getBookingSourcesInternal = internalQuery({
 	},
 	handler: async (ctx, args) =>
 		buildBookingSources(ctx, args.organizationId, args.startDate, args.endDate),
+});
+
+// ---- getWeeklyPulse: this-week vs last-week operator pulse ----
+//
+// One query that gives the home page its four hero numbers:
+//   - revenue (USD)
+//   - booking count
+//   - avg group size
+//   - cancellation rate
+//
+// …each with the prior period as the comparison baseline so the
+// card can show "+12%" or "-3 bookings" without a second fetch.
+//
+// "This week" = `args.startDate`..`args.endDate` (caller picks the
+// window — usually the last 7 calendar days). "Last week" = the
+// same-length window immediately preceding `args.startDate`. The
+// window length is normalized so a caller asking for a 14-day
+// range gets a 14-day prior baseline.
+
+async function buildWeeklyPulse(
+	ctx: QCtx,
+	orgId: string,
+	startDate: string,
+	endDate: string,
+) {
+	const startMs = Date.parse(`${startDate}T00:00:00Z`);
+	const endMs = Date.parse(`${endDate}T00:00:00Z`);
+	// Guard against bad input so a typo can't trigger a NaN-derived
+	// date that lands 50 years in the future.
+	if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+		return {
+			startDate,
+			endDate,
+			previousStartDate: startDate,
+			previousEndDate: endDate,
+			revenueCents: 0,
+			bookings: 0,
+			guests: 0,
+			avgGroupSize: 0,
+			cancellationRate: 0,
+			previousRevenueCents: 0,
+			previousBookings: 0,
+			previousGuests: 0,
+			previousCancellationRate: 0,
+		};
+	}
+	const windowMs = endMs - startMs;
+	const prevEnd = new Date(startMs - 86_400_000).toISOString().slice(0, 10);
+	const prevStart = new Date(startMs - windowMs - 86_400_000)
+		.toISOString()
+		.slice(0, 10);
+
+	// Two range scans in parallel. The two windows never overlap,
+	// so a single index scan with two predicates can't beat
+	// parallelizing them on the wire — Convex reads are independent
+	// transactions. `buildRevenueSummary` already bounds at 10K
+	// per window.
+	const [current, previous] = await Promise.all([
+		buildRevenueSummary(ctx, orgId, startDate, endDate),
+		buildRevenueSummary(ctx, orgId, prevStart, prevEnd),
+	]);
+
+	return {
+		startDate,
+		endDate,
+		previousStartDate: prevStart,
+		previousEndDate: prevEnd,
+		revenueCents: current.totalRevenueCents,
+		bookings: current.totalBookings,
+		guests: current.totalGuests,
+		avgGroupSize:
+			current.totalBookings > 0
+				? round1(current.totalGuests / current.totalBookings)
+				: 0,
+		cancellationRate: current.cancellationRate,
+		previousRevenueCents: previous.totalRevenueCents,
+		previousBookings: previous.totalBookings,
+		previousGuests: previous.totalGuests,
+		previousCancellationRate: previous.cancellationRate,
+	};
+}
+
+export const getWeeklyPulse = query({
+	args: {
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		return await buildWeeklyPulse(
+			ctx,
+			member.organizationId,
+			args.startDate,
+			args.endDate,
+		);
+	},
+});
+
+export const getWeeklyPulseInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		startDate: v.string(),
+		endDate: v.string(),
+	},
+	handler: async (ctx, args) =>
+		buildWeeklyPulse(ctx, args.organizationId, args.startDate, args.endDate),
 });

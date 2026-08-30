@@ -2,7 +2,12 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
+import {
+	buildSparklineByTour,
+	ChannelMixBar,
+	TopToursLeaderboard,
+} from "@/components/chart-tokens";
 import { MetricCard } from "@/components/metric-card";
 import {
 	aggregateDailyTourMetrics,
@@ -88,9 +93,16 @@ function AnalyticsPage() {
 	const presets = buildPresets();
 	const activePreset = isPresetActive(range, presets);
 
+	// Debounce date picker keystrokes via useDeferredValue so each
+	// typed character doesn't refire all 8 analytics queries. The
+	// input stays responsive (it's bound to `range`), while the
+	// expensive `rangeArgs` downstream updates on the next tick
+	// when React has time. This is the React 19 idiomatic fix —
+	// no setTimeout, no debounce hook, no library.
+	const deferredRange = useDeferredValue(range);
 	const rangeArgs = {
-		startDate: range.startDate,
-		endDate: range.endDate,
+		startDate: deferredRange.startDate,
+		endDate: deferredRange.endDate,
 	} as const;
 	const {
 		data: overview,
@@ -108,14 +120,26 @@ function AnalyticsPage() {
 	const { data: tourStats } = useQuery(
 		convexQuery(api.analytics.getTourStats, rangeArgs),
 	);
-	const { data: sources } = useQuery(
-		convexQuery(api.analytics.getBookingSources, rangeArgs),
-	);
 	const { data: guideStats } = useQuery(
 		convexQuery(api.analytics.getGuideStats, rangeArgs),
 	);
 	const { data: dailyStats } = useQuery(
 		convexQuery(api.analytics.getDailyStats, rangeArgs),
+	);
+	// Tier 2: channel-mix horizontal bar — revenue + booking count
+	// per booking source. Uses by_org_date (range-scannable on date).
+	const { data: channels } = useQuery(
+		convexQuery(api.analytics.getChannelRevenue, rangeArgs),
+	);
+	// Tier 4: financial-health trio (refund rate / outstanding /
+	// deposit coverage). One query, three small cards.
+	const { data: financialHealth } = useQuery(
+		convexQuery(api.analytics.getFinancialHealth, rangeArgs),
+	);
+	// Tier 4: public-booking funnel (success rate + per-rejection
+	// bucket counts). One query, four small cards.
+	const { data: conversions } = useQuery(
+		convexQuery(api.analytics.getConversions, rangeArgs),
 	);
 	const { data: cachedTourDays } = useQuery(
 		convexQuery(api.tourAnalytics.list, {
@@ -128,6 +152,37 @@ function AnalyticsPage() {
 		() => aggregateDailyTourMetrics(cachedTourDays ?? []),
 		[cachedTourDays],
 	);
+	// Independent 30-day window for the leaderboard sparklines so
+	// the trend stays consistent regardless of the user's selected
+	// range — operators want "is this tour trending up?" not
+	// "show me the trend for whatever window I happen to be on".
+	const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+	const thirtyAgo = useMemo(() => {
+		const d = new Date(Date.now() - 30 * 86_400_000);
+		return d.toISOString().slice(0, 10);
+	}, []);
+	const { data: leaderboardTourDays } = useQuery(
+		convexQuery(api.tourAnalytics.list, {
+			periodType: "daily",
+			dateFrom: thirtyAgo,
+			dateTo: today,
+		}),
+	);
+	const sparklineByTour = useMemo(
+		() => buildSparklineByTour((leaderboardTourDays ?? []) as never),
+		[leaderboardTourDays],
+	);
+	const leaderboardTours = useMemo(() => {
+		if (!topTours) return [];
+		return topTours.map((t) => ({
+			tourId: String(t.tourId),
+			tourName: String(t.tourName ?? "Unknown"),
+			totalBookings: t.totalBookings,
+			totalGuests: t.totalGuests,
+			totalRevenueCents: t.totalRevenueCents,
+			sparkline: sparklineByTour.get(String(t.tourId)) ?? [],
+		}));
+	}, [topTours, sparklineByTour]);
 	const { displayName } = useOrgMembers(["guide", "owner", "admin"]);
 
 	if (orgError || overviewError || revenueError) {
@@ -332,6 +387,81 @@ function AnalyticsPage() {
 							isPending={revenuePending}
 						/>
 					</div>
+					{/* Tier 4: financial-health trio — refund rate,
+					    outstanding balance, deposit coverage. */}
+					<div className="mt-4 grid gap-4 border-t pt-4 md:grid-cols-3">
+						<MetricCard
+							label="Refund rate"
+							value={
+								financialHealth ? `${financialHealth.refundRate}%` : undefined
+							}
+							isPending={!financialHealth}
+						/>
+						<MetricCard
+							label="Outstanding"
+							value={
+								financialHealth
+									? formatCentsWhole(financialHealth.outstandingCents)
+									: undefined
+							}
+							isPending={!financialHealth}
+						/>
+						<MetricCard
+							label="Deposit coverage"
+							value={
+								financialHealth
+									? `${financialHealth.depositCoverage}%`
+									: undefined
+							}
+							isPending={!financialHealth}
+						/>
+					</div>
+				</CardContent>
+			</Card>
+
+			{/* Tier 4: public-booking funnel — total attempts, success
+			    rate, and per-rejection-bucket counts. Tells the
+			    operator whether their booking flow is succeeding or
+			    hitting a wall (rate limit / capacity / validation). */}
+			<Card>
+				<CardHeader>
+					<CardTitle>Public booking funnel</CardTitle>
+					<CardDescription>
+						{conversions
+							? `${conversions.totalAttempts} attempt${
+									conversions.totalAttempts === 1 ? "" : "s"
+								} · ${conversions.successRate}% succeeded`
+							: "How guests land on the booking page"}
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<div className="grid gap-4 md:grid-cols-4">
+						<MetricCard
+							label="Success rate"
+							value={conversions ? `${conversions.successRate}%` : undefined}
+							isPending={!conversions}
+						/>
+						<MetricCard
+							label="Attempts"
+							value={conversions?.totalAttempts}
+							isPending={!conversions}
+						/>
+						<MetricCard
+							label="Rate-limited"
+							value={conversions?.rejectedRateLimit}
+							isPending={!conversions}
+						/>
+						<MetricCard
+							label="Capacity / validation"
+							value={
+								conversions
+									? conversions.rejectedCapacity +
+										conversions.rejectedValidation
+									: undefined
+							}
+							isPending={!conversions}
+						/>
+					</div>
 				</CardContent>
 			</Card>
 
@@ -340,36 +470,12 @@ function AnalyticsPage() {
 					<CardHeader>
 						<CardTitle>Top tours</CardTitle>
 						<CardDescription>
-							Most-booked tours in the selected window
+							Most-booked tours in the selected window. 30-day revenue trend in
+							the column on the right.
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						{!topTours || topTours.length === 0 ? (
-							<p className="text-muted-foreground text-sm">
-								No bookings in this window.
-							</p>
-						) : (
-							<ul className="flex flex-col gap-2 text-sm">
-								{topTours.map((t) => (
-									<li
-										key={t.tourId}
-										className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0"
-									>
-										<Link
-											to="/dashboard/tours/$tourId"
-											params={{ tourId: t.tourId }}
-											className="text-link hover:underline truncate"
-										>
-											{String(t.tourName ?? "Unknown")}
-										</Link>
-										<div className="text-right text-xs whitespace-nowrap text-muted-foreground">
-											{t.totalBookings} bookings · {t.totalGuests} guests ·{" "}
-											{formatCentsWhole(t.totalRevenueCents)}
-										</div>
-									</li>
-								))}
-							</ul>
-						)}
+						<TopToursLeaderboard tours={leaderboardTours} />
 					</CardContent>
 				</Card>
 
@@ -413,29 +519,17 @@ function AnalyticsPage() {
 
 			<Card>
 				<CardHeader>
-					<CardTitle>Bookings by source</CardTitle>
-					<CardDescription>Where your bookings come from</CardDescription>
+					<CardTitle>Revenue by channel</CardTitle>
+					<CardDescription>
+						{channels && channels.length > 0
+							? `${channels.length} channel${
+									channels.length === 1 ? "" : "s"
+								} contributing`
+							: "Where your bookings come from"}
+					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{!sources || sources.length === 0 ? (
-						<p className="text-muted-foreground text-sm">
-							No bookings in this window.
-						</p>
-					) : (
-						<ul className="grid gap-2 text-sm md:grid-cols-2 md:gap-x-8">
-							{sources.map((s) => (
-								<li
-									key={s.source}
-									className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0 break-inside-avoid"
-								>
-									<span className="truncate">{s.source}</span>
-									<div className="text-right text-xs whitespace-nowrap text-muted-foreground">
-										{s.totalBookings} bookings · {s.totalGuests} guests
-									</div>
-								</li>
-							))}
-						</ul>
-					)}
+					<ChannelMixBar channels={channels ?? []} />
 				</CardContent>
 			</Card>
 

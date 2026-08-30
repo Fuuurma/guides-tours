@@ -395,3 +395,101 @@ describe("webhookDeliveries.listRecent", () => {
 		expect(excluded.length).toBe(3);
 	});
 });
+
+// Tests for countFailedSince — the home-page "what's broken" pill
+// for OTA / Stripe delivery health. The public query is gated by
+// requireMembership (Better Auth); convex-test can't fake that
+// session flow, so we exercise the same by_org_status_received
+// index + filter + take pipeline that countFailedSince uses via
+// t.run. See the listRecent describe above for the same pattern.
+describe("webhookDeliveries.countFailedSince (index pipeline)", () => {
+	it("counts only failed deliveries received after the cutoff", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_cf";
+		const cutoff = 1_700_000_000_000; // arbitrary
+		await t.run(async (ctx) => {
+			await ctx.db.insert("webhookDeliveries", {
+				organizationId: orgId,
+				source: "stripe",
+				eventId: "evt_recent_fail",
+				eventType: "payment_intent.failed",
+				status: "failed",
+				payload: {},
+				attemptCount: 1,
+				receivedAt: cutoff + 1000,
+			});
+			await ctx.db.insert("webhookDeliveries", {
+				organizationId: orgId,
+				source: "stripe",
+				eventId: "evt_recent_fail_2",
+				eventType: "payment_intent.failed",
+				status: "failed",
+				payload: {},
+				attemptCount: 1,
+				receivedAt: cutoff + 2000,
+			});
+			// Old failed delivery — should NOT be counted
+			await ctx.db.insert("webhookDeliveries", {
+				organizationId: orgId,
+				source: "stripe",
+				eventId: "evt_old_fail",
+				eventType: "payment_intent.failed",
+				status: "failed",
+				payload: {},
+				attemptCount: 1,
+				receivedAt: cutoff - 1000,
+			});
+			// Recent non-failed — should NOT be counted
+			await ctx.db.insert("webhookDeliveries", {
+				organizationId: orgId,
+				source: "stripe",
+				eventId: "evt_recent_ok",
+				eventType: "payment_intent.succeeded",
+				status: "processed",
+				payload: {},
+				attemptCount: 1,
+				receivedAt: cutoff + 3000,
+			});
+		});
+
+		const count = await t.run((ctx) =>
+			ctx.db
+				.query("webhookDeliveries")
+				.withIndex("by_org_status_received", (q) =>
+					q.eq("organizationId", orgId).eq("status", "failed"),
+				)
+				.filter((q) => q.gte(q.field("receivedAt"), cutoff))
+				.take(100),
+		);
+		expect(count.length).toBe(2);
+	});
+
+	it("returns 0 when no failed deliveries exist for the org", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_cf_empty";
+		await t.run(async (ctx) => {
+			await ctx.db.insert("webhookDeliveries", {
+				organizationId: orgId,
+				source: "viator",
+				eventId: "evt_ok",
+				eventType: "booking.created",
+				status: "processed",
+				payload: {},
+				attemptCount: 1,
+				receivedAt: 1_700_000_000_000,
+			});
+		});
+		const count = await t.run((ctx) =>
+			ctx.db
+				.query("webhookDeliveries")
+				.withIndex("by_org_status_received", (q) =>
+					q.eq("organizationId", orgId).eq("status", "failed"),
+				)
+				.filter((q) =>
+					q.gte(q.field("receivedAt"), 1_700_000_000_000 - 1000),
+				)
+				.take(100),
+		);
+		expect(count.length).toBe(0);
+	});
+});

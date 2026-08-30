@@ -2,9 +2,21 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { CalendarDays, MapPin, Plus } from "lucide-react";
+import {
+	AlertTriangle,
+	CalendarDays,
+	MapPin,
+	PhoneOff,
+	Plus,
+	Sparkles,
+	TrendingDown,
+	TrendingUp,
+	UserCheck,
+	Users,
+	Wallet,
+} from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -25,10 +37,11 @@ import {
 } from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
-import { formatCentsWhole } from "@/lib/format";
+import { formatCentsWhole, formatSignedPct } from "@/lib/format";
 import { cn, getErrorMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -81,6 +94,22 @@ function DashboardIndex() {
 			dateTo: weekTo,
 		}),
 	);
+	// Tier 1: this-week vs last-week pulse. Backend derives the
+	// previous window from `startDate` so we just pass the 7-day
+	// rolling range. Default `sinceMs` of 24h is baked into the
+	// count queries — pass nothing to use it.
+	const { data: pulse, error: pulseError } = useQuery(
+		convexQuery(api.analytics.getWeeklyPulse, {
+			startDate: today,
+			endDate: weekTo,
+		}),
+	);
+	const { data: failedWebhookCount } = useQuery(
+		convexQuery(api.webhookDeliveries.countFailedSince, {}),
+	);
+	const { data: failedPaymentCount } = useQuery(
+		convexQuery(api.payments.countFailedSince, {}),
+	);
 	const { displayName } = useOrgMembers();
 
 	const sendPhoneReminders = useMutation(api.phoneReminders.sendReminders);
@@ -93,7 +122,8 @@ function DashboardIndex() {
 		customersError ??
 		toursError ??
 		staffingError ??
-		missingPhoneError;
+		missingPhoneError ??
+		pulseError;
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
@@ -126,6 +156,114 @@ function DashboardIndex() {
 		totalTours === 0 &&
 		todaysBookings.length === 0 &&
 		pendingBookings.length === 0;
+
+	// Tier 1: pulse deltas. Use `useMemo` so the strings don't
+	// reallocate on every render — the values are derived from
+	// `pulse` which is stable per query result.
+	const pulseDeltas = useMemo(() => {
+		if (!pulse) return null;
+		const { bookings, guests, revenueCents, cancellationRate } = pulse;
+		const {
+			previousBookings,
+			previousGuests,
+			previousRevenueCents,
+			previousCancellationRate,
+		} = pulse;
+		const pct = (now: number, before: number): number =>
+			before === 0 ? (now > 0 ? 100 : 0) : ((now - before) / before) * 100;
+		const revPct = pct(revenueCents, previousRevenueCents);
+		const bookPct = pct(bookings, previousBookings);
+		const guestPct = pct(guests, previousGuests);
+		const cancelDelta = cancellationRate - previousCancellationRate;
+		return {
+			revPct,
+			bookPct,
+			guestPct,
+			cancelDelta,
+		};
+	}, [pulse]);
+
+	// Tier 3: needs-attention pill list. Compose from queries the
+	// home page already issues, plus the two new count queries. A
+	// zero-count pill is hidden — the operator only sees what
+	// actually needs them today.
+	const attentionItems = useMemo(() => {
+		const items: Array<{
+			key: string;
+			label: string;
+			count: number;
+			to: string;
+			icon: typeof AlertTriangle;
+			tone: "warning" | "danger" | "info";
+		}> = [];
+		// Staffing gaps in the next 48h: re-filter the existing
+		// 7-day staffingGaps result by a 48-hour window so this
+		// pill is "right now" urgency, not "this week".
+		const horizon = localYmd(addDaysLocal(new Date(), 2));
+		const gaps48h = gaps.filter((g) => g.date >= today && g.date <= horizon);
+		if (gaps48h.length > 0) {
+			items.push({
+				key: "gaps48h",
+				label: "Staffing gaps in 48h",
+				count: gaps48h.length,
+				to: "/dashboard/staffing",
+				icon: UserCheck,
+				tone: "warning",
+			});
+		}
+		const pendingCount = pendingBookingPage?.total ?? pendingBookings.length;
+		if (pendingCount > 0) {
+			items.push({
+				key: "pendingBookings",
+				label: "Pending bookings",
+				count: pendingCount,
+				to: "/dashboard/bookings",
+				icon: Users,
+				tone: "info",
+			});
+		}
+		if (missing.length > 0) {
+			items.push({
+				key: "missingPhones",
+				label: "Staff missing phones",
+				count: missing.length,
+				to: "/dashboard/staffing",
+				icon: PhoneOff,
+				tone: "warning",
+			});
+		}
+		const wh = failedWebhookCount ?? 0;
+		if (wh > 0) {
+			items.push({
+				key: "failedWebhooks",
+				label: "Failed webhooks (24h)",
+				count: wh,
+				to: "/dashboard/ota",
+				icon: AlertTriangle,
+				tone: "danger",
+			});
+		}
+		const fp = failedPaymentCount ?? 0;
+		if (fp > 0) {
+			items.push({
+				key: "failedPayments",
+				label: "Failed payments (24h)",
+				count: fp,
+				to: "/dashboard/payments",
+				icon: Wallet,
+				tone: "danger",
+			});
+		}
+		return items;
+	}, [
+		gaps,
+		today,
+		pendingBookingPage,
+		pendingBookings.length,
+		missing.length,
+		failedWebhookCount,
+		failedPaymentCount,
+	]);
 
 	const onRemindPhones = async () => {
 		setRemindPending(true);
@@ -213,6 +351,19 @@ function DashboardIndex() {
 				</Empty>
 			) : (
 				<>
+					{/* Tier 1: weekly pulse row — this week vs last week.
+					    Four hero numbers with delta arrows so the operator
+					    can read momentum at a glance. Sand/coral palette
+					    lives on these cards (border + ring on hover). */}
+					<WeeklyPulseRow pulse={pulse} deltas={pulseDeltas} />
+
+					{/* Tier 3: needs-attention row. Numbered pills with
+					    counts — only shows the categories that have a
+					    non-zero count. Hover nudges coral. */}
+					{attentionItems.length > 0 ? (
+						<NeedsAttentionRow items={attentionItems} />
+					) : null}
+
 					<div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
 						<LinkedMetric
 							label="Staffing gaps this week"
@@ -668,5 +819,296 @@ function PublicBookingLinkBar({ slug }: { slug: string }) {
 				</Button>
 			</div>
 		</div>
+	);
+}
+
+/**
+ * Tier 1: This-week vs last-week pulse row. Four hero numbers
+ * (revenue, bookings, avg group size, cancellation rate) with
+ * delta arrows so the operator reads momentum at a glance.
+ *
+ * Sand/coral palette lives on these cards (border + ring on
+ * hover) to satisfy the design system's "ocean / sand / coral"
+ * mandate while keeping the cards readable in both light and
+ * dark mode.
+ */
+type PulseData = {
+	startDate: string;
+	endDate: string;
+	previousStartDate: string;
+	previousEndDate: string;
+	revenueCents: number;
+	bookings: number;
+	guests: number;
+	avgGroupSize: number;
+	cancellationRate: number;
+	previousRevenueCents: number;
+	previousBookings: number;
+	previousGuests: number;
+	previousCancellationRate: number;
+};
+
+type PulseDeltas = {
+	revPct: number;
+	bookPct: number;
+	guestPct: number;
+	cancelDelta: number;
+};
+
+function WeeklyPulseRow({
+	pulse,
+	deltas,
+}: {
+	pulse: PulseData | undefined;
+	deltas: PulseDeltas | null;
+}) {
+	return (
+		<section
+			aria-label="This week's performance"
+			className="flex flex-col gap-3"
+		>
+			<header className="flex items-baseline justify-between gap-3">
+				<h2 className="font-display text-xl font-medium tracking-tight">
+					This week
+				</h2>
+				{pulse ? (
+					<p className="font-mono text-xs text-muted-foreground">
+						{pulse.startDate} → {pulse.endDate}
+						{" vs "}
+						{pulse.previousStartDate} → {pulse.previousEndDate}
+					</p>
+				) : (
+					<Skeleton className="h-3 w-56" />
+				)}
+			</header>
+			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+				<PulseMetric
+					label="Revenue"
+					value={pulse ? formatCentsWhole(pulse.revenueCents) : undefined}
+					delta={
+						deltas
+							? {
+									value: formatSignedPct(deltas.revPct, true),
+									direction:
+										deltas.revPct > 0
+											? "up"
+											: deltas.revPct < 0
+												? "down"
+												: "flat",
+								}
+							: null
+					}
+					icon={Wallet}
+					href="/dashboard/analytics"
+				/>
+				<PulseMetric
+					label="Bookings"
+					value={pulse?.bookings}
+					delta={
+						deltas
+							? {
+									value: formatSignedPct(deltas.bookPct, true),
+									direction:
+										deltas.bookPct > 0
+											? "up"
+											: deltas.bookPct < 0
+												? "down"
+												: "flat",
+								}
+							: null
+					}
+					icon={CalendarDays}
+					href="/dashboard/bookings"
+				/>
+				<PulseMetric
+					label="Avg group"
+					value={pulse ? pulse.avgGroupSize.toFixed(1) : undefined}
+					delta={
+						deltas
+							? {
+									value: formatSignedPct(deltas.guestPct, true),
+									direction:
+										deltas.guestPct > 0
+											? "up"
+											: deltas.guestPct < 0
+												? "down"
+												: "flat",
+								}
+							: null
+					}
+					icon={Users}
+					href="/dashboard/bookings"
+				/>
+				<PulseMetric
+					label="Cancellation rate"
+					value={pulse ? `${pulse.cancellationRate}%` : undefined}
+					delta={
+						deltas
+							? {
+									// For cancellation rate, "up is bad" — invert the
+									// direction so the arrow color matches the operator's
+									// intent (red up arrow = worse).
+									value: `${deltas.cancelDelta >= 0 ? "+" : ""}${deltas.cancelDelta.toFixed(1)}pp`,
+									direction:
+										deltas.cancelDelta > 0
+											? "down"
+											: deltas.cancelDelta < 0
+												? "up"
+												: "flat",
+								}
+							: null
+					}
+					icon={Sparkles}
+					href="/dashboard/analytics"
+				/>
+			</div>
+		</section>
+	);
+}
+
+function PulseMetric({
+	label,
+	value,
+	delta,
+	icon: Icon,
+	href,
+}: {
+	label: string;
+	value: string | number | undefined;
+	delta: { value: string; direction: "up" | "down" | "flat" } | null;
+	icon: typeof Wallet;
+	href: string;
+}) {
+	return (
+		<Link
+			to={href}
+			className="group block rounded-xl border bg-card p-5 transition-colors hover:border-chart-1/50 hover:bg-chart-4/5"
+		>
+			<div className="flex items-start justify-between gap-3">
+				<p className="text-sm text-muted-foreground">{label}</p>
+				<Icon
+					data-icon="inline-end"
+					className="size-4 text-chart-1/70 group-hover:text-chart-1"
+					aria-hidden="true"
+				/>
+			</div>
+			<p className="mt-2 font-display text-3xl font-medium tracking-tight tabular-nums">
+				{value ?? "—"}
+			</p>
+			{delta ? (
+				<div className="mt-2 flex items-center gap-1.5 text-xs">
+					{delta.direction === "up" ? (
+						<TrendingUp
+							className="size-3.5 text-emerald-600 dark:text-emerald-400"
+							aria-hidden="true"
+						/>
+					) : delta.direction === "down" ? (
+						<TrendingDown
+							className="size-3.5 text-rose-600 dark:text-rose-400"
+							aria-hidden="true"
+						/>
+					) : (
+						<span
+							className="size-1.5 rounded-full bg-muted-foreground/40"
+							aria-hidden="true"
+						/>
+					)}
+					<span
+						className={cn(
+							"tabular-nums",
+							delta.direction === "up" &&
+								"text-emerald-700 dark:text-emerald-300",
+							delta.direction === "down" && "text-rose-700 dark:text-rose-300",
+							delta.direction === "flat" && "text-muted-foreground",
+						)}
+					>
+						{delta.value}
+					</span>
+					<span className="text-muted-foreground">vs last week</span>
+				</div>
+			) : null}
+		</Link>
+	);
+}
+
+/**
+ * Tier 3: "Needs attention" pill row. Numbered list of categories
+ * where the operator has outstanding work — only shows up if at
+ * least one category has a non-zero count. Each pill links to the
+ * page where the operator can resolve the issue.
+ */
+function NeedsAttentionRow({
+	items,
+}: {
+	items: Array<{
+		key: string;
+		label: string;
+		count: number;
+		to: string;
+		icon: typeof AlertTriangle;
+		tone: "warning" | "danger" | "info";
+	}>;
+}) {
+	return (
+		<section aria-label="Needs attention" className="flex flex-col gap-3">
+			<header className="flex items-baseline justify-between gap-3">
+				<h2 className="font-display text-xl font-medium tracking-tight">
+					Needs attention
+				</h2>
+				<p className="text-xs text-muted-foreground">
+					{items.length} item{items.length === 1 ? "" : "s"}
+				</p>
+			</header>
+			<ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+				{items.map((item) => {
+					const Icon = item.icon;
+					return (
+						<li key={item.key}>
+							<Link
+								to={item.to}
+								className={cn(
+									"group flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors",
+									item.tone === "danger" &&
+										"border-destructive/30 hover:border-destructive/60 hover:bg-destructive/5",
+									item.tone === "warning" &&
+										"border-chart-4/40 hover:border-chart-4/70 hover:bg-chart-4/10",
+									item.tone === "info" &&
+										"hover:border-chart-1/50 hover:bg-chart-1/5",
+								)}
+							>
+								<span
+									className={cn(
+										"flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
+										item.tone === "danger" &&
+											"bg-destructive/10 text-destructive",
+										item.tone === "warning" && "bg-chart-4/15 text-chart-4",
+										item.tone === "info" && "bg-chart-1/10 text-chart-1",
+									)}
+								>
+									{item.count}
+								</span>
+								<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+									<span className="truncate text-sm font-medium">
+										{item.label}
+									</span>
+									<Icon
+										className={cn(
+											"size-4 shrink-0",
+											item.tone === "danger" &&
+												"text-destructive/70 group-hover:text-destructive",
+											item.tone === "warning" &&
+												"text-chart-4 group-hover:text-chart-4",
+											item.tone === "info" &&
+												"text-chart-1/70 group-hover:text-chart-1",
+										)}
+										aria-hidden="true"
+									/>
+								</div>
+							</Link>
+						</li>
+					);
+				})}
+			</ul>
+		</section>
 	);
 }

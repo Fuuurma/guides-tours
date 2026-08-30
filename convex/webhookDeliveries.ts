@@ -197,3 +197,34 @@ export const listRecent = query({
 			}));
 	},
 });
+
+/**
+ * Home-page "what's broken" feed: how many webhook deliveries for
+ * the active org ended up in a terminal-failure state since the
+ * given cutoff (defaults to 24h). Bounded so a noisy OTA can't
+ * hammer the page — `take(100)` is well above the expected volume
+ * for "things that need operator attention in the next morning".
+ *
+ * Uses the `by_org_status_received` index for a narrow scan.
+ */
+export const countFailedSince = query({
+	args: {
+		sinceMs: v.optional(v.number()),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const since = args.sinceMs ?? Date.now() - 24 * 60 * 60 * 1000;
+		const limit = Math.min(args.limit ?? 100, 500);
+		const rows = await ctx.db
+			.query("webhookDeliveries")
+			.withIndex("by_org_status_received", (q) =>
+				q
+					.eq("organizationId", member.organizationId)
+					.eq("status", "failed"),
+			)
+			.filter((q) => q.gte(q.field("receivedAt"), since))
+			.take(limit);
+		return rows.length;
+	},
+});

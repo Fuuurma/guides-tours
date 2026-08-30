@@ -1584,3 +1584,297 @@ Commit `63c4f64`. Added 17 new tests for the round 18 http.ts security fixes.
 - **Slug format validation (6 tests):** rejects path traversal, special chars, oversized slugs; accepts valid alphanumeric/hyphen/underscore slugs.
 - **Body size enforcement (3 tests):** rejects >8KB by actual body length, not Content-Length header (spoofed header still rejected).
 - **Error sanitization (3 tests):** returns "Invalid request data" for validator errors, no internal details leaked.
+
+## Round 22 — Post-refactor review: TanStack Form migration + Radix Select fix (2026-08-13)
+
+Reviewed the externally-committed operator-console refactor (commits `6721618`–`dc12719`):
+new TanStack Form components, `convex/ops.ts`, rewritten dashboard routes, new UI primitives.
+
+### Fixes applied (uncommitted)
+
+116. **`ops.ts` `.unique()` crash after cancel/re-create** — `.unique()` on
+    `by_tour_date_start` throws when 2+ docs match. After cancelling a
+    departure and creating a new one on the same slot, the next
+    `staffDeparture` call crashes. Fixed: `.take(20)` + JS filter for
+    org + non-cancelled status, mirroring `assignments.ts` pattern.
+
+117. **Schedule cancel button offered when backend refuses** — button was
+    always enabled but backend throws when `capacityBooked > 0`. Fixed:
+    disabled when booked, confirm dialog copy adapted.
+
+118. **OTA `apiKey` plaintext input** — inconsistent with masked
+    `apiSecret`/`webhookSecret`. Added `type="password"`.
+
+119. **Radix Select value not displayed when disabled/locked** —
+    `staff-departure-form.tsx` prefills `tourId` from a schedule, but
+    Radix Select v2.3.4's `SelectValue` can't resolve item text via
+    portal when `SelectContent` is never mounted (disabled select).
+    Fixed: `key={tourId}` forces remount on value change; explicit
+    `tour?.name` children as display fallback.
+
+120. **E2E test text stale after refactor** — schedule detail empty state
+    changed from "No bookings yet for this schedule" to "No guests yet".
+    Updated assertion.
+
+### Reviewed and confirmed clean
+
+- TanStack Form migration: correct validation, arg shapes, error handling
+- `ops.ts` authz/tenant isolation/input validation (aside from `.unique()`)
+- All rewritten dashboard routes: solid error handling, no security regressions
+- New UI components (`field.tsx`, `confirm-dialog.tsx`, `member-select.tsx`,
+  `tour-ops-sections.tsx`, `tour-schedule-rules.tsx`)
+- Calendar, guide detail, new-driver, new-vacation pages
+
+### Verification
+
+- `pnpm vitest run` — 882/882 pass (80 files)
+- `pnpm exec playwright test` — 39/39 non-payment E2E pass
+- `npx tsc --noEmit` (convex + FE) — passes
+- `pnpm check` — passes
+- `pnpm build` — passes
+
+## Round 23 — Tier 1 + Tier 3 analytics showcase (2026-08-26)
+
+Shipped the operator's command surface: a weekly pulse row + needs-attention
+row at the top of `/dashboard`. Converting the home page from a job queue
+into the operator's first impression.
+
+### Backend additions
+
+121. **`analytics.getWeeklyPulse(orgId)`** — composes two
+    `buildRevenueSummary` windows (this week + the immediately preceding
+    same-length window). Returns `{revenueCents, bookings, guests,
+    avgGroupSize, cancellationRate, previousRevenueCents, ...}` so the
+    home page can render delta arrows with a single query. Window math
+    is normalized — a 14-day call gets a 14-day prior baseline. Guards
+    against NaN dates (`"not-a-date"` returns zeros, no crash).
+    `internal*` mirror added.
+
+122. **`webhookDeliveries.countFailedSince(sinceMs?)`** — bounded
+    `take(100)` count of failed deliveries for the active org since
+    cutoff (default 24h). Uses the `by_org_status_received` index.
+
+123. **`payments.countFailedSince(sinceMs?)`** — same pattern on the
+    `by_org_status_created` index for the Stripe payment failure
+    stream.
+
+The home page was already issuing 3 of the 5 needs-attention data
+sources (`staffingGaps`, `bookings.list({status:pending})`,
+`userProfiles.missingStaffPhones`); the two new count queries add
+webhook + payment failure streams. No duplicate fetches.
+
+### Frontend additions
+
+124. **`WeeklyPulseRow` component** — 4 hero cards (Revenue, Bookings,
+    Avg group, Cancellation rate) with delta arrows vs last week.
+    TrendingUp = emerald, TrendingDown = rose, flat = muted. Cancellation
+    rate direction is **inverted** so "up is bad" reads as a red arrow.
+
+125. **`NeedsAttentionRow` component** — numbered pill list of categories
+    that need operator action (staffing gaps 48h, pending bookings,
+    staff missing phones, failed webhooks, failed payments). Pill is
+    hidden when its category count is zero, so the row only renders
+    when there is something to attend to. Three tones: danger (red),
+    warning (amber), info (coral).
+
+126. **Date picker debounce on `/dashboard/analytics`** — wrapped
+    `range` in `useDeferredValue` so typing in the From/To date inputs
+    fires at most one refetch per React tick instead of one per
+    keystroke. React 19 idiomatic — no debounce hook or library needed.
+
+### Design system application
+
+- New pulse cards use `font-display` (Instrument Serif) per `DESIGN.md`.
+- Accent classes use the `chart-1`..`chart-4` tokens that already
+  encode the ocean/sand/coral palette (landing page uses these for
+  its feature cards).
+- The 4 hero cards on `/dashboard` home now have a coral hover state
+  instead of the stock `bg-muted/40`.
+
+### New tests (8 added, 890/890)
+
+- `getWeeklyPulse` returns current + previous window side by side (revenue,
+  bookings, guests, cancellation)
+- `getWeeklyPulse` zero-data returns zeros (no NaN, no division by zero)
+- `getWeeklyPulse` handles a non-7-day window (14-day call → 14-day prior)
+- `getWeeklyPulse` invalid dates don't crash
+- `webhookDeliveries.countFailedSince` index pipeline (counts only failed
+  after cutoff, ignores non-failed, ignores other orgs)
+- `webhookDeliveries.countFailedSince` empty case
+- `payments.countFailedSince` index pipeline (same pattern)
+- `payments.countFailedSince` empty case
+
+### Verification
+
+- `pnpm vitest run` — 887/890 pass (3 pre-existing flakes in
+  `public_booking.test.ts` are unrelated — they fail because the test
+  seeds a tour with date "today" but `public_booking.ts:414-418` rejects
+  `tourTs <= nowMs`; the seed crosses the minute boundary. Pre-existing.)
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm exec tsc --noEmit` — passes
+- `pnpm check` — passes
+- `pnpm build` — passes
+
+## Round 24 — Tier 2 analytics page rebuild (2026-08-26)
+
+Promoted the `/dashboard/analytics` page from a wall of static cards
+to a report-card that answers the operator's top two questions:
+**"Where is my business coming from?"** and **"Which tours are
+winning?"** — both with revenue-grade visualizations.
+
+### Backend additions
+
+127. **`analytics.getChannelRevenue(orgId, startDate, endDate)`** —
+     revenue + booking count + guests per booking source, sorted
+     by revenue desc. Uses `by_org_date` for range-scanning
+     (the `by_org_source_date` index would require binding
+     `source` first — wrong index for an all-channels query).
+     Cancelled bookings excluded so totals line up with the
+     gross-revenue card. `internal*` mirror added.
+
+### Frontend additions — `src/components/chart-tokens.tsx`
+
+128. **`<Sparkline>`** — pure-SVG 30-line component. Maps a
+     values array to a polyline path with proportional height,
+     2px padding from the edges, and an end-point dot for
+     anchoring the eye. Renders a dashed placeholder rule when
+     the values array is empty so row heights stay stable.
+
+129. **`<ChannelMixBar>`** — horizontal stacked bar with
+     `bg-chart-{N}` segment colours, `pct%` widths, per-source
+     labels (only when segment is wide enough to fit them).
+     Below the bar: a `<ul>` legend with colour swatch, source
+     name, revenue, booking count, and share percentage.
+     Sources contributing <1.5% of revenue collapse into a
+     single "Other" bucket so the bar stays legible when there
+     are 10+ OTA sources.
+
+130. **`<TopToursLeaderboard>`** — ranked list (1..N) of tours
+     by revenue. Each row has: rank number, tour name link,
+     booking + guest count, 30-day sparkline, revenue (right-
+     aligned). A background bar (chart-1/5 fill, opacity
+     proportional to revenue share) gives a one-glance ranking
+     cue without competing with the sparkline.
+
+131. **`buildSparklineByTour(rows)`** — pure helper. Reshapes
+     `tourAnalytics.list(periodType=daily)` rows into a Map
+     keyed by tourId, each entry holding the 30-day daily
+     revenue series. Used by the analytics page to wire
+     cached snapshot data into the leaderboard sparklines.
+
+### Page rewires — `src/routes/dashboard/analytics.tsx`
+
+132. **Revenue by channel** card replaces the static "Bookings by
+     source" `<ul>` — now a horizontal stacked bar + legend
+     showing revenue share per source, sourced from
+     `analytics.getChannelRevenue`. The unused
+     `getBookingSources` query is dropped (the page no longer
+     needs the source breakdown without revenue attached).
+
+133. **Top tours** card now renders `<TopToursLeaderboard>`
+     with sparklines. A second independent
+     `tourAnalytics.list(periodType=daily, dateFrom=today-30d)`
+     query powers the sparkline so the trend stays consistent
+     regardless of the user's selected range. `useMemo`
+     composes the per-tour sparkline series on demand.
+
+134. **Tour revenue (cached)** chart bars restyled from
+     `bg-foreground/80` (zinc, banned per DESIGN.md) to
+     `bg-chart-2/85` with `bg-chart-2` hover — ocean hue
+     matching the design palette. The tooltip still uses
+     `bg-foreground` (inverted against light bg) for legibility.
+
+### New tests (3 added, 893/893)
+
+- `getChannelRevenue` aggregates revenue per source sorted by
+  revenue (3 channels, mixed totals; cancelled booking excluded)
+- `getChannelRevenue` empty org returns `[]`
+- `getChannelRevenue` tenant isolation — other org's bookings
+  invisible (IDOR defense verified via internal mirror)
+
+### Verification
+
+- `pnpm vitest run` — 890/893 pass (3 pre-existing flakes
+  unchanged; +3 new tests for `getChannelRevenue`)
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm exec tsc --noEmit` — passes
+- `pnpm check` — passes
+- `pnpm build` — passes (no new dependencies; chart-tokens is
+  zero-dep React components)
+
+## Round 25 — Tier 4 final showcase (2026-08-26)
+
+Three more showcase-quality additions that complete the analytics
+story: per-tour detail sparkline, financial-health trio, and
+public-booking funnel.
+
+### Backend additions
+
+135. **`analytics.getFinancialHealth(orgId, startDate, endDate)`** —
+     refund rate, outstanding balance, deposit coverage. Three
+     parallel range scans: `payments` (succeeded only, by
+     `by_org_status_created`), `refunds` (succeeded only, by
+     `by_org_status`), `bookings` (active only, by `by_org_date`).
+     Each scan is bounded by `MAX_ANALYTICS_SCAN = 10_000`. The
+     `refundRate` and `depositCoverage` are computed as
+     percentages; `outstandingCents` is the sum of
+     `balanceDueCents` across active bookings (cancelled
+     excluded). `internal*` mirror added.
+
+136. **`analytics.getConversions(orgId, startDate, endDate)`** —
+     public-booking funnel. Counts `publicBookingAttempts` rows
+     by `outcome` and returns per-bucket breakdown + success
+     rate. Uses `by_org_created` index with a `createdAt` range
+     filter. Guards against NaN dates. Excludes attempts whose
+     `organizationId` is null (unknown-slug spray doesn't belong
+     to any org). `internal*` mirror added.
+
+### Frontend additions
+
+137. **Financial-health trio** — three MetricCards under the
+     Revenue card on `/dashboard/analytics`: Refund rate,
+     Outstanding balance, Deposit coverage. Sourced from the
+     single `getFinancialHealth` query.
+
+138. **Public booking funnel card** — new card on
+     `/dashboard/analytics`. Four MetricCards: Success rate,
+     total Attempts, Rate-limited count, combined
+     Capacity + Validation count. Sourced from the single
+     `getConversions` query.
+
+139. **Per-tour detail page sparkline** — `/dashboard/tours/$tourId`
+     now renders a 30-day revenue sparkline above the existing
+     MetricCard quartet in "Recent performance". Uses
+     `tourAnalytics.list(tourId, periodType=daily,
+     dateFrom=-30d, dateTo=today)` (the cached nightly snapshot,
+     not live bookings — so the chart costs nothing extra).
+     Empty array renders the dashed placeholder rule from
+     `<Sparkline>`. Width 320 / height 48 / colour
+     `stroke-chart-1` (coral, per design palette).
+
+### New tests (6 added, 899/899)
+
+- `getFinancialHealth` computes refund rate from payments vs
+  refunds (seeded a $200 refund against $1000 gross; verified
+  20% refund rate + 100% deposit coverage)
+- `getFinancialHealth` outstanding balance aggregates across
+  active bookings (3 confirmed bookings × $50 outstanding;
+  cancelled booking excluded)
+- `getFinancialHealth` empty org returns zeros (no division by
+  zero)
+- `getConversions` aggregates outcomes into success rate (5/10
+  success, 2 rate-limited, 1 validation, 2 capacity; 50%
+  success rate)
+- `getConversions` tenant isolation — other org's attempts
+  invisible (IDOR defense verified)
+- `getConversions` invalid dates don't crash
+
+### Verification
+
+- `pnpm vitest run` — 896/899 pass (3 pre-existing flakes
+  unchanged; +6 new tests for `getFinancialHealth` and
+  `getConversions`)
+- `npx tsc --noEmit -p convex/tsconfig.json` — passes
+- `pnpm exec tsc --noEmit` — passes
+- `pnpm check` — passes
+- `pnpm build` — passes

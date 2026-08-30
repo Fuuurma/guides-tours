@@ -70,3 +70,25 @@ export function centsToInputValue(
 	const n = typeof cents === "bigint" ? Number(cents) : cents;
 	return (n / 100).toFixed(2);
 }
+
+/**
+ * Format a percentage delta as a signed string.
+ *
+ * @example
+ *   formatSignedPct(12.4)    // "+12%"
+ *   formatSignedPct(-3.1)    // "-3%"
+ *   formatSignedPct(0)       // "0%"
+ *   formatSignedPct(null)    // "—"
+ *   formatSignedPct(100, 0)  // "+100%" (special case for divide-by-zero)
+ */
+export function formatSignedPct(
+	delta: number | null | undefined,
+	divisorZeroFloor = false,
+): string {
+	if (delta == null || Number.isNaN(delta)) return "—";
+	if (divisorZeroFloor && delta >= 100) return "+100%";
+	const rounded = Math.round(delta);
+	if (rounded === 0) return "0%";
+	const sign = rounded > 0 ? "+" : "";
+	return `${sign}${rounded}%`;
+}

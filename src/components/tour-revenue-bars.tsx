@@ -83,7 +83,7 @@ export function TourRevenueBars({ days, maxBars = 28 }: Props) {
 								{d.periodDate.slice(5)} · {formatCentsWhole(cents)}
 							</span>
 							<div
-								className="w-full max-w-6 rounded-t bg-foreground/80 transition-colors group-hover:bg-foreground"
+								className="w-full max-w-6 rounded-t bg-chart-2/85 transition-colors group-hover:bg-chart-2"
 								style={{ height: `${pct}%` }}
 							/>
 						</div>

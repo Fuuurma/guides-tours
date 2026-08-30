@@ -144,6 +144,40 @@ export const list = query({
 	},
 });
 
+/**
+ * Home-page "what's broken" feed: how many payment rows for the
+ * active org ended up in a terminal-failure state since the
+ * given cutoff (defaults to 24h). Bounded to `take(100)` so the
+ * "needs attention" pill doesn't hammer the DB if a Stripe
+ * outage cascades.
+ *
+ * Uses the `by_org_status_created` index for a narrow scan.
+ * Status check is JS-side because `status` is `v.string()` —
+ * the index is leading (orgId, status, createdAt) and we then
+ * filter on createdAt.
+ */
+export const countFailedSince = query({
+	args: {
+		sinceMs: v.optional(v.number()),
+		limit: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		const since = args.sinceMs ?? Date.now() - 24 * 60 * 60 * 1000;
+		const limit = Math.min(args.limit ?? 100, 500);
+		const rows = await ctx.db
+			.query("payments")
+			.withIndex("by_org_status_created", (q) =>
+				q
+					.eq("organizationId", member.organizationId)
+					.eq("status", "failed"),
+			)
+			.filter((q) => q.gte(q.field("createdAt"), since))
+			.take(limit);
+		return rows.length;
+	},
+});
+
 export const get = query({
 	args: { paymentId: v.id("payments") },
 	handler: async (ctx, args) => {

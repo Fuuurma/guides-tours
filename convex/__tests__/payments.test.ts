@@ -910,3 +910,135 @@ describe("convex/payments — audit logging", () => {
 		expect(audits[0].newValues).toMatchObject({ status: "refunded" });
 	});
 });
+
+// Tests for countFailedSince — the home-page "what's broken" pill
+// for Stripe payment failures. The public query is gated by
+// requireMembership (Better Auth); convex-test can't fake that
+// session flow, so we exercise the same by_org_status_created
+// index + filter + take pipeline via t.run.
+describe("payments.countFailedSince (index pipeline)", () => {
+	async function seedPaymentRow(
+		ctx: TestCtx,
+		orgId: string,
+		status: string,
+		createdAt: number,
+	) {
+		const bookingId = await ctx.db.insert("bookings", {
+			organizationId: orgId,
+			tourId: (await ctx.db.insert("tours", {
+				organizationId: orgId,
+				name: "Tour",
+				description: "",
+				durationHours: 1,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 24,
+				tourType: "walkable",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			})) as Id<"tours">,
+			customerId: (await ctx.db.insert("customers", {
+				organizationId: orgId,
+				name: "Alice",
+				email: "alice@example.com",
+				phone: "",
+				notes: "",
+				smsConsent: false,
+				emailConsent: false,
+				preferredLanguage: "en",
+				tags: [],
+				source: "",
+				sourceDetails: "",
+				specialRequirements: "",
+				vipStatus: false,
+				loyaltyPoints: 0,
+				totalVisits: 0,
+				totalRevenueCents: 0n,
+				createdAt: 0,
+				updatedAt: 0,
+			})) as Id<"customers">,
+			date: "2026-08-01",
+			startTime: "09:00",
+			guests: 1,
+			guestNames: "",
+			languageRequired: "en",
+			notes: "",
+			status: "pending",
+			depositAmountCents: 0n,
+			totalAmountCents: 5000n,
+			balanceDueCents: 5000n,
+			paymentMethod: "",
+			checkedInBy: "",
+			netRevenueCents: 0n,
+			source: "direct",
+			reviewComment: "",
+			createdAt: 0,
+			updatedAt: 0,
+		});
+		await ctx.db.insert("payments", {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 5000n,
+			currency: "USD",
+			status,
+			provider: "stripe",
+			stripePaymentIntentId: `pi_${status}_${createdAt}`,
+			createdAt,
+			updatedAt: createdAt,
+		});
+	}
+
+	it("counts only failed payments created after the cutoff", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_cf";
+		const cutoff = 1_700_000_000_000;
+		await t.run(async (ctx: any) => {
+			await seedPaymentRow(ctx, orgId, "failed", cutoff + 1000);
+			await seedPaymentRow(ctx, orgId, "failed", cutoff + 2000);
+			await seedPaymentRow(ctx, orgId, "failed", cutoff - 1000); // too old
+			await seedPaymentRow(ctx, orgId, "succeeded", cutoff + 3000); // wrong status
+		});
+
+		const count = await t.run((ctx) =>
+			ctx.db
+				.query("payments")
+				.withIndex("by_org_status_created", (q) =>
+					q.eq("organizationId", orgId).eq("status", "failed"),
+				)
+				.filter((q) => q.gte(q.field("createdAt"), cutoff))
+				.take(100),
+		);
+		expect(count.length).toBe(2);
+	});
+
+	it("returns 0 when no failed payments exist for the org", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_cf_empty";
+		await t.run(async (ctx: any) => {
+			await seedPaymentRow(ctx, orgId, "succeeded", 1_700_000_000_000);
+		});
+		const count = await t.run((ctx) =>
+			ctx.db
+				.query("payments")
+				.withIndex("by_org_status_created", (q) =>
+					q.eq("organizationId", orgId).eq("status", "failed"),
+				)
+				.filter((q) =>
+					q.gte(q.field("createdAt"), 1_700_000_000_000 - 1000),
+				)
+				.take(100),
+		);
+		expect(count.length).toBe(0);
+	});
+});

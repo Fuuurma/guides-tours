@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Sparkline } from "@/components/chart-tokens";
 import { useConfirm } from "@/components/confirm-dialog";
 import { DetailPage, DetailSection } from "@/components/detail-page";
 import { DetailRow, MetricCard } from "@/components/metric-card";
@@ -58,6 +59,26 @@ function TourDetailPage() {
 			status: "available",
 		}),
 	);
+	// Tier 4: 30-day revenue sparkline for this tour. Reuses the
+	// nightly-cached `tourAnalytics` snapshot so the chart costs
+	// nothing extra. Empty if no cached rows yet.
+	const { data: cachedDays } = useQuery(
+		convexQuery(api.tourAnalytics.list, {
+			tourId: tourId as Id<"tours">,
+			periodType: "daily",
+			dateFrom: period.startDate,
+			dateTo: period.endDate,
+		}),
+	);
+	const sparklineValues: number[] = (
+		(cachedDays ?? []) as Array<{
+			periodDate: string;
+			grossRevenueCents: number | bigint;
+		}>
+	)
+		.slice()
+		.sort((a, b) => a.periodDate.localeCompare(b.periodDate))
+		.map((r) => Number(r.grossRevenueCents));
 
 	const onDelete = async () => {
 		const ok = await confirm({
@@ -287,6 +308,25 @@ function TourDetailPage() {
 					title="Recent performance"
 					description={`${stats.periodStart} → ${stats.periodEnd} (last 30 days)`}
 				>
+					<div className="mb-4 flex flex-col gap-2 rounded-md border bg-card p-3">
+						<div className="flex items-center justify-between text-xs text-muted-foreground">
+							<span>30-day revenue trend</span>
+							<span className="font-mono">
+								{sparklineValues.length > 0
+									? `${sparklineValues.length} day${
+											sparklineValues.length === 1 ? "" : "s"
+										}`
+									: "no cached rows yet"}
+							</span>
+						</div>
+						<Sparkline
+							values={sparklineValues}
+							width={320}
+							height={48}
+							colorClass="stroke-chart-1"
+							ariaLabel={`30-day revenue trend for ${tour?.name ?? "this tour"}`}
+						/>
+					</div>
 					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 						<MetricCard label="Bookings" value={stats.totalBookings} />
 						<MetricCard label="Guests" value={stats.totalGuests} />
