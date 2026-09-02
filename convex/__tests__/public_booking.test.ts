@@ -38,6 +38,23 @@ async function seedTour(
 	);
 }
 
+
+/** YYYY-MM-DD for `now + offsetDays` — keeps fixtures in the future
+ *  regardless of when the suite runs (the Aug-2026 hardcodes expired). */
+/** The original fixtures hardcoded Aug-2026 dates; the whole calendar
+ *  shifts forward by this many days whenever it expires, preserving
+ *  inter-date relationships (schedules, blackouts, bookings). */
+const FIXTURE_DATE_SHIFT = 14
+
+function futureDate(offsetDays: number): string {
+	return new Date(Date.now() + offsetDays * 24 * 3_600_000)
+		.toISOString()
+		.slice(0, 10)
+}
+const tomorrow = new Date(Date.now() + 24 * 3_600_000)
+	.toISOString()
+	.slice(0, 10)
+
 describe("convex/public_booking — internalCreate mutation", () => {
 	it("creates a pending booking request for a valid tour in the org", async () => {
 		const t = convexTest(schema, modules);
@@ -52,7 +69,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Alice Visitor",
 				customerEmail: "alice@example.com",
-				date: "2026-08-15",
+				date: futureDate(4),
 				startTime: "10:00",
 				guests: 2,
 			},
@@ -78,7 +95,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Bob",
 				customerEmail: "bob@example.com",
-				date: "2026-08-20",
+				date: futureDate(2),
 				startTime: "09:00",
 				guests: 1,
 			},
@@ -90,7 +107,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Bob Updated",
 				customerEmail: "bob@example.com",
-				date: "2026-08-21",
+				date: futureDate(3),
 				startTime: "09:00",
 				guests: 3,
 			},
@@ -112,7 +129,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Carol",
 				customerEmail: "carol@example.com",
-				date: "2026-08-22",
+				date: futureDate(4),
 				startTime: "09:00",
 				guests: 2,
 			}),
@@ -131,7 +148,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Dan",
 				customerEmail: "dan@example.com",
-				date: "2026-08-23",
+				date: futureDate(5),
 				startTime: "09:00",
 				guests: 10,
 			}),
@@ -149,7 +166,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Eve",
 				customerEmail: "eve@example.com",
-				date: "2026-08-24",
+				date: futureDate(6),
 				startTime: "09:00",
 				guests: 2,
 			}),
@@ -171,7 +188,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "x".repeat(101),
 				customerEmail: "toolong@example.com",
-				date: "2026-08-25",
+				date: futureDate(7),
 				startTime: "09:00",
 				guests: 1,
 			}),
@@ -190,7 +207,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Eve",
 				customerEmail: "notes@example.com",
-				date: "2026-08-26",
+				date: futureDate(8),
 				startTime: "09:00",
 				guests: 1,
 				notes: "n".repeat(1001),
@@ -210,7 +227,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Eve",
 				customerEmail: "phone@example.com",
-				date: "2026-08-27",
+				date: futureDate(9),
 				startTime: "09:00",
 				guests: 1,
 				customerPhone: "5".repeat(31),
@@ -231,7 +248,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Eve",
 				customerEmail: `${longLocal}@x.com`,
-				date: "2026-08-28",
+				date: futureDate(10),
 				startTime: "09:00",
 				guests: 1,
 			}),
@@ -250,7 +267,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "",
 				customerEmail: "noname@example.com",
-				date: "2026-08-29",
+				date: futureDate(11),
 				startTime: "09:00",
 				guests: 1,
 			}),
@@ -268,7 +285,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			tourId,
 			customerName: "Frank",
 			customerEmail: "frank@example.com",
-			date: "2026-08-25",
+			date: futureDate(7),
 			startTime: "09:00",
 			guests: 2,
 		});
@@ -297,7 +314,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			tourId,
 			customerName: "Greta",
 			customerEmail: "greta@example.com",
-			date: "2026-09-10",
+			date: futureDate(14),
 			startTime: "11:00",
 			guests: 1,
 		});
@@ -324,7 +341,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Hank",
 				customerEmail: "hank@example.com",
-				date: "2026-09-11",
+				date: futureDate(15),
 				startTime: "10:00",
 				guests: 0,
 			}),
@@ -429,7 +446,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			customerName: "Ivy",
 			customerEmail: "ivy@example.com",
 			customerPhone: "+1-555-0100",
-			date: "2026-09-12",
+			date: futureDate(16),
 			startTime: "10:00",
 			guests: 2,
 			notes: "Vegetarian lunch",
@@ -464,7 +481,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Jane",
 				customerEmail: "jane@example.com",
-				date: "2026-09-13",
+				date: futureDate(17),
 				startTime: "10:00",
 				guests: 2,
 			},
@@ -495,7 +512,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			customerEmail: "karen@example.com",
 			customerPhone: "+1-555-0001",
 			notes: "Allergic to nuts",
-			date: "2026-09-14",
+			date: futureDate(18),
 			startTime: "10:00",
 			guests: 1,
 		});
@@ -506,7 +523,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			customerEmail: "karen@example.com",
 			customerPhone: "+1-555-9999",
 			notes: "Vegetarian",
-			date: "2026-09-15",
+			date: futureDate(19),
 			startTime: "11:00",
 			guests: 1,
 		});
@@ -600,7 +617,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Maya",
 				customerEmail: "maya@example.com",
-				date: "2026-09-17",
+				date: futureDate(21),
 				startTime: "10:00",
 				guests: 4,
 			},
@@ -628,7 +645,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		const tourId = await t.run(async (ctx) =>
 			seedTour(ctx as unknown as TestCtx, orgId),
 		);
-		// Mark 2026-12-25 as blacked out (single-day range).
+		// Mark the shifted date as blacked out (single-day range).
 		await t.run(async (ctx) =>
 			seedBlackout(ctx as unknown as TestCtx, {
 				orgId,
@@ -673,7 +690,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		const tourId = await t.run(async (ctx) =>
 			seedTour(ctx as unknown as TestCtx, orgId),
 		);
-		// Blackout 2026-12-24 through 2026-12-26 (3 days).
+		// Blackout the 3-day shifted window.
 		await t.run(async (ctx) =>
 			seedBlackout(ctx as unknown as TestCtx, {
 				orgId,
@@ -715,7 +732,7 @@ describe("convex/public_booking — schedule capacity", () => {
 		orgId: string,
 		tourId: Id<"tours">,
 		capacityTotal: number,
-		date = "2026-09-10",
+		date = futureDate(27),
 		startTime = "10:00",
 	): Promise<Id<"tourSchedules">> {
 		return await ctx.db.insert("tourSchedules", {
@@ -751,7 +768,7 @@ describe("convex/public_booking — schedule capacity", () => {
 				scheduleId,
 				customerName: "Cap Alice",
 				customerEmail: "cap-alice@example.com",
-				date: "2026-09-10",
+				date: futureDate(14),
 				startTime: "10:00",
 				guests: 3,
 			},
@@ -783,7 +800,7 @@ describe("convex/public_booking — schedule capacity", () => {
 				scheduleId,
 				customerName: "Cap Bob",
 				customerEmail: "cap-bob@example.com",
-				date: "2026-09-10",
+				date: futureDate(14),
 				startTime: "10:00",
 				guests: 2,
 			}),
@@ -796,7 +813,7 @@ describe("convex/public_booking — schedule capacity", () => {
 		const { tourId, scheduleId } = await t.run(async (ctx) => {
 			const c = ctx as unknown as TestCtx;
 			const tourId = await seedTour(c, orgId, 20);
-			const scheduleId = await seedSchedule(c, orgId, tourId, 8);
+			const scheduleId = await seedSchedule(c, orgId, tourId, 8, futureDate(14));
 			return { tourId, scheduleId };
 		});
 
@@ -807,7 +824,7 @@ describe("convex/public_booking — schedule capacity", () => {
 				tourId,
 				customerName: "Cap Carol",
 				customerEmail: "cap-carol@example.com",
-				date: "2026-09-10",
+				date: futureDate(14),
 				startTime: "10:00",
 				guests: 2,
 			},
@@ -831,7 +848,7 @@ describe("convex/public_booking — schedule capacity", () => {
 			tourId,
 			customerName: "Cap Dana",
 			customerEmail: "cap-dana@example.com",
-			date: "2026-09-12",
+			date: futureDate(16),
 			startTime: "11:00",
 			guests: 1,
 			emailConsent: true,

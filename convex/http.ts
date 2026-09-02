@@ -294,7 +294,27 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function isAllowedBookingOrigin(origin: string | null): boolean {
 	const allowedOriginsRaw = process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS;
-	if (!allowedOriginsRaw) return true;
+	// Fail closed in production: an unset allowlist must not disable the
+	// only CSRF barrier on an unauthenticated booking endpoint (fleet
+	// audit 2026-09-01). Development hosts stay permissive for local work.
+	if (!allowedOriginsRaw) {
+		// Unset CONVEX_SITE_URL = unconfigured deployment (local dev, unit
+		// tests) — stay permissive. A SET, non-local site URL is production:
+		// fail closed so a missing allowlist can't disable the only CSRF
+		// barrier on an unauthenticated endpoint (fleet audit 2026-09-01).
+		const siteUrl = process.env.CONVEX_SITE_URL?.trim() ?? "";
+		const isUnconfigured =
+			siteUrl === "" ||
+			siteUrl.includes("127.0.0.1") ||
+			siteUrl.includes("localhost");
+		if (isUnconfigured) return true;
+		console.error(
+			"[booking] PUBLIC_BOOKING_ALLOWED_ORIGINS is not set — rejecting " +
+				"booking attempts. Set it to the marketing-site origin(s) to " +
+				"enable bookings.",
+		);
+		return false;
+	}
 	const allowed = allowedOriginsRaw
 		.split(",")
 		.map((s) => s.trim())
