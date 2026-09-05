@@ -612,9 +612,7 @@ export const create = mutation({
 		// roll back the insert above.
 		if (scheduleId) {
 			await ctx.runMutation(
-				internal.tourSchedules.incrementBooked as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
+				internal.tourSchedules.incrementBooked,
 				{
 					organizationId: member.organizationId,
 					scheduleId,
@@ -667,9 +665,7 @@ export const create = mutation({
 			// Best-effort: email failure does not fail the booking.
 			await ctx.scheduler.runAfter(
 				0,
-				internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[2],
+				internal.notification_dispatch.dispatchImmediateBookingConfirmation,
 				{ bookingId },
 			);
 			await ctx.runMutation(
@@ -862,9 +858,7 @@ async function performUpdate(
 		const delta = nextGuests - booking.guests;
 		if (delta > 0 && nextScheduleId) {
 			await ctx.runMutation(
-				internal.tourSchedules.incrementBooked as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
+				internal.tourSchedules.incrementBooked,
 				{
 					organizationId,
 					scheduleId: nextScheduleId,
@@ -873,9 +867,7 @@ async function performUpdate(
 			);
 		} else if (delta < 0 && nextScheduleId) {
 			await ctx.runMutation(
-				internal.tourSchedules.decrementBooked as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
+				internal.tourSchedules.decrementBooked,
 				{
 					organizationId,
 					scheduleId: nextScheduleId,
@@ -886,9 +878,7 @@ async function performUpdate(
 	} else {
 		if (oldScheduleId) {
 			await ctx.runMutation(
-				internal.tourSchedules.decrementBooked as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
+				internal.tourSchedules.decrementBooked,
 				{
 					organizationId,
 					scheduleId: oldScheduleId,
@@ -898,9 +888,7 @@ async function performUpdate(
 		}
 		if (nextScheduleId) {
 			await ctx.runMutation(
-				internal.tourSchedules.incrementBooked as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
+				internal.tourSchedules.incrementBooked,
 				{
 					organizationId,
 					scheduleId: nextScheduleId,
@@ -938,9 +926,7 @@ async function performUpdate(
 		if (booking.status === "confirmed") {
 			await ctx.scheduler.runAfter(
 				0,
-				internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[2],
+				internal.notification_dispatch.dispatchImmediateBookingConfirmation,
 				{ bookingId: args.bookingId },
 			);
 			await ctx.runMutation(internal.scheduledNotifications.scheduleForBooking, {
@@ -1030,9 +1016,7 @@ async function performConfirm(
 	});
 	await ctx.scheduler.runAfter(
 		0,
-		internal.notification_dispatch.dispatchImmediateBookingConfirmation as unknown as Parameters<
-			typeof ctx.scheduler.runAfter
-		>[2],
+		internal.notification_dispatch.dispatchImmediateBookingConfirmation,
 		{ bookingId: booking._id },
 	);
 	await ctx.runMutation(internal.scheduledNotifications.scheduleForBooking, {
@@ -1172,9 +1156,7 @@ async function performCancel(
 	if (scheduleId) {
 		try {
 			await ctx.runMutation(
-				internal.tourSchedules.decrementBooked as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
+				internal.tourSchedules.decrementBooked,
 				{
 					organizationId: booking.organizationId,
 					scheduleId,
