@@ -12,14 +12,10 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { internal } from "./_generated/api";
+import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { assertFieldWithinLimit } from "./lib/validation";
-type InternalMutationRef = FunctionReference<"mutation", "internal">;
-const internalRefs = internal as unknown as Record<
-	string,
-	Record<string, InternalMutationRef>
->;
 
 
 // ---- queries ----
