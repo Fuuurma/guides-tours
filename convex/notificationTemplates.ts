@@ -16,6 +16,7 @@ import {
 } from "./_generated/server";
 import type { FunctionReference } from "convex/server";
 import { internal } from "./_generated/api";
+import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
@@ -33,11 +34,6 @@ import {
 } from "./lib/notificationRender";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { sendTwilioSms } from "./notification_sms";
-type InternalMutationRef = FunctionReference<"mutation", "internal">;
-const internalRefs = internal as unknown as Record<
-	string,
-	Record<string, InternalMutationRef>
->;
 
 
 // ---- queries ----
