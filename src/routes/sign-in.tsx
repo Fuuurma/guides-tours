@@ -73,6 +73,15 @@ function SignInPage() {
 			// After sign-in, peek at whether the user has any org. If not,
 			// route them through onboarding. Otherwise straight to dashboard.
 			const { data: orgs } = await authClient.organization.list();
+			// Design step 1 (docs/DESIGN-authz-active-org.md): pin a
+			// single-org user's active org at sign-in so backend authz
+			// never falls back to "first org". Multi-org users keep the
+			// current behavior until the picker step lands (owner).
+			if (orgs && orgs.length === 1) {
+				await authClient.organization.setActive({
+					organizationId: orgs[0].id,
+				});
+			}
 			await navigate({
 				to: orgs && orgs.length > 0 ? "/dashboard" : "/onboarding",
 			});
