@@ -61,6 +61,15 @@ function SignInPage() {
 				// Coming from the invite "sign in to accept" link — accept
 				// the invitation after a successful sign-in.
 				await authClient.organization.acceptInvitation({ invitationId });
+				// Same pin as the standard path (design step 1): a first-time
+				// member signs in with no active org set — pin their (only)
+				// org so authz never falls back to "first org".
+				const { data: invitedOrgs } = await authClient.organization.list();
+				if (invitedOrgs && invitedOrgs.length === 1) {
+					await authClient.organization.setActive({
+						organizationId: invitedOrgs[0].id,
+					});
+				}
 				await navigate({ to: "/dashboard" });
 				return;
 			}
