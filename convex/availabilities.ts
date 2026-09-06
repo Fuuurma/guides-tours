@@ -96,7 +96,7 @@ export const upsert = mutation({
 		isAvailable: v.boolean(),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member", "guide"]);
+		const member = await requireRole(ctx, ["owner", "admin", "member", "guide", "driver"]);
 		return await ctx.runMutation(
 			internalRefs.availabilities.internalUpsert,
 			{
@@ -172,7 +172,7 @@ export const internalUpsert = internalMutation({
 export const remove = mutation({
 	args: { availabilityId: v.id("availabilities") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member", "guide"]);
+		const member = await requireRole(ctx, ["owner", "admin", "member", "guide", "driver"]);
 		return await ctx.runMutation(
 			internalRefs.availabilities.internalRemove,
 			{

@@ -30,7 +30,7 @@ export function getRouter() {
 	const router = createTanStackRouter({
 		routeTree,
 		defaultPreload: "intent",
-		defaultPreloadStaleTime: 0,
+		defaultPreloadStaleTime: 30_000,
 		scrollRestoration: true,
 		context: { queryClient, convexQueryClient },
 		Wrap: ({ children }) => (

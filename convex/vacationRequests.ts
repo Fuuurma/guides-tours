@@ -224,7 +224,7 @@ export const create = mutation({
 		userId: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member", "guide"]);
+		const member = await requireRole(ctx, ["owner", "admin", "member", "guide", "driver"]);
 		const targetUserId = args.userId?.trim() || member.userId;
 		const onBehalf = targetUserId !== member.userId;
 		let status: "pending" | "approved" = "pending";
