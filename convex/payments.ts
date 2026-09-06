@@ -749,6 +749,7 @@ export const getPaymentForRefund = internalQuery({
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) return null;
 		return {
+			_id: p._id,
 			organizationId: p.organizationId,
 			status: p.status,
 			amountCents: p.amountCents,

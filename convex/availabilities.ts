@@ -183,6 +183,22 @@ export const remove = mutation({
 	args: { availabilityId: v.id("availabilities") },
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member", "guide", "driver"]);
+		// IDOR fix (fleet P1 2026-09-06): mirror the upsert guard —
+		// guide/driver/member may only delete their OWN availability.
+		// Without this, a same-org guide could enumerate and wipe
+		// another guide's rows (forcing or clearing unavailability to
+		// manipulate the assignment conflict guard).
+		const existing = await ctx.db.get(args.availabilityId);
+		if (!existing) throw new ConvexError("Availability not found");
+		if (existing.organizationId !== member.organizationId) {
+			throw new ConvexError("Forbidden: wrong organization");
+		}
+		const onBehalf = existing.userId !== member.userId;
+		if (onBehalf && !["owner", "admin"].includes(member.role as "owner" | "admin")) {
+			throw new ConvexError(
+				"Forbidden: only owners and admins can delete another person's availability",
+			);
+		}
 		return await ctx.runMutation(
 			internalRefs.availabilities.internalRemove,
 			{
