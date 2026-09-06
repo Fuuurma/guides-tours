@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { Spinner } from "@/components/ui/spinner";
+import { authClient } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/auth/callback")({
 	validateSearch: (search: Record<string, unknown>) => ({
@@ -31,12 +32,22 @@ function AuthCallback() {
 			credentials: "include",
 			body: JSON.stringify({ token: ott }),
 		})
-			.then((res) => {
-				if (res.ok) {
-					void navigate({ to: redirect ?? "/dashboard" });
-				} else {
+			.then(async (res) => {
+				if (!res.ok) {
 					void navigate({ to: "/sign-in" });
+					return;
 				}
+				// Org pinning parity with sign-in (design step 1,
+				// docs/DESIGN-authz-active-org.md): Google users were the
+				// missed path — without this they hit authz's first-org
+				// fallback on every backend query.
+				const { data: orgs } = await authClient.organization.list();
+				if (orgs && orgs.length === 1) {
+					await authClient.organization.setActive({
+						organizationId: orgs[0].id,
+					});
+				}
+				void navigate({ to: orgs && orgs.length > 0 ? redirect ?? "/dashboard" : "/onboarding" });
 			})
 			.catch(() => {
 				void navigate({ to: "/sign-in" });
