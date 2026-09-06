@@ -75,8 +75,11 @@ async function getKey(): Promise<CryptoKey> {
 	return cachedKey;
 }
 
-/** Reset the cached key. Test-only. */
+/** Reset the cached key. Test-only — guarded against production use. */
 export function _resetKeyForTest(): void {
+	if (process.env.NODE_ENV === "production") {
+		throw new Error("_resetKeyForTest must not be called in production");
+	}
 	cachedKey = null;
 }
 
