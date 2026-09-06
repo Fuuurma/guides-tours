@@ -97,6 +97,16 @@ export const upsert = mutation({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member", "guide", "driver"]);
+				// IDOR fix (fleet P1 2026-09-06): guide/driver/member may only
+		// manage their OWN availability. On-behalf writes are
+		// owner/admin-only, mirroring vacationRequests.create and the
+		// authz.ts contract ("own availability").
+		const onBehalf = args.userIdTarget !== member.userId;
+		if (onBehalf && !["owner", "admin"].includes(member.role as "owner" | "admin")) {
+			throw new ConvexError(
+				"Forbidden: only owners and admins can edit another person's availability",
+			);
+		}
 		return await ctx.runMutation(
 			internalRefs.availabilities.internalUpsert,
 			{
