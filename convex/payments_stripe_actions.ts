@@ -669,11 +669,18 @@ export const refundViaStripe = action({
 			params.append("metadata[dashboard_reason]", args.reason.slice(0, 200));
 		}
 
+		// Idempotency key: prevents duplicate refunds on double-click or
+		// action retry. Keyed by payment ID so a retry returns the same
+		// Stripe refund instead of creating a new one (fleet audit
+		// 2026-09-06 P5).
+		const idempotencyKey = `refund_${payment._id}`;
+
 		const res = await fetch(`${STRIPE_API_BASE}/refunds`, {
 			method: "POST",
 			headers: {
 				Authorization: `Bearer ${stripeSecret}`,
 				"Content-Type": "application/x-www-form-urlencoded",
+				"Idempotency-Key": idempotencyKey,
 			},
 			body: params.toString(),
 		});
