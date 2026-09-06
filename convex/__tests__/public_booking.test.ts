@@ -41,19 +41,11 @@ async function seedTour(
 
 /** YYYY-MM-DD for `now + offsetDays` — keeps fixtures in the future
  *  regardless of when the suite runs (the Aug-2026 hardcodes expired). */
-/** The original fixtures hardcoded Aug-2026 dates; the whole calendar
- *  shifts forward by this many days whenever it expires, preserving
- *  inter-date relationships (schedules, blackouts, bookings). */
-const FIXTURE_DATE_SHIFT = 14
-
 function futureDate(offsetDays: number): string {
 	return new Date(Date.now() + offsetDays * 24 * 3_600_000)
 		.toISOString()
 		.slice(0, 10)
 }
-const tomorrow = new Date(Date.now() + 24 * 3_600_000)
-	.toISOString()
-	.slice(0, 10)
 
 describe("convex/public_booking — internalCreate mutation", () => {
 	it("creates a pending booking request for a valid tour in the org", async () => {
