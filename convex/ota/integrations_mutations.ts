@@ -137,15 +137,22 @@ export const createInternal = internalMutation({
 			assertFieldWithinLimit("apiEndpoint", args.apiEndpoint, 500);
 		}
 
-		const existing = await ctx.db
+		// Only an ACTIVE integration blocks creation (fleet P1
+		// 2026-09-06): removeInternal soft-deletes, so counting
+		// soft-deleted rows here made re-creating an integration for
+		// the same provider throw forever. Stale inactive rows are
+		// harmless — all reads go by integrationId and webhooks check
+		// isActive.
+		const providerRows = await ctx.db
 			.query("otaIntegrations")
 			.withIndex("by_org_provider", (q) =>
 				q
 					.eq("organizationId", args.organizationId)
 					.eq("provider", args.provider),
 			)
-			.unique();
-		if (existing) {
+			.collect();
+		const active = providerRows.find((r) => r.isActive !== false);
+		if (active) {
 			throw new ConvexError(
 				`Integration for ${args.provider} already exists. Update it instead.`,
 			);
