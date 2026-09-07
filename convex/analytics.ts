@@ -421,13 +421,9 @@ async function buildFinancialHealth(
 			.withIndex("by_org_status_created", (q) =>
 				q
 					.eq("organizationId", orgId)
-					.eq("status", "succeeded"),
-			)
-			.filter((q) =>
-				q.and(
-					q.gte(q.field("createdAt"), Date.parse(`${startDate}T00:00:00Z`)),
-					q.lte(q.field("createdAt"), Date.parse(`${endDate}T23:59:59Z`)),
-				),
+					.eq("status", "succeeded")
+					.gte("createdAt", Date.parse(`${startDate}T00:00:00Z`))
+					.lte("createdAt", Date.parse(`${endDate}T23:59:59Z`)),
 			)
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
@@ -525,13 +521,10 @@ async function buildConversions(
 	const rows = await ctx.db
 		.query("publicBookingAttempts")
 		.withIndex("by_org_created", (q) =>
-			q.eq("organizationId", orgId),
-		)
-		.filter((q) =>
-			q.and(
-				q.gte(q.field("createdAt"), startMs),
-				q.lte(q.field("createdAt"), endMs),
-			),
+			q
+				.eq("organizationId", orgId)
+				.gte("createdAt", startMs)
+				.lte("createdAt", endMs),
 		)
 		.take(MAX_ANALYTICS_SCAN);
 

@@ -152,9 +152,9 @@ export const list = query({
  * outage cascades.
  *
  * Uses the `by_org_status_created` index for a narrow scan.
- * Status check is JS-side because `status` is `v.string()` —
- * the index is leading (orgId, status, createdAt) and we then
- * filter on createdAt.
+ * The createdAt lower bound is pushed into the trailing field of the
+ * leading (orgId, status, createdAt) index so the scan starts at
+ * `since` instead of filtering post-fetch.
  */
 export const countFailedSince = query({
 	args: {
@@ -170,9 +170,9 @@ export const countFailedSince = query({
 			.withIndex("by_org_status_created", (q) =>
 				q
 					.eq("organizationId", member.organizationId)
-					.eq("status", "failed"),
+					.eq("status", "failed")
+					.gte("createdAt", since),
 			)
-			.filter((q) => q.gte(q.field("createdAt"), since))
 			.take(limit);
 		return rows.length;
 	},

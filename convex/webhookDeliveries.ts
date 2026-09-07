@@ -221,9 +221,9 @@ export const countFailedSince = query({
 			.withIndex("by_org_status_received", (q) =>
 				q
 					.eq("organizationId", member.organizationId)
-					.eq("status", "failed"),
+					.eq("status", "failed")
+					.gte("receivedAt", since),
 			)
-			.filter((q) => q.gte(q.field("receivedAt"), since))
 			.take(limit);
 		return rows.length;
 	},
