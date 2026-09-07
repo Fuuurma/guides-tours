@@ -22,7 +22,7 @@
 import { v, ConvexError } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
-import type { FunctionReference } from "convex/server";
+
 import type { Id, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { internalRefs } from "./lib/internalRefs";

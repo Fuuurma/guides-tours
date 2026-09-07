@@ -13,8 +13,7 @@ import {
 	mutation,
 	internalMutation,
 } from "./_generated/server";
-import type { FunctionReference } from "convex/server";
-import { internal } from "./_generated/api";
+
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
@@ -22,7 +21,6 @@ import { assertFieldWithinLimit } from "./lib/validation";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { parseBookingTime } from "./lib/time";
-
 
 const SCHEDULE_STATUSES = ["available", "full", "cancelled"] as const;
 type ScheduleStatus = (typeof SCHEDULE_STATUSES)[number];

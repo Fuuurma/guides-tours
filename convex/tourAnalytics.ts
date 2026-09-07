@@ -12,13 +12,12 @@ import {
 	mutation,
 	internalMutation,
 } from "./_generated/server";
-import type { FunctionReference } from "convex/server";
+
 import { internal } from "./_generated/api";
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { utcYmd, addDaysYmd } from "./lib/staffingGaps";
-
 
 const MAX_TOURS = 500;
 const MAX_BOOKINGS = 5_000;

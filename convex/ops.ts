@@ -6,14 +6,12 @@
 // a guide/vehicle/driver against it.
 
 import { ConvexError, v } from "convex/values";
-import type { FunctionReference } from "convex/server";
+
 import { internalMutation, mutation } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { internalRefs } from "./lib/internalRefs";
 import type { Id } from "./_generated/dataModel";
 import { requireRole } from "./lib/authz";
 import { authComponent, createAuth } from "./auth";
-
 
 const staffDepartureArgs = {
 	tourId: v.id("tours"),

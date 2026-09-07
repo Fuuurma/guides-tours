@@ -12,14 +12,12 @@ import {
 	internalQuery,
 } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
-import type { FunctionReference } from "convex/server";
-import { internal } from "./_generated/api";
+
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { MAX_NOTES_LEN } from "./lib/validation";
 import { authComponent, createAuth } from "./auth";
-
 
 // ---- helpers ----
 
