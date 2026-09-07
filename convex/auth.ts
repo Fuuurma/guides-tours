@@ -9,6 +9,7 @@ import authSchema from "./betterAuth/schema";
 import authConfig from "./auth.config";
 import { ac, roles } from "./authz";
 import { sendTemplatedEmail } from "./lib/sendEmail";
+import { logger } from "./lib/logger";
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
 	components.betterAuth,
@@ -70,7 +71,7 @@ const plugins = [
 				// Log but don't throw — Better Auth treats thrown errors as
 				// invitation failures and the row is harder to recover.
 				// Operators can re-send via the dashboard.
-				console.error(
+				logger.error(
 					`[invite] SES send failed for ${data.email} (org=${orgName}): ${result.error}`,
 				);
 			}

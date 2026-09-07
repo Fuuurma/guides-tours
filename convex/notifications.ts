@@ -34,6 +34,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { logAudit } from "./lib/audit";
 import { requireMembership } from "./lib/authz";
+import { logger } from "./lib/logger";
 
 const BATCH_SIZE = 100;
 const NOTIFICATION_CUTOFF_MINUTES = 10;
@@ -142,7 +143,7 @@ export const processPendingNotifications = internalMutation({
 		for (const result of enqueueResults) {
 			if (result.status === "rejected") {
 				failed += 1;
-				console.error(
+				logger.error(
 					`[cron] failed to enqueue dispatch: ${result.reason}`,
 				);
 				continue;
@@ -159,14 +160,14 @@ export const processPendingNotifications = internalMutation({
 					: err instanceof Error
 						? err.message
 						: "unknown error";
-			console.error(
+			logger.error(
 				`[cron] failed to enqueue dispatch for ${scheduled._id}: ${message}`,
 			);
 			await bumpRetryOrAbandon(ctx, scheduled, message);
 		}
 
 		if (processed > 0 || failed > 0) {
-			console.log(
+			logger.info(
 				`[cron] processPendingNotifications enqueued=${processed} failed=${failed} of ${due.length} due`,
 			);
 		}
@@ -249,7 +250,7 @@ async function bumpRetryOrAbandon(
 			processedAt: Date.now(),
 			notificationLogId: logId ?? scheduled.notificationLogId,
 		});
-		console.warn(
+		logger.warn(
 			`[cron] abandoned scheduled ${scheduled._id} after ${scheduled.retryCount} retries: ${errorMessage ?? "unknown"}`,
 		);
 	}
@@ -401,7 +402,7 @@ export const cleanupOldAssignments = internalMutation({
 			),
 		);
 
-		console.log(
+		logger.info(
 			`[cron] cleanupOldAssignments archived ${targets.length} assignments older than ${cutoffDate}`,
 		);
 
@@ -450,7 +451,7 @@ export const cleanupOldNotifications = internalMutation({
 			...oldScheduled.map((s) => ctx.db.delete(s._id)),
 		]);
 
-		console.log(
+		logger.info(
 			`[cron] cleanupOldNotifications deleted ${oldLogs.length} logs, ${oldScheduled.length} scheduled (cutoff=${new Date(cutoff).toISOString()})`,
 		);
 

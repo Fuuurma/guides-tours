@@ -24,6 +24,7 @@ import { logAudit } from "./lib/audit";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { addDaysYmd, utcYmd } from "./lib/staffingGaps";
 import { dashboardUrl } from "./lib/siteUrl";
+import { logger } from "./lib/logger";
 import type { MissingStaffPhone } from "./lib/userContact";
 import { collectMissingStaffPhones } from "./userProfiles";
 import {
@@ -461,7 +462,7 @@ export const purgeOldSends = internalMutation({
 			totalDeleted += old.length;
 		}
 		if (totalDeleted > 0) {
-			console.log(
+			logger.info(
 				`[cron] purgeOldPhoneReminderSends deleted ${totalDeleted} (cutoff=${new Date(cutoff).toISOString()})`,
 			);
 		}

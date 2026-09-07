@@ -18,6 +18,7 @@
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import { authComponent, createAuth } from "../auth";
+import { logger } from "./logger";
 
 export type Role = "owner" | "admin" | "member" | "guide" | "driver";
 
@@ -112,7 +113,7 @@ export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 		);
 	}
 	if (list.length > 1) {
-		console.warn(
+		logger.warn(
 			`[authz] user ${user._id} has ${list.length} orgs but no active org set — defaulting to ${first.id}. Client should call setActiveOrganization.`,
 		);
 	}

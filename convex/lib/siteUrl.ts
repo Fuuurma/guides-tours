@@ -1,6 +1,8 @@
 /** Canonical public app origin for emails, SMS, and invite deep-links.
  * Falls back to localhost for dev. In production, SITE_URL must be set
  * to an HTTPS URL — throws if unset in production. */
+import { logger } from "./logger";
+
 export function getSiteUrl(): string {
 	const url = process.env.SITE_URL;
 	if (!url) {
@@ -15,7 +17,7 @@ export function getSiteUrl(): string {
 		return "http://127.0.0.1:3020";
 	}
 	if (url.startsWith("http://") && !url.includes("127.0.0.1") && !url.includes("localhost")) {
-		console.warn(
+		logger.warn(
 			`[siteUrl] SITE_URL is HTTP (${url}). Set it to an HTTPS URL in production.`,
 		);
 	}

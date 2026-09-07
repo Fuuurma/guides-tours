@@ -24,6 +24,7 @@ import type { ActionCtx } from "../_generated/server";
 import { httpAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { decrypt } from "../lib/crypto";
+import { logger } from "../lib/logger";
 import type { Id } from "../_generated/dataModel";
 import { verifyWebhookSignatureWithTimestamp } from "./webhook_verify";
 import type { NormalizedProviderEvent } from "./types";
@@ -116,7 +117,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 		}
 		const event = config.normalize(parsed);
 		if (!event) {
-			console.log(
+			logger.info(
 				`${config.logPrefix} ignored event type on integration ${integrationId}`,
 			);
 			return new Response("ignored", { status: 200 });
@@ -144,7 +145,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 				// Re-delivery of an already-processed event. Skip
 				// silently — the original call already handled it.
 				// Log at info so audit can see retries.
-				console.log(
+				logger.info(
 					`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,
 				);
 				return new Response("ok (duplicate)", { status: 200 });

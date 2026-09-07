@@ -18,6 +18,7 @@ import {
 	buildSesSendEmailXml,
 	signSesRequest,
 } from "./awsSigV4";
+import { logger } from "./logger";
 
 export type SendEmailResult =
 	| { status: "sent" }
@@ -51,7 +52,7 @@ export async function sendTemplatedEmail(
 		]
 			.filter(Boolean)
 			.join(", ");
-		console.warn(
+		logger.warn(
 			`[sendEmail] SES not configured (missing: ${missing}) — skipping email to ${params.to}`,
 		);
 		return { status: "skipped", reason: `SES not configured: ${missing}` };

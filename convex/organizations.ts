@@ -12,6 +12,7 @@ import { query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
 import { requireMembership } from "./lib/authz";
 import { loadUserContact } from "./lib/userContact";
+import { logger } from "./lib/logger";
 
 export const activeOrganization = query({
 	args: {},
@@ -36,7 +37,7 @@ export const activeOrganization = query({
 			if (!fallbackOrganization) return null;
 			selectedOrganizationId = fallbackOrganization.id;
 			if (organizations.length > 1) {
-				console.warn(
+				logger.warn(
 					`[organizations] user ${user._id} has ${organizations.length} orgs but no valid active org set — defaulting to ${selectedOrganizationId}. Client should call setActiveOrganization.`,
 				);
 			}

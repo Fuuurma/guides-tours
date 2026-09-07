@@ -27,6 +27,7 @@ import { internal } from "./_generated/api";
 import { decrypt } from "./lib/crypto";
 import { requireRole } from "./lib/authz";
 import { normalizeEmail } from "./lib/validation";
+import { logger } from "./lib/logger";
 import {
 	verifyStripeSignature,
 } from "./payments_stripe";
@@ -775,7 +776,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	if (!settings?.stripeWebhookSecret) {
 		// Log server-side for ops, but return the same uniform 200
 		// so the response is indistinguishable from the no-org case.
-		console.warn(
+		logger.warn(
 			`[stripe-webhook] org ${orgId} has no webhook secret configured`,
 		);
 		return UNIFORM_OK;
@@ -806,7 +807,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			},
 		);
 		if (recorded.isDuplicate) {
-			console.log(
+			logger.info(
 				`[stripe-webhook] duplicate event ${stripeEventId} for org ${orgId}`,
 			);
 			return new Response("ok (duplicate)", { status: 200 });
@@ -829,7 +830,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			const currencyRaw = obj?.currency;
 
 			if (!piId) {
-				console.log(
+				logger.info(
 					`[stripe-webhook] ${eventType} missing payment_intent (org=${orgId})`,
 				);
 				// Ack — Checkout may complete without a PI in edge cases;
@@ -854,7 +855,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 				}
 
 				if (!paymentId) {
-					console.log(
+					logger.info(
 						`[stripe-webhook] unknown intent ${piId} (event=${eventType}, org=${orgId})`,
 					);
 				} else {
@@ -873,7 +874,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 				{ stripePaymentIntentId: piId, organizationId: orgId },
 			);
 			if (!paymentId) {
-				console.log(
+				logger.info(
 					`[stripe-webhook] unknown/cross-org intent ${piId} (event=${eventType}, org=${orgId})`,
 				);
 			} else {
@@ -885,7 +886,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		} else if (eventType === "charge.refunded") {
 			const piId = paymentIntentIdFrom(obj);
 			if (!piId) {
-				console.log(
+				logger.info(
 					`[stripe-webhook] charge.refunded missing payment_intent (org=${orgId})`,
 				);
 			} else {
@@ -894,7 +895,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 					{ stripePaymentIntentId: piId, organizationId: orgId },
 				);
 				if (!paymentId) {
-					console.log(
+					logger.info(
 						`[stripe-webhook] unknown intent ${piId} for charge.refunded (org=${orgId})`,
 					);
 				} else {

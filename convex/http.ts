@@ -5,6 +5,7 @@ import { registerOtaRoutes } from "./ota/router";
 import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { logger } from "./lib/logger";
 
 const http = httpRouter();
 
@@ -238,7 +239,7 @@ http.route({
 			);
 		} catch (err) {
 			// Log full error server-side for debugging.
-			console.error("[public-booking] Error:", err);
+			logger.error("[public-booking] Error:", err);
 			// Return only safe, user-facing error messages to the
 			// client — internal details could aid attackers.
 			let message = "An error occurred processing your booking";
@@ -308,7 +309,7 @@ function isAllowedBookingOrigin(origin: string | null): boolean {
 			siteUrl.includes("127.0.0.1") ||
 			siteUrl.includes("localhost");
 		if (isUnconfigured) return true;
-		console.error(
+		logger.error(
 			"[booking] PUBLIC_BOOKING_ALLOWED_ORIGINS is not set — rejecting " +
 				"booking attempts. Set it to the marketing-site origin(s) to " +
 				"enable bookings.",

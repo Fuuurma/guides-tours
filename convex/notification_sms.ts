@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { decrypt } from "./lib/crypto";
 import { logAudit } from "./lib/audit";
+import { logger } from "./lib/logger";
 
 export type TwilioSendResult = {
 	ok: boolean;
@@ -170,7 +171,7 @@ export async function sendTwilioSms(
 	}
 
 	const payload = (await response.json().catch((parseErr) => {
-		console.error("[notification_sms] Failed to parse Twilio response JSON:", parseErr);
+		logger.error("[notification_sms] Failed to parse Twilio response JSON:", parseErr);
 		return {};
 	})) as {
 		sid?: string;

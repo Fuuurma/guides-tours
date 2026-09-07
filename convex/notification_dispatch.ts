@@ -13,6 +13,7 @@ import {
 	renderNotification,
 } from "./lib/notificationRender";
 import { sendTwilioSms } from "./notification_sms";
+import { logger } from "./lib/logger";
 
 export type DispatchChannel = "email" | "sms" | "none";
 
@@ -119,7 +120,7 @@ async function renderAndDispatch(
 				},
 			};
 		} else {
-			console.warn(
+			logger.warn(
 				`[dispatch-sms-${tag}] ${template.templateType} → ${customer.phone} failed: ${sms.error}`,
 			);
 			result = {
@@ -139,7 +140,7 @@ async function renderAndDispatch(
 		const reason = noContact
 			? "no email or phone on file"
 			: "customer has not consented to email or SMS";
-		console.warn(
+		logger.warn(
 			`[dispatch] ${template.templateType} skipped for ${customer.name}: ${reason}`,
 		);
 		result = {
