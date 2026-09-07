@@ -320,7 +320,7 @@ describe("createWebhookHandler — shared factory contract", () => {
 				otaReservationId: "RES-FAC-001",
 				otaCustomerName: "Alice",
 				otaCustomerEmail: "alice@example.com",
-				otaCustomerData: {},
+				otaCustomerData: { guests: 2 },
 				otaTourName: "Old Tour",
 				otaTourDate: "2026-08-01",
 				otaGuests: 2,

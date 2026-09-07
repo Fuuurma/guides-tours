@@ -11,7 +11,10 @@
 //   encrypts before insert, decrypts after read.
 // - Money fields are cents-only (v.int64()) — Django DecimalField dollars
 //   were dropped during migration.
-// - JSON-shaped fields use v.any() until we tighten with v.union/record.
+// - JSON-shaped fields are typed with concrete v.record/v.object/v.union
+//   validators. Genuinely free-form fields (raw provider payloads, audit
+//   diffs) retain v.any() under an explicit allowlist — see schema.test.ts
+//   "no untyped jsonField outside allowlist" for the regression guard.
 // - Soft deletes: source uses is_active flags and CASCADE ForeignKeys.
 //   In Convex we use a `deletedAt: v.optional(v.number())` pattern for
 //   soft delete and actual deletion for hard remove (no CASCADE).
@@ -42,9 +45,15 @@ const encryptedString = v.string();
 // Currency code (ISO 4217, e.g. "USD", "EUR").
 const currency = v.string();
 
-// JSON-shaped field that we don't type-check at the schema boundary.
-// Refine per-table as usage patterns emerge.
-const jsonField = v.any();
+// Typed JSON shapes used across multiple tables. Genuinely free-form
+// fields (raw provider payloads, audit diffs) use rawAny directly and
+// are tracked in the ALLOWLIST_V_ANY set in schema.test.ts.
+const rawAny = v.any();
+const stringRecord = v.record(v.string(), v.string());
+const metadataRecord = v.record(
+	v.string(),
+	v.union(v.string(), v.number(), v.boolean()),
+);
 
 export default defineSchema({
 	// ----- Guides / staff -----
@@ -344,7 +353,7 @@ export default defineSchema({
 		userId, // FK -> better-auth "user" (the person who drives)
 		licenseInfo: v.string(),
 		// JSON: { monday: true, tuesday: false, ... }
-		availability: jsonField,
+		availability: v.record(v.string(), v.boolean()),
 		notes: v.string(),
 		isActive: v.boolean(),
 		createdAt: v.number(),
@@ -499,7 +508,7 @@ export default defineSchema({
 		lastSyncAt: v.optional(v.number()),
 		lastSyncStatus: v.optional(v.string()),
 		lastSyncError: v.optional(v.string()),
-		settings: jsonField,
+		settings: stringRecord,
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
@@ -531,7 +540,7 @@ export default defineSchema({
 		defaultCapacity: v.optional(v.number()),
 		minAdvanceBookingHours: v.number(),
 		maxAdvanceBookingDays: v.number(),
-		settings: jsonField,
+		settings: stringRecord,
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
@@ -553,7 +562,10 @@ export default defineSchema({
 		otaCustomerEmail: v.optional(v.string()),
 		otaCustomerPhone: v.optional(v.string()),
 		otaCustomerCountry: v.optional(v.string()),
-		otaCustomerData: jsonField,
+		otaCustomerData: v.object({
+			productId: v.optional(v.string()),
+			guests: v.number(),
+		}),
 		otaTourName: v.optional(v.string()),
 		otaTourDate: v.optional(v.string()),
 		otaTourTime: v.optional(v.string()),
@@ -566,7 +578,7 @@ export default defineSchema({
 		// PENDING | CONFIRMED | CANCELLED | REFUNDED
 		status: v.string(),
 		lastSyncAt: v.optional(v.number()),
-		rawOtaData: jsonField,
+		rawOtaData: rawAny,
 		otaCreatedAt: v.optional(v.number()),
 		receivedAt: v.number(),
 		confirmedAt: v.optional(v.number()),
@@ -587,7 +599,12 @@ export default defineSchema({
 		date: v.string(),
 		availableSpaces: v.number(),
 		totalSpaces: v.number(),
-		timeSlots: jsonField,
+		timeSlots: v.array(
+			v.object({
+				startTime: v.string(),
+				availableSpaces: v.number(),
+			}),
+		),
 		cachedAt: v.number(),
 		expiresAt: v.number(),
 	})
@@ -605,7 +622,14 @@ export default defineSchema({
 		grossRevenueCents: v.int64(),
 		commissionPaidCents: v.int64(),
 		netRevenueCents: v.optional(v.int64()),
-		byTour: jsonField,
+		byTour: v.record(
+			v.string(),
+			v.object({
+				bookings: v.number(),
+				guests: v.number(),
+				grossRevenueCents: v.int64(),
+			}),
+		),
 		calculatedAt: v.number(),
 	})
 		.index("by_org", ["organizationId"])
@@ -649,7 +673,7 @@ export default defineSchema({
 		ipAddress: v.optional(v.string()),
 		userAgent: v.optional(v.string()),
 		// Full payload (encrypted for sensitive providers)
-		payload: jsonField,
+		payload: rawAny,
 		// Processing result
 		processedResourceId: v.optional(v.string()),
 		// "skipped: duplicate eventId" | "skipped: cross-org" | etc
@@ -755,7 +779,7 @@ export default defineSchema({
 		processedAt: v.optional(v.number()),
 		failureReason: v.optional(v.string()),
 		// Free-form metadata (Stripe response, internal notes, etc.)
-		metadata: jsonField,
+		metadata: stringRecord,
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
@@ -814,7 +838,7 @@ export default defineSchema({
 		currency,
 		errorCode: v.optional(v.string()),
 		errorMessage: v.optional(v.string()),
-		metadata: jsonField,
+		metadata: stringRecord,
 		scheduledAt: v.optional(v.number()),
 		sentAt: v.optional(v.number()),
 		deliveredAt: v.optional(v.number()),
@@ -842,7 +866,7 @@ export default defineSchema({
 		clickedAt: v.optional(v.number()),
 		errorCode: v.optional(v.string()),
 		errorMessage: v.optional(v.string()),
-		metadata: jsonField,
+		metadata: stringRecord,
 		scheduledAt: v.optional(v.number()),
 		sentAt: v.optional(v.number()),
 		createdAt: v.number(),
@@ -865,7 +889,7 @@ export default defineSchema({
 		errorMessage: v.optional(v.string()),
 		scheduledFor: v.optional(v.number()),
 		sentAt: v.optional(v.number()),
-		metadata: jsonField,
+		metadata: metadataRecord,
 		createdAt: v.number(),
 	})
 		.index("by_org", ["organizationId"])
@@ -961,8 +985,8 @@ export default defineSchema({
 		action: v.string(), // e.g. "tour.created", "booking.confirmed"
 		resourceType: v.string(), // e.g. "tour", "booking"
 		resourceId: v.string(),
-		oldValues: jsonField,
-		newValues: jsonField,
+		oldValues: rawAny,
+		newValues: rawAny,
 		ipAddress: v.optional(v.string()),
 		userAgent: v.optional(v.string()),
 		timestamp: v.number(),

@@ -219,4 +219,70 @@ describe("convex/schema", () => {
 			}
 		});
 	});
+
+	describe("no untyped jsonField outside allowlist", () => {
+		const ALLOWLIST_V_ANY = [
+			"rawOtaData",
+			"payload",
+			"oldValues",
+			"newValues",
+		];
+
+		it("jsonField alias is not defined", () => {
+			const lines = source.split("\n");
+			const violations = lines.filter(
+				(line) =>
+					!line.trim().startsWith("//") &&
+					/\bjsonField\b/.test(line),
+			);
+			expect(
+				violations,
+				"jsonField alias should be removed — use concrete validators",
+			).toEqual([]);
+		});
+
+		it("v.any() only appears in the rawAny alias and allowlisted fields", () => {
+			const lines = source.split("\n");
+			const violations: string[] = [];
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (!line.includes("v.any()")) continue;
+				if (line.includes("rawAny = v.any()")) continue;
+				if (line.trim().startsWith("//")) continue;
+				const isAllowlisted = ALLOWLIST_V_ANY.some((field) => {
+					const re = new RegExp(`\\b${field}:\\s*rawAny\\b`);
+					return re.test(line);
+				});
+				if (!isAllowlisted) {
+					violations.push(`line ${i + 1}: ${line.trim()}`);
+				}
+			}
+			expect(
+				violations,
+				`v.any() found outside allowlist ${JSON.stringify(ALLOWLIST_V_ANY)}`,
+			).toEqual([]);
+		});
+
+		it("rawAny is only used for allowlisted fields", () => {
+			const lines = source.split("\n");
+			const violations: string[] = [];
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				if (!line.includes("rawAny")) continue;
+				if (line.includes("rawAny = v.any()")) continue;
+				if (line.trim().startsWith("//")) continue;
+				const isAllowlisted = ALLOWLIST_V_ANY.some((field) => {
+					const re = new RegExp(`\\b${field}:\\s*rawAny\\b`);
+					return re.test(line);
+				});
+				if (!isAllowlisted) {
+					violations.push(`line ${i + 1}: ${line.trim()}`);
+				}
+			}
+			expect(
+				violations,
+				`rawAny used for non-allowlisted field (allowlist: ${JSON.stringify(ALLOWLIST_V_ANY)})`,
+			).toEqual([]);
+		});
+	});
 });

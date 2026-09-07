@@ -105,7 +105,7 @@ export const create = mutation({
 		defaultCapacity: v.optional(v.number()),
 		minAdvanceBookingHours: v.optional(v.number()),
 		maxAdvanceBookingDays: v.optional(v.number()),
-		settings: v.optional(v.any()),
+		settings: v.optional(v.record(v.string(), v.string())),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -139,7 +139,7 @@ export const internalCreate = internalMutation({
 		defaultCapacity: v.optional(v.number()),
 		minAdvanceBookingHours: v.optional(v.number()),
 		maxAdvanceBookingDays: v.optional(v.number()),
-		settings: v.optional(v.any()),
+		settings: v.optional(v.record(v.string(), v.string())),
 	},
 	handler: async (ctx, args) => {
 		if (args.commissionRate < 0 || args.commissionRate > 1) {
@@ -219,7 +219,7 @@ export const update = mutation({
 		defaultCapacity: v.optional(v.number()),
 		minAdvanceBookingHours: v.optional(v.number()),
 		maxAdvanceBookingDays: v.optional(v.number()),
-		settings: v.optional(v.any()),
+		settings: v.optional(v.record(v.string(), v.string())),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -252,7 +252,7 @@ export const internalUpdate = internalMutation({
 		defaultCapacity: v.optional(v.number()),
 		minAdvanceBookingHours: v.optional(v.number()),
 		maxAdvanceBookingDays: v.optional(v.number()),
-		settings: v.optional(v.any()),
+		settings: v.optional(v.record(v.string(), v.string())),
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db.get(args.productId);
