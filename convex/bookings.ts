@@ -595,8 +595,12 @@ export const create = mutation({
 				{
 					organizationId: member.organizationId,
 					bookingId,
-					date: args.date,
-					startTime: args.startTime,
+					// Resolved values (from the linked schedule when one
+					// is set) — raw args diverge from the real slot and
+					// the reminders fire wrong or land in the past
+					// (needs-work 2026-09-07 P1).
+					date,
+					startTime,
 				},
 			);
 		}

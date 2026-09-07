@@ -663,13 +663,18 @@ export const internalCreate = internalMutation({
 	// Defense-in-depth: scope by orgId too. A guide belonging to
 	// multiple orgs (Better Auth allows this) shouldn't have their
 	// vacation in another org block an assignment in this org.
-	// Bound the scan: a guide with >500 vacation requests is unusual.
-	const MAX_VACATIONS = 500;
-	const vacations = await ctx.db
+	// Index-pushes userId + status (needs-work 2026-09-07 P3): the old
+	// by_org scan filtered userId in memory after take(500), so a guide
+	// past position 500 in the org's vacation rows was silently
+	// unchecked. Per-guide approved rows are naturally tiny.
+	// Org filter stays in-memory over the tiny per-guide set — the
+	// original by_org scan was org-scoped and that contract holds.
+	const vacations = (await ctx.db
 		.query("vacationRequests")
-		.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-		.filter((q) => q.eq(q.field("userId"), args.guideId))
-		.take(MAX_VACATIONS);
+		.withIndex("by_user_status", (q) =>
+			q.eq("userId", args.guideId).eq("status", "approved"),
+		)
+		.collect()).filter((vr) => vr.organizationId === args.organizationId);
 	const onVacation = vacations.some(
 		(vr) =>
 			vr.status === "approved" &&
@@ -1025,12 +1030,15 @@ export const internalUpdate = internalMutation({
 		// Only needed when guideId or date changed — if both are unchanged,
 		// the existing assignment already passed these checks at create time.
 		if (next.guideId !== existing.guideId || next.date !== existing.date) {
-			const MAX_VACATIONS = 500;
-			const vacations = await ctx.db
+			// Same index-push as internalCreate (needs-work 09-07 P3).
+			const vacations = (await ctx.db
 				.query("vacationRequests")
-				.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-				.filter((q) => q.eq(q.field("userId"), next.guideId))
-				.take(MAX_VACATIONS);
+				.withIndex("by_user_status", (q) =>
+					q.eq("userId", next.guideId).eq("status", "approved"),
+				)
+				.collect()).filter(
+				(vr) => vr.organizationId === args.organizationId,
+			);
 			const onVacation = vacations.some(
 				(vr) =>
 					vr.status === "approved" &&
