@@ -509,7 +509,7 @@ export const create = mutation({
 			guestNames: args.guestNames ?? "",
 			languageRequired: args.languageRequired ?? "",
 			notes: args.notes ?? "",
-			status: args.status ?? "confirmed",
+			status: args.status ?? "pending",
 			depositAmountCents: deposit,
 			totalAmountCents: total,
 			balanceDueCents: balance,
