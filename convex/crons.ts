@@ -86,6 +86,7 @@ crons.daily(
 	"refresh_tour_analytics",
 	{ hourUTC: 5, minuteUTC: 0 },
 	internal.tourAnalytics.runDaily,
+	{},
 );
 
 // Daily at 07:00 UTC — ops staffing digest (email/SMS) for orgs

@@ -21,8 +21,6 @@ import { utcYmd, addDaysYmd } from "./lib/staffingGaps";
 
 const MAX_TOURS = 500;
 const MAX_BOOKINGS = 5_000;
-const MAX_ORGS = 100;
-const MAX_TOURS_SCAN = 5_000;
 
 // ---- queries ----
 
@@ -354,20 +352,42 @@ export const computeForOrgDay = internalMutation({
 	},
 });
 
-/** Nightly: schedule yesterday's daily refresh for each org with tours. */
+/**
+ * Nightly: schedule yesterday's daily refresh for each org with tours.
+ *
+ * Paginate-once + self-continuation (needs-work 09-07 P2): the old
+ * take(5000) + slice(100) silently skipped orgs past either bound. The
+ * discovery pass now walks the WHOLE tours table across scheduled
+ * pages, collecting every org id; only the final page schedules the
+ * per-org compute jobs — no silent caps anywhere. `organizations` is
+ * component-owned (Better Auth), which is why discovery rides the
+ * tours table rather than an orgs query.
+ */
 export const runDaily = internalMutation({
-	args: {},
-	handler: async (ctx) => {
+	args: {
+		cursor: v.optional(v.string()),
+		discovered: v.optional(v.array(v.string())),
+	},
+	handler: async (ctx, args) => {
 		const yesterday = addDaysYmd(utcYmd(), -1);
-		const tours = await ctx.db.query("tours").take(MAX_TOURS_SCAN);
-		const orgIds = [
-			...new Set(
-				tours
-					.filter((t) => t.deletedAt === undefined)
-					.map((t) => t.organizationId),
-			),
-		].slice(0, MAX_ORGS);
+		const discovered = [...(args.discovered ?? [])];
 
+		const result = await ctx.db
+			.query("tours")
+			.paginate({ numItems: 5_000, cursor: args.cursor ?? null });
+		for (const tour of result.page) {
+			if (tour.deletedAt === undefined) discovered.push(tour.organizationId);
+		}
+
+		if (!result.isDone) {
+			await ctx.scheduler.runAfter(0, internal.tourAnalytics.runDaily, {
+				cursor: result.continueCursor,
+				discovered,
+			});
+			return { orgs: discovered.length, done: false };
+		}
+
+		const orgIds = [...new Set(discovered)];
 		await Promise.all(
 			orgIds.map((organizationId) =>
 				ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
@@ -376,6 +396,6 @@ export const runDaily = internalMutation({
 				}),
 			),
 		);
-		return { orgs: orgIds.length, periodDate: yesterday };
+		return { orgs: orgIds.length, done: true, periodDate: yesterday };
 	},
 });
