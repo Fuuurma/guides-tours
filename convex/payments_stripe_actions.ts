@@ -171,7 +171,6 @@ export const createCheckoutSession = action({
 	args: {
 		bookingId: v.id("bookings"),
 		amountCents: v.int64(),
-		currency: v.optional(v.string()),
 		customerEmail: v.optional(v.string()),
 		description: v.optional(v.string()),
 	},
@@ -213,9 +212,12 @@ export const createCheckoutSession = action({
 			throw new ConvexError("Stripe publishable key is not configured");
 		}
 		const stripeSecret = await decrypt(settings.stripeSecretKey);
-		const currencyDb = currencyForDb(
-			args.currency ?? settings.defaultCurrency,
-		);
+		// Currency is org-authoritative (fleet needs-work 09-08 P1):
+		// a caller-supplied currency could mismatch the booking record
+		// and corrupt refund/report math. The siblings
+		// (createPublicPaymentIntent/createHostedCheckout) already lock
+		// to defaultCurrency.
+		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
 
 		const params = new URLSearchParams();
