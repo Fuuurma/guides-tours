@@ -8,7 +8,7 @@ ports, deploy/auth notes, and agent handoffs.
 Before meaningful work, read:
 1. Current sprint / next work: `~/Projects/hub/WORK.md`
 2. This project's state page: `~/Projects/hub/projects/guides-tours.md`
-3. Standard stack playbook: `~/Projects/hub/tech-stack/STACK-STANDARDS.md`
+3. Standard stack playbook: `~/Projects/hub/tech-stack/CONVENTIONS.md`
 4. Agent skills/context: `~/Projects/hub/tech-stack/AGENT-CONTEXT.md`
 5. Official docs index: `~/Projects/hub/tech-stack/OFFICIAL-DOCS.md`
 
@@ -44,7 +44,7 @@ For UI/UX, landing, visual polish, or any screen users see: invoke `design-arsen
 
 For UI implementation, use `pnpm dlx shadcn@latest` and follow the `shadcn` skill rules (no `space-x/y`, use `gap-*`, `size-*`, `cn()`, semantic tokens, lucide icons, `FieldGroup`/`Field`, etc.).
 
-For TanStack Start/Router/Form, there is no global skill; follow `STACK-STANDARDS.md`, `CONVENTIONS.md`, and `TANSTACK-FORM.md`. Use TanStack Form for every new form and every touched legacy form.
+For TanStack Start/Router/Form, there is no global skill; follow `CONVENTIONS.md`, `CONVENTIONS.md`, and `TANSTACK-FORM.md`. Use TanStack Form for every new form and every touched legacy form.
 
 For Better Auth, follow `AUTH-OAUTH.md` exactly.
 <!-- fuurma-hub-end -->
