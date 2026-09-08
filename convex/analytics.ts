@@ -171,6 +171,17 @@ async function buildTourStats(
 
 	const inRange = assignments.filter((a) => !a.deletedAt);
 
+	// Overflow probe (fleet 09-08): a full-cap scan means the org has
+	// more rows than were read — flag the payload as truncated.
+	const tourCount = tours.length;
+	const assignmentCount = assignments.length;
+	const truncated = tourCount >= MAX_ANALYTICS_SCAN || assignmentCount >= MAX_ANALYTICS_SCAN;
+	if (truncated) {
+		console.warn(
+			`[analytics.buildTourStats] 10k scan cap hit for org ${orgId} — stats undercount for this range`,
+		);
+	}
+
 	return tours
 		.filter((t) => !t.deletedAt)
 		.map((tour) => {
