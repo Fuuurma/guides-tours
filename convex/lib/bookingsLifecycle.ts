@@ -459,10 +459,18 @@ export async function performCancel(
 					guests: booking.guests,
 				},
 			);
-		} catch {
+		} catch (err) {
 			// Capacity restore is best-effort; the cancellation
 			// is the source of truth and the schedule can be
-			// reconciled manually if needed.
+			// reconciled manually if needed. But silent swallow
+			// hides permanent capacity loss from operators
+			// (fleet needs-work 2026-09-08 P1) — log it.
+			console.error("[bookingsLifecycle] decrementBooked failed", {
+				scheduleId,
+				bookingId: booking._id,
+				guests: booking.guests,
+				error: err instanceof Error ? err.message : String(err),
+			});
 		}
 	}
 
