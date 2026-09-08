@@ -240,7 +240,6 @@ async function buildGuideStats(
 	return Array.from(guideMap.entries())
 		.map(([guideId, stats]) => ({
 			guideId,
-			guideName: guideId === "unassigned" ? "Unassigned" : guideId,
 			totalAssignments: stats.total,
 			completed: stats.completed,
 			cancelled: stats.cancelled,
