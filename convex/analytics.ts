@@ -61,9 +61,10 @@ async function buildOverview(
 	// Run independent queries in parallel. The tours list and the
 	// assignments range scan and the pending vacations count don't
 	// depend on each other — serializing them was adding ~3x
-	// latency to the analytics overview query. Bound each scan to
-	// prevent OOM on large orgs — the FE can render 1000s of data
-	// points but not millions.
+	// latency to the analytics overview query. Each scan probes
+	// CAP+1 rows: hitting the cap means the org has more rows than
+	// were read, which the payload reports as truncated (fleet
+	// needs-work 09-08, devin finding on silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const [tours, allAssignments, pendingVacations] = await Promise.all([
 		ctx.db
@@ -86,6 +87,9 @@ async function buildOverview(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+	const truncated = [tours, allAssignments, pendingVacations].some(
+		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
+	);
 	const activeTours = tours.filter((t) => !t.deletedAt);
 
 	const inRange = allAssignments.filter((a) => !a.deletedAt);
@@ -137,6 +141,7 @@ async function buildOverview(
 		upcomingThisWeek: upcoming,
 		completionRate,
 		averagePerDay: avgPerDay,
+		truncated,
 	};
 }
 
