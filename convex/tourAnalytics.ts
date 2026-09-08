@@ -379,15 +379,21 @@ export const runDaily = internalMutation({
 			if (tour.deletedAt === undefined) discovered.push(tour.organizationId);
 		}
 
+		// Deduplicate org IDs before forwarding to the next page —
+		// without this the array grows one entry per tour (not per org)
+		// and can exceed Convex's scheduled-call arg-size limit at scale
+		// (fleet needs-work 2026-09-07 P1).
+		const unique = [...new Set(discovered)];
+
 		if (!result.isDone) {
 			await ctx.scheduler.runAfter(0, internal.tourAnalytics.runDaily, {
 				cursor: result.continueCursor,
-				discovered,
+				discovered: unique,
 			});
-			return { orgs: discovered.length, done: false };
+			return { orgs: unique.length, done: false };
 		}
 
-		const orgIds = [...new Set(discovered)];
+		const orgIds = unique;
 		await Promise.all(
 			orgIds.map((organizationId) =>
 				ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
