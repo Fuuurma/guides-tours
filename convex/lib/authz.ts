@@ -12,14 +12,15 @@
 //
 // Active-org resolution: Better Auth org plugin stores
 // `session.activeOrganizationId`. We read it via auth.api.getSession.
-// If null (user never called setActiveOrganization), we fall back to
-// the user's first membership.
+// Single-org users fall back to their only membership (back-compat).
+// Multi-org users WITHOUT an active org fail closed — silently defaulting
+// to the "first" org risks cross-tenant writes. The client must call
+// setActiveOrganization (org switcher / sign-in / auth callback).
 
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import { authComponent, createAuth } from "../auth";
 import { roles, type RoleName } from "../authz";
-import { logger } from "./logger";
 
 export type Role = "owner" | "admin" | "member" | "guide" | "driver";
 
@@ -52,8 +53,10 @@ export async function requireUser(ctx: Ctx) {
  * Resolve the caller's active membership.
  *
  * Reads `session.activeOrganizationId` (Better Auth org plugin).
- * Falls back to the user's first org if no active org is set.
- * Throws if the user has no organization at all.
+ * Single-org users fall back to their only membership. Multi-org users
+ * without an active org throw — failing closed so a write can never
+ * silently land in the wrong tenant. Throws if the user has no
+ * organization at all.
  */
 export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 	const user = await requireUser(ctx);
@@ -81,18 +84,20 @@ export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 		}
 	}
 
-	// Fall back to the user's first org (no active set yet).
-	// SECURITY NOTE: this silent fallback means a user in multiple
-	// orgs will operate on their "first" org if they never called
-	// setActiveOrganization. The client should always set the active
-	// org explicitly to avoid writing to the wrong tenant. We keep
-	// the fallback for backwards compatibility but log it so ops can
-	// detect multi-org users who haven't set an active org.
+	// No active org set: single-org users keep the back-compat fallback
+	// to their only membership. Multi-org users fail closed — silently
+	// defaulting to the "first" org risks cross-tenant writes, so force
+	// an explicit choice via setActiveOrganization instead.
 	const list = await auth.api.listOrganizations({ headers });
 	const first = list[0];
 	if (!first) {
 		throw new ConvexError(
 			"No organization: user must belong to at least one organization",
+		);
+	}
+	if (list.length > 1) {
+		throw new ConvexError(
+			"No active organization: call setActiveOrganization to choose which organization to operate on",
 		);
 	}
 	const memberList = await auth.api.listMembers({
@@ -111,11 +116,6 @@ export async function getActiveMembership(ctx: Ctx): Promise<Member> {
 		// visible and the user is not granted unintended permissions.
 		throw new ConvexError(
 			`User ${user._id} is not a member of organization ${first.id} (data inconsistency — contact admin)`,
-		);
-	}
-	if (list.length > 1) {
-		logger.warn(
-			`[authz] user ${user._id} has ${list.length} orgs but no active org set — defaulting to ${first.id}. Client should call setActiveOrganization.`,
 		);
 	}
 	return {
