@@ -13,6 +13,7 @@ import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { parseBookingTime } from "./time";
+import { logger } from "./logger";
 import { logAudit } from "./audit";
 import {
 	MAX_GUEST_NAMES_LEN,
@@ -465,7 +466,7 @@ export async function performCancel(
 			// reconciled manually if needed. But silent swallow
 			// hides permanent capacity loss from operators
 			// (fleet needs-work 2026-09-08 P1) — log it.
-			console.error("[bookingsLifecycle] decrementBooked failed", {
+			logger.error("[bookingsLifecycle] decrementBooked failed", {
 				scheduleId,
 				bookingId: booking._id,
 				guests: booking.guests,

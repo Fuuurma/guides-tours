@@ -21,6 +21,7 @@ import type { GenericQueryCtx } from "convex/server";
 import type { DataModel, Doc, Id } from "./_generated/dataModel";
 import { internalQuery, query } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
+import { logger } from "./lib/logger";
 import { requireMembership } from "./lib/authz";
 
 // Type aliases for the document shapes we work with. These come
@@ -177,7 +178,7 @@ async function buildTourStats(
 	const assignmentCount = assignments.length;
 	const truncated = tourCount >= MAX_ANALYTICS_SCAN || assignmentCount >= MAX_ANALYTICS_SCAN;
 	if (truncated) {
-		console.warn(
+		logger.warn(
 			`[analytics.buildTourStats] 10k scan cap hit for org ${orgId} — stats undercount for this range`,
 		);
 	}
