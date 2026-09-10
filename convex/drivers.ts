@@ -131,8 +131,9 @@ export const internalCreate = internalMutation({
 		// duplicate. Use .filter() to scope by org, then .first().
 		const existing = await ctx.db
 			.query("drivers")
-			.withIndex("by_user", (q) => q.eq("userId", args.userId))
-			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+			.withIndex("by_org_user", (q) =>
+				q.eq("organizationId", args.organizationId).eq("userId", args.userId),
+			)
 			.first();
 		if (existing) {
 			throw new ConvexError("Driver profile already exists for this user");

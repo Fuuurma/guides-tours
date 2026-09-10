@@ -438,9 +438,9 @@ export const checkConflicts = query({
 
 		async function collect(
 			indexName:
-				| "by_guide_date"
-				| "by_vehicle_date"
-				| "by_driver_date",
+				| "by_org_guide_date"
+				| "by_org_vehicle_date"
+				| "by_org_driver_date",
 			indexField: string,
 			value: string,
 			conflictType: Conflict["conflictType"],
@@ -448,14 +448,8 @@ export const checkConflicts = query({
 			const rows = await ctx.db
 				.query("assignments")
 				.withIndex(indexName, (q: any) =>
-					q.eq(indexField, value).eq("date", args.date),
+					q.eq("organizationId", orgId).eq(indexField, value).eq("date", args.date),
 				)
-				// SECURITY: scope by org. A guide belonging to multiple
-				// orgs shouldn't surface other-org assignments as
-				// conflicts in this org's conflict-check UI.
-				// Bound the scan: a single date's worth of assignments
-				// per resource is small in practice.
-				.filter((q) => q.eq(q.field("organizationId"), orgId))
 				.take(MAX_CONFLICTS);
 			for (const a of rows) {
 				if (a.deletedAt) continue;
@@ -481,11 +475,11 @@ export const checkConflicts = query({
 		// index scans — run them in parallel when all three are provided.
 		await Promise.all([
 			args.guideId
-				? collect("by_guide_date", "guideId", args.guideId, "guide")
+				? collect("by_org_guide_date", "guideId", args.guideId, "guide")
 				: Promise.resolve(),
 			args.vehicleId
 				? collect(
-						"by_vehicle_date",
+						"by_org_vehicle_date",
 						"vehicleId",
 						args.vehicleId,
 						"vehicle",
@@ -493,7 +487,7 @@ export const checkConflicts = query({
 				: Promise.resolve(),
 			args.driverId
 				? collect(
-						"by_driver_date",
+						"by_org_driver_date",
 						"driverId",
 						args.driverId,
 						"driver",
@@ -1507,7 +1501,7 @@ export async function checkConflictsHelper(
 	const collected: Array<{ conflictType: "guide" | "vehicle" | "driver"; row: CollectedRow }> = [];
 
 	async function collect(
-		indexName: "by_guide_date" | "by_vehicle_date" | "by_driver_date",
+		indexName: "by_org_guide_date" | "by_org_vehicle_date" | "by_org_driver_date",
 		indexField: string,
 		value: string,
 		conflictType: "guide" | "vehicle" | "driver",
@@ -1515,11 +1509,8 @@ export async function checkConflictsHelper(
 		const rows = await ctx.db
 			.query("assignments")
 			.withIndex(indexName, (q: any) =>
-				q.eq(indexField, value).eq("date", args.date),
+				q.eq("organizationId", args.organizationId).eq(indexField, value).eq("date", args.date),
 			)
-			// SECURITY: scope to org — a guideId from another org must
-			// not surface as a "conflict" in this org's UI.
-			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
 			.take(MAX_CONFLICTS);
 		for (const r of rows) {
 			if (r.deletedAt) continue;
@@ -1540,13 +1531,13 @@ export async function checkConflictsHelper(
 
 	await Promise.all([
 		args.guideId
-			? collect("by_guide_date", "guideId", args.guideId, "guide")
+			? collect("by_org_guide_date", "guideId", args.guideId, "guide")
 			: Promise.resolve(),
 		args.vehicleId
-			? collect("by_vehicle_date", "vehicleId", args.vehicleId, "vehicle")
+			? collect("by_org_vehicle_date", "vehicleId", args.vehicleId, "vehicle")
 			: Promise.resolve(),
 		args.driverId
-			? collect("by_driver_date", "driverId", args.driverId, "driver")
+			? collect("by_org_driver_date", "driverId", args.driverId, "driver")
 			: Promise.resolve(),
 	]);
 

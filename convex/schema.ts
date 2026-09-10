@@ -92,6 +92,7 @@ export default defineSchema({
 		updatedAt: v.number(),
 	})
 		.index("by_org_status", ["organizationId", "status"])
+		.index("by_org_user", ["organizationId", "userId"])
 		.index("by_user", ["userId"])
 		.index("by_user_status", ["userId", "status"])
 		.index("by_org", ["organizationId"]),
@@ -361,6 +362,7 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_org_active", ["organizationId", "isActive"])
+		.index("by_org_user", ["organizationId", "userId"])
 		.index("by_user", ["userId"]),
 
 	// ----- Assignments -----
@@ -396,6 +398,11 @@ export default defineSchema({
 		.index("by_guide_date", ["guideId", "date"])
 		.index("by_vehicle_date", ["vehicleId", "date"])
 		.index("by_driver_date", ["driverId", "date"])
+		// Compound org-scoped resource indexes for conflict checks
+		// (replaces .filter(orgId) after by_guide/vehicle/driver_date).
+		.index("by_org_guide_date", ["organizationId", "guideId", "date"])
+		.index("by_org_vehicle_date", ["organizationId", "vehicleId", "date"])
+		.index("by_org_driver_date", ["organizationId", "driverId", "date"])
 		.index("by_schedule", ["scheduleId"]),
 
 	// ----- Bookings -----

@@ -81,8 +81,9 @@ export const list = query({
 			// a userId from another org must not be readable here.
 			all = await ctx.db
 				.query("vacationRequests")
-				.withIndex("by_user", (q) => q.eq("userId", args.userId!))
-				.filter((q) => q.eq(q.field("organizationId"), orgId))
+				.withIndex("by_org_user", (q) =>
+					q.eq("organizationId", orgId).eq("userId", args.userId!),
+				)
 				.order("desc")
 				.take(MAX_VACATION_REQUESTS);
 		} else {
