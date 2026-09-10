@@ -6,9 +6,7 @@
 
 import { v } from "convex/values";
 import { ConvexError } from "convex/values";
-import type { FunctionReference } from "convex/server";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import {
 	MAX_DESCRIPTION_LEN,
@@ -17,11 +15,11 @@ import {
 } from "./lib/validation";
 import { logAudit } from "./lib/audit";
 import { normalizeTourType, resolveTourStaffing } from "./lib/staffing";
+import { internalRefs } from "./lib/internalRefs";
 
-type InternalMutationRef = FunctionReference<"mutation", "internal">;
-const createRef = internal.tours.internalCreate as unknown as InternalMutationRef;
-const updateRef = internal.tours.internalUpdate as unknown as InternalMutationRef;
-const removeRef = internal.tours.internalRemove as unknown as InternalMutationRef;
+const createRef = internalRefs.tours.internalCreate;
+const updateRef = internalRefs.tours.internalUpdate;
+const removeRef = internalRefs.tours.internalRemove;
 
 // ----- Queries -----
 
