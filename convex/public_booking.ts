@@ -532,9 +532,7 @@ export const internalCreate = internalMutation({
 		if (scheduleId) {
 			try {
 				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
+					internal.tourSchedules.incrementBooked,
 					{
 						organizationId: args.organizationId,
 						scheduleId,
@@ -547,9 +545,7 @@ export const internalCreate = internalMutation({
 				// increment), cancel the orphaned booking so we don't
 				// leave a "pending" row that will never be confirmed.
 				await ctx.runMutation(
-					internal.bookings.internalCancel as unknown as Parameters<
-						typeof ctx.runMutation
-					>[0],
+					internal.bookings.internalCancel,
 					{
 						bookingId,
 						reason: "capacity_exceeded",

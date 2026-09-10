@@ -471,9 +471,7 @@ export const sendTest = mutation({
 		const role = args.role ?? "guide";
 		await ctx.scheduler.runAfter(
 			0,
-			internal.assignmentNotifications.sendTestInternal as unknown as Parameters<
-				typeof ctx.scheduler.runAfter
-			>[1],
+			internal.assignmentNotifications.sendTestInternal,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -549,9 +547,7 @@ export const resend = mutation({
 		if (target === "guide" || target === "both") {
 			await ctx.scheduler.runAfter(
 				0,
-				internal.assignmentNotifications.notifyGuide as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[1],
+				internal.assignmentNotifications.notifyGuide,
 				{ ...base, guideId: a.guideId },
 			);
 			guideQueued = true;
@@ -559,9 +555,7 @@ export const resend = mutation({
 		if ((target === "driver" || target === "both") && a.driverId) {
 			await ctx.scheduler.runAfter(
 				0,
-				internal.assignmentNotifications.notifyDriver as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[1],
+				internal.assignmentNotifications.notifyDriver,
 				{ ...base, driverId: a.driverId },
 			);
 			driverQueued = true;

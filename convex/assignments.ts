@@ -872,9 +872,7 @@ export const internalCreate = internalMutation({
 
 	await ctx.scheduler.runAfter(
 		0,
-		internal.assignmentNotifications.notifyGuide as unknown as Parameters<
-			typeof ctx.scheduler.runAfter
-		>[1],
+		internal.assignmentNotifications.notifyGuide,
 		{
 			organizationId: args.organizationId,
 			assignmentId,
@@ -890,9 +888,7 @@ export const internalCreate = internalMutation({
 	if (args.driverId) {
 		await ctx.scheduler.runAfter(
 			0,
-			internal.assignmentNotifications.notifyDriver as unknown as Parameters<
-				typeof ctx.scheduler.runAfter
-			>[1],
+			internal.assignmentNotifications.notifyDriver,
 			{
 				organizationId: args.organizationId,
 				assignmentId,
@@ -1217,9 +1213,7 @@ export const internalUpdate = internalMutation({
 			};
 			await ctx.scheduler.runAfter(
 				0,
-				internal.assignmentNotifications.notifyGuide as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[1],
+				internal.assignmentNotifications.notifyGuide,
 				{
 					...notifyArgs,
 					guideId: next.guideId,
@@ -1228,9 +1222,7 @@ export const internalUpdate = internalMutation({
 			);
 			await ctx.scheduler.runAfter(
 				0,
-				internal.assignmentNotifications.notifyGuide as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[1],
+				internal.assignmentNotifications.notifyGuide,
 				{
 					...notifyArgs,
 					guideId: existing.guideId,
@@ -1251,9 +1243,7 @@ export const internalUpdate = internalMutation({
 			if (next.driverId) {
 				await ctx.scheduler.runAfter(
 					0,
-					internal.assignmentNotifications.notifyDriver as unknown as Parameters<
-						typeof ctx.scheduler.runAfter
-					>[1],
+					internal.assignmentNotifications.notifyDriver,
 					{
 						...notifyArgs,
 						driverId: next.driverId,
@@ -1264,9 +1254,7 @@ export const internalUpdate = internalMutation({
 			if (existing.driverId) {
 				await ctx.scheduler.runAfter(
 					0,
-					internal.assignmentNotifications.notifyDriver as unknown as Parameters<
-						typeof ctx.scheduler.runAfter
-					>[1],
+					internal.assignmentNotifications.notifyDriver,
 					{
 						...notifyArgs,
 						driverId: existing.driverId,
@@ -1345,9 +1333,7 @@ export const internalCancel = internalMutation({
 		const tour = await ctx.db.get(a.tourId);
 		await ctx.scheduler.runAfter(
 			0,
-			internal.assignmentNotifications.notifyGuide as unknown as Parameters<
-				typeof ctx.scheduler.runAfter
-			>[1],
+			internal.assignmentNotifications.notifyGuide,
 			{
 				organizationId: a.organizationId,
 				assignmentId: args.assignmentId,
@@ -1363,9 +1349,7 @@ export const internalCancel = internalMutation({
 		if (a.driverId) {
 			await ctx.scheduler.runAfter(
 				0,
-				internal.assignmentNotifications.notifyDriver as unknown as Parameters<
-					typeof ctx.scheduler.runAfter
-				>[1],
+				internal.assignmentNotifications.notifyDriver,
 				{
 					organizationId: a.organizationId,
 					assignmentId: args.assignmentId,

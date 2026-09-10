@@ -483,9 +483,7 @@ export const sendTest = mutation({
 		}
 		await ctx.scheduler.runAfter(
 			0,
-			internal.notificationTemplates.sendTestInternal as unknown as Parameters<
-				typeof ctx.scheduler.runAfter
-			>[2],
+			internal.notificationTemplates.sendTestInternal,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
@@ -547,9 +545,7 @@ export const sendTestInternal = internalAction({
 				bodyHtml: rendered.bodyHtml,
 			});
 			await ctx.runMutation(
-				internal.notificationTemplates.recordTestLog as unknown as Parameters<
-					typeof ctx.runMutation
-				>[0],
+				internal.notificationTemplates.recordTestLog,
 				{
 					organizationId: args.organizationId,
 					userId: args.userId,
@@ -581,9 +577,7 @@ export const sendTestInternal = internalAction({
 			recipientName: "Test",
 		});
 		await ctx.runMutation(
-			internal.notificationTemplates.recordTestLog as unknown as Parameters<
-				typeof ctx.runMutation
-			>[0],
+			internal.notificationTemplates.recordTestLog,
 			{
 				organizationId: args.organizationId,
 				userId: args.userId,
