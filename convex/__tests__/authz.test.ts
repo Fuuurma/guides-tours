@@ -6,7 +6,7 @@ import { roles, ALL_ROLES } from "../authz"
 // this via roles[role].authorize(). If you change who may do what, change it
 // in authz.ts statements AND this matrix.
 describe("declared RBAC matrix (booking resource)", () => {
-  const can = (role: string, action: string) =>
+  const can = (role: string, action: "create" | "read" | "update" | "delete") =>
     roles[role as keyof typeof roles]?.authorize({ booking: [action] }).success
 
   it("owner and admin have full booking CRUD", () => {
