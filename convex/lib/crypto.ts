@@ -52,6 +52,15 @@ function getKeyMaterial(): Uint8Array {
 	);
 }
 
+// The CryptoKey cache below is deliberately module-scope (verdict 2026-09-10,
+// worker shift): the key is imported non-extractable, so isolate memory holds
+// nothing the env var doesn't already provide to the same isolate. Env
+// rotation takes effect on the next Convex push/deploy — re-bundling
+// re-instantiates the module and resets the cache; no TTL or per-call re-read
+// is needed. NOTE for a future key rotation with existing ciphertexts: the
+// format "iv:ct:tag" carries no key version — add a version prefix (e.g.
+// "v2:…") and per-version key lookups BEFORE rotating, or old data becomes
+// undecryptable. That is an owner-scale change, not a cache change.
 let cachedKey: CryptoKey | null = null;
 
 async function getKey(): Promise<CryptoKey> {
