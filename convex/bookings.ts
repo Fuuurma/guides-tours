@@ -27,7 +27,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requirePermission } from "./lib/authz";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
 import {
@@ -369,11 +369,9 @@ export const create = mutation({
 		// (throws "Schedule over capacity" if there's no room).
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-		]);
+		// Enforce the declared RBAC (authz.ts): member is read-only on
+		// bookings — create requires owner/admin.
+		const member = await requirePermission(ctx, "booking", "create");
 
 		// Tour and customer are independent lookups — fetch in parallel.
 		const [tour, customer] = await Promise.all([
@@ -630,11 +628,8 @@ export const update = mutation({
 		scheduleId: v.optional(v.id("tourSchedules")),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-		]);
+		// Enforce declared RBAC: booking:update (owner/admin only).
+		const member = await requirePermission(ctx, "booking", "update");
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
 		if (booking.organizationId !== member.organizationId) {
@@ -648,7 +643,8 @@ export const update = mutation({
 export const confirm = mutation({
 	args: { bookingId: v.id("bookings") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		// Enforce declared RBAC: booking:update (owner/admin only).
+		const member = await requirePermission(ctx, "booking", "update");
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
 		if (booking.organizationId !== member.organizationId) {
@@ -709,7 +705,8 @@ export const cancel = mutation({
 		reason: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		// Enforce declared RBAC: booking:update (owner/admin only).
+		const member = await requirePermission(ctx, "booking", "update");
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
 		if (booking.organizationId !== member.organizationId) {
@@ -739,11 +736,8 @@ export const internalCancel = internalMutation({
 export const checkIn = mutation({
 	args: { bookingId: v.id("bookings") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-		]);
+		// Enforce declared RBAC: booking:update (owner/admin only).
+		const member = await requirePermission(ctx, "booking", "update");
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
 		if (booking.organizationId !== member.organizationId) {
@@ -783,11 +777,8 @@ export const checkIn = mutation({
 export const complete = mutation({
 	args: { bookingId: v.id("bookings") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-		]);
+		// Enforce declared RBAC: booking:update (owner/admin only).
+		const member = await requirePermission(ctx, "booking", "update");
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
 		if (booking.organizationId !== member.organizationId) {
@@ -818,11 +809,8 @@ export const recordReview = mutation({
 		comment: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-		]);
+		// Enforce declared RBAC: booking:update (owner/admin only).
+		const member = await requirePermission(ctx, "booking", "update");
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
 		if (booking.organizationId !== member.organizationId) {

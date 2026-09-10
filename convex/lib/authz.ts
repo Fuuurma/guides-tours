@@ -18,6 +18,7 @@
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import { authComponent, createAuth } from "../auth";
+import { roles, type RoleName } from "../authz";
 import { logger } from "./logger";
 
 export type Role = "owner" | "admin" | "member" | "guide" | "driver";
@@ -129,6 +130,36 @@ export async function getActiveMembership(ctx: Ctx): Promise<Member> {
  */
 export async function requireMembership(ctx: Ctx): Promise<Member> {
 	return getActiveMembership(ctx);
+}
+
+/**
+ * FO-02 follow-up / devin 09-01 P1: enforce the DECLARED per-resource
+ * RBAC statements (convex/authz.ts) instead of coarse role lists.
+ *
+ * Resolves the caller's membership, then checks the role's declared
+ * statements for `resource:action` via the Better Auth access-control
+ * `authorize`. Throws ConvexError on denial with role/resource/action.
+ *
+ * NOTE: this is the enforcement path for the declared config — to change
+ * who may do what, edit the statements/roles in authz.ts, not the callers.
+ */
+export async function requirePermission(
+  ctx: Ctx,
+  resource: string,
+  action: string,
+): Promise<Member> {
+  const member = await requireMembership(ctx);
+  const role = roles[member.role as RoleName];
+  if (!role) {
+    throw new ConvexError(`Forbidden: unknown role "${member.role}"`);
+  }
+  const verdict = role.authorize({ [resource]: [action] });
+  if (!verdict.success) {
+    throw new ConvexError(
+      `Forbidden: role "${member.role}" lacks ${action} on ${resource}`,
+    );
+  }
+  return member;
 }
 
 /**
