@@ -199,6 +199,7 @@ function SignInPage() {
 						No account yet?{" "}
 						<Link
 							to="/sign-up"
+							search={redirect ? { redirect } : {}}
 							className="font-medium text-foreground underline"
 						>
 							Create one
