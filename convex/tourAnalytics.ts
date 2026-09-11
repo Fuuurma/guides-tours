@@ -19,8 +19,7 @@ import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { utcYmd, addDaysYmd } from "./lib/staffingGaps";
 
-const MAX_TOURS = 500;
-const MAX_BOOKINGS = 5_000;
+const PAGE_SIZE = 1_000;
 
 // ---- queries ----
 
@@ -278,34 +277,31 @@ export const computeForOrgDay = internalMutation({
 	args: {
 		organizationId: v.string(),
 		periodDate: v.string(),
+		cursor: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const tours = await ctx.db
+		// Paginate-once + self-continuation (Convex allows one .paginate()
+		// per function). The old .take(MAX_TOURS=500) silently dropped
+		// tours past the cap and .take(MAX_BOOKINGS=5000) under-counted
+		// org-days — the same class fixed in runDaily 5969342 (fleet
+		// finding 2026-09-08 P1). Per-tour bookings read through
+		// by_tour_date + collect(): a tour's daily bookings are
+		// capacity-bound, and collect() reads the real set, no cap.
+		const result = await ctx.db
 			.query("tours")
 			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-			.take(MAX_TOURS);
-		const bookings = await ctx.db
-			.query("bookings")
-			.withIndex("by_org_date", (q) =>
-				q
-					.eq("organizationId", args.organizationId)
-					.eq("date", args.periodDate),
-			)
-			.take(MAX_BOOKINGS);
-
-		const byTour = new Map<string, typeof bookings>();
-		for (const b of bookings) {
-			const key = String(b.tourId);
-			const list = byTour.get(key) ?? [];
-			list.push(b);
-			byTour.set(key, list);
-		}
+			.paginate({ numItems: PAGE_SIZE, cursor: args.cursor ?? null });
 
 		let upserted = 0;
-		for (const tour of tours) {
+		for (const tour of result.page) {
 			if (tour.deletedAt !== undefined) continue;
-			const dayBookings = byTour.get(String(tour._id));
-			if (!dayBookings || dayBookings.length === 0) continue;
+			const dayBookings = await ctx.db
+				.query("bookings")
+				.withIndex("by_tour_date", (q) =>
+					q.eq("tourId", tour._id).eq("date", args.periodDate),
+				)
+				.collect();
+			if (dayBookings.length === 0) continue;
 
 			const active = dayBookings.filter((b) => b.status !== "cancelled");
 			const cancellations = dayBookings.length - active.length;
@@ -348,7 +344,15 @@ export const computeForOrgDay = internalMutation({
 			});
 			upserted += 1;
 		}
-		return { upserted };
+
+		if (!result.isDone) {
+			await ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
+				organizationId: args.organizationId,
+				periodDate: args.periodDate,
+				cursor: result.continueCursor,
+			});
+		}
+		return { upserted, done: result.isDone };
 	},
 });
 

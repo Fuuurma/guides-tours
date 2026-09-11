@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -268,5 +269,76 @@ describe("tour analytics cache", () => {
 		expect(rows[0]!.cancellations).toBe(1);
 		expect(rows[0]!.utilizationRate).toBe(0.5);
 		expect(rows[0]!.avgGroupSize).toBe(5);
+	});
+
+	it("computeForOrgDay: tours past index 500 are still computed", async () => {
+		// Regression pin for the old .take(MAX_TOURS=500) silent cap —
+		// the only booking sits on tour #501, invisible under take(500).
+		const t = convexTest(schema, modules);
+		const orgId = "org_ta7";
+		const lastTourId = await t.run(async (ctx) => {
+			let last = (await seedTour(ctx, orgId)) as Id<"tours">;
+			for (let i = 0; i < 500; i++) last = await seedTour(ctx, orgId);
+			const customerId = await ctx.db.insert("customers", {
+				organizationId: orgId,
+				name: "C",
+				email: "c@example.com",
+				phone: "",
+				notes: "",
+				smsConsent: false,
+				emailConsent: false,
+				preferredLanguage: "en",
+				tags: [],
+				source: "direct",
+				sourceDetails: "",
+				specialRequirements: "",
+				vipStatus: false,
+				loyaltyPoints: 0,
+				totalVisits: 0,
+				totalRevenueCents: 0n,
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			await ctx.db.insert("bookings", {
+				organizationId: orgId,
+				tourId: last,
+				customerId,
+				date: "2026-09-10",
+				startTime: "09:00",
+				guests: 3,
+				guestNames: "",
+				languageRequired: "en",
+				notes: "",
+				status: "confirmed",
+				depositAmountCents: 0n,
+				totalAmountCents: 9000n,
+				balanceDueCents: 9000n,
+				paymentMethod: "",
+				checkedInBy: "",
+				netRevenueCents: 9000n,
+				source: "direct",
+				reviewComment: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return last;
+		});
+
+		const result = await t.mutation(internal.tourAnalytics.computeForOrgDay, {
+			organizationId: orgId,
+			periodDate: "2026-09-10",
+		});
+		expect(result.upserted).toBe(1);
+
+		const rows = await t.run((ctx) =>
+			ctx.db
+				.query("tourAnalytics")
+				.withIndex("by_tour_period", (q) =>
+					q.eq("tourId", lastTourId).eq("periodDate", "2026-09-10"),
+				)
+				.collect(),
+		);
+		expect(rows.length).toBe(1);
+		expect(rows[0]!.totalBookings).toBe(1);
 	});
 });
