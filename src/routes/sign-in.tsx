@@ -189,7 +189,9 @@ function SignInPage() {
 
 					<GoogleSignInButton
 						callbackURL={
-							redirect ? `${window.location.origin}${redirect}` : "/dashboard"
+							redirect
+								? `${typeof window !== "undefined" ? window.location.origin : ""}${redirect}`
+								: "/dashboard"
 						}
 					/>
 
