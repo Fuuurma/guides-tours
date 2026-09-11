@@ -769,6 +769,21 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	// should not be able to tell which orgIds have Stripe enabled.
 	const UNIFORM_OK = new Response("ok", { status: 200 });
 	if (!orgId) {
+		// Handled-type events that resolve no org are real drops — e.g. a
+		// charge.refunded whose PI has no local row never gets recorded.
+		// Log server-side for ops while keeping the uniform 200; other
+		// event types (payouts, balance…) never carry our metadata and
+		// are noise by design, so stay silent.
+		if (
+			eventType === "payment_intent.succeeded" ||
+			eventType === "payment_intent.payment_failed" ||
+			eventType === "checkout.session.completed" ||
+			eventType === "charge.refunded"
+		) {
+			logger.warn(
+				`[stripe-webhook] ${eventType} unresolvable — no metadata.organizationId and no local payment row (event=${parsed.id ?? "?"})`,
+			);
+		}
 		return UNIFORM_OK;
 	}
 
