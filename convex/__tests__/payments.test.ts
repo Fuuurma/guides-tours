@@ -241,6 +241,48 @@ describe("convex/payments — markSucceeded / markFailed / markRefunded", () => 
 		expect(String(booking?.balanceDueCents)).toBe("5000");
 	});
 
+	it("markSucceeded flags payment.overpaid when the balance dropped after intent creation", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_overpaid";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		// Intent created for the full 10000 balance…
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 10000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_test_overpaid",
+		});
+		// …then another payment drops the balance to 4000 before the
+		// card confirms — the charge still lands for 10000.
+		await t.run(async (ctx) => {
+			await ctx.db.patch(bookingId, { balanceDueCents: 4000n });
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		expect(String(booking?.balanceDueCents)).toBe("0");
+		expect(String(booking?.depositAmountCents)).toBe("4000");
+
+		const audits = (await t.run(async (ctx) =>
+			ctx.db
+				.query("auditLogs")
+				.withIndex("by_resource", (q) =>
+					q
+						.eq("resourceType", "payment")
+						.eq("resourceId", paymentId),
+				)
+				.collect(),
+		)) as any[];
+		const overpaid = audits.find((a) => a.action === "payment.overpaid");
+		expect(overpaid?.newValues?.overpaidCents).toBe("6000");
+		expect(overpaid?.newValues?.chargedCents).toBe("10000");
+	});
+
 	it("markFailed captures the failure reason", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pay_e";

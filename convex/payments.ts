@@ -37,9 +37,10 @@ async function applyPaymentToBooking(
 		amountCents: bigint;
 		now: number;
 	},
-): Promise<void> {
+): Promise<{ applied: bigint; overpaid: bigint }> {
 	const booking = await ctx.db.get(args.bookingId);
-	if (!booking || booking.organizationId !== args.organizationId) return;
+	if (!booking || booking.organizationId !== args.organizationId)
+		return { applied: 0n, overpaid: 0n };
 	const paid = args.amountCents;
 	const prevBalance = booking.balanceDueCents;
 	const nextBalance = prevBalance > paid ? prevBalance - paid : 0n;
@@ -49,6 +50,10 @@ async function applyPaymentToBooking(
 		depositAmountCents: booking.depositAmountCents + applied,
 		updatedAt: args.now,
 	});
+	// If the balance dropped between intent creation and card confirm,
+	// the customer was charged more than was due — the excess is real
+	// money needing a refund, so it must not vanish into the clamp.
+	return { applied, overpaid: paid - applied };
 }
 
 /** Reverse a refunded charge back onto booking.balanceDueCents. */
@@ -327,12 +332,27 @@ export const markSucceeded = internalMutation({
 		});
 
 		if (p.bookingId) {
-			await applyPaymentToBooking(ctx, {
+			const { overpaid } = await applyPaymentToBooking(ctx, {
 				organizationId: p.organizationId,
 				bookingId: p.bookingId,
 				amountCents: p.amountCents,
 				now,
 			});
+			if (overpaid > 0n) {
+				await logAudit(ctx, {
+					organizationId: p.organizationId,
+					userId: "stripe_webhook",
+					action: "payment.overpaid",
+					resourceType: "payment",
+					resourceId: args.paymentId,
+					oldValues: {},
+					newValues: {
+						bookingId: p.bookingId,
+						chargedCents: p.amountCents.toString(),
+						overpaidCents: overpaid.toString(),
+					},
+				});
+			}
 		}
 
 		await logAudit(ctx, {
