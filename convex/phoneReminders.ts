@@ -437,19 +437,24 @@ export const sendReminders = mutation({
 export const PHONE_REMIND_SEND_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const purgeOldSends = internalMutation({
-	args: {},
-	handler: async (ctx) => {
+	args: {
+		// Paginated org discovery: the old bare .take(100) silently
+		// skipped orgs past the first page (org 101+ never purged).
+		cursor: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
 		const cutoff = Date.now() - PHONE_REMIND_SEND_RETENTION_MS;
 		const MAX_PER_ORG = 500;
 		// Iterate orgs via notificationSettings (the set of orgs that
-		// could have phoneReminderSends rows). Previously used the
-		// non-org-scoped by_lastSentAt index, which meant one org's
-		// old rows could crowd out another's in the .take(2000) cap.
+		// could have phoneReminderSends rows), one paginated page per
+		// run with self-continuation (mirror of tourAnalytics.runDaily).
+		// Previously a bare .take(100) capped discovery, so orgs past
+		// the first 100 never had their old sends purged.
 		const orgSettings = await ctx.db
 			.query("notificationSettings")
-			.take(100);
+			.paginate({ numItems: 100, cursor: args.cursor ?? null });
 		let totalDeleted = 0;
-		for (const settings of orgSettings) {
+		for (const settings of orgSettings.page) {
 			const old = await ctx.db
 				.query("phoneReminderSends")
 				.withIndex("by_org_lastSentAt", (q) =>
@@ -460,6 +465,14 @@ export const purgeOldSends = internalMutation({
 				.take(MAX_PER_ORG);
 			await Promise.all(old.map((row) => ctx.db.delete(row._id)));
 			totalDeleted += old.length;
+		}
+		if (!orgSettings.isDone) {
+			// Continue discovery on the next page — the cron chain walks
+			// the whole table across runs (self-continuation, mirroring
+			// tourAnalytics.runDaily).
+			await ctx.scheduler.runAfter(0, internal.phoneReminders.purgeOldSends, {
+				cursor: orgSettings.continueCursor,
+			});
 		}
 		if (totalDeleted > 0) {
 			logger.info(

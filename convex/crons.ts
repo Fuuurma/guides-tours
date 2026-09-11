@@ -79,6 +79,7 @@ crons.daily(
 	"cleanup_old_phone_reminder_sends",
 	{ hourUTC: 4, minuteUTC: 45 },
 	internal.phoneReminders.purgeOldSends,
+	{},
 );
 
 // Daily at 05:00 UTC — refresh tourAnalytics daily cache for yesterday.
