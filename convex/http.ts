@@ -294,11 +294,15 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 function isAllowedBookingOrigin(origin: string | null): boolean {
-	const allowedOriginsRaw = process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS;
-	// Fail closed in production: an unset allowlist must not disable the
-	// only CSRF barrier on an unauthenticated booking endpoint (fleet
-	// audit 2026-09-01). Development hosts stay permissive for local work.
-	if (!allowedOriginsRaw) {
+	const allowed = (process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS ?? "")
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
+	// Fail closed in production whenever no effective allowlist exists —
+	// unset OR set-but-empty ("" / all-whitespace parses to zero origins and
+	// must not silently open the only CSRF barrier on an unauthenticated
+	// endpoint). Development hosts stay permissive for local work.
+	if (allowed.length === 0) {
 		// Unset CONVEX_SITE_URL = unconfigured deployment (local dev, unit
 		// tests) — stay permissive. A SET, non-local site URL is production:
 		// fail closed so a missing allowlist can't disable the only CSRF
@@ -316,11 +320,7 @@ function isAllowedBookingOrigin(origin: string | null): boolean {
 		);
 		return false;
 	}
-	const allowed = allowedOriginsRaw
-		.split(",")
-		.map((s) => s.trim())
-		.filter(Boolean);
-	return allowed.length === 0 ? true : origin !== null && allowed.includes(origin);
+	return origin !== null && allowed.includes(origin);
 }
 
 function bookingResponse(
