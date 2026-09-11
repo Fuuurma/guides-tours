@@ -24,7 +24,7 @@
     "typecheck": "tsc --noEmit",
     "check": "biome check --error-on-warnings",
     "deploy:check": "node scripts/deploy-check.mjs",
-    "deploy": "pnpm deploy:check && pnpm build && wrangler deploy"
+    "deploy": "pnpm deploy:check && pnpm typecheck && pnpm build && wrangler deploy"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.48.0",
