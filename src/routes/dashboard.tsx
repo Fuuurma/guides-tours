@@ -21,12 +21,17 @@ import { authClient } from "@/lib/auth-client";
 import { api } from "../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard")({
-	beforeLoad: async ({ context }) => {
+	beforeLoad: async ({ context, location }) => {
 		// Route-level auth guard — prevents unauthenticated users from
 		// accessing any dashboard sub-route. The root route sets
 		// `isAuthenticated` from the server-side token check.
 		if (!context.isAuthenticated) {
-			throw redirect({ to: "/sign-in" });
+			// Carry the attempted URL through: /sign-in validates it
+			// (same-origin path only) and navigates back after auth.
+			throw redirect({
+				to: "/sign-in",
+				search: { redirect: location.href },
+			});
 		}
 	},
 	component: DashboardLayout,
