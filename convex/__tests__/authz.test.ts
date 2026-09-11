@@ -11,7 +11,7 @@ describe("declared RBAC matrix (booking resource)", () => {
 
   it("owner and admin have full booking CRUD", () => {
     for (const role of ["owner", "admin"]) {
-      for (const action of ["create", "read", "update", "delete"]) {
+      for (const action of ["create", "read", "update", "delete"] as const) {
         expect(can(role, action), `${role}:${action}`).toBe(true)
       }
     }
@@ -19,7 +19,7 @@ describe("declared RBAC matrix (booking resource)", () => {
 
   it("member is read-only on bookings (declared intent, now enforced)", () => {
     expect(can("member", "read")).toBe(true)
-    for (const action of ["create", "update", "delete"]) {
+    for (const action of ["create", "update", "delete"] as const) {
       expect(can("member", action)).toBe(false)
     }
   })
@@ -27,7 +27,7 @@ describe("declared RBAC matrix (booking resource)", () => {
   it("guide and driver are read-only on bookings", () => {
     for (const role of ["guide", "driver"]) {
       expect(can(role, "read")).toBe(true)
-      for (const action of ["create", "update", "delete"]) {
+      for (const action of ["create", "update", "delete"] as const) {
         expect(can(role, action), `${role}:${action}`).toBe(false)
       }
     }
