@@ -59,10 +59,11 @@ http.route({
 //   (e.g. "https://tours.example.com,https://www.example.com").
 //   The Origin header is optional in modern browsers for same-origin
 //   POST; we only reject when an Origin is present and not allowed.
-// - Per-email rate limit (5 attempts / 15 min) via
-//   convex/lib/rate_limit.ts. Enforced inside the createForSlug
-//   action so it can't be bypassed by hitting the httpAction
-//   repeatedly with different slugs.
+// - Dual rate limits via convex/lib/rate_limit.ts, enforced inside
+//   the createForSlug action so they can't be bypassed by hitting
+//   the httpAction repeatedly with different slugs:
+//   5 attempts / 15 min per email AND 10 attempts / 15 min per IP
+//   (by_ip_created sliding window on the extracted client IP).
 http.route({
 	pathPrefix: "/api/public/book/",
 	method: "OPTIONS",
