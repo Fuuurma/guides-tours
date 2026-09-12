@@ -34,7 +34,6 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 | `SITE_URL` | this app's prod URL | e.g. `https://guides-tours.fuurma.tech` |
 | `VITE_CONVEX_URL` | from `npx convex deploy --prod` output | auto-injected at build time |
 | `VITE_SITE_URL` | this app's prod URL | e.g. `https://guides-tours.fuurma.tech` — must match `SITE_URL` |
-| `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe dashboard | `pk_live_...` (publishable key is safe in the bundle) |
 | `ENCRYPTION_KEY` | local `openssl rand -hex 32` | 64-char hex used to encrypt OTA/Stripe secrets at rest in Convex |
 
 ### Convex (via `npx convex env set` or dashboard)
@@ -44,9 +43,7 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 | `BETTER_AUTH_SECRET` | auth | `openssl rand -base64 32` |
 | `SITE_URL` | auth | must match Cloudflare Worker URL |
 | `ENCRYPTION_KEY` | OTA/Stripe secret encryption | same 64-char hex as the Worker; without it, secret round-trip will fail with `crypto.getRandomValues`-style errors at decrypt time |
-| `STRIPE_SECRET_KEY` | payments | `sk_live_...` |
-| `STRIPE_WEBHOOK_SECRET` | payments | from Stripe dashboard |
-| `STRIPE_PUBLISHABLE_KEY` | payments | `pk_live_...` (optional; read by some Stripe helpers) |
+| — | payments (Stripe) | **No env vars.** Stripe credentials are per-org encrypted rows in `paymentSettings` (`stripeSecretKey` / `stripeWebhookSecret`), configured in-product and decrypted via `getStripeSecrets` |
 | `AWS_REGION` | SES email | e.g. `us-east-1` |
 | `AWS_ACCESS_KEY_ID` | SES email | IAM user with `ses:SendEmail` |
 | `AWS_SECRET_ACCESS_KEY` | SES email | same IAM user |

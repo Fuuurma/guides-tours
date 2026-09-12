@@ -84,11 +84,12 @@ const groups = [
     keys: ["AWS_REGION", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "SES_FROM_ADDRESS"],
     check: (key) => (convexProdHas(key) ? "set" : ""),
   },
-  {
-    label: "Convex prod — billing (Stripe)",
-    keys: ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PUBLISHABLE_KEY"],
-    check: (key) => (convexProdHas(key) ? "set" : ""),
-  },
+  // NOTE: no global STRIPE_* env vars — Stripe credentials are per-org
+  // encrypted rows (schema paymentSettings.stripeSecretKey /
+  // stripeWebhookSecret, read via getStripeSecrets). A per-org-configured
+  // deployment must not be hard-blocked by secrets no code reads, and
+  // "billing ready" cannot be asserted from env presence
+  // (fleet needs-work 2026-09-10 P2).
   {
     label: "Convex prod — public-booking origin allowlist (production safety)",
     keys: ["PUBLIC_BOOKING_ALLOWED_ORIGINS"],
