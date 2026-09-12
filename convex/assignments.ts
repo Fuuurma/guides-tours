@@ -21,7 +21,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 import type { Id, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
@@ -79,6 +79,54 @@ export function rangesOverlap(
 	return (
 		timeToMinutes(startA) < timeToMinutes(endB) &&
 		timeToMinutes(endA) > timeToMinutes(startB)
+	);
+}
+
+type ConflictIndexName =
+	| "by_org_guide_date"
+	| "by_org_vehicle_date"
+	| "by_org_driver_date";
+
+/**
+ * Shared conflict-scan core: rows of `assignments` overlapping
+ * [startTime, endTime] on `date` for one resource index, minus
+ * deleted/non-scheduled/excluded rows. `checkConflicts` (public query)
+ * and `checkConflictsHelper` (mutation-side) used to each carry a
+ * verbatim copy of this (fleet finding 2026-08-31 P2).
+ */
+async function collectConflictRows(
+	ctx: QueryCtx | MutationCtx,
+	opts: {
+		orgId: string;
+		date: string;
+		startTime: string;
+		endTime: string;
+		indexName: ConflictIndexName;
+		indexField: string;
+		value: string;
+		excludeAssignmentId?: Id<"assignments"> | string;
+	},
+): Promise<Doc<"assignments">[]> {
+	const rows = await ctx.db
+		.query("assignments")
+		.withIndex(opts.indexName, (q: any) =>
+			q
+				.eq("organizationId", opts.orgId)
+				.eq(opts.indexField, opts.value)
+				.eq("date", opts.date),
+		)
+		.take(MAX_CONFLICTS);
+	return rows.filter(
+		(a) =>
+			!a.deletedAt &&
+			a.status === "scheduled" &&
+			!(opts.excludeAssignmentId && a._id === opts.excludeAssignmentId) &&
+			rangesOverlap(
+				opts.startTime,
+				opts.endTime,
+				a.startTime,
+				a.endTime ?? a.startTime,
+			),
 	);
 }
 
@@ -421,51 +469,26 @@ export const checkConflicts = query({
 		// Collect every overlapping assignment per conflict type.
 		// We keep the assignment + its conflict type so we can build
 		// the final conflict array after the tour lookup pass.
-		const assignmentsList: Array<{
-			_id: Id<"assignments">;
-			organizationId: string;
-			tourId: Id<"tours">;
-			guideId: string;
-			vehicleId?: Id<"vehicles">;
-			driverId?: Id<"drivers">;
-			date: string;
-			startTime: string;
-			endTime?: string;
-			status: "scheduled" | "completed" | "cancelled";
-			deletedAt?: number;
-		}> = [];
+		const assignmentsList: Doc<"assignments">[] = [];
 		const overlapping: Conflict[] = [];
 
 		async function collect(
-			indexName:
-				| "by_org_guide_date"
-				| "by_org_vehicle_date"
-				| "by_org_driver_date",
+			indexName: ConflictIndexName,
 			indexField: string,
 			value: string,
 			conflictType: Conflict["conflictType"],
 		): Promise<void> {
-			const rows = await ctx.db
-				.query("assignments")
-				.withIndex(indexName, (q: any) =>
-					q.eq("organizationId", orgId).eq(indexField, value).eq("date", args.date),
-				)
-				.take(MAX_CONFLICTS);
+			const rows = await collectConflictRows(ctx, {
+				orgId,
+				date: args.date,
+				startTime: candidateStart,
+				endTime: candidateEnd,
+				indexName,
+				indexField,
+				value,
+				excludeAssignmentId: args.excludeAssignmentId,
+			});
 			for (const a of rows) {
-				if (a.deletedAt) continue;
-				if (a.status !== "scheduled") continue;
-				if (args.excludeAssignmentId && a._id === args.excludeAssignmentId)
-					continue;
-				if (
-					!rangesOverlap(
-						candidateStart,
-						candidateEnd,
-						a.startTime,
-						a.endTime ?? a.startTime,
-					)
-				) {
-					continue;
-				}
 				assignmentsList.push(a);
 				overlapping.push({ conflictType, assignment: a });
 			}
@@ -1490,43 +1513,28 @@ export async function checkConflictsHelper(
 	// public checkConflicts query already does this, but the helper
 	// was sequential. Also batch tour name lookups instead of using
 	// hardcoded "(guide conflict)" placeholders.
-	type CollectedRow = {
-		_id: string;
-		tourId: Id<"tours">;
-		startTime: string;
-		endTime?: string;
-		deletedAt?: number;
-		status: string;
-	};
-	const collected: Array<{ conflictType: "guide" | "vehicle" | "driver"; row: CollectedRow }> = [];
+	const collected: Array<{
+		conflictType: "guide" | "vehicle" | "driver";
+		row: Doc<"assignments">;
+	}> = [];
 
 	async function collect(
-		indexName: "by_org_guide_date" | "by_org_vehicle_date" | "by_org_driver_date",
+		indexName: ConflictIndexName,
 		indexField: string,
 		value: string,
 		conflictType: "guide" | "vehicle" | "driver",
 	): Promise<void> {
-		const rows = await ctx.db
-			.query("assignments")
-			.withIndex(indexName, (q: any) =>
-				q.eq("organizationId", args.organizationId).eq(indexField, value).eq("date", args.date),
-			)
-			.take(MAX_CONFLICTS);
-		for (const r of rows) {
-			if (r.deletedAt) continue;
-			if (r.status !== "scheduled") continue;
-			if (args.excludeAssignmentId && r._id === args.excludeAssignmentId) continue;
-			if (
-				rangesOverlap(
-					args.startTime,
-					args.endTime,
-					r.startTime,
-					r.endTime ?? r.startTime,
-				)
-			) {
-				collected.push({ conflictType, row: r as CollectedRow });
-			}
-		}
+		const rows = await collectConflictRows(ctx, {
+			orgId: args.organizationId,
+			date: args.date,
+			startTime: args.startTime,
+			endTime: args.endTime,
+			indexName,
+			indexField,
+			value,
+			excludeAssignmentId: args.excludeAssignmentId,
+		});
+		for (const r of rows) collected.push({ conflictType, row: r });
 	}
 
 	await Promise.all([
