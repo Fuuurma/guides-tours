@@ -136,7 +136,16 @@ export const upsertOtaBooking = internalMutation({
 		};
 
 		if (existing) {
-			await ctx.db.patch(existing._id, patch);
+			// A re-delivered/re-emitted BOOKING_CREATED for a previously
+			// cancelled reservation re-confirms it: clear the stale
+			// cancelledAt so the row isn't left in an inconsistent
+			// confirmed+cancelledAt state. The audit row below records
+			// the cancelled→confirmed transition via oldValues.
+			const patchToApply =
+				existing.status === "cancelled"
+					? { ...patch, cancelledAt: undefined }
+					: patch;
+			await ctx.db.patch(existing._id, patchToApply);
 			await logAudit(ctx, {
 				organizationId,
 				userId: "system",

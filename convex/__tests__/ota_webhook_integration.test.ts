@@ -139,6 +139,34 @@ describe("OTA webhook upsert — Viator", () => {
 		)) as any;
 		expect(row?.status).toBe("cancelled");
 	});
+
+	test("re-create after cancel re-confirms and clears cancelledAt", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_vi4";
+		const integrationId = await t.run((ctx) =>
+			seedIntegration(ctx, orgId, "viator"),
+		);
+		await upsertViaViator(t, orgId, integrationId, "VR-004");
+		await t.mutation(internal.ota.upsert.cancelOtaBooking, {
+			integrationId,
+			reservationId: "VR-004",
+			rawData: {},
+		});
+		await upsertViaViator(t, orgId, integrationId, "VR-004");
+
+		const row = (await t.run((ctx) =>
+			ctx.db
+				.query("otaBookings")
+				.withIndex("by_integration_reservation", (q) =>
+					q
+						.eq("integrationId", integrationId)
+						.eq("otaReservationId", "VR-004"),
+				)
+				.unique(),
+		)) as any;
+		expect(row?.status).toBe("confirmed");
+		expect(row?.cancelledAt).toBeUndefined();
+	});
 });
 
 describe("OTA webhook upsert — GetYourGuide", () => {
