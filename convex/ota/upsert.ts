@@ -272,7 +272,10 @@ export const upsertAvailabilityCache = internalMutation({
 			expiresAt,
 		};
 		if (existing) {
-			await ctx.db.patch(existing._id, doc);
+			await ctx.db.patch(existing._id, {
+				...doc,
+				timeSlots: existing.timeSlots ?? doc.timeSlots,
+			});
 			await logAudit(ctx, {
 				organizationId: product.organizationId,
 				userId: "system",
