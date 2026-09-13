@@ -93,7 +93,16 @@ export function createWebhookHandler(config: WebhookConfig) {
 			});
 		}
 
-		const secret = await decrypt(integration.webhookSecret);
+		let secret: string;
+		try {
+			secret = await decrypt(integration.webhookSecret);
+		} catch {
+			// Corrupt/rotated secret in storage: fail closed with a 500
+			// instead of an unhandled throw (fleet devin 2026-09-06).
+			return new Response("integration secret undecryptable", {
+				status: 500,
+			});
+		}
 		const verifyResult = await verifyWebhookSignatureWithTimestamp(
 			rawBody,
 			signature,
