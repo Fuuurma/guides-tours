@@ -211,7 +211,9 @@ async function buildGuideStats(
 	startDate: string,
 	endDate: string,
 ) {
-	// Bound the scan to prevent OOM on large orgs.
+	// Bound the scan to prevent OOM on large orgs. Hitting the cap
+	// means the org has more rows than were read — reported as
+	// truncated (fleet needs-work 09-08, silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const assignments = await ctx.db
 		.query("assignments")
@@ -222,6 +224,7 @@ async function buildGuideStats(
 				.lte("date", endDate),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	const truncated = assignments.length >= MAX_ANALYTICS_SCAN;
 
 	const inRange = assignments.filter((a) => !a.deletedAt);
 
@@ -238,7 +241,7 @@ async function buildGuideStats(
 		guideMap.set(key, entry);
 	}
 
-	return Array.from(guideMap.entries())
+	const guides = Array.from(guideMap.entries())
 		.map(([guideId, stats]) => ({
 			guideId,
 			totalAssignments: stats.total,
@@ -247,6 +250,9 @@ async function buildGuideStats(
 		}))
 		.sort((a, b) => b.totalAssignments - a.totalAssignments)
 		.slice(0, 10);
+	// Uniform shape with buildDailyStats/buildChannelRevenue: the
+	// list rides `guides`, the cap-hit rides `truncated`.
+	return { guides, truncated };
 }
 
 async function buildDailyStats(
@@ -285,12 +291,15 @@ async function buildDailyStats(
 		}
 	}
 
-	return Array.from(dayMap.entries()).map(([date, stats]) => ({
-		date,
-		total: stats.total,
-		completed: stats.completed,
-		cancelled: stats.cancelled,
-	}));
+	return {
+		days: Array.from(dayMap.entries()).map(([date, stats]) => ({
+			date,
+			total: stats.total,
+			completed: stats.completed,
+			cancelled: stats.cancelled,
+		})),
+		truncated: assignments.length >= MAX_ANALYTICS_SCAN,
+	};
 }
 
 async function buildRevenueSummary(
@@ -301,7 +310,9 @@ async function buildRevenueSummary(
 ) {
 	// Range-scan within the org + date window to avoid a full-table
 	// collect. by_org_date is leading (orgId, date) so gte/lte work.
-	// Bound the scan to prevent OOM on large orgs.
+	// Bound the scan to prevent OOM on large orgs. Hitting the cap
+	// means the org has more rows than were read — reported as
+	// truncated (fleet needs-work 09-08, silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const allBookingsInRange = await ctx.db
 		.query("bookings")
@@ -312,6 +323,7 @@ async function buildRevenueSummary(
 				.lte("date", endDate),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	const truncated = allBookingsInRange.length >= MAX_ANALYTICS_SCAN;
 
 	const inRange = allBookingsInRange.filter(
 		(b) => b.status !== "cancelled",
@@ -343,6 +355,7 @@ async function buildRevenueSummary(
 		totalRevenueCents: totalRevenue,
 		avgBookingValueCents: avgBookingValue,
 		cancellationRate,
+		truncated,
 	};
 }
 
@@ -377,6 +390,10 @@ async function buildChannelRevenue(
 				.lte("date", endDate),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	// Hitting the cap means the org has more rows than were read —
+	// reported as truncated (fleet needs-work 09-08, silent take(N)
+	// caps).
+	const truncated = bookings.length >= MAX_ANALYTICS_SCAN;
 
 	const active = bookings.filter((b) => b.status !== "cancelled");
 
@@ -397,14 +414,17 @@ async function buildChannelRevenue(
 		channelMap.set(source, entry);
 	}
 
-	return Array.from(channelMap.entries())
-		.map(([source, stats]) => ({
-			source,
-			totalBookings: stats.bookings,
-			totalGuests: stats.guests,
-			totalRevenueCents: stats.revenue,
-		}))
-		.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents);
+	return {
+		channels: Array.from(channelMap.entries())
+			.map(([source, stats]) => ({
+				source,
+				totalBookings: stats.bookings,
+				totalGuests: stats.guests,
+				totalRevenueCents: stats.revenue,
+			}))
+			.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents),
+		truncated,
+	};
 }
 
 /**

@@ -232,10 +232,11 @@ describe("analytics", () => {
 				endDate: "2026-07-03",
 			},
 		);
-		expect(stats.length).toBe(3);
-		expect(stats[0]!.total).toBe(0);
-		expect(stats[1]!.total).toBe(0);
-		expect(stats[2]!.total).toBe(0);
+		expect(stats.days.length).toBe(3);
+		expect(stats.days[0]!.total).toBe(0);
+		expect(stats.days[1]!.total).toBe(0);
+		expect(stats.days[2]!.total).toBe(0);
+		expect(stats.truncated).toBe(false);
 	});
 
 	it("getRevenueSummary: sums revenue and guests", async () => {
@@ -262,6 +263,7 @@ describe("analytics", () => {
 		expect(summary.totalGuests).toBe(6);
 		expect(summary.totalRevenueCents).toBe(15000);
 		expect(summary.avgBookingValueCents).toBe(7500);
+		expect(summary.truncated).toBe(false);
 	});
 
 	it("getBookingSources: groups by source", async () => {
@@ -378,13 +380,14 @@ describe("analytics", () => {
 				endDate: "2026-07-31",
 			},
 		);
-		expect(stats.length).toBe(2);
-		const guide1 = stats.find((s: any) => s.guideId === "guide_1")!;
+		expect(stats.guides.length).toBe(2);
+		const guide1 = stats.guides.find((s: any) => s.guideId === "guide_1")!;
 		expect(guide1.totalAssignments).toBe(3);
 		expect(guide1.completed).toBe(1);
 		expect(guide1.cancelled).toBe(1);
-		const guide2 = stats.find((s: any) => s.guideId === "guide_2")!;
+		const guide2 = stats.guides.find((s: any) => s.guideId === "guide_2")!;
 		expect(guide2.totalAssignments).toBe(1);
+		expect(stats.truncated).toBe(false);
 	});
 
 	// Tenant isolation: queries for one org must not see another org's data,
@@ -606,19 +609,20 @@ describe("analytics", () => {
 			},
 		);
 
-		expect(channels.length).toBe(3);
+		expect(channels.channels.length).toBe(3);
 		// Sorted by revenue desc
-		expect(channels[0]!.source).toBe("getyourguide");
-		expect(channels[0]!.totalBookings).toBe(1);
-		expect(channels[0]!.totalRevenueCents).toBe(40000);
-		expect(channels[0]!.totalGuests).toBe(4);
-		expect(channels[1]!.source).toBe("viator");
-		expect(channels[1]!.totalBookings).toBe(2);
-		expect(channels[1]!.totalRevenueCents).toBe(30000);
-		expect(channels[1]!.totalGuests).toBe(5);
-		expect(channels[2]!.source).toBe("direct");
-		expect(channels[2]!.totalBookings).toBe(1);
-		expect(channels[2]!.totalRevenueCents).toBe(10000);
+		expect(channels.channels[0]!.source).toBe("getyourguide");
+		expect(channels.channels[0]!.totalBookings).toBe(1);
+		expect(channels.channels[0]!.totalRevenueCents).toBe(40000);
+		expect(channels.channels[0]!.totalGuests).toBe(4);
+		expect(channels.channels[1]!.source).toBe("viator");
+		expect(channels.channels[1]!.totalBookings).toBe(2);
+		expect(channels.channels[1]!.totalRevenueCents).toBe(30000);
+		expect(channels.channels[1]!.totalGuests).toBe(5);
+		expect(channels.channels[2]!.source).toBe("direct");
+		expect(channels.channels[2]!.totalBookings).toBe(1);
+		expect(channels.channels[2]!.totalRevenueCents).toBe(10000);
+		expect(channels.truncated).toBe(false);
 	});
 
 	it("getChannelRevenue: empty org returns []", async () => {
@@ -631,7 +635,7 @@ describe("analytics", () => {
 				endDate: "2026-08-31",
 			},
 		);
-		expect(channels).toEqual([]);
+		expect(channels).toEqual({ channels: [], truncated: false });
 	});
 
 	it("getChannelRevenue: tenant isolation — other org's bookings invisible", async () => {
@@ -668,9 +672,10 @@ describe("analytics", () => {
 				endDate: "2026-08-31",
 			},
 		);
-		expect(aChannels.length).toBe(1);
-		expect(aChannels[0]!.source).toBe("viator");
-		expect(aChannels[0]!.totalRevenueCents).toBe(10000);
+		expect(aChannels.channels.length).toBe(1);
+		expect(aChannels.channels[0]!.source).toBe("viator");
+		expect(aChannels.channels[0]!.totalRevenueCents).toBe(10000);
+		expect(aChannels.truncated).toBe(false);
 	});
 
 	// Tier 4: getFinancialHealth — refund rate, outstanding balance, deposit coverage.
