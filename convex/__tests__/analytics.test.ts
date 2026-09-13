@@ -144,6 +144,39 @@ describe("analytics", () => {
 		expect(overview.completionRate).toBe(33.3);
 	});
 
+	it("getOverview: upcomingThisWeek counts future assignments outside the window", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_upcoming";
+		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
+		const day = (offset: number) =>
+			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+		// Scheduled 3 days out: beyond every dashboard preset's
+		// endDate (all end today) but inside the 7-day card window.
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, {
+				status: "scheduled",
+				date: day(3),
+			}),
+		);
+		// Cancelled future assignment: must NOT count.
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, {
+				status: "cancelled",
+				date: day(4),
+			}),
+		);
+
+		const overview = await t.query(
+			internal.analytics.getOverviewInternal,
+			{
+				organizationId: orgId,
+				startDate: day(-30),
+				endDate: day(0),
+			},
+		);
+		expect(overview.upcomingThisWeek).toBe(1);
+	});
+
 	it("getTourStats: groups by tour", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a2";
@@ -165,11 +198,12 @@ describe("analytics", () => {
 				endDate: "2026-07-31",
 			},
 		);
-		expect(stats.length).toBe(2);
-		expect(stats[0]!.tourName).toBe("Tour A");
-		expect(stats[0]!.totalAssignments).toBe(2);
-		expect(stats[1]!.tourName).toBe("Tour B");
-		expect(stats[1]!.totalAssignments).toBe(1);
+		expect(stats.tours.length).toBe(2);
+		expect(stats.tours[0]!.tourName).toBe("Tour A");
+		expect(stats.tours[0]!.totalAssignments).toBe(2);
+		expect(stats.tours[1]!.tourName).toBe("Tour B");
+		expect(stats.tours[1]!.totalAssignments).toBe(1);
+		expect(stats.truncated).toBe(false);
 	});
 
 	it("getForTour: bookings + assignments for one tour", async () => {
@@ -331,12 +365,13 @@ describe("analytics", () => {
 			endDate: "2026-07-31",
 			limit: 10,
 		});
-		expect(top.length).toBe(2);
-		expect(top[0]!.tourName).toBe("Premium Tour");
-		expect(top[0]!.totalBookings).toBe(2);
-		expect(top[0]!.totalRevenueCents).toBe(100000);
-		expect(top[1]!.tourName).toBe("Budget Tour");
-		expect(top[1]!.totalBookings).toBe(1);
+		expect(top.tours.length).toBe(2);
+		expect(top.tours[0]!.tourName).toBe("Premium Tour");
+		expect(top.tours[0]!.totalBookings).toBe(2);
+		expect(top.tours[0]!.totalRevenueCents).toBe(100000);
+		expect(top.tours[1]!.tourName).toBe("Budget Tour");
+		expect(top.tours[1]!.totalBookings).toBe(1);
+		expect(top.truncated).toBe(false);
 
 		// limit=1 returns only the top tour
 		const limited = await t.query(internal.analytics.getTopToursInternal, {
@@ -345,8 +380,9 @@ describe("analytics", () => {
 			endDate: "2026-07-31",
 			limit: 1,
 		});
-		expect(limited.length).toBe(1);
-		expect(limited[0]!.tourName).toBe("Premium Tour");
+		expect(limited.tours.length).toBe(1);
+		expect(limited.tours[0]!.tourName).toBe("Premium Tour");
+		expect(limited.truncated).toBe(false);
 	});
 
 	it("getGuideStats: groups by guide and counts statuses", async () => {
@@ -736,6 +772,7 @@ describe("analytics", () => {
 		expect(fh.grossCents).toBe(100000);
 		expect(fh.refundCents).toBe(20000);
 		expect(fh.refundRate).toBe(20);
+		expect(fh.truncated).toBe(false);
 		// Outstanding: 0 (booking has balanceDueCents = 0)
 		expect(fh.outstandingCents).toBe(0);
 		// 100% deposit coverage (1 booking, deposit > 0)
@@ -810,6 +847,7 @@ describe("analytics", () => {
 
 		expect(fh.refundCents).toBe(20000);
 		expect(fh.refundRate).toBe(20);
+		expect(fh.truncated).toBe(false);
 	});
 
 	it("getFinancialHealth: outstanding balance aggregates across active bookings", async () => {
@@ -918,6 +956,7 @@ describe("analytics", () => {
 		expect(conv.rejectedCapacity).toBe(2);
 		expect(conv.rejectedUnknownSlug).toBe(0);
 		expect(conv.successRate).toBe(50);
+		expect(conv.truncated).toBe(false);
 	});
 
 	it("getConversions: tenant isolation — other org's attempts invisible", async () => {
@@ -953,6 +992,7 @@ describe("analytics", () => {
 		);
 		expect(aConv.totalAttempts).toBe(1);
 		expect(aConv.success).toBe(1);
+		expect(aConv.truncated).toBe(false);
 	});
 
 	it("getConversions: invalid dates don't crash", async () => {
@@ -967,5 +1007,6 @@ describe("analytics", () => {
 		);
 		expect(conv.totalAttempts).toBe(0);
 		expect(conv.successRate).toBe(0);
+		expect(conv.truncated).toBe(false);
 	});
 });

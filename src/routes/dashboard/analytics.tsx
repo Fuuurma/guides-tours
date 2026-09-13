@@ -173,8 +173,8 @@ function AnalyticsPage() {
 		[leaderboardTourDays],
 	);
 	const leaderboardTours = useMemo(() => {
-		if (!topTours) return [];
-		return topTours.map((t) => ({
+		if (!topTours?.tours) return [];
+		return topTours.tours.map((t) => ({
 			tourId: String(t.tourId),
 			tourName: String(t.tourName ?? "Unknown"),
 			totalBookings: t.totalBookings,
@@ -487,13 +487,13 @@ function AnalyticsPage() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						{!tourStats || tourStats.length === 0 ? (
+						{!tourStats?.tours || tourStats.tours.length === 0 ? (
 							<p className="text-muted-foreground text-sm">
 								No assignments in this window.
 							</p>
 						) : (
 							<ul className="flex flex-col gap-2 text-sm">
-								{tourStats.map((t) => (
+								{tourStats.tours.map((t) => (
 									<li
 										key={t.tourId}
 										className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0"

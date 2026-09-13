@@ -67,7 +67,15 @@ async function buildOverview(
 	// were read, which the payload reports as truncated (fleet
 	// needs-work 09-08, devin finding on silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
-	const [tours, allAssignments, pendingVacations] = await Promise.all([
+	// The upcoming-week card needs FUTURE rows, but the window scan
+	// below is clipped at endDate (every dashboard preset ends today),
+	// so filtering it could only ever count today (fleet needs-work
+	// 09-13 P2). Dedicated 7-day scan — inherently bounded, cheap.
+	const todayEarly = new Date().toISOString().slice(0, 10);
+	const weekEndEarly = new Date(Date.parse(todayEarly) + 7 * 86_400_000)
+		.toISOString()
+		.slice(0, 10);
+	const [tours, allAssignments, pendingVacations, upcomingWeek] = await Promise.all([
 		ctx.db
 			.query("tours")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
@@ -87,8 +95,17 @@ async function buildOverview(
 				q.eq("organizationId", orgId).eq("status", "pending"),
 			)
 			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("assignments")
+			.withIndex("by_org_date", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", todayEarly)
+					.lte("date", weekEndEarly),
+			)
+			.take(MAX_ANALYTICS_SCAN),
 	]);
-	const truncated = [tours, allAssignments, pendingVacations].some(
+	const truncated = [tours, allAssignments, pendingVacations, upcomingWeek].some(
 		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
 	);
 	const activeTours = tours.filter((t) => !t.deletedAt);
@@ -106,14 +123,10 @@ async function buildOverview(
 	const daysInRange = dateRange(startDate, endDate).length;
 	const avgPerDay = daysInRange > 0 ? round1(total / daysInRange) : 0;
 
-	const today = new Date().toISOString().slice(0, 10);
-	const weekEnd = new Date(Date.parse(today) + 7 * 86_400_000)
-		.toISOString()
-		.slice(0, 10);
-	const upcoming = allAssignments.filter(
+	// Counted from the dedicated 7-day scan above (same anchors),
+	// not the window-clipped array — see the scan comment.
+	const upcoming = upcomingWeek.filter(
 		(a) =>
-			a.date >= today &&
-			a.date <= weekEnd &&
 			a.status === "scheduled" &&
 			!a.deletedAt,
 	).length;
@@ -173,7 +186,8 @@ async function buildTourStats(
 	const inRange = assignments.filter((a) => !a.deletedAt);
 
 	// Overflow probe (fleet 09-08): a full-cap scan means the org has
-	// more rows than were read — flag the payload as truncated.
+	// more rows than were read — flag the payload as truncated (and
+	// keep the warn log so cap-hits stay visible server-side).
 	const tourCount = tours.length;
 	const assignmentCount = assignments.length;
 	const truncated = tourCount >= MAX_ANALYTICS_SCAN || assignmentCount >= MAX_ANALYTICS_SCAN;
@@ -183,7 +197,7 @@ async function buildTourStats(
 		);
 	}
 
-	return tours
+	const tourItems = tours
 		.filter((t) => !t.deletedAt)
 		.map((tour) => {
 			const tourAssignments = inRange.filter(
@@ -203,6 +217,7 @@ async function buildTourStats(
 		})
 		.sort((a, b) => b.totalAssignments - a.totalAssignments)
 		.slice(0, 10);
+	return { tours: tourItems, truncated };
 }
 
 async function buildGuideStats(
@@ -482,6 +497,11 @@ async function buildFinancialHealth(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+	// Hitting any cap means the org has more rows than were read —
+	// reported as truncated (fleet needs-work 09-13 P3).
+	const truncated = [payments, refunds, bookings].some(
+		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
+	);
 
 	const grossCents = payments.reduce(
 		(s, p) => s + Number(p.amountCents),
@@ -517,6 +537,7 @@ async function buildFinancialHealth(
 		bookingsTotal: activeBookings.length,
 		bookingsWithDeposit,
 		depositCoverage,
+		truncated,
 	};
 }
 
@@ -554,6 +575,7 @@ async function buildConversions(
 			rejectedCapacity: 0,
 			rejectedUnknownSlug: 0,
 			successRate: 0,
+			truncated: false,
 		};
 	}
 	const rows = await ctx.db
@@ -565,6 +587,9 @@ async function buildConversions(
 				.lte("createdAt", endMs),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	// Hitting the cap means more attempts than were read — reported
+	// as truncated (fleet needs-work 09-13 P3, silent take(N) caps).
+	const truncated = rows.length >= MAX_ANALYTICS_SCAN;
 
 	let success = 0;
 	let rejectedRateLimit = 0;
@@ -607,6 +632,7 @@ async function buildConversions(
 		rejectedCapacity,
 		rejectedUnknownSlug,
 		successRate,
+		truncated,
 	};
 }
 
@@ -617,7 +643,9 @@ async function buildTopTours(
 	endDate: string,
 	limit: number,
 ) {
-	// Bound the scans to prevent OOM on large orgs.
+	// Bound the scans to prevent OOM on large orgs. Hitting either
+	// cap means the org has more rows than were read — reported as
+	// truncated (fleet needs-work 09-08/09-13, silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const [tours, bookings] = await Promise.all([
 		ctx.db
@@ -634,6 +662,9 @@ async function buildTopTours(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+	const truncated =
+		tours.length >= MAX_ANALYTICS_SCAN ||
+		bookings.length >= MAX_ANALYTICS_SCAN;
 	const tourMap = new Map(tours.map((t) => [String(t._id), t.name]));
 
 	const inRange = bookings.filter((b) => b.status !== "cancelled");
@@ -651,16 +682,19 @@ async function buildTopTours(
 		tourRevenue.set(key, entry);
 	}
 
-	return Array.from(tourRevenue.entries())
-		.map(([tourId, stats]) => ({
-			tourId,
-			tourName: tourMap.get(tourId) ?? "Unknown",
-			totalBookings: stats.bookings,
-			totalGuests: stats.guests,
-			totalRevenueCents: stats.revenue,
-		}))
-		.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents)
-		.slice(0, limit);
+	return {
+		tours: Array.from(tourRevenue.entries())
+			.map(([tourId, stats]) => ({
+				tourId,
+				tourName: tourMap.get(tourId) ?? "Unknown",
+				totalBookings: stats.bookings,
+				totalGuests: stats.guests,
+				totalRevenueCents: stats.revenue,
+			}))
+			.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents)
+			.slice(0, limit),
+		truncated,
+	};
 }
 
 /**
