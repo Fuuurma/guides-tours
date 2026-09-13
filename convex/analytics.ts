@@ -444,10 +444,12 @@ async function buildFinancialHealth(
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("refunds")
-			.withIndex("by_org_status", (q) =>
+			.withIndex("by_org_status_created", (q) =>
 				q
 					.eq("organizationId", orgId)
-					.eq("status", "succeeded"),
+					.eq("status", "succeeded")
+					.gte("createdAt", Date.parse(`${startDate}T00:00:00Z`))
+					.lte("createdAt", Date.parse(`${endDate}T23:59:59Z`)),
 			)
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db

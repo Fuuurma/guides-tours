@@ -739,6 +739,74 @@ describe("analytics", () => {
 		expect(fh.depositCoverage).toBe(100);
 	});
 
+	it("getFinancialHealth: refunds outside the window are excluded", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_fin_window";
+		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const bookingId = await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, tourId, custId, {
+				date: "2026-08-01",
+				totalAmountCents: 100000n,
+				balanceDueCents: 0n,
+				depositAmountCents: 100000n,
+			}),
+		);
+		await t.run(async (ctx: any) => {
+			const id = await ctx.db.insert("payments", {
+				organizationId: orgId,
+				bookingId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "succeeded",
+				provider: "stripe",
+				stripePaymentIntentId: "pi_fin_win",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-01T10:00:00Z"),
+			});
+			// In-window refund ($200) — must count.
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				bookingId,
+				amountCents: 20000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_win",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-08-02T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-08-02T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+			});
+			// All-time (June) refund ($500) — must NOT count.
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				bookingId,
+				amountCents: 50000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_old",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-06-15T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-06-15T10:00:00Z"),
+				updatedAt: Date.parse("2026-06-15T10:00:00Z"),
+			});
+		});
+
+		const fh = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-08-01",
+				endDate: "2026-08-31",
+			},
+		);
+
+		expect(fh.refundCents).toBe(20000);
+		expect(fh.refundRate).toBe(20);
+	});
+
 	it("getFinancialHealth: outstanding balance aggregates across active bookings", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_out";

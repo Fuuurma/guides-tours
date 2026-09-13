@@ -794,7 +794,12 @@ export default defineSchema({
 		.index("by_payment", ["paymentId"])
 		.index("by_stripe_refund", ["stripeRefundId"])
 		.index("by_booking", ["bookingId"])
-		.index("by_org_status", ["organizationId", "status"]),
+		.index("by_org_status", ["organizationId", "status"])
+		.index("by_org_status_created", [
+			"organizationId",
+			"status",
+			"createdAt",
+		]),
 
 	// ----- Notifications -----
 
