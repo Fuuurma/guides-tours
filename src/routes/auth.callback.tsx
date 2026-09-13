@@ -47,7 +47,12 @@ function AuthCallback() {
 						organizationId: orgs[0].id,
 					});
 				}
-				void navigate({ to: orgs && orgs.length > 0 ? redirect ?? "/dashboard" : "/onboarding" });
+				void navigate({
+					to:
+						orgs && orgs.length > 0
+							? (redirect ?? "/dashboard")
+							: "/onboarding",
+				});
 			})
 			.catch(() => {
 				void navigate({ to: "/sign-in" });
