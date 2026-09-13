@@ -274,6 +274,7 @@ function PendingInvitesSection() {
 	const [invites, setInvites] = useState<InviteRow[] | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [busyId, setBusyId] = useState<string | null>(null);
+	const [resendId, setResendId] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -328,6 +329,24 @@ function PendingInvitesSection() {
 		}
 	};
 
+	const onResend = async (inv: InviteRow) => {
+		setResendId(inv.id);
+		try {
+			const { error } = await organization.inviteMember({
+				email: inv.email,
+				role: inv.role as "guide" | "member" | "admin",
+				resend: true,
+			});
+			if (error) throw new Error(error.message ?? "Resend failed");
+			toast.success("Invitation resent");
+		} catch (err) {
+			toast.error(getErrorMessage(err));
+		} finally {
+			setResendId(null);
+			await refresh();
+		}
+	};
+
 	return (
 		<section className="mt-10 flex flex-col gap-3">
 			<div className="flex items-center justify-between gap-2">
@@ -367,18 +386,32 @@ function PendingInvitesSection() {
 										: ""}
 								</p>
 							</div>
-							<Button
-								type="button"
-								size="sm"
-								variant="outline"
-								disabled={busyId === inv.id}
-								onClick={() => void onCancel(inv.id)}
-							>
-								{busyId === inv.id ? (
-									<Spinner data-icon="inline-start" />
-								) : null}
-								{busyId === inv.id ? "Cancelling…" : "Cancel"}
-							</Button>
+							<div className="flex items-center gap-2">
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={busyId === inv.id || resendId === inv.id}
+									onClick={() => void onResend(inv)}
+								>
+									{resendId === inv.id ? (
+										<Spinner data-icon="inline-start" />
+									) : null}
+									{resendId === inv.id ? "Resending…" : "Resend"}
+								</Button>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={busyId === inv.id || resendId === inv.id}
+									onClick={() => void onCancel(inv.id)}
+								>
+									{busyId === inv.id ? (
+										<Spinner data-icon="inline-start" />
+									) : null}
+									{busyId === inv.id ? "Cancelling…" : "Cancel"}
+								</Button>
+							</div>
 						</li>
 					))}
 				</ul>
