@@ -916,22 +916,24 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 						`[stripe-webhook] unknown intent ${piId} for charge.refunded (org=${orgId})`,
 					);
 				} else {
+					// Pass the FULL refund list (Stripe orders it newest-first;
+					// picking data[length-1] grabbed the OLDEST refund on
+					// multi-refund intents, so later refunds never reached the
+					// ledger — fleet P2 09-14). markRefunded backfills only
+					// the missing ids, so the list order is irrelevant.
 					const refundsData = obj?.refunds?.data ?? [];
-					const lastRefund = refundsData[refundsData.length - 1];
-					const refund = lastRefund
-						? {
-								stripeRefundId: lastRefund.id,
-								amountCents: BigInt(lastRefund.amount),
-								currency: currencyForDb(lastRefund.currency),
-								reason: lastRefund.reason,
-								processedAt: lastRefund.created
-									? lastRefund.created * 1000
-									: undefined,
-							}
-						: undefined;
+					const refunds = refundsData
+						.filter((r) => r && typeof r.id === "string")
+						.map((r) => ({
+							stripeRefundId: r.id,
+							amountCents: BigInt(r.amount),
+							currency: currencyForDb(r.currency),
+							reason: r.reason,
+							processedAt: r.created ? r.created * 1000 : undefined,
+						}));
 					await ctx.runMutation(internal.payments.markRefunded, {
 						paymentId,
-						refund,
+						refunds,
 					});
 				}
 			}

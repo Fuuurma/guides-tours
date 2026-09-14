@@ -862,7 +862,11 @@ export const markRefunded = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
 		// Optional refund details from the Stripe webhook. When present,
-		// a corresponding row is written to the refunds table.
+		// corresponding rows are written to the refunds table — one per
+		// Stripe refund id, backfilling only the missing ones (a PI can
+		// be refunded multiple times; every charge.refunded event carries
+		// the FULL refund list, so passing the array keeps the ledger in
+		// sync across partial/multiple refunds — fleet P2 09-14).
 		refund: v.optional(
 			v.object({
 				stripeRefundId: v.string(),
@@ -872,31 +876,47 @@ export const markRefunded = internalMutation({
 				processedAt: v.optional(v.number()),
 			}),
 		),
+		refunds: v.optional(
+			v.array(
+				v.object({
+					stripeRefundId: v.string(),
+					amountCents: v.int64(),
+					currency: v.string(),
+					reason: v.optional(v.string()),
+					processedAt: v.optional(v.number()),
+				}),
+			),
+		),
 	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) throw new ConvexError("Payment not found");
+		const all = [
+			...(args.refund ? [args.refund] : []),
+			...(args.refunds ?? []),
+		];
 		if (p.status === "refunded") {
-			// Idempotent — but if a refund row is missing, backfill it.
-			if (args.refund) {
+			// Idempotent — but backfill any refund rows Stripe knows about
+			// that the ledger is missing (multiple/partial refunds).
+			for (const refund of all) {
 				const existing = await ctx.db
 					.query("refunds")
 					.withIndex("by_stripe_refund", (q) =>
-						q.eq("stripeRefundId", args.refund!.stripeRefundId),
+						q.eq("stripeRefundId", refund.stripeRefundId),
 					)
 					.first();
 				if (!existing) {
 					await ctx.db.insert("refunds", {
 						organizationId: p.organizationId,
 						paymentId: p._id,
-						stripeRefundId: args.refund.stripeRefundId,
-						amountCents: args.refund.amountCents,
-						currency: args.refund.currency,
+						stripeRefundId: refund.stripeRefundId,
+						amountCents: refund.amountCents,
+						currency: refund.currency,
 						status: "succeeded",
-						reason: args.refund.reason,
+						reason: refund.reason,
 						refundedBy: "stripe_webhook",
 						refundedAt: Date.now(),
-						processedAt: args.refund.processedAt ?? Date.now(),
+						processedAt: refund.processedAt ?? Date.now(),
 						metadata: {},
 						createdAt: Date.now(),
 						updatedAt: Date.now(),
@@ -915,34 +935,33 @@ export const markRefunded = internalMutation({
 			status: "refunded",
 			updatedAt: now,
 		});
-		// Write the refunds row when details are present.
-		if (args.refund) {
+		for (const refund of all) {
 			await ctx.db.insert("refunds", {
 				organizationId: p.organizationId,
 				paymentId: p._id,
-				stripeRefundId: args.refund.stripeRefundId,
-				amountCents: args.refund.amountCents,
-				currency: args.refund.currency,
+				stripeRefundId: refund.stripeRefundId,
+				amountCents: refund.amountCents,
+				currency: refund.currency,
 				status: "succeeded",
-				reason: args.refund.reason,
+				reason: refund.reason,
 				refundedBy: "stripe_webhook",
 				refundedAt: now,
-				processedAt: args.refund.processedAt ?? now,
+				processedAt: refund.processedAt ?? now,
 				metadata: {},
 				createdAt: now,
 				updatedAt: now,
 			});
 		}
-
 		if (p.bookingId) {
 			await reversePaymentOnBooking(ctx, {
 				organizationId: p.organizationId,
 				bookingId: p.bookingId,
-				amountCents: args.refund?.amountCents ?? p.amountCents,
+				amountCents:
+					all.reduce((sum, r) => sum + r.amountCents, 0n) ??
+					p.amountCents,
 				now,
 			});
 		}
-
 		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",
