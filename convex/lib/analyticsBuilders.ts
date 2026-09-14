@@ -116,7 +116,14 @@ export async function buildOverview(
 		totalGuides = memberList.members.filter(
 			(m: { role: string }) => m.role === "guide",
 		).length;
-	} catch {
+	} catch (err) {
+		// A real Better Auth/component failure must not be
+		// indistinguishable from an org with zero guides (fleet
+		// 10b56a45) — log with context, keep the 0 fallback.
+		logger.error(
+			`[analytics] listMembers failed for org ${orgId}: ` +
+				(err instanceof Error ? err.message : String(err)),
+		);
 		totalGuides = 0;
 	}
 
