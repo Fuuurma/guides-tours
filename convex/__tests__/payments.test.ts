@@ -1019,6 +1019,86 @@ describe("convex/payments — audit logging", () => {
 		row = (await t.run(async (ctx) => ctx.db.get(paymentId))) as any;
 		expect(row?.status).toBe("refunded");
 	});
+
+	it("markRefunded backfills refund row + booking reversal on already-refunded payment", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_multirefund";
+		// Booking paid in full via deposit — reversal is observable.
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				totalAmountCents: 3000n,
+				depositAmountCents: 3000n,
+			}),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 3000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_multi_1",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+
+		// Webhook payload carrying [re_m1, re_m2] summing to the full
+		// amount: first call flips status + reverses 2000, second call
+		// hits the already-refunded branch but must still write the row
+		// and reverse the remaining 1000.
+		await t.mutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded: true,
+			refund: {
+				stripeRefundId: "re_m1",
+				amountCents: 2000n,
+				currency: "USD",
+			},
+		});
+		await t.mutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded: true,
+			refund: {
+				stripeRefundId: "re_m2",
+				amountCents: 1000n,
+				currency: "USD",
+			},
+		});
+
+		const refunds = await t.run(async (ctx) =>
+			ctx.db
+				.query("refunds")
+				.withIndex("by_payment", (q) => q.eq("paymentId", paymentId))
+				.collect(),
+		);
+		expect(refunds.length).toBe(2);
+
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		expect(booking?.depositAmountCents).toBe(0n);
+		expect(booking?.balanceDueCents).toBe(3000n);
+
+		// Re-delivery of the same payload is a no-op — no third row, no
+		// double reversal.
+		await t.mutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded: true,
+			refund: {
+				stripeRefundId: "re_m2",
+				amountCents: 1000n,
+				currency: "USD",
+			},
+		});
+		const refundsAfter = await t.run(async (ctx) =>
+			ctx.db
+				.query("refunds")
+				.withIndex("by_payment", (q) => q.eq("paymentId", paymentId))
+				.collect(),
+		);
+		expect(refundsAfter.length).toBe(2);
+		const bookingAfter = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		expect(bookingAfter?.depositAmountCents).toBe(0n);
+	});
 });
 
 // Tests for countFailedSince — the home-page "what's broken" pill

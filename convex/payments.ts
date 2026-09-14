@@ -883,6 +883,9 @@ export const markRefunded = internalMutation({
 		if (!p) throw new ConvexError("Payment not found");
 		if (p.status === "refunded") {
 			// Idempotent — but if a refund row is missing, backfill it.
+			// This matters for multi-refund payloads: the first entry may
+			// flip the status while later entries still need their row +
+			// booking reversal recorded.
 			if (args.refund) {
 				const existing = await ctx.db
 					.query("refunds")
@@ -891,6 +894,7 @@ export const markRefunded = internalMutation({
 					)
 					.first();
 				if (!existing) {
+					const now = Date.now();
 					await ctx.db.insert("refunds", {
 						organizationId: p.organizationId,
 						paymentId: p._id,
@@ -900,12 +904,20 @@ export const markRefunded = internalMutation({
 						status: "succeeded",
 						reason: args.refund.reason,
 						refundedBy: "stripe_webhook",
-						refundedAt: Date.now(),
-						processedAt: args.refund.processedAt ?? Date.now(),
+						refundedAt: now,
+						processedAt: args.refund.processedAt ?? now,
 						metadata: {},
-						createdAt: Date.now(),
-						updatedAt: Date.now(),
+						createdAt: now,
+						updatedAt: now,
 					});
+					if (p.bookingId) {
+						await reversePaymentOnBooking(ctx, {
+							organizationId: p.organizationId,
+							bookingId: p.bookingId,
+							amountCents: args.refund.amountCents,
+							now,
+						});
+					}
 				}
 			}
 			return args.paymentId;
