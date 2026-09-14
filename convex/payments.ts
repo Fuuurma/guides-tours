@@ -861,6 +861,11 @@ export const recordFromAction = internalMutation({
 export const markRefunded = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
+		// Whether the charge is fully refunded (Stripe charge.refunded flag
+		// / amount_refunded >= amount). Undefined defaults to full — the
+		// historical contract — but partial-refund webhook payloads pass
+		// false so a partial refund doesn't mislabel the payment refunded.
+		fullyRefunded: v.optional(v.boolean()),
 		// Optional refund details from the Stripe webhook. When present,
 		// a corresponding row is written to the refunds table.
 		refund: v.optional(
@@ -911,11 +916,15 @@ export const markRefunded = internalMutation({
 			);
 		}
 		const now = Date.now();
-		await ctx.db.patch(args.paymentId, {
-			status: "refunded",
-			updatedAt: now,
-		});
-		// Write the refunds row when details are present.
+		const fully = args.fullyRefunded ?? true;
+		if (fully) {
+			await ctx.db.patch(args.paymentId, {
+				status: "refunded",
+				updatedAt: now,
+			});
+		}
+		// Write the refunds row when details are present — for both full
+		// and partial refunds (the refunds table is the per-refund truth).
 		if (args.refund) {
 			await ctx.db.insert("refunds", {
 				organizationId: p.organizationId,
@@ -950,7 +959,7 @@ export const markRefunded = internalMutation({
 			resourceType: "payment",
 			resourceId: args.paymentId,
 			oldValues: { status: p.status },
-			newValues: { status: "refunded" },
+			newValues: { status: fully ? "refunded" : "succeeded" },
 		});
 		return args.paymentId;
 	},

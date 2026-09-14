@@ -54,6 +54,8 @@ type StripeObject = {
 		bookingId?: string;
 	};
 	last_payment_error?: { message?: string };
+	refunded?: boolean;
+	amount_refunded?: number;
 	refunds?: {
 		data?: Array<{
 			id: string;
@@ -916,23 +918,36 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 						`[stripe-webhook] unknown intent ${piId} for charge.refunded (org=${orgId})`,
 					);
 				} else {
+					// charge.refunded re-sends the charge's FULL refunds list —
+					// a payload can carry several new refunds at once. Record
+					// each (by_stripe_refund idempotency dedups re-deliveries)
+					// and only flip payments.status when the charge is fully
+					// refunded — partial refunds must not mislabel the payment.
 					const refundsData = obj?.refunds?.data ?? [];
-					const lastRefund = refundsData[refundsData.length - 1];
-					const refund = lastRefund
-						? {
-								stripeRefundId: lastRefund.id,
-								amountCents: BigInt(lastRefund.amount),
-								currency: currencyForDb(lastRefund.currency),
-								reason: lastRefund.reason,
-								processedAt: lastRefund.created
-									? lastRefund.created * 1000
-									: undefined,
-							}
-						: undefined;
-					await ctx.runMutation(internal.payments.markRefunded, {
-						paymentId,
-						refund,
-					});
+					const fullyRefunded =
+						obj?.refunded === true ||
+						(typeof obj?.amount_refunded === "number" &&
+							typeof obj?.amount === "number" &&
+							obj.amount_refunded >= obj.amount);
+					for (const r of refundsData) {
+						await ctx.runMutation(internal.payments.markRefunded, {
+							paymentId,
+							fullyRefunded,
+							refund: {
+								stripeRefundId: r.id,
+								amountCents: BigInt(r.amount),
+								currency: currencyForDb(r.currency),
+								reason: r.reason,
+								processedAt: r.created ? r.created * 1000 : undefined,
+							},
+						});
+					}
+					if (refundsData.length === 0) {
+						await ctx.runMutation(internal.payments.markRefunded, {
+							paymentId,
+							fullyRefunded,
+						});
+					}
 				}
 			}
 		}
