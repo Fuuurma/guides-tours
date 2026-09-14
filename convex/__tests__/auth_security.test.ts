@@ -20,6 +20,10 @@ import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
 import { createAuthOptions } from "../auth";
+import {
+	isUnconfiguredDeployment,
+	trustedOriginsForDeployment,
+} from "../lib/siteUrl";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -96,5 +100,79 @@ describe("auth queries", () => {
 		const t = convexTest(schema, modules);
 
 		await expect(t.query(api.auth.getCurrentUser, {})).resolves.toBeNull();
+	});
+});
+
+// SITE_URL-fallback policy (fleet 2026-09-13, option b): the shared
+// configured/unconfigured predicate reads CONVEX_SITE_URL — never
+// NODE_ENV — and gates both the auth.ts degrade signal and http.ts's
+// localhost trust anchor.
+describe("isUnconfiguredDeployment", () => {
+	it("treats unset CONVEX_SITE_URL as unconfigured (dev/tests/codegen)", () => {
+		delete process.env.CONVEX_SITE_URL;
+		expect(isUnconfiguredDeployment()).toBe(true);
+	});
+
+	it("treats local CONVEX_SITE_URL as unconfigured", () => {
+		process.env.CONVEX_SITE_URL = "http://127.0.0.1:3020";
+		expect(isUnconfiguredDeployment()).toBe(true);
+	});
+
+	it("treats a non-local CONVEX_SITE_URL as configured", () => {
+		process.env.CONVEX_SITE_URL = "https://guides-tours.fuurma.tech";
+		expect(isUnconfiguredDeployment()).toBe(false);
+	});
+});
+
+describe("trustedOriginsForDeployment (SITE_URL policy)", () => {
+	function withEnv(env: Record<string, string | undefined>, fn: () => void) {
+		const saved = { ...process.env };
+		try {
+			delete process.env.CONVEX_SITE_URL;
+			delete process.env.SITE_URL;
+			for (const [k, v] of Object.entries(env)) {
+				if (v !== undefined) process.env[k] = v;
+			}
+			fn();
+		} finally {
+			process.env = saved;
+		}
+	}
+
+	it("configured deployment + missing SITE_URL trusts NO localhost anchor", () => {
+		withEnv(
+			{
+				CONVEX_SITE_URL: "https://guides-tours.fuurma.tech",
+			},
+			() => {
+				const origins = trustedOriginsForDeployment();
+				expect(origins).not.toContain("http://127.0.0.1:3020");
+				expect(origins).toContain("https://guides-tours.fuurma.tech");
+			},
+		);
+	});
+
+	it("unconfigured deployment keeps the localhost fallback", () => {
+		withEnv({}, () => {
+			expect(trustedOriginsForDeployment()).toContain(
+				"http://127.0.0.1:3020",
+			);
+		});
+	});
+
+	it("configured deployment + SITE_URL set trusts SITE_URL only", () => {
+		withEnv(
+			{
+				CONVEX_SITE_URL: "https://guides-tours.fuurma.tech",
+				SITE_URL: "https://guides-tours.fuurma.tech",
+			},
+			() => {
+				const origins = trustedOriginsForDeployment();
+				// CONVEX_SITE_URL membership is unchanged by the policy —
+				// both entries carry the deployed origin here.
+				expect(origins).toContain("https://guides-tours.fuurma.tech");
+				expect(origins).not.toContain("http://127.0.0.1:3020");
+			},
+		);
 	});
 });

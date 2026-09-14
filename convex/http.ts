@@ -6,6 +6,7 @@ import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { logger } from "./lib/logger";
+import { isUnconfiguredDeployment } from "./lib/siteUrl";
 
 const http = httpRouter();
 
@@ -22,7 +23,15 @@ authComponent.registerRoutesLazy(http, createAuth, {
   basePath: "/api/auth",
   cors: true,
   trustedOrigins: [
-    process.env.SITE_URL ?? "http://127.0.0.1:3020",
+    // SITE_URL-fallback policy (fleet 2026-09-13): on a configured
+    // deployment with SITE_URL unset, do NOT synthesize a localhost
+    // trust anchor (the CSRF edge named in the finding). Unconfigured
+    // deployments — local dev, unit tests, push-time codegen — keep it.
+    ...(isUnconfiguredDeployment()
+      ? [process.env.SITE_URL ?? "http://127.0.0.1:3020"]
+      : process.env.SITE_URL
+        ? [process.env.SITE_URL]
+        : []),
     process.env.CONVEX_SITE_URL,
   ].filter((origin): origin is string => typeof origin === "string"),
 });

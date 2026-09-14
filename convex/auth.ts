@@ -10,6 +10,8 @@ import authConfig from "./auth.config";
 import { ac, roles } from "./authz";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { sendInvitationEmail } from "./lib/inviteEmail";
+import { logger } from "./lib/logger";
+import { isUnconfiguredDeployment } from "./lib/siteUrl";
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
 	components.betterAuth,
@@ -46,7 +48,29 @@ const plugins = [
 // time, an unset SITE_URL will cause Better Auth to misbehave — callers
 // must set it on the Convex dashboard for production.
 function getSiteUrl(): string {
-	return process.env.SITE_URL ?? "http://127.0.0.1:3020";
+	const siteUrl = process.env.SITE_URL;
+	if (!siteUrl) {
+		// SITE_URL-fallback policy (fleet 2026-09-13, option b — degraded
+		// not dead): keep serving the localhost fallback rather than
+		// throwing at module scope (which would take down every HTTP
+		// route and can break `convex push` codegen), but on a CONFIGURED
+		// deployment the misconfiguration must be loud: auth baseURL and
+		// every email link are degraded until SITE_URL is set on the
+		// Convex dashboard.
+		if (!isUnconfiguredDeployment()) {
+			let warned = (getSiteUrl as { __warned?: boolean }).__warned;
+			if (!warned) {
+				logger.error(
+					"[auth] SITE_URL is not set on a configured deployment — " +
+						"auth baseURL and email links are degraded to " +
+						"http://127.0.0.1:3020. Set SITE_URL on the Convex dashboard.",
+				);
+				(getSiteUrl as { __warned?: boolean }).__warned = true;
+			}
+		}
+		return "http://127.0.0.1:3020";
+	}
+	return siteUrl;
 }
 
 // Local dev detection — mirrors restaurant-calendar, but only when
