@@ -32,7 +32,13 @@ function fromHex(hex: string): Uint8Array {
 	if (hex.length % 2 !== 0) throw new Error("invalid hex length");
 	const out = new Uint8Array(hex.length / 2);
 	for (let i = 0; i < out.length; i++) {
-		out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+		// parseInt returns NaN for non-hex input; assigning NaN into a
+		// Uint8Array silently coerces to 0 — reject instead so a
+		// malformed signature fails verification rather than degrading
+		// to zeroed bytes (needs-work 2026-09-10).
+		const byte = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+		if (Number.isNaN(byte)) throw new Error("invalid hex character");
+		out[i] = byte;
 	}
 	return out;
 }
@@ -81,7 +87,7 @@ async function hmacSha256Hex(
  * Compute the HMAC-SHA256 hex signature for a payload. Exposed so
  * tests + provider-specific helpers can use it.
  */
-export { hmacSha256Hex };
+export { hmacSha256Hex, fromHex };
 
 /**
  * Verify a webhook signature.
@@ -111,9 +117,9 @@ export async function verifyWebhookSignature(
  */
 export const WEBHOOK_HEADER = {
 	viator: "x-viator-signature",
-	getYourGuide: "x-getyourguide-signature",
+	getyourguide: "x-getyourguide-signature",
 	airbnb: "x-airbnb-signature",
-	tripAdvisor: "x-tripadvisor-signature",
+	tripadvisor: "x-tripadvisor-signature",
 	klook: "x-klook-signature",
 	booking: "x-booking-signature",
 	expedia: "x-expedia-signature",
@@ -130,9 +136,9 @@ export type ProviderSlug = keyof typeof WEBHOOK_HEADER;
  */
 export const WEBHOOK_TIMESTAMP_HEADER = {
 	viator: "x-viator-timestamp",
-	getYourGuide: "x-getyourguide-timestamp",
+	getyourguide: "x-getyourguide-timestamp",
 	airbnb: "x-airbnb-timestamp",
-	tripAdvisor: "x-tripadvisor-timestamp",
+	tripadvisor: "x-tripadvisor-timestamp",
 	klook: "x-klook-timestamp",
 	booking: "x-booking-timestamp",
 	expedia: "x-expedia-timestamp",

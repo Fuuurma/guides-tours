@@ -46,7 +46,7 @@ export const recordDelivery = internalMutation({
 			)
 			.first();
 		if (existing) {
-			return { id: existing._id, isDuplicate: true };
+			return { id: existing._id, isDuplicate: true, existingStatus: existing.status };
 		}
 		const now = Date.now();
 		const id = await ctx.db.insert("webhookDeliveries", {

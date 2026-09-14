@@ -110,11 +110,12 @@ export function createWebhookHandler(config: WebhookConfig) {
 			secret,
 		);
 		if (!verifyResult.valid) {
-			if (verifyResult.reason) {
-				return new Response(`rejected: ${verifyResult.reason}`, {
-					status: 401,
-				});
-			}
+			// Don't echo the failure reason — it tells a caller which
+			// check (signature vs timestamp) failed and aids probing.
+			// The reason stays in the server log (needs-work 2026-09-10).
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: ${verifyResult.reason ?? "invalid signature"}`,
+			);
 			return new Response("invalid signature", { status: 401 });
 		}
 
@@ -151,13 +152,22 @@ export function createWebhookHandler(config: WebhookConfig) {
 				},
 			);
 			if (recorded.isDuplicate) {
-				// Re-delivery of an already-processed event. Skip
-				// silently — the original call already handled it.
-				// Log at info so audit can see retries.
-				logger.info(
-					`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,
+				// Only a completed delivery is a true duplicate. A prior
+				// attempt that never finished — 'failed' dispatch, or
+				// stuck 'received'/'processing' after a crash — must be
+				// re-dispatched on the provider's retry, not acked as a
+				// duplicate (needs-work 2026-09-11: failed dispatches
+				// were unrecoverable because retries were swallowed).
+				const s = recorded.existingStatus;
+				if (s === "processed" || s === "skipped") {
+					logger.info(
+						`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,
+					);
+					return new Response("ok (duplicate)", { status: 200 });
+				}
+				logger.warn(
+					`${config.logPrefix} re-dispatching event ${eventId} on integration ${integrationId} (prior status: ${s ?? "unknown"})`,
 				);
-				return new Response("ok (duplicate)", { status: 200 });
 			}
 		}
 
@@ -204,9 +214,12 @@ export function createWebhookHandler(config: WebhookConfig) {
  * reservationId is the natural key — each provider guarantees
  * uniqueness for the lifetime of a booking.
  */
-function extractEventId(event: NormalizedProviderEvent): string | null {
+export function extractEventId(event: NormalizedProviderEvent): string | null {
 	if (event.kind === "booking.created" || event.kind === "booking.cancelled") {
-		return event.reservationId;
+		// Prefix with the kind — create and cancel share the same
+		// reservationId, so a bare reservationId made the cancel dedup
+		// against the create and get swallowed (needs-work 2026-09-11).
+		return `${event.kind}:${event.reservationId}`;
 	}
 	if (event.kind === "availability.update") {
 		// availability.update has no reservationId. Build a

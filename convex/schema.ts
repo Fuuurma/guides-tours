@@ -661,7 +661,8 @@ export default defineSchema({
 		organizationId: orgId,
 		// "stripe" | "viator" | "getyourguide" | ...
 		source: v.string(),
-		// Provider's unique event id (e.g. Stripe evt_*, OTA reservation id)
+		// Provider's unique event id (e.g. Stripe evt_*; OTA events use
+		// "<kind>:<reservationId>" so create and cancel don't dedup-collide)
 		eventId: v.string(),
 		// Event type: payment_intent.succeeded | charge.refunded |
 		// booking.created | booking.cancelled | etc
