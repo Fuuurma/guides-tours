@@ -113,6 +113,31 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(await res.text()).toBe("missing signature");
 	});
 
+	// F91: the dashboard and DEPLOYMENT.md publish
+	// /api/ota/webhooks/{providerId} using the lowercase ids from
+	// types.ts/ota-providers.ts. Router paths must match exactly —
+	// httpRouter is case-sensitive, so a camelCase mount 404s the
+	// registered URL before any signature check.
+	it.each([
+		"airbnb",
+		"booking",
+		"expedia",
+		"getyourguide",
+		"klook",
+		"tripadvisor",
+		"viator",
+	])("mounts /api/ota/webhooks/%s at the canonical lowercase path", async (provider) => {
+		const t = convexTest(schema, modules);
+		const res = await t.fetch(`/api/ota/webhooks/${provider}`, {
+			method: "POST",
+			body: "{}",
+		});
+		// Reaching the handler = 400 "missing signature"; a wrong-case
+		// mount would fall through the router as 404.
+		expect(res.status).toBe(400);
+		expect(await res.text()).toBe("missing signature");
+	});
+
 	it("rejects missing integrationId query param with 400", async () => {
 		const t = convexTest(schema, modules);
 		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);

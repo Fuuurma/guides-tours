@@ -3,6 +3,10 @@
  * to an HTTPS URL — throws if unset in production. */
 import { logger } from "./logger";
 
+// Warn once per isolate, not per call — reminder/digest jobs call this
+// per org row and would spam logs otherwise (F93).
+let warnedMissingSiteUrl = false;
+
 export function getSiteUrl(): string {
 	const url = process.env.SITE_URL;
 	if (!url) {
@@ -10,8 +14,19 @@ export function getSiteUrl(): string {
 		// would produce broken links in emails/SMS and could leak
 		// internal addresses. Fail loudly instead of silently defaulting.
 		if (process.env.NODE_ENV === "production") {
+			logger.error(
+				"[siteUrl] SITE_URL is unset in production — refusing to " +
+					"build links that would point at a fallback address",
+			);
 			throw new Error(
 				"SITE_URL environment variable must be set in production",
+			);
+		}
+		if (!warnedMissingSiteUrl) {
+			warnedMissingSiteUrl = true;
+			logger.warn(
+				"[siteUrl] SITE_URL unset — falling back to " +
+					"http://127.0.0.1:3020 (dev only; production throws)",
 			);
 		}
 		return "http://127.0.0.1:3020";
