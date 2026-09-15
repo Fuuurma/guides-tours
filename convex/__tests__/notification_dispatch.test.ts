@@ -192,6 +192,37 @@ describe("convex/notification_dispatch", () => {
 		});
 	});
 
+	it("writes a notification.abandoned audit row when retries are exhausted (F24)", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const { orgId, scheduledId } = await seedScheduledForTemplate(
+				ctx,
+				"reminder_24h",
+				"24h Reminder",
+			);
+			// Push the row to the retry ceiling so the next failure abandons.
+			await ctx.db.patch(scheduledId, { retryCount: 3, maxRetries: 3 });
+
+			await t.action(
+				internal.notification_dispatch.dispatchScheduled,
+				{ scheduledId },
+			);
+
+			const after = await ctx.db.get(scheduledId);
+			expect(after?.sent).toBe(true);
+			const audits = await ctx.db
+				.query("auditLogs")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.collect();
+			const abandoned = audits.find(
+				(a) => a.action === "notification.abandoned",
+			);
+			expect(abandoned).toBeDefined();
+			expect(abandoned?.resourceType).toBe("scheduledNotification");
+			expect(abandoned?.resourceId).toBe(String(scheduledId));
+		});
+	});
+
 	it("renders different subjects + bodies per templateType", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {

@@ -250,7 +250,16 @@ export const recordDispatchResult = internalMutation({
 
 async function bumpRetryOrAbandon(
 	ctx: MutationCtx,
-	scheduled: Pick<Doc<"scheduledNotifications">, "_id" | "retryCount" | "maxRetries" | "notificationLogId">,
+	scheduled: Pick<
+		Doc<"scheduledNotifications">,
+		| "_id"
+		| "organizationId"
+		| "bookingId"
+		| "templateId"
+		| "retryCount"
+		| "maxRetries"
+		| "notificationLogId"
+	>,
 	errorMessage?: string,
 	logId?: Doc<"notificationLogs">["_id"],
 ) {
@@ -269,6 +278,24 @@ async function bumpRetryOrAbandon(
 			sent: true,
 			processedAt: Date.now(),
 			notificationLogId: logId ?? scheduled.notificationLogId,
+		});
+		// Escalation trail (F24): transient logger.warn is invisible to
+		// operators — a durable org-scoped audit row lets the audit view
+		// surface systemic delivery failure (e.g. SES down/misconfigured).
+		await logAudit(ctx, {
+			organizationId: scheduled.organizationId,
+			userId: "system",
+			action: "notification.abandoned",
+			resourceType: "scheduledNotification",
+			resourceId: String(scheduled._id),
+			oldValues: {},
+			newValues: {
+				bookingId: scheduled.bookingId ? String(scheduled.bookingId) : undefined,
+				templateId: scheduled.templateId ? String(scheduled.templateId) : undefined,
+				retryCount: scheduled.retryCount,
+				maxRetries: scheduled.maxRetries,
+				lastError: errorMessage ?? "unknown",
+			},
 		});
 		logger.warn(
 			`[cron] abandoned scheduled ${scheduled._id} after ${scheduled.retryCount} retries: ${errorMessage ?? "unknown"}`,

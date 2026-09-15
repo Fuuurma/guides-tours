@@ -38,16 +38,42 @@ type Member = {
 	role: string;
 };
 
+// Per-invocation memoization (see membershipCache below): the ctx
+// object is unique per function execution, so these entries die with
+// the request and never go stale.
+type AuthUser = NonNullable<
+	Awaited<ReturnType<typeof authComponent.getAuthUser>>
+>;
+const userCache = new WeakMap<Ctx, Promise<AuthUser>>();
+
 /**
  * Resolve the caller's identity. Throws if not authenticated.
+ * Memoized per request.
  */
 export async function requireUser(ctx: Ctx) {
-	const user = await authComponent.getAuthUser(ctx);
-	if (!user) {
-		throw new ConvexError("Unauthorized: sign in required");
+	const cached = userCache.get(ctx);
+	if (cached) {
+		return cached;
 	}
-	return user;
+	const promise = (async () => {
+		const user = await authComponent.getAuthUser(ctx);
+		if (!user) {
+			throw new ConvexError("Unauthorized: sign in required");
+		}
+		return user;
+	})();
+	userCache.set(ctx, promise);
+	return promise;
 }
+
+// Per-invocation memoization: ctx objects are unique per function
+// execution, so a WeakMap entry lives exactly as long as the request.
+// Callers commonly resolve membership 2+ times in one request
+// (requirePermission → requireMembership, then assertOrgMember →
+// requireMembership) and each resolution costs 1–3 Better Auth
+// component calls. Membership can't change mid-request (mutations are
+// a single tx; the org switch is client-side), so reuse is safe.
+const membershipCache = new WeakMap<Ctx, Promise<Member>>();
 
 /**
  * Resolve the caller's active membership.
@@ -56,9 +82,19 @@ export async function requireUser(ctx: Ctx) {
  * Single-org users fall back to their only membership. Multi-org users
  * without an active org throw — failing closed so a write can never
  * silently land in the wrong tenant. Throws if the user has no
- * organization at all.
+ * organization at all. Memoized per request.
  */
 export async function getActiveMembership(ctx: Ctx): Promise<Member> {
+	const cached = membershipCache.get(ctx);
+	if (cached) {
+		return cached;
+	}
+	const promise = resolveActiveMembership(ctx);
+	membershipCache.set(ctx, promise);
+	return promise;
+}
+
+async function resolveActiveMembership(ctx: Ctx): Promise<Member> {
 	const user = await requireUser(ctx);
 	const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
 	const session = await auth.api.getSession({ headers });

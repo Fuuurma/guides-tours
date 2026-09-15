@@ -22,28 +22,40 @@ const { mockState } = vi.hoisted(() => ({
 		user: null as MockUser | null,
 		session: null as MockSession | null,
 		orgs: [] as MockOrg[],
+		calls: { getAuthUser: 0, getSession: 0, listMembers: 0, listOrganizations: 0 },
 	},
 }));
 
 vi.mock("../auth", () => ({
 	authComponent: {
-		getAuthUser: async () => mockState.user,
+		getAuthUser: async () => {
+			mockState.calls.getAuthUser++;
+			return mockState.user;
+		},
 		safeGetAuthUser: async () => mockState.user ?? undefined,
 		getAuth: async () => ({
 			auth: {
 				api: {
-					getSession: async () =>
-						mockState.session
+					getSession: async () => {
+						mockState.calls.getSession++;
+						return mockState.session
 							? { session: mockState.session, user: mockState.user }
-							: null,
-					listOrganizations: async () => mockState.orgs,
+							: null;
+					},
+					listOrganizations: async () => {
+						mockState.calls.listOrganizations++;
+						return mockState.orgs;
+					},
 					listMembers: async (args: {
 						query: { organizationId: string };
-					}) => ({
-						members:
-							mockState.orgs.find((o) => o.id === args.query.organizationId)
-								?.members ?? [],
-					}),
+					}) => {
+						mockState.calls.listMembers++;
+						return {
+							members:
+								mockState.orgs.find((o) => o.id === args.query.organizationId)
+									?.members ?? [],
+						};
+					},
 				},
 			},
 			headers: new Headers(),
@@ -72,21 +84,24 @@ function setState(next: {
 	mockState.user = next.user ?? null;
 	mockState.session = next.session ?? null;
 	mockState.orgs = next.orgs ?? [];
+	mockState.calls = { getAuthUser: 0, getSession: 0, listMembers: 0, listOrganizations: 0 };
 }
 
-const CTX = {} as unknown as Ctx;
+// Membership resolution is memoized per ctx (one Convex invocation =
+// one ctx object), so each test needs a fresh ctx to stay isolated.
+const CTX = () => ({}) as unknown as Ctx;
 
 describe("getActiveMembership fail-closed (multi-org, no active org)", () => {
 	it("throws for multi-org users with no active org set", async () => {
 		setState({ user: USER, session: {}, orgs: [ORG_A, ORG_B] });
-		await expect(getActiveMembership(CTX)).rejects.toThrow(
+		await expect(getActiveMembership(CTX())).rejects.toThrow(
 			/No active organization/,
 		);
 	});
 
 	it("keeps the back-compat fallback for single-org users", async () => {
 		setState({ user: USER, session: {}, orgs: [ORG_A] });
-		const member = await getActiveMembership(CTX);
+		const member = await getActiveMembership(CTX());
 		expect(member.organizationId).toBe(ORG_A.id);
 		expect(member.role).toBe("owner");
 	});
@@ -97,20 +112,48 @@ describe("getActiveMembership fail-closed (multi-org, no active org)", () => {
 			session: { activeOrganizationId: ORG_B.id },
 			orgs: [ORG_A, ORG_B],
 		});
-		const member = await getActiveMembership(CTX);
+		const member = await getActiveMembership(CTX());
 		expect(member.organizationId).toBe(ORG_B.id);
 		expect(member.role).toBe("member");
 	});
 
 	it("throws when the user has no organization at all", async () => {
 		setState({ user: USER, session: {}, orgs: [] });
-		await expect(getActiveMembership(CTX)).rejects.toThrow(
+		await expect(getActiveMembership(CTX())).rejects.toThrow(
 			/No organization/,
 		);
 	});
 
 	it("throws for unauthenticated callers", async () => {
 		setState({ user: null, session: null, orgs: [ORG_A] });
-		await expect(getActiveMembership(CTX)).rejects.toThrow(/Unauthorized/);
+		await expect(getActiveMembership(CTX())).rejects.toThrow(/Unauthorized/);
+	});
+});
+
+describe("getActiveMembership per-request memoization (F9)", () => {
+	it("resolves once per ctx — repeated calls reuse the cached promise", async () => {
+		setState({
+			user: USER,
+			session: { activeOrganizationId: ORG_A.id },
+			orgs: [ORG_A, ORG_B],
+		});
+		const ctx = CTX();
+		const first = await getActiveMembership(ctx);
+		const second = await getActiveMembership(ctx);
+		expect(second).toBe(first);
+		expect(mockState.calls.getAuthUser).toBe(1);
+		expect(mockState.calls.getSession).toBe(1);
+		expect(mockState.calls.listMembers).toBe(1);
+	});
+
+	it("does not share the cache across ctx objects", async () => {
+		setState({
+			user: USER,
+			session: { activeOrganizationId: ORG_A.id },
+			orgs: [ORG_A, ORG_B],
+		});
+		await getActiveMembership(CTX());
+		await getActiveMembership(CTX());
+		expect(mockState.calls.getSession).toBe(2);
 	});
 });
