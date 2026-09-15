@@ -54,6 +54,16 @@ export interface WebhookConfig {
  *   - Normalizes the event; returns 200 + "ignored" for unknown kinds
  *   - Dispatches upsert/cancel via shared mutations
  */
+/** Deterministic short hash (djb2) — dedup key for malformed payloads
+ * so identical retry attempts collapse to one audit row. */
+function djb2Hash(input: string): string {
+	let h = 5381;
+	for (let i = 0; i < input.length; i++) {
+		h = ((h << 5) + h + input.charCodeAt(i)) | 0;
+	}
+	return (h >>> 0).toString(36);
+}
+
 export function createWebhookHandler(config: WebhookConfig) {
 	return httpAction(async (ctx, request) => {
 		if (request.method !== "POST") {
@@ -146,7 +156,41 @@ export function createWebhookHandler(config: WebhookConfig) {
 		} catch {
 			return new Response("invalid JSON", { status: 400 });
 		}
-		const event = config.normalize(parsed);
+		// A signed-but-malformed payload escaping normalize() would
+		// otherwise 5xx BEFORE recordDelivery — zero audit trail and
+		// infinite poison retries. Controlled 400 + a failed-delivery
+		// audit row; identical retries dedup via a body hash (F86/F130).
+		let event: NormalizedProviderEvent | null;
+		try {
+			event = config.normalize(parsed);
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			const malformedId = `malformed:${integrationId}:${djb2Hash(rawBody)}`;
+			await ctx.runMutation(internal.webhookDeliveries.recordDelivery, {
+				organizationId: integration.organizationId,
+				source: config.provider,
+				eventId: malformedId,
+				eventType: "malformed",
+				integrationId: integrationId as Id<"otaIntegrations">,
+				ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
+				userAgent: request.headers.get("user-agent") ?? undefined,
+				payload: parsed,
+			});
+			await ctx.runMutation(
+				internal.webhookDeliveries.updateDeliveryStatus,
+				{
+					organizationId: integration.organizationId,
+					source: config.provider,
+					eventId: malformedId,
+					status: "failed",
+					errorMessage: message,
+				},
+			);
+			logger.error(
+				`${config.logPrefix} malformed payload on integration ${integrationId}: ${message}`,
+			);
+			return new Response("malformed payload", { status: 400 });
+		}
 		if (!event) {
 			logger.info(
 				`${config.logPrefix} ignored event type on integration ${integrationId}`,

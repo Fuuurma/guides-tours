@@ -246,6 +246,46 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(res.status).toBe(401);
 	});
 
+	it("signed-but-malformed payload gets 400 + a failed delivery audit row (F130)", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_malformed", "viator", secret),
+		);
+		// Parses as JSON but normalize() throws — the reservation has no
+		// id/reservationId for stringOrThrow.
+		const body = JSON.stringify({
+			eventType: "BOOKING_CREATED",
+			reservation: { productCode: "P-1" },
+		});
+		const sig = await hmacHex("test-secret", body);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(res.status).toBe(400);
+		expect(await res.text()).toBe("malformed payload");
+		// The poison delivery is audited as failed, not silent.
+		const deliveries = await t.run(async (ctx) =>
+			ctx.db
+				.query("webhookDeliveries")
+				.withIndex("by_org", (q) => q.eq("organizationId", "org_malformed"))
+				.collect(),
+		);
+		expect(deliveries.length).toBe(1);
+		expect(deliveries[0]?.eventType).toBe("malformed");
+		expect(deliveries[0]?.status).toBe("failed");
+		expect(deliveries[0]?.eventId).toMatch(/^malformed:/);
+	});
+
 	it("rejects invalid JSON with 400", async () => {
 		const t = convexTest(schema, modules);
 		const { encrypt } = await import("../lib/crypto");
