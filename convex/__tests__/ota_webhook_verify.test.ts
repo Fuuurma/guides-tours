@@ -9,6 +9,7 @@
 import { describe, expect, test } from "vitest";
 import {
 	checkWebhookTimestamp,
+	fromHex,
 	hmacSha256Hex,
 	verifyWebhookSignature,
 	verifyWebhookSignatureWithTimestamp,
@@ -73,6 +74,20 @@ describe("verifyWebhookSignature", () => {
 		expect(
 			await verifyWebhookSignature("payload", "not-hex!!", "secret"),
 		).toBe(false);
+	});
+
+	test("rejects a signature-length non-hex string (no silent zero-byte coercion)", async () => {
+		// 64 chars of non-hex — same length as a real SHA-256 hex digest,
+		// so it reaches fromHex. parseInt('zz',16) is NaN and used to
+		// silently coerce to a 0 byte (needs-work 2026-09-10).
+		expect(
+			await verifyWebhookSignature("payload", "zz".repeat(32), "secret"),
+		).toBe(false);
+	});
+
+	test("fromHex throws on non-hex characters instead of coercing to zero", () => {
+		expect(() => fromHex("zz")).toThrow("invalid hex character");
+		expect(fromHex("00ff")).toEqual(new Uint8Array([0, 255]));
 	});
 
 	test("rejects signature with wrong length", async () => {

@@ -367,6 +367,134 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(row).toBeDefined();
 		expect((row as any).status).toBe("cancelled");
 	});
+
+	it("does not echo the verify-failure reason in the 401 body", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", secret),
+		);
+		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const sig = await hmacHex("test-secret", body);
+		const staleTs = String(Date.now() - 60 * 60 * 1000);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": staleTs,
+				},
+			},
+		);
+		expect(res.status).toBe(401);
+		// Generic body — must not leak which check failed ("too_old").
+		expect(await res.text()).toBe("invalid signature");
+	});
+
+	it("a cancel after a create for the same reservation still dispatches", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", secret),
+		);
+
+		// Create the booking through the wire first — this records a
+		// delivery whose eventId must NOT collide with the cancel's.
+		const createBody = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const createSig = await hmacHex("test-secret", createBody);
+		const createRes = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body: createBody,
+				headers: {
+					"x-viator-signature": createSig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(createRes.status).toBe(200);
+
+		const cancelBody = JSON.stringify(VIATOR_CANCEL_PAYLOAD);
+		const cancelSig = await hmacHex("test-secret", cancelBody);
+		const cancelRes = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body: cancelBody,
+				headers: {
+					"x-viator-signature": cancelSig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(cancelRes.status).toBe(200);
+		expect(await cancelRes.text()).toBe("ok");
+
+		const row = await t.run(async (ctx) =>
+			ctx.db
+				.query("otaBookings")
+				.withIndex("by_integration_reservation", (q: any) =>
+					q
+						.eq("integrationId", integrationId)
+						.eq("otaReservationId", "RES-FAC-001"),
+				)
+				.unique(),
+		);
+		expect((row as any)?.status).toBe("cancelled");
+	});
+
+	it("re-dispatches a delivery whose prior attempt failed", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", secret),
+		);
+
+		// Seed the delivery row a failed first attempt would leave
+		// behind — the provider's retry must re-dispatch, not be acked
+		// as a duplicate.
+		await t.run(async (ctx) => {
+			await ctx.db.insert("webhookDeliveries", {
+				organizationId: "org_a",
+				source: "viator",
+				eventId: "booking.created:RES-FAC-001",
+				eventType: "booking.created",
+				status: "failed",
+				payload: {},
+				receivedAt: Date.now() - 60_000,
+				attemptCount: 1,
+			});
+		});
+
+		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const sig = await hmacHex("test-secret", body);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(res.status).toBe(200);
+		expect(await res.text()).toBe("ok");
+
+		// The retry dispatched — the booking exists now.
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("otaBookings").collect(),
+		);
+		expect(rows.length).toBe(1);
+		expect((rows[0] as any).otaReservationId).toBe("RES-FAC-001");
+	});
 });
 
 // silence unused-import warning for internal (referenced for type info)

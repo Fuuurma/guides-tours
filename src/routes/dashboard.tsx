@@ -72,8 +72,8 @@ function DashboardLayout() {
 						<Skeleton className="h-9 w-full rounded-lg" />
 					</div>
 					<div className="flex flex-1 flex-col gap-2 px-3">
-						{["a", "b", "c", "d", "e", "f", "g", "h"].map((k) => (
-							<Skeleton key={k} className="h-8 w-full rounded-lg" />
+						{Array.from({ length: 8 }, (_, i) => (
+							<Skeleton key={i} className="h-8 w-full rounded-lg" />
 						))}
 					</div>
 				</aside>

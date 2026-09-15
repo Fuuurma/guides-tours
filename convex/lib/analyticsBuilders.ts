@@ -4,11 +4,10 @@
  * reads and compute the report shapes. The Convex query wrappers stay
  * in convex/analytics.ts — the client-facing api surface is identical.
  */
-import { logger } from "./logger";
-import type { GenericQueryCtx } from "convex/server";
 import { authComponent, createAuth } from "../auth";
+import type { GenericQueryCtx } from "convex/server";
 import type { DataModel, Doc, Id } from "../_generated/dataModel";
-
+import { logger } from "../lib/logger";
 
 type QCtx = GenericQueryCtx<DataModel>;
 type Booking = Doc<"bookings">;
@@ -43,7 +42,15 @@ export async function buildOverview(
 	// were read, which the payload reports as truncated (fleet
 	// needs-work 09-08, devin finding on silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
-	const [tours, allAssignments, pendingVacations] = await Promise.all([
+	// The upcoming-week card needs FUTURE rows, but the window scan
+	// below is clipped at endDate (every dashboard preset ends today),
+	// so filtering it could only ever count today (fleet needs-work
+	// 09-13 P2). Dedicated 7-day scan — inherently bounded, cheap.
+	const todayEarly = new Date().toISOString().slice(0, 10);
+	const weekEndEarly = new Date(Date.parse(todayEarly) + 7 * 86_400_000)
+		.toISOString()
+		.slice(0, 10);
+	const [tours, allAssignments, pendingVacations, upcomingWeek] = await Promise.all([
 		ctx.db
 			.query("tours")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
@@ -63,8 +70,17 @@ export async function buildOverview(
 				q.eq("organizationId", orgId).eq("status", "pending"),
 			)
 			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("assignments")
+			.withIndex("by_org_date", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.gte("date", todayEarly)
+					.lte("date", weekEndEarly),
+			)
+			.take(MAX_ANALYTICS_SCAN),
 	]);
-	const truncated = [tours, allAssignments, pendingVacations].some(
+	const truncated = [tours, allAssignments, pendingVacations, upcomingWeek].some(
 		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
 	);
 	const activeTours = tours.filter((t) => !t.deletedAt);
@@ -82,14 +98,10 @@ export async function buildOverview(
 	const daysInRange = dateRange(startDate, endDate).length;
 	const avgPerDay = daysInRange > 0 ? round1(total / daysInRange) : 0;
 
-	const today = new Date().toISOString().slice(0, 10);
-	const weekEnd = new Date(Date.parse(today) + 7 * 86_400_000)
-		.toISOString()
-		.slice(0, 10);
-	const upcoming = allAssignments.filter(
+	// Counted from the dedicated 7-day scan above (same anchors),
+	// not the window-clipped array — see the scan comment.
+	const upcoming = upcomingWeek.filter(
 		(a) =>
-			a.date >= today &&
-			a.date <= weekEnd &&
 			a.status === "scheduled" &&
 			!a.deletedAt,
 	).length;
@@ -104,7 +116,14 @@ export async function buildOverview(
 		totalGuides = memberList.members.filter(
 			(m: { role: string }) => m.role === "guide",
 		).length;
-	} catch {
+	} catch (err) {
+		// A real Better Auth/component failure must not be
+		// indistinguishable from an org with zero guides (fleet
+		// 10b56a45) — log with context, keep the 0 fallback.
+		logger.error(
+			`[analytics] listMembers failed for org ${orgId}: ` +
+				(err instanceof Error ? err.message : String(err)),
+		);
 		totalGuides = 0;
 	}
 
@@ -149,7 +168,8 @@ export async function buildTourStats(
 	const inRange = assignments.filter((a) => !a.deletedAt);
 
 	// Overflow probe (fleet 09-08): a full-cap scan means the org has
-	// more rows than were read — flag the payload as truncated.
+	// more rows than were read — flag the payload as truncated (and
+	// keep the warn log so cap-hits stay visible server-side).
 	const tourCount = tours.length;
 	const assignmentCount = assignments.length;
 	const truncated = tourCount >= MAX_ANALYTICS_SCAN || assignmentCount >= MAX_ANALYTICS_SCAN;
@@ -159,7 +179,7 @@ export async function buildTourStats(
 		);
 	}
 
-	return tours
+	const tourItems = tours
 		.filter((t) => !t.deletedAt)
 		.map((tour) => {
 			const tourAssignments = inRange.filter(
@@ -179,6 +199,7 @@ export async function buildTourStats(
 		})
 		.sort((a, b) => b.totalAssignments - a.totalAssignments)
 		.slice(0, 10);
+	return { tours: tourItems, truncated };
 }
 
 export async function buildGuideStats(
@@ -187,7 +208,9 @@ export async function buildGuideStats(
 	startDate: string,
 	endDate: string,
 ) {
-	// Bound the scan to prevent OOM on large orgs.
+	// Bound the scan to prevent OOM on large orgs. Hitting the cap
+	// means the org has more rows than were read — reported as
+	// truncated (fleet needs-work 09-08, silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const assignments = await ctx.db
 		.query("assignments")
@@ -198,6 +221,7 @@ export async function buildGuideStats(
 				.lte("date", endDate),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	const truncated = assignments.length >= MAX_ANALYTICS_SCAN;
 
 	const inRange = assignments.filter((a) => !a.deletedAt);
 
@@ -214,7 +238,7 @@ export async function buildGuideStats(
 		guideMap.set(key, entry);
 	}
 
-	return Array.from(guideMap.entries())
+	const guides = Array.from(guideMap.entries())
 		.map(([guideId, stats]) => ({
 			guideId,
 			totalAssignments: stats.total,
@@ -223,6 +247,9 @@ export async function buildGuideStats(
 		}))
 		.sort((a, b) => b.totalAssignments - a.totalAssignments)
 		.slice(0, 10);
+	// Uniform shape with buildDailyStats/buildChannelRevenue: the
+	// list rides `guides`, the cap-hit rides `truncated`.
+	return { guides, truncated };
 }
 
 export async function buildDailyStats(
@@ -261,12 +288,15 @@ export async function buildDailyStats(
 		}
 	}
 
-	return Array.from(dayMap.entries()).map(([date, stats]) => ({
-		date,
-		total: stats.total,
-		completed: stats.completed,
-		cancelled: stats.cancelled,
-	}));
+	return {
+		days: Array.from(dayMap.entries()).map(([date, stats]) => ({
+			date,
+			total: stats.total,
+			completed: stats.completed,
+			cancelled: stats.cancelled,
+		})),
+		truncated: assignments.length >= MAX_ANALYTICS_SCAN,
+	};
 }
 
 export async function buildRevenueSummary(
@@ -277,7 +307,9 @@ export async function buildRevenueSummary(
 ) {
 	// Range-scan within the org + date window to avoid a full-table
 	// collect. by_org_date is leading (orgId, date) so gte/lte work.
-	// Bound the scan to prevent OOM on large orgs.
+	// Bound the scan to prevent OOM on large orgs. Hitting the cap
+	// means the org has more rows than were read — reported as
+	// truncated (fleet needs-work 09-08, silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const allBookingsInRange = await ctx.db
 		.query("bookings")
@@ -288,6 +320,7 @@ export async function buildRevenueSummary(
 				.lte("date", endDate),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	const truncated = allBookingsInRange.length >= MAX_ANALYTICS_SCAN;
 
 	const inRange = allBookingsInRange.filter(
 		(b) => b.status !== "cancelled",
@@ -319,6 +352,7 @@ export async function buildRevenueSummary(
 		totalRevenueCents: totalRevenue,
 		avgBookingValueCents: avgBookingValue,
 		cancellationRate,
+		truncated,
 	};
 }
 
@@ -353,6 +387,10 @@ export async function buildChannelRevenue(
 				.lte("date", endDate),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	// Hitting the cap means the org has more rows than were read —
+	// reported as truncated (fleet needs-work 09-08, silent take(N)
+	// caps).
+	const truncated = bookings.length >= MAX_ANALYTICS_SCAN;
 
 	const active = bookings.filter((b) => b.status !== "cancelled");
 
@@ -373,14 +411,17 @@ export async function buildChannelRevenue(
 		channelMap.set(source, entry);
 	}
 
-	return Array.from(channelMap.entries())
-		.map(([source, stats]) => ({
-			source,
-			totalBookings: stats.bookings,
-			totalGuests: stats.guests,
-			totalRevenueCents: stats.revenue,
-		}))
-		.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents);
+	return {
+		channels: Array.from(channelMap.entries())
+			.map(([source, stats]) => ({
+				source,
+				totalBookings: stats.bookings,
+				totalGuests: stats.guests,
+				totalRevenueCents: stats.revenue,
+			}))
+			.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents),
+		truncated,
+	};
 }
 
 /**
@@ -420,10 +461,12 @@ export async function buildFinancialHealth(
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
 			.query("refunds")
-			.withIndex("by_org_status", (q) =>
+			.withIndex("by_org_status_created", (q) =>
 				q
 					.eq("organizationId", orgId)
-					.eq("status", "succeeded"),
+					.eq("status", "succeeded")
+					.gte("createdAt", Date.parse(`${startDate}T00:00:00Z`))
+					.lte("createdAt", Date.parse(`${endDate}T23:59:59Z`)),
 			)
 			.take(MAX_ANALYTICS_SCAN),
 		ctx.db
@@ -436,6 +479,11 @@ export async function buildFinancialHealth(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+	// Hitting any cap means the org has more rows than were read —
+	// reported as truncated (fleet needs-work 09-13 P3).
+	const truncated = [payments, refunds, bookings].some(
+		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
+	);
 
 	const grossCents = payments.reduce(
 		(s, p) => s + Number(p.amountCents),
@@ -471,6 +519,7 @@ export async function buildFinancialHealth(
 		bookingsTotal: activeBookings.length,
 		bookingsWithDeposit,
 		depositCoverage,
+		truncated,
 	};
 }
 
@@ -508,6 +557,7 @@ export async function buildConversions(
 			rejectedCapacity: 0,
 			rejectedUnknownSlug: 0,
 			successRate: 0,
+			truncated: false,
 		};
 	}
 	const rows = await ctx.db
@@ -519,6 +569,9 @@ export async function buildConversions(
 				.lte("createdAt", endMs),
 		)
 		.take(MAX_ANALYTICS_SCAN);
+	// Hitting the cap means more attempts than were read — reported
+	// as truncated (fleet needs-work 09-13 P3, silent take(N) caps).
+	const truncated = rows.length >= MAX_ANALYTICS_SCAN;
 
 	let success = 0;
 	let rejectedRateLimit = 0;
@@ -561,6 +614,7 @@ export async function buildConversions(
 		rejectedCapacity,
 		rejectedUnknownSlug,
 		successRate,
+		truncated,
 	};
 }
 
@@ -571,7 +625,9 @@ export async function buildTopTours(
 	endDate: string,
 	limit: number,
 ) {
-	// Bound the scans to prevent OOM on large orgs.
+	// Bound the scans to prevent OOM on large orgs. Hitting either
+	// cap means the org has more rows than were read — reported as
+	// truncated (fleet needs-work 09-08/09-13, silent take(N) caps).
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const [tours, bookings] = await Promise.all([
 		ctx.db
@@ -588,6 +644,9 @@ export async function buildTopTours(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+	const truncated =
+		tours.length >= MAX_ANALYTICS_SCAN ||
+		bookings.length >= MAX_ANALYTICS_SCAN;
 	const tourMap = new Map(tours.map((t) => [String(t._id), t.name]));
 
 	const inRange = bookings.filter((b) => b.status !== "cancelled");
@@ -605,16 +664,19 @@ export async function buildTopTours(
 		tourRevenue.set(key, entry);
 	}
 
-	return Array.from(tourRevenue.entries())
-		.map(([tourId, stats]) => ({
-			tourId,
-			tourName: tourMap.get(tourId) ?? "Unknown",
-			totalBookings: stats.bookings,
-			totalGuests: stats.guests,
-			totalRevenueCents: stats.revenue,
-		}))
-		.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents)
-		.slice(0, limit);
+	return {
+		tours: Array.from(tourRevenue.entries())
+			.map(([tourId, stats]) => ({
+				tourId,
+				tourName: tourMap.get(tourId) ?? "Unknown",
+				totalBookings: stats.bookings,
+				totalGuests: stats.guests,
+				totalRevenueCents: stats.revenue,
+			}))
+			.sort((a, b) => b.totalRevenueCents - a.totalRevenueCents)
+			.slice(0, limit),
+		truncated,
+	};
 }
 
 /**

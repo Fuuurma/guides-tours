@@ -173,8 +173,8 @@ function AnalyticsPage() {
 		[leaderboardTourDays],
 	);
 	const leaderboardTours = useMemo(() => {
-		if (!topTours) return [];
-		return topTours.map((t) => ({
+		if (!topTours?.tours) return [];
+		return topTours.tours.map((t) => ({
 			tourId: String(t.tourId),
 			tourName: String(t.tourName ?? "Unknown"),
 			totalBookings: t.totalBookings,
@@ -487,13 +487,13 @@ function AnalyticsPage() {
 						</CardDescription>
 					</CardHeader>
 					<CardContent>
-						{!tourStats || tourStats.length === 0 ? (
+						{!tourStats?.tours || tourStats.tours.length === 0 ? (
 							<p className="text-muted-foreground text-sm">
 								No assignments in this window.
 							</p>
 						) : (
 							<ul className="flex flex-col gap-2 text-sm">
-								{tourStats.map((t) => (
+								{tourStats.tours.map((t) => (
 									<li
 										key={t.tourId}
 										className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0"
@@ -521,15 +521,15 @@ function AnalyticsPage() {
 				<CardHeader>
 					<CardTitle>Revenue by channel</CardTitle>
 					<CardDescription>
-						{channels && channels.length > 0
-							? `${channels.length} channel${
-									channels.length === 1 ? "" : "s"
+						{channels?.channels && channels.channels.length > 0
+							? `${channels.channels.length} channel${
+									channels.channels.length === 1 ? "" : "s"
 								} contributing`
 							: "Where your bookings come from"}
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<ChannelMixBar channels={channels ?? []} />
+					<ChannelMixBar channels={channels?.channels ?? []} />
 				</CardContent>
 			</Card>
 
@@ -552,13 +552,13 @@ function AnalyticsPage() {
 						<CardDescription>Assignments completed in range</CardDescription>
 					</CardHeader>
 					<CardContent>
-						{!guideStats || guideStats.length === 0 ? (
+						{!guideStats?.guides || guideStats.guides.length === 0 ? (
 							<p className="text-muted-foreground text-sm">
 								No assignments in this window.
 							</p>
 						) : (
 							<ul className="flex flex-col gap-2 text-sm">
-								{guideStats.slice(0, 8).map((g) => (
+								{guideStats.guides.slice(0, 8).map((g) => (
 									<li
 										key={g.guideId}
 										className="flex items-baseline justify-between gap-4 border-b pb-2 last:border-0"
@@ -585,13 +585,13 @@ function AnalyticsPage() {
 						<CardDescription>Assignments per day</CardDescription>
 					</CardHeader>
 					<CardContent>
-						{!dailyStats || dailyStats.length === 0 ? (
+						{!dailyStats?.days || dailyStats.days.length === 0 ? (
 							<p className="text-muted-foreground text-sm">
 								No activity in this window.
 							</p>
 						) : (
 							<ul className="flex max-h-64 flex-col gap-1 overflow-y-auto text-sm">
-								{[...dailyStats]
+								{[...dailyStats.days]
 									.sort((a, b) => b.date.localeCompare(a.date))
 									.slice(0, 14)
 									.map((d) => (

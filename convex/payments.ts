@@ -861,12 +861,13 @@ export const recordFromAction = internalMutation({
 export const markRefunded = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
+		// Whether the charge is fully refunded (Stripe charge.refunded flag
+		// / amount_refunded >= amount). Undefined defaults to full — the
+		// historical contract — but partial-refund webhook payloads pass
+		// false so a partial refund doesn't mislabel the payment refunded.
+		fullyRefunded: v.optional(v.boolean()),
 		// Optional refund details from the Stripe webhook. When present,
-		// corresponding rows are written to the refunds table — one per
-		// Stripe refund id, backfilling only the missing ones (a PI can
-		// be refunded multiple times; every charge.refunded event carries
-		// the FULL refund list, so passing the array keeps the ledger in
-		// sync across partial/multiple refunds — fleet P2 09-14).
+		// a corresponding row is written to the refunds table.
 		refund: v.optional(
 			v.object({
 				stripeRefundId: v.string(),
@@ -876,51 +877,47 @@ export const markRefunded = internalMutation({
 				processedAt: v.optional(v.number()),
 			}),
 		),
-		refunds: v.optional(
-			v.array(
-				v.object({
-					stripeRefundId: v.string(),
-					amountCents: v.int64(),
-					currency: v.string(),
-					reason: v.optional(v.string()),
-					processedAt: v.optional(v.number()),
-				}),
-			),
-		),
 	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) throw new ConvexError("Payment not found");
-		const all = [
-			...(args.refund ? [args.refund] : []),
-			...(args.refunds ?? []),
-		];
 		if (p.status === "refunded") {
-			// Idempotent — but backfill any refund rows Stripe knows about
-			// that the ledger is missing (multiple/partial refunds).
-			for (const refund of all) {
+			// Idempotent — but if a refund row is missing, backfill it.
+			// This matters for multi-refund payloads: the first entry may
+			// flip the status while later entries still need their row +
+			// booking reversal recorded.
+			if (args.refund) {
 				const existing = await ctx.db
 					.query("refunds")
 					.withIndex("by_stripe_refund", (q) =>
-						q.eq("stripeRefundId", refund.stripeRefundId),
+						q.eq("stripeRefundId", args.refund!.stripeRefundId),
 					)
 					.first();
 				if (!existing) {
+					const now = Date.now();
 					await ctx.db.insert("refunds", {
 						organizationId: p.organizationId,
 						paymentId: p._id,
-						stripeRefundId: refund.stripeRefundId,
-						amountCents: refund.amountCents,
-						currency: refund.currency,
+						stripeRefundId: args.refund.stripeRefundId,
+						amountCents: args.refund.amountCents,
+						currency: args.refund.currency,
 						status: "succeeded",
-						reason: refund.reason,
+						reason: args.refund.reason,
 						refundedBy: "stripe_webhook",
-						refundedAt: Date.now(),
-						processedAt: refund.processedAt ?? Date.now(),
+						refundedAt: now,
+						processedAt: args.refund.processedAt ?? now,
 						metadata: {},
-						createdAt: Date.now(),
-						updatedAt: Date.now(),
+						createdAt: now,
+						updatedAt: now,
 					});
+					if (p.bookingId) {
+						await reversePaymentOnBooking(ctx, {
+							organizationId: p.organizationId,
+							bookingId: p.bookingId,
+							amountCents: args.refund.amountCents,
+							now,
+						});
+					}
 				}
 			}
 			return args.paymentId;
@@ -931,37 +928,42 @@ export const markRefunded = internalMutation({
 			);
 		}
 		const now = Date.now();
-		await ctx.db.patch(args.paymentId, {
-			status: "refunded",
-			updatedAt: now,
-		});
-		for (const refund of all) {
+		const fully = args.fullyRefunded ?? true;
+		if (fully) {
+			await ctx.db.patch(args.paymentId, {
+				status: "refunded",
+				updatedAt: now,
+			});
+		}
+		// Write the refunds row when details are present — for both full
+		// and partial refunds (the refunds table is the per-refund truth).
+		if (args.refund) {
 			await ctx.db.insert("refunds", {
 				organizationId: p.organizationId,
 				paymentId: p._id,
-				stripeRefundId: refund.stripeRefundId,
-				amountCents: refund.amountCents,
-				currency: refund.currency,
+				stripeRefundId: args.refund.stripeRefundId,
+				amountCents: args.refund.amountCents,
+				currency: args.refund.currency,
 				status: "succeeded",
-				reason: refund.reason,
+				reason: args.refund.reason,
 				refundedBy: "stripe_webhook",
 				refundedAt: now,
-				processedAt: refund.processedAt ?? now,
+				processedAt: args.refund.processedAt ?? now,
 				metadata: {},
 				createdAt: now,
 				updatedAt: now,
 			});
 		}
+
 		if (p.bookingId) {
 			await reversePaymentOnBooking(ctx, {
 				organizationId: p.organizationId,
 				bookingId: p.bookingId,
-				amountCents:
-					all.reduce((sum, r) => sum + r.amountCents, 0n) ??
-					p.amountCents,
+				amountCents: args.refund?.amountCents ?? p.amountCents,
 				now,
 			});
 		}
+
 		await logAudit(ctx, {
 			organizationId: p.organizationId,
 			userId: "stripe_webhook",
@@ -969,7 +971,7 @@ export const markRefunded = internalMutation({
 			resourceType: "payment",
 			resourceId: args.paymentId,
 			oldValues: { status: p.status },
-			newValues: { status: "refunded" },
+			newValues: { status: fully ? "refunded" : "succeeded" },
 		});
 		return args.paymentId;
 	},

@@ -20,13 +20,14 @@ import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { internal } from "../_generated/api";
-import {
-	timeToMinutes,
-	minutesToTime,
-	calculateEndTime,
-	rangesOverlap,
-	checkConflictsHelper,
+import { checkConflictsHelper,
 } from "../assignments";
+import {
+	calculateEndTime,
+	minutesToTime,
+	rangesOverlap,
+	timeToMinutes,
+} from "../lib/assignmentTime";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 

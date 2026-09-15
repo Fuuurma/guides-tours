@@ -144,6 +144,39 @@ describe("analytics", () => {
 		expect(overview.completionRate).toBe(33.3);
 	});
 
+	it("getOverview: upcomingThisWeek counts future assignments outside the window", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_upcoming";
+		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
+		const day = (offset: number) =>
+			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+		// Scheduled 3 days out: beyond every dashboard preset's
+		// endDate (all end today) but inside the 7-day card window.
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, {
+				status: "scheduled",
+				date: day(3),
+			}),
+		);
+		// Cancelled future assignment: must NOT count.
+		await t.run((ctx: any) =>
+			seedAssignment(ctx, orgId, tourId, {
+				status: "cancelled",
+				date: day(4),
+			}),
+		);
+
+		const overview = await t.query(
+			internal.analytics.getOverviewInternal,
+			{
+				organizationId: orgId,
+				startDate: day(-30),
+				endDate: day(0),
+			},
+		);
+		expect(overview.upcomingThisWeek).toBe(1);
+	});
+
 	it("getTourStats: groups by tour", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a2";
@@ -165,11 +198,12 @@ describe("analytics", () => {
 				endDate: "2026-07-31",
 			},
 		);
-		expect(stats.length).toBe(2);
-		expect(stats[0]!.tourName).toBe("Tour A");
-		expect(stats[0]!.totalAssignments).toBe(2);
-		expect(stats[1]!.tourName).toBe("Tour B");
-		expect(stats[1]!.totalAssignments).toBe(1);
+		expect(stats.tours.length).toBe(2);
+		expect(stats.tours[0]!.tourName).toBe("Tour A");
+		expect(stats.tours[0]!.totalAssignments).toBe(2);
+		expect(stats.tours[1]!.tourName).toBe("Tour B");
+		expect(stats.tours[1]!.totalAssignments).toBe(1);
+		expect(stats.truncated).toBe(false);
 	});
 
 	it("getForTour: bookings + assignments for one tour", async () => {
@@ -232,10 +266,11 @@ describe("analytics", () => {
 				endDate: "2026-07-03",
 			},
 		);
-		expect(stats.length).toBe(3);
-		expect(stats[0]!.total).toBe(0);
-		expect(stats[1]!.total).toBe(0);
-		expect(stats[2]!.total).toBe(0);
+		expect(stats.days.length).toBe(3);
+		expect(stats.days[0]!.total).toBe(0);
+		expect(stats.days[1]!.total).toBe(0);
+		expect(stats.days[2]!.total).toBe(0);
+		expect(stats.truncated).toBe(false);
 	});
 
 	it("getRevenueSummary: sums revenue and guests", async () => {
@@ -262,6 +297,7 @@ describe("analytics", () => {
 		expect(summary.totalGuests).toBe(6);
 		expect(summary.totalRevenueCents).toBe(15000);
 		expect(summary.avgBookingValueCents).toBe(7500);
+		expect(summary.truncated).toBe(false);
 	});
 
 	it("getBookingSources: groups by source", async () => {
@@ -329,12 +365,13 @@ describe("analytics", () => {
 			endDate: "2026-07-31",
 			limit: 10,
 		});
-		expect(top.length).toBe(2);
-		expect(top[0]!.tourName).toBe("Premium Tour");
-		expect(top[0]!.totalBookings).toBe(2);
-		expect(top[0]!.totalRevenueCents).toBe(100000);
-		expect(top[1]!.tourName).toBe("Budget Tour");
-		expect(top[1]!.totalBookings).toBe(1);
+		expect(top.tours.length).toBe(2);
+		expect(top.tours[0]!.tourName).toBe("Premium Tour");
+		expect(top.tours[0]!.totalBookings).toBe(2);
+		expect(top.tours[0]!.totalRevenueCents).toBe(100000);
+		expect(top.tours[1]!.tourName).toBe("Budget Tour");
+		expect(top.tours[1]!.totalBookings).toBe(1);
+		expect(top.truncated).toBe(false);
 
 		// limit=1 returns only the top tour
 		const limited = await t.query(internal.analytics.getTopToursInternal, {
@@ -343,8 +380,9 @@ describe("analytics", () => {
 			endDate: "2026-07-31",
 			limit: 1,
 		});
-		expect(limited.length).toBe(1);
-		expect(limited[0]!.tourName).toBe("Premium Tour");
+		expect(limited.tours.length).toBe(1);
+		expect(limited.tours[0]!.tourName).toBe("Premium Tour");
+		expect(limited.truncated).toBe(false);
 	});
 
 	it("getGuideStats: groups by guide and counts statuses", async () => {
@@ -378,13 +416,14 @@ describe("analytics", () => {
 				endDate: "2026-07-31",
 			},
 		);
-		expect(stats.length).toBe(2);
-		const guide1 = stats.find((s: any) => s.guideId === "guide_1")!;
+		expect(stats.guides.length).toBe(2);
+		const guide1 = stats.guides.find((s: any) => s.guideId === "guide_1")!;
 		expect(guide1.totalAssignments).toBe(3);
 		expect(guide1.completed).toBe(1);
 		expect(guide1.cancelled).toBe(1);
-		const guide2 = stats.find((s: any) => s.guideId === "guide_2")!;
+		const guide2 = stats.guides.find((s: any) => s.guideId === "guide_2")!;
 		expect(guide2.totalAssignments).toBe(1);
+		expect(stats.truncated).toBe(false);
 	});
 
 	// Tenant isolation: queries for one org must not see another org's data,
@@ -606,19 +645,20 @@ describe("analytics", () => {
 			},
 		);
 
-		expect(channels.length).toBe(3);
+		expect(channels.channels.length).toBe(3);
 		// Sorted by revenue desc
-		expect(channels[0]!.source).toBe("getyourguide");
-		expect(channels[0]!.totalBookings).toBe(1);
-		expect(channels[0]!.totalRevenueCents).toBe(40000);
-		expect(channels[0]!.totalGuests).toBe(4);
-		expect(channels[1]!.source).toBe("viator");
-		expect(channels[1]!.totalBookings).toBe(2);
-		expect(channels[1]!.totalRevenueCents).toBe(30000);
-		expect(channels[1]!.totalGuests).toBe(5);
-		expect(channels[2]!.source).toBe("direct");
-		expect(channels[2]!.totalBookings).toBe(1);
-		expect(channels[2]!.totalRevenueCents).toBe(10000);
+		expect(channels.channels[0]!.source).toBe("getyourguide");
+		expect(channels.channels[0]!.totalBookings).toBe(1);
+		expect(channels.channels[0]!.totalRevenueCents).toBe(40000);
+		expect(channels.channels[0]!.totalGuests).toBe(4);
+		expect(channels.channels[1]!.source).toBe("viator");
+		expect(channels.channels[1]!.totalBookings).toBe(2);
+		expect(channels.channels[1]!.totalRevenueCents).toBe(30000);
+		expect(channels.channels[1]!.totalGuests).toBe(5);
+		expect(channels.channels[2]!.source).toBe("direct");
+		expect(channels.channels[2]!.totalBookings).toBe(1);
+		expect(channels.channels[2]!.totalRevenueCents).toBe(10000);
+		expect(channels.truncated).toBe(false);
 	});
 
 	it("getChannelRevenue: empty org returns []", async () => {
@@ -631,7 +671,7 @@ describe("analytics", () => {
 				endDate: "2026-08-31",
 			},
 		);
-		expect(channels).toEqual([]);
+		expect(channels).toEqual({ channels: [], truncated: false });
 	});
 
 	it("getChannelRevenue: tenant isolation — other org's bookings invisible", async () => {
@@ -668,9 +708,10 @@ describe("analytics", () => {
 				endDate: "2026-08-31",
 			},
 		);
-		expect(aChannels.length).toBe(1);
-		expect(aChannels[0]!.source).toBe("viator");
-		expect(aChannels[0]!.totalRevenueCents).toBe(10000);
+		expect(aChannels.channels.length).toBe(1);
+		expect(aChannels.channels[0]!.source).toBe("viator");
+		expect(aChannels.channels[0]!.totalRevenueCents).toBe(10000);
+		expect(aChannels.truncated).toBe(false);
 	});
 
 	// Tier 4: getFinancialHealth — refund rate, outstanding balance, deposit coverage.
@@ -731,12 +772,82 @@ describe("analytics", () => {
 		expect(fh.grossCents).toBe(100000);
 		expect(fh.refundCents).toBe(20000);
 		expect(fh.refundRate).toBe(20);
+		expect(fh.truncated).toBe(false);
 		// Outstanding: 0 (booking has balanceDueCents = 0)
 		expect(fh.outstandingCents).toBe(0);
 		// 100% deposit coverage (1 booking, deposit > 0)
 		expect(fh.bookingsTotal).toBe(1);
 		expect(fh.bookingsWithDeposit).toBe(1);
 		expect(fh.depositCoverage).toBe(100);
+	});
+
+	it("getFinancialHealth: refunds outside the window are excluded", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_fin_window";
+		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const bookingId = await t.run((ctx: any) =>
+			seedBooking(ctx, orgId, tourId, custId, {
+				date: "2026-08-01",
+				totalAmountCents: 100000n,
+				balanceDueCents: 0n,
+				depositAmountCents: 100000n,
+			}),
+		);
+		await t.run(async (ctx: any) => {
+			const id = await ctx.db.insert("payments", {
+				organizationId: orgId,
+				bookingId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "succeeded",
+				provider: "stripe",
+				stripePaymentIntentId: "pi_fin_win",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-01T10:00:00Z"),
+			});
+			// In-window refund ($200) — must count.
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				bookingId,
+				amountCents: 20000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_win",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-08-02T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-08-02T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+			});
+			// All-time (June) refund ($500) — must NOT count.
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				bookingId,
+				amountCents: 50000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_old",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-06-15T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-06-15T10:00:00Z"),
+				updatedAt: Date.parse("2026-06-15T10:00:00Z"),
+			});
+		});
+
+		const fh = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-08-01",
+				endDate: "2026-08-31",
+			},
+		);
+
+		expect(fh.refundCents).toBe(20000);
+		expect(fh.refundRate).toBe(20);
+		expect(fh.truncated).toBe(false);
 	});
 
 	it("getFinancialHealth: outstanding balance aggregates across active bookings", async () => {
@@ -845,6 +956,7 @@ describe("analytics", () => {
 		expect(conv.rejectedCapacity).toBe(2);
 		expect(conv.rejectedUnknownSlug).toBe(0);
 		expect(conv.successRate).toBe(50);
+		expect(conv.truncated).toBe(false);
 	});
 
 	it("getConversions: tenant isolation — other org's attempts invisible", async () => {
@@ -880,6 +992,7 @@ describe("analytics", () => {
 		);
 		expect(aConv.totalAttempts).toBe(1);
 		expect(aConv.success).toBe(1);
+		expect(aConv.truncated).toBe(false);
 	});
 
 	it("getConversions: invalid dates don't crash", async () => {
@@ -894,5 +1007,6 @@ describe("analytics", () => {
 		);
 		expect(conv.totalAttempts).toBe(0);
 		expect(conv.successRate).toBe(0);
+		expect(conv.truncated).toBe(false);
 	});
 });

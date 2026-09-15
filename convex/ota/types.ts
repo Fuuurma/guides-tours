@@ -46,20 +46,25 @@ export type NormalizedProviderEvent =
 			rawPayload: unknown;
 	  };
 
+// Provider slugs are the lowercase strings webhook handlers write to
+// otaIntegrations.provider / webhookDeliveries.source and that the UI
+// list (src/components/ota-providers.ts) pins — keep this union in
+// sync with the stored values, not the brands' camelCase spellings
+// (needs-work 2026-09-10).
 export type ProviderSlug =
 	| "viator"
-	| "getYourGuide"
+	| "getyourguide"
 	| "airbnb"
-	| "tripAdvisor"
+	| "tripadvisor"
 	| "klook"
 	| "booking"
 	| "expedia";
 
 export const ALL_PROVIDERS: readonly ProviderSlug[] = [
 	"viator",
-	"getYourGuide",
+	"getyourguide",
 	"airbnb",
-	"tripAdvisor",
+	"tripadvisor",
 	"klook",
 	"booking",
 	"expedia",

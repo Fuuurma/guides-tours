@@ -89,6 +89,9 @@ describe("webhookDeliveries.recordDelivery", () => {
 		});
 		expect(second.isDuplicate).toBe(true);
 		expect(second.id).toBe(first.id);
+		// The handler needs the existing row's status to distinguish a
+		// retryable failure from a true duplicate (needs-work 09-11).
+		expect(second.existingStatus).toBe("received");
 
 		// The existing row must NOT be modified — payload stays as the
 		// first insert, status stays "received".
