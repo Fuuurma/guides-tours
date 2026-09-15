@@ -1,17 +1,24 @@
 /** Canonical public app origin for emails, SMS, and invite deep-links.
- * Falls back to localhost for dev. In production, SITE_URL must be set
- * to an HTTPS URL — throws if unset in production. */
+ * Falls back to localhost for dev. On a configured deployment (see
+ * isUnconfiguredDeployment) a missing SITE_URL is a loud
+ * misconfiguration — the link degrades to localhost but a
+ * once-per-isolate logger.error fires so ops sees it.
+ * (SITE_URL-fallback policy, fleet decision 7a7d0b9a option b —
+ * degraded-not-dead: never throw, a module-scope throw takes down
+ * every HTTP route and can break `convex push` codegen.) */
 import { logger } from "./logger";
+
+let warnedMissingSiteUrl = false;
 
 export function getSiteUrl(): string {
 	const url = process.env.SITE_URL;
 	if (!url) {
-		// In production, a missing SITE_URL is a misconfiguration that
-		// would produce broken links in emails/SMS and could leak
-		// internal addresses. Fail loudly instead of silently defaulting.
-		if (process.env.NODE_ENV === "production") {
-			throw new Error(
-				"SITE_URL environment variable must be set in production",
+		if (!isUnconfiguredDeployment() && !warnedMissingSiteUrl) {
+			warnedMissingSiteUrl = true;
+			logger.error(
+				"[siteUrl] SITE_URL is not set on a configured deployment — " +
+					"auth baseURL and email links are degraded to " +
+					"http://127.0.0.1:3020. Set SITE_URL on the Convex dashboard.",
 			);
 		}
 		return "http://127.0.0.1:3020";

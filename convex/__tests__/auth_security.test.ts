@@ -16,7 +16,7 @@
 process.env.ENCRYPTION_KEY ??= "a".repeat(64);
 
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
 import { createAuthOptions } from "../auth";
@@ -174,5 +174,65 @@ describe("trustedOriginsForDeployment (SITE_URL policy)", () => {
 				expect(origins).not.toContain("http://127.0.0.1:3020");
 			},
 		);
+	});
+});
+
+// getSiteUrl degraded-not-dead policy (fleet decision 7a7d0b9a, option b):
+// never throws; unconfigured deployments get a silent localhost fallback,
+// configured deployments get the same fallback PLUS a once-per-isolate
+// logger.error so a missing SITE_URL can't silently ship broken links.
+// The once-flag is module state, so each case re-imports a fresh module.
+describe("getSiteUrl fallback policy", () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.unstubAllEnvs();
+	});
+
+	async function freshGetSiteUrl() {
+		vi.resetModules();
+		const mod = await import("../lib/siteUrl");
+		return mod.getSiteUrl;
+	}
+
+	it("configured deployment + missing SITE_URL: degrades to localhost and logs loudly once", async () => {
+		vi.stubEnv("CONVEX_SITE_URL", "https://guides-tours.fuurma.tech");
+		vi.stubEnv("SITE_URL", "");
+		const errorSpy = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const getSiteUrl = await freshGetSiteUrl();
+
+		expect(getSiteUrl()).toBe("http://127.0.0.1:3020");
+		expect(errorSpy).toHaveBeenCalledTimes(1);
+		expect(errorSpy.mock.calls[0]?.[0]).toContain("SITE_URL");
+
+		// Second call: same fallback, no repeated error (once per isolate).
+		errorSpy.mockClear();
+		expect(getSiteUrl()).toBe("http://127.0.0.1:3020");
+		expect(errorSpy).not.toHaveBeenCalled();
+	});
+
+	it("unconfigured deployment + missing SITE_URL: silent localhost fallback", async () => {
+		vi.stubEnv("CONVEX_SITE_URL", "");
+		vi.stubEnv("SITE_URL", "");
+		const errorSpy = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const getSiteUrl = await freshGetSiteUrl();
+
+		expect(getSiteUrl()).toBe("http://127.0.0.1:3020");
+		expect(errorSpy).not.toHaveBeenCalled();
+	});
+
+	it("SITE_URL set: returns it unchanged and never logs", async () => {
+		vi.stubEnv("CONVEX_SITE_URL", "https://guides-tours.fuurma.tech");
+		vi.stubEnv("SITE_URL", "https://guides-tours.fuurma.tech");
+		const errorSpy = vi
+			.spyOn(console, "error")
+			.mockImplementation(() => {});
+		const getSiteUrl = await freshGetSiteUrl();
+
+		expect(getSiteUrl()).toBe("https://guides-tours.fuurma.tech");
+		expect(errorSpy).not.toHaveBeenCalled();
 	});
 });
