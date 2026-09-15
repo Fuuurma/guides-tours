@@ -563,8 +563,10 @@ export async function performUpdate(
 	}
 
 	// Dual-role: driver must not already be guiding an overlapping slot
-	// (mirrors internalCreate). Only check when driverId changed.
-	if (next.driverId && next.driverId !== existing.driverId) {
+	// (mirrors internalCreate). Runs on every update with a driver —
+	// a date/startTime move with an unchanged driver can still collide
+	// with the driver's guide duties in the new window (F63).
+	if (next.driverId) {
 		const driverRow = await ctx.db.get(next.driverId);
 		if (driverRow) {
 			const dual = await checkConflictsHelper(ctx, {

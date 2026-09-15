@@ -5,7 +5,7 @@
 
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
-import { rangesOverlap } from "./assignmentTime";
+import { shiftDate, windowsOverlapAbs } from "./assignmentTime";
 
 /** Bound the conflict scans in checkConflicts + checkConflictsHelper. */
 const MAX_CONFLICTS = 100;
@@ -35,25 +35,42 @@ opts: {
 	excludeAssignmentId?: Id<"assignments"> | string;
 },
 ): Promise<Doc<"assignments">[]> {
-const rows = await ctx.db
-	.query("assignments")
-	.withIndex(opts.indexName, (q: any) =>
-		q
-			.eq("organizationId", opts.orgId)
-			.eq(opts.indexField, opts.value)
-			.eq("date", opts.date),
-	)
-	.take(MAX_CONFLICTS);
-return rows.filter(
+// Scan the candidate date AND the previous day — a row that started
+// yesterday and wrapped past midnight occupies this morning's minutes
+// but lives under yesterday's date key (F62). Same-day rows are
+// covered by the absolute-window comparison below.
+const [rows, prevRows] = await Promise.all([
+	ctx.db
+		.query("assignments")
+		.withIndex(opts.indexName, (q: any) =>
+			q
+				.eq("organizationId", opts.orgId)
+				.eq(opts.indexField, opts.value)
+				.eq("date", opts.date),
+		)
+		.take(MAX_CONFLICTS),
+	ctx.db
+		.query("assignments")
+		.withIndex(opts.indexName, (q: any) =>
+			q
+				.eq("organizationId", opts.orgId)
+				.eq(opts.indexField, opts.value)
+				.eq("date", shiftDate(opts.date, -1)),
+		)
+		.take(MAX_CONFLICTS),
+]);
+return [...rows, ...prevRows].filter(
 	(a) =>
 		!a.deletedAt &&
 		a.status === "scheduled" &&
 		!(opts.excludeAssignmentId && a._id === opts.excludeAssignmentId) &&
-		rangesOverlap(
+		windowsOverlapAbs(
+			opts.date,
 			opts.startTime,
 			opts.endTime,
+			a.date,
 			a.startTime,
-			a.endTime ?? a.startTime,
+			a.endTime,
 		),
 );
 }

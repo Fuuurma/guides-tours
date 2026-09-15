@@ -946,4 +946,95 @@ describe("convex/assignments — lifecycle", () => {
 		);
 		expect(row?.endTime).toBe("15:00");
 	});
+
+	it("midnight-wrapping assignments still conflict (F62)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_midnight";
+		const guideId = "guide-mid";
+		// 2h tour starting 23:00 → stored endTime wraps to 01:00.
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId, 2),
+		);
+		await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId,
+			date: "2026-09-30",
+			startTime: "23:00",
+		});
+		// Same-date overlap inside the wrapped window.
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId,
+				date: "2026-09-30",
+				startTime: "23:30",
+			}),
+		).rejects.toThrow();
+		// Next-day overlap: the wrapped row occupies 00:00–01:00 on
+		// 10-01, but its date key is 09-30 — a pre-fix scan of
+		// date = 10-01 never saw it.
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId,
+				date: "2026-10-01",
+				startTime: "00:30",
+			}),
+		).rejects.toThrow();
+	});
+
+	it("update moving the slot still runs the driver dual-role check (F63)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_dual_move";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId, 2),
+		);
+		// "person-1" is a driver on assignment A but a GUIDE on a
+		// separate 14:00–16:00 assignment the same day.
+		const driverId = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.insert("drivers", {
+				organizationId: orgId,
+				userId: "person-1",
+				licenseInfo: "x",
+				availability: {},
+				notes: "",
+				isActive: true,
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "person-1",
+			date: "2026-10-05",
+			startTime: "14:00",
+		});
+		const aId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-10-05",
+			startTime: "09:00",
+			driverId,
+		});
+		// Moving the slot to 14:30 overlaps person-1's guide window —
+		// driverId is unchanged, which the old gate skipped.
+		await expect(
+			t.mutation(internal.assignments.internalUpdate, {
+				organizationId: orgId,
+				userId: "u1",
+				assignmentId: aId,
+				startTime: "14:30",
+			}),
+		).rejects.toThrow(/guide during this time/);
+	});
 });
