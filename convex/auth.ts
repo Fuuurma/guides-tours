@@ -9,6 +9,7 @@ import authSchema from "./betterAuth/schema";
 import authConfig from "./auth.config";
 import { ac, roles } from "./authz";
 import { sendTemplatedEmail } from "./lib/sendEmail";
+import { getSiteUrl as canonicalSiteUrl } from "./lib/siteUrl";
 import { logger } from "./lib/logger";
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
@@ -39,10 +40,11 @@ const plugins = [
 			email: string;
 			organization: { name: string };
 		}) => {
-			const siteUrl = process.env.SITE_URL;
-			if (!siteUrl) {
-				throw new Error("SITE_URL must be set in the Convex dashboard");
-			}
+			// Request-time SITE_URL via the canonical helper — throws in
+			// production when unset (a localhost invite link must never be
+			// emailed) and falls back to localhost in dev so local invites
+			// don't hard-fail (F131).
+			const siteUrl = canonicalSiteUrl();
 			const inviteLink = `${siteUrl}/invite/${data.id}`;
 			const orgName = data.organization.name;
 			const subject = `You've been invited to join ${orgName} on guides-tours`;
