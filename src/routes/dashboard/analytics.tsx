@@ -309,7 +309,7 @@ function AnalyticsPage() {
 					transition={{ duration: 0.25, delay: 0 }}
 				>
 					<MetricCard
-						label="Total bookings"
+						label="Total assignments"
 						value={overview?.totalAssignments}
 						isPending={overviewPending}
 					/>
