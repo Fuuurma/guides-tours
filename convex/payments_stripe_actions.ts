@@ -675,10 +675,12 @@ export const refundViaStripe = action({
 		}
 
 		// Idempotency key: prevents duplicate refunds on double-click or
-		// action retry. Keyed by payment ID so a retry returns the same
-		// Stripe refund instead of creating a new one (fleet audit
-		// 2026-09-06 P5).
-		const idempotencyKey = `refund_${payment._id}`;
+		// action retry. Scoped per ATTEMPT — partial refunds keep the
+		// payment "succeeded", so a payment-only key would make a second
+		// refund call silently replay the first refund's response (F5).
+		// Retries of the same attempt still dedup because refundCount only
+		// advances once a refund row exists.
+		const idempotencyKey = `refund_${payment._id}_${payment.refundCount}`;
 
 		const res = await fetch(`${STRIPE_API_BASE}/refunds`, {
 			method: "POST",

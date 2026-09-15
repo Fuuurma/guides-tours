@@ -768,6 +768,14 @@ export const getPaymentForRefund = internalQuery({
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) return null;
+		// Count prior refunds so refundViaStripe can scope its Stripe
+		// idempotency key per-attempt — a payment-scoped key would replay
+		// the FIRST refund on a second call now that partial refunds keep
+		// status "succeeded" (F5).
+		const refunds = await ctx.db
+			.query("refunds")
+			.withIndex("by_payment", (q) => q.eq("paymentId", args.paymentId))
+			.collect();
 		return {
 			_id: p._id,
 			organizationId: p.organizationId,
@@ -776,6 +784,9 @@ export const getPaymentForRefund = internalQuery({
 			currency: p.currency,
 			stripePaymentIntentId: p.stripePaymentIntentId,
 			bookingId: p.bookingId,
+			refundCount: refunds.filter(
+				(r) => r.status === "succeeded" || r.status === "pending",
+			).length,
 		};
 	},
 });
