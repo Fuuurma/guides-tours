@@ -149,7 +149,7 @@ function AnalyticsPage() {
 		}),
 	);
 	const cachedDailySeries = useMemo(
-		() => aggregateDailyTourMetrics(cachedTourDays ?? []),
+		() => aggregateDailyTourMetrics(cachedTourDays?.items ?? []),
 		[cachedTourDays],
 	);
 	// Independent 30-day window for the leaderboard sparklines so
@@ -169,7 +169,7 @@ function AnalyticsPage() {
 		}),
 	);
 	const sparklineByTour = useMemo(
-		() => buildSparklineByTour((leaderboardTourDays ?? []) as never),
+		() => buildSparklineByTour((leaderboardTourDays?.items ?? []) as never),
 		[leaderboardTourDays],
 	);
 	const leaderboardTours = useMemo(() => {

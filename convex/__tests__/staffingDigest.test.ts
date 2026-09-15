@@ -451,16 +451,18 @@ describe("convex/staffingDigest — listDigestTargets", () => {
 			}),
 		);
 
-		const targets = (await t.query(internal.staffingDigest.listDigestTargets, {})) as Array<{
-			organizationId: string;
-			email?: string;
-			phone?: string;
-			daysAhead: number;
-			emailEnabled: boolean;
-			emailFromEmail?: string;
-			emailFromName?: string;
-			phoneRemindWithDigest: boolean;
-		}>;
+		const { targets } = (await t.query(internal.staffingDigest.listDigestTargets, {})) as {
+			targets: Array<{
+				organizationId: string;
+				email?: string;
+				phone?: string;
+				daysAhead: number;
+				emailEnabled: boolean;
+				emailFromEmail?: string;
+				emailFromName?: string;
+				phoneRemindWithDigest: boolean;
+			}>;
+		};
 
 		expect(targets).toHaveLength(2);
 		const a = targets.find((tg) => tg.organizationId === "org_a");
@@ -500,8 +502,40 @@ describe("convex/staffingDigest — listDigestTargets", () => {
 			}),
 		);
 
-		const targets = await t.query(internal.staffingDigest.listDigestTargets, {});
+		const { targets } = await t.query(internal.staffingDigest.listDigestTargets, {});
 
 		expect(targets).toEqual([]);
+	});
+
+	it("pages past the old 100-org cap so every enabled org is reached (F11)", async () => {
+		const t = convexTest(schema, modules);
+		// 150 enabled orgs — beyond the old take(MAX_ORGS_PER_RUN=100)
+		// truncation that silently dropped the tail.
+		for (let i = 0; i < 150; i++) {
+			await t.run(async (ctx) =>
+				seedNotificationSettings(ctx as unknown as TestCtx, `org_${i}`, {
+					staffingDigestEnabled: true,
+					staffingDigestEmail: `ops${i}@org.example`,
+				}),
+			);
+		}
+
+		const seen = new Set<string>();
+		let cursor: string | undefined;
+		let pages = 0;
+		do {
+			const result = (await t.query(internal.staffingDigest.listDigestTargets, { cursor })) as {
+				targets: Array<{ organizationId: string }>;
+				isDone: boolean;
+				continueCursor: string;
+			};
+			for (const target of result.targets) seen.add(target.organizationId);
+			cursor = result.continueCursor;
+			pages += 1;
+			if (result.isDone) break;
+		} while (pages < 10);
+
+		expect(seen.size).toBe(150);
+		expect(pages).toBeGreaterThan(1);
 	});
 });

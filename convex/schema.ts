@@ -293,6 +293,10 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_org_period", ["organizationId", "periodDate", "periodType"])
+		// list(periodType=…) needs org + periodType equality with a date
+		// range — by_org_period's middle field is the ranged one, which
+		// forced periodType into JS post-filtering (F8).
+		.index("by_org_type_date", ["organizationId", "periodType", "periodDate"])
 		.index("by_tour_period", ["tourId", "periodDate"])
 		.index("by_period", ["periodType", "periodDate"]),
 

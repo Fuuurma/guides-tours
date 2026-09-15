@@ -341,4 +341,99 @@ describe("tour analytics cache", () => {
 		expect(rows.length).toBe(1);
 		expect(rows[0]!.totalBookings).toBe(1);
 	});
+
+	it("list: periodType filter sees rows past the 1000-row org cap", async () => {
+		// Regression pin for F8: the old by_org_period scan took the
+		// first 1000 org rows by date, THEN filtered periodType in JS.
+		// With 600 older monthly rows crowding the window, only 400 of
+		// the 600 daily rows came back. by_org_type_date resolves both
+		// equalities at index level so all 600 daily rows return.
+		const t = convexTest(schema, modules);
+		const orgId = "org_ta8";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run(async (ctx) => {
+			for (let i = 0; i < 600; i++) {
+				const day = String((i % 28) + 1).padStart(2, "0");
+				const month = String(Math.floor(i / 28) + 1).padStart(2, "0");
+				await ctx.db.insert("tourAnalytics", {
+					organizationId: orgId,
+					tourId,
+					periodDate: `2025-${month}-${day}`,
+					periodType: "monthly",
+					totalBookings: 0,
+					totalGuests: 0,
+					grossRevenueCents: 0n,
+					netRevenueCents: 0n,
+					cancellations: 0,
+					noShows: 0,
+					avgGroupSize: 0,
+					utilizationRate: 0,
+					totalCapacity: 0,
+					calculatedAt: 0,
+				});
+			}
+			for (let i = 0; i < 600; i++) {
+				const day = String((i % 28) + 1).padStart(2, "0");
+				const month = String(Math.floor(i / 28) + 1).padStart(2, "0");
+				await ctx.db.insert("tourAnalytics", {
+					organizationId: orgId,
+					tourId,
+					periodDate: `2026-${month}-${day}`,
+					periodType: "daily",
+					totalBookings: 0,
+					totalGuests: 0,
+					grossRevenueCents: 0n,
+					netRevenueCents: 0n,
+					cancellations: 0,
+					noShows: 0,
+					avgGroupSize: 0,
+					utilizationRate: 0,
+					totalCapacity: 0,
+					calculatedAt: 0,
+				});
+			}
+		});
+
+		const result = await t.query(internal.tourAnalytics.listInternal, {
+			organizationId: orgId,
+			periodType: "daily",
+		});
+		expect(result.items.length).toBe(600);
+		expect(result.truncated).toBe(false);
+	});
+
+	it("list: flags truncation when matching rows exceed the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ta9";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run(async (ctx) => {
+			for (let i = 0; i < 1100; i++) {
+				const day = String((i % 28) + 1).padStart(2, "0");
+				const month = String(Math.floor(i / 28) + 1).padStart(2, "0");
+				await ctx.db.insert("tourAnalytics", {
+					organizationId: orgId,
+					tourId,
+					periodDate: `2026-${month}-${day}`,
+					periodType: "daily",
+					totalBookings: 0,
+					totalGuests: 0,
+					grossRevenueCents: 0n,
+					netRevenueCents: 0n,
+					cancellations: 0,
+					noShows: 0,
+					avgGroupSize: 0,
+					utilizationRate: 0,
+					totalCapacity: 0,
+					calculatedAt: 0,
+				});
+			}
+		});
+
+		const result = await t.query(internal.tourAnalytics.listInternal, {
+			organizationId: orgId,
+			periodType: "daily",
+		});
+		expect(result.items.length).toBe(1000);
+		expect(result.truncated).toBe(true);
+	});
 });

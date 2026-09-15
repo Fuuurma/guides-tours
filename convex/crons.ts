@@ -96,6 +96,7 @@ crons.daily(
 	"staffing_digest",
 	{ hourUTC: 7, minuteUTC: 0 },
 	internal.staffingDigest.runDaily,
+	{},
 );
 
 // Daily at 08:00 UTC — guide availability reminders for unmarked days.
@@ -103,6 +104,7 @@ crons.daily(
 	"availability_reminders",
 	{ hourUTC: 8, minuteUTC: 0 },
 	internal.availabilityReminders.runDaily,
+	{},
 );
 
 export default crons;

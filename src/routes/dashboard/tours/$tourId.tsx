@@ -71,7 +71,7 @@ function TourDetailPage() {
 		}),
 	);
 	const sparklineValues: number[] = (
-		(cachedDays ?? []) as Array<{
+		(cachedDays?.items ?? []) as Array<{
 			periodDate: string;
 			grossRevenueCents: number | bigint;
 		}>
