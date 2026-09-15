@@ -54,8 +54,10 @@ http.route({
 //
 // Hardening:
 // - Origin allowlist via PUBLIC_BOOKING_ALLOWED_ORIGINS env var.
-//   If unset, all origins are allowed (development-friendly
-//   default). Set this in production to your marketing-site domain
+//   If unset: local dev stays permissive, but a configured
+//   (non-localhost) deployment FAILS CLOSED — every booking attempt
+//   is rejected with 403. Set this in production to your
+//   marketing-site domain(s)
 //   (e.g. "https://tours.example.com,https://www.example.com").
 //   The Origin header is optional in modern browsers for same-origin
 //   POST; we only reject when an Origin is present and not allowed.

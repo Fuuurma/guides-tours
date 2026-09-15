@@ -63,7 +63,7 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 | `OTA_BOOKING_API_SECRET` | Booking.com | optional |
 | `OTA_EXPEDIA_API_KEY` | Expedia | optional |
 | `OTA_EXPEDIA_API_SECRET` | Expedia | optional |
-| `PUBLIC_BOOKING_ALLOWED_ORIGINS` | public booking form | comma-separated origins (e.g. `https://tours.example.com,https://www.example.com`); if unset, all origins allowed (dev only) |
+| `PUBLIC_BOOKING_ALLOWED_ORIGINS` | public booking form | comma-separated origins (e.g. `https://tours.example.com,https://www.example.com`); unset = permissive in local dev, but production **fails closed** (all booking attempts rejected) — required in prod |
 
 ## Deploy
 
