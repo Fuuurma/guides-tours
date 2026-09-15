@@ -52,6 +52,7 @@ crons.daily(
 	"cleanup_old_assignments",
 	{ hourUTC: 3, minuteUTC: 0 },
 	internal.notifications.cleanupOldAssignments,
+	{},
 );
 
 // Daily at 04:00 UTC — drop old notification artifacts.
