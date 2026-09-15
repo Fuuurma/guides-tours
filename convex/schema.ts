@@ -697,7 +697,14 @@ export default defineSchema({
 		processedAt: v.optional(v.number()),
 	})
 		.index("by_org", ["organizationId"])
-		.index("by_source_event", ["source", "eventId"])
+		// Dedup must be per-org: two orgs on the same OTA feed can receive
+		// the same provider eventId — a global (source, eventId) key would
+		// mark org B's delivery "duplicate" and skip it entirely (F14).
+		.index("by_org_source_event", [
+			"organizationId",
+			"source",
+			"eventId",
+		])
 		.index("by_org_status", ["organizationId", "status"])
 		.index("by_org_received", ["organizationId", "receivedAt"])
 		.index("by_org_status_received", [

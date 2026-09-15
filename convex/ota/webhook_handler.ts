@@ -183,6 +183,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 				await ctx.runMutation(
 					internal.webhookDeliveries.updateDeliveryStatus,
 					{
+						organizationId: integration.organizationId,
 						source: config.provider,
 						eventId,
 						status: "processed",
@@ -194,6 +195,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 				await ctx.runMutation(
 					internal.webhookDeliveries.updateDeliveryStatus,
 					{
+						organizationId: integration.organizationId,
 						source: config.provider,
 						eventId,
 						status: "failed",

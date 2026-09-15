@@ -958,6 +958,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			await ctx.runMutation(
 				internal.webhookDeliveries.updateDeliveryStatus,
 				{
+					organizationId: orgId,
 					source: "stripe",
 					eventId: stripeEventId,
 					status: "processed",
@@ -969,6 +970,7 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			await ctx.runMutation(
 				internal.webhookDeliveries.updateDeliveryStatus,
 				{
+					organizationId: orgId,
 					source: "stripe",
 					eventId: stripeEventId,
 					status: "failed",

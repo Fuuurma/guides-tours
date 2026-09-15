@@ -6,12 +6,14 @@
 //     fields and "received" status
 //   - recordDelivery: idempotent on (source, eventId) — returns the
 //     existing row's id with isDuplicate:true on a second call
+//   - recordDelivery: the SAME (source, eventId) under a different org
+//     is NOT a duplicate — providers can broadcast shared eventIds (F14)
 //   - recordDelivery: creates separate records for different eventIds
 //     from the same source
 //   - updateDeliveryStatus: updates the status of an existing delivery
 //     (and sets processedAt for terminal statuses)
 //   - updateDeliveryStatus: throws ConvexError when no delivery matches
-//     the (source, eventId) pair
+//     the (org, source, eventId) triple
 //   - listByOrg: returns deliveries scoped to a specific organization,
 //     newest first
 //   - listByOrg: returns an empty array for an org with no deliveries
@@ -124,12 +126,50 @@ describe("webhookDeliveries.recordDelivery", () => {
 		const rows = await t.run((ctx) =>
 			ctx.db
 				.query("webhookDeliveries")
-				.withIndex("by_source_event", (q) => q.eq("source", "getyourguide"))
+				.withIndex("by_org_source_event", (q) =>
+					q.eq("organizationId", orgId).eq("source", "getyourguide"),
+				)
 				.collect(),
 		);
 		expect(rows.length).toBe(2);
 		const ids = rows.map((r) => r.eventId).sort();
 		expect(ids).toEqual(["evt_A", "evt_B"]);
+	});
+
+	it("records the same (source, eventId) independently per org (F14)", async () => {
+		// A provider broadcasting one eventId to multiple orgs must not
+		// collapse deliveries: org B's row is a distinct delivery, not a
+		// duplicate of org A's.
+		const t = convexTest(schema, modules);
+		const a = await t.mutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: "org_wd_x_a",
+			source: "viator",
+			eventId: "evt_shared_1",
+			eventType: "booking.created",
+			payload: { ref: "A" },
+		});
+		const b = await t.mutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: "org_wd_x_b",
+			source: "viator",
+			eventId: "evt_shared_1",
+			eventType: "booking.created",
+			payload: { ref: "B" },
+		});
+		expect(a.isDuplicate).toBe(false);
+		expect(b.isDuplicate).toBe(false);
+		expect(a.id).not.toBe(b.id);
+
+		// And a status update for org B must not touch org A's row.
+		await t.mutation(internal.webhookDeliveries.updateDeliveryStatus, {
+			organizationId: "org_wd_x_b",
+			source: "viator",
+			eventId: "evt_shared_1",
+			status: "processed",
+		});
+		const rowA = (await t.run((ctx) => ctx.db.get(a.id))) as any;
+		const rowB = (await t.run((ctx) => ctx.db.get(b.id))) as any;
+		expect(rowA.status).toBe("received");
+		expect(rowB.status).toBe("processed");
 	});
 });
 
@@ -147,6 +187,7 @@ describe("webhookDeliveries.updateDeliveryStatus", () => {
 		const updatedId = await t.mutation(
 			internal.webhookDeliveries.updateDeliveryStatus,
 			{
+				organizationId: orgId,
 				source: "stripe",
 				eventId: "evt_upd_001",
 				status: "processed",
@@ -173,6 +214,7 @@ describe("webhookDeliveries.updateDeliveryStatus", () => {
 			payload: {},
 		});
 		await t.mutation(internal.webhookDeliveries.updateDeliveryStatus, {
+			organizationId: orgId,
 			source: "viator",
 			eventId: "evt_fail_001",
 			status: "failed",
@@ -195,6 +237,7 @@ describe("webhookDeliveries.updateDeliveryStatus", () => {
 			payload: {},
 		});
 		await t.mutation(internal.webhookDeliveries.updateDeliveryStatus, {
+			organizationId: orgId,
 			source: "viator",
 			eventId: "evt_skip_001",
 			status: "skipped",
@@ -211,6 +254,7 @@ describe("webhookDeliveries.updateDeliveryStatus", () => {
 		const t = convexTest(schema, modules);
 		await expect(
 			t.mutation(internal.webhookDeliveries.updateDeliveryStatus, {
+				organizationId: "org_wd_missing",
 				source: "stripe",
 				eventId: "evt_missing_999",
 				status: "processed",
@@ -286,6 +330,7 @@ describe("webhookDeliveries.listByOrg", () => {
 		});
 		// Mark one as processed.
 		await t.mutation(internal.webhookDeliveries.updateDeliveryStatus, {
+			organizationId: orgId,
 			source: "stripe",
 			eventId: "evt_f_1",
 			status: "processed",
