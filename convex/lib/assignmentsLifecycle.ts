@@ -117,7 +117,12 @@ if (avail && !avail.isAvailable) {
 	throw new ConvexError("Guide is marked as unavailable on this date");
 }
 
-const endTime = calculateEndTime(startTime, tour.durationHours);
+// When a schedule is linked, its endTime is the published departure
+// end — use it instead of startTime + durationHours so the assignment
+// row, conflict window, and guide notification all cover the real
+// published window (F122).
+const endTime =
+	schedule?.endTime ?? calculateEndTime(startTime, tour.durationHours);
 
 // Slot staffing: up to requiredGuides active guides.
 const sameDay = await ctx.db
@@ -352,6 +357,12 @@ export async function performUpdate(
 	}
 	const tour = await ctx.db.get(existing.tourId);
 	if (!tour) throw new ConvexError("Tour no longer exists");
+	// Fetch the linked schedule once — its endTime is the published
+	// departure end and wins over duration-derived math (F122), and
+	// the vehicle-capacity check below reuses the same row.
+	const linkedSchedule = existing.scheduleId
+		? await ctx.db.get(existing.scheduleId)
+		: null;
 
 	const nextVehicleId = args.clearVehicle
 		? undefined
@@ -372,7 +383,15 @@ export async function performUpdate(
 		);
 	}
 	const staffing = resolveTourStaffing(tour);
-	const endTime = calculateEndTime(next.startTime, tour.durationHours);
+	// The published schedule end wins while the assignment still tracks
+	// the departure (same date+start) — duration math only applies when
+	// the row is schedule-free or has been moved off it (F122).
+	const endTime =
+		linkedSchedule &&
+		linkedSchedule.date === next.date &&
+		linkedSchedule.startTime === next.startTime
+			? linkedSchedule.endTime
+			: calculateEndTime(next.startTime, tour.durationHours);
 
 	// Same tour+date+startTime staffing cap as create.
 	// Fetch same-day assignments once and reuse for both the guide
@@ -473,11 +492,10 @@ export async function performUpdate(
 			);
 		}
 		// Vehicle capacity vs schedule booked (mirrors internalCreate).
-		if (existing.scheduleId) {
-			const scheduleRow = await ctx.db.get(existing.scheduleId);
-			if (scheduleRow && vehicle.capacity < scheduleRow.capacityBooked) {
+		if (linkedSchedule) {
+			if (vehicle.capacity < linkedSchedule.capacityBooked) {
 				throw new ConvexError(
-					`Vehicle seats (${vehicle.capacity}) are below booked guests (${scheduleRow.capacityBooked})`,
+					`Vehicle seats (${vehicle.capacity}) are below booked guests (${linkedSchedule.capacityBooked})`,
 				);
 			}
 		}
