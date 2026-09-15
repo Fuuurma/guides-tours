@@ -2,10 +2,11 @@ import { convexQuery } from "@convex-dev/react-query";
 import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { ListPage } from "@/components/list-page";
+import { PendingInvitesSection } from "@/components/pending-invites-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ import { organization } from "@/lib/auth-client";
 import { getErrorMessage } from "@/lib/utils";
 import { MAX_EMAIL_LEN, validateEmail } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
+import type { RoleName } from "../../../convex/authz";
 
 export const Route = createFileRoute("/dashboard/guides")({
 	component: GuidesPage,
@@ -44,6 +46,10 @@ type GuideRow = {
 };
 
 const GUIDE_ROLES = ["guide", "owner", "admin"];
+
+// Roles this dialog may grant — a subset of the org RoleName union
+// defined in convex/authz.ts (owner/driver are not invitable here).
+type InvitableRole = Extract<RoleName, "guide" | "member" | "admin">;
 
 const columns: DataTableColumn<GuideRow>[] = [
 	{
@@ -103,14 +109,23 @@ function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 				}));
 				return;
 			}
-			const role = value.role as "guide" | "member" | "admin";
+			const role = value.role as InvitableRole;
 			try {
 				const { error } = await organization.inviteMember({
 					email: value.email.trim().toLowerCase(),
 					role,
 				});
 				if (error) throw new Error(error.message ?? "Invite failed");
-				toast.success(`Invitation sent to ${value.email.trim().toLowerCase()}`);
+				// Only the invitation row is confirmed — the email send runs
+				// server-side and never surfaces SES failures to the client, so
+				// the UI must not claim the email was sent.
+				toast.success(
+					`Invitation created for ${value.email.trim().toLowerCase()}`,
+					{
+						description:
+							"Invite email requested — resend it from Pending invites if it doesn't arrive.",
+					},
+				);
 				form.reset();
 				setOpen(false);
 				onInvited();
@@ -259,130 +274,5 @@ function GuidesPage() {
 				searchPlaceholder="Search by name, email, or role…"
 			/>
 		</ListPage>
-	);
-}
-
-type InviteRow = {
-	id: string;
-	email: string;
-	role: string;
-	status: string;
-	expiresAt?: Date | string | number;
-};
-
-function PendingInvitesSection() {
-	const [invites, setInvites] = useState<InviteRow[] | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [busyId, setBusyId] = useState<string | null>(null);
-
-	useEffect(() => {
-		let cancelled = false;
-		const load = async () => {
-			setLoading(true);
-			try {
-				const { data, error } = await organization.listInvitations();
-				if (error) throw new Error(error.message ?? "Failed to load invites");
-				if (cancelled) return;
-				const rows = (data ?? []) as InviteRow[];
-				setInvites(rows.filter((i) => i.status === "pending"));
-			} catch (err) {
-				if (cancelled) return;
-				toast.error(getErrorMessage(err));
-				setInvites([]);
-			} finally {
-				if (!cancelled) setLoading(false);
-			}
-		};
-		void load();
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	const refresh = async () => {
-		setLoading(true);
-		try {
-			const { data, error } = await organization.listInvitations();
-			if (error) throw new Error(error.message ?? "Failed to load invites");
-			const rows = (data ?? []) as InviteRow[];
-			setInvites(rows.filter((i) => i.status === "pending"));
-		} catch (err) {
-			toast.error(getErrorMessage(err));
-			setInvites([]);
-		} finally {
-			setLoading(false);
-		}
-	};
-
-	const onCancel = async (invitationId: string) => {
-		setBusyId(invitationId);
-		try {
-			const { error } = await organization.cancelInvitation({ invitationId });
-			if (error) throw new Error(error.message ?? "Cancel failed");
-			toast.success("Invitation cancelled");
-			await refresh();
-		} catch (err) {
-			toast.error(getErrorMessage(err));
-		} finally {
-			setBusyId(null);
-		}
-	};
-
-	return (
-		<section className="mt-10 flex flex-col gap-3">
-			<div className="flex items-center justify-between gap-2">
-				<div>
-					<h2 className="text-lg font-semibold">Pending invites</h2>
-					<p className="text-muted-foreground text-sm">
-						Invitations that haven't been accepted yet
-					</p>
-				</div>
-				<Button
-					type="button"
-					size="sm"
-					variant="outline"
-					onClick={() => void refresh()}
-					disabled={loading}
-				>
-					Refresh
-				</Button>
-			</div>
-			{loading && invites === null ? (
-				<p className="text-muted-foreground text-sm">Loading…</p>
-			) : !invites || invites.length === 0 ? (
-				<p className="text-muted-foreground text-sm">No pending invites.</p>
-			) : (
-				<ul className="divide-y rounded-md border">
-					{invites.map((inv) => (
-						<li
-							key={inv.id}
-							className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-						>
-							<div>
-								<p className="font-medium">{inv.email}</p>
-								<p className="text-muted-foreground text-xs">
-									Role: {inv.role}
-									{inv.expiresAt
-										? ` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`
-										: ""}
-								</p>
-							</div>
-							<Button
-								type="button"
-								size="sm"
-								variant="outline"
-								disabled={busyId === inv.id}
-								onClick={() => void onCancel(inv.id)}
-							>
-								{busyId === inv.id ? (
-									<Spinner data-icon="inline-start" />
-								) : null}
-								{busyId === inv.id ? "Cancelling…" : "Cancel"}
-							</Button>
-						</li>
-					))}
-				</ul>
-			)}
-		</section>
 	);
 }

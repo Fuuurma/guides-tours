@@ -1,5 +1,11 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { verifyWebhookSignature, hmacSha256Hex } from "../webhook_verify";
+import {
+	verifyWebhookSignature,
+	verifyWebhookSignatureWithTimestamp,
+	checkWebhookTimestamp,
+	hmacSha256Hex,
+	WEBHOOK_MAX_AGE_MS,
+} from "../webhook_verify";
 
 // Test helper: compute the signature the same way the OTA would
 // and verify our code accepts it. Uses Node's crypto to sign so the
@@ -80,6 +86,118 @@ describe("convex/ota/webhook_verify", () => {
 				.update("hello world")
 				.digest("hex");
 			expect(our).toBe(theirs);
+		});
+	});
+
+	describe("checkWebhookTimestamp", () => {
+		const NOW = 1_700_000_000_000;
+
+		it("skips (valid) when the header is absent by default", () => {
+			expect(checkWebhookTimestamp(null, NOW)).toEqual({
+				valid: true,
+				reason: "skipped",
+			});
+			expect(checkWebhookTimestamp("", NOW)).toEqual({
+				valid: true,
+				reason: "skipped",
+			});
+		});
+
+		it("rejects (missing) when the header is absent and requireTimestamp is set", () => {
+			expect(
+				checkWebhookTimestamp(null, NOW, undefined, {
+					requireTimestamp: true,
+				}),
+			).toEqual({ valid: false, reason: "missing" });
+			expect(
+				checkWebhookTimestamp("", NOW, undefined, { requireTimestamp: true }),
+			).toEqual({ valid: false, reason: "missing" });
+		});
+
+		it("accepts a fresh timestamp regardless of requireTimestamp", () => {
+			const fresh = String(NOW - 1000);
+			expect(checkWebhookTimestamp(fresh, NOW)).toEqual({ valid: true });
+			expect(
+				checkWebhookTimestamp(fresh, NOW, undefined, {
+					requireTimestamp: true,
+				}),
+			).toEqual({ valid: true });
+		});
+
+		it("rejects non-numeric headers", () => {
+			expect(checkWebhookTimestamp("12.45", NOW)).toEqual({
+				valid: false,
+				reason: "not_numeric",
+			});
+			expect(checkWebhookTimestamp("abc", NOW)).toEqual({
+				valid: false,
+				reason: "not_numeric",
+			});
+		});
+
+		it("enforces the replay window on both edges", () => {
+			const tooOld = String(NOW - WEBHOOK_MAX_AGE_MS - 1);
+			const tooFuture = String(NOW + WEBHOOK_MAX_AGE_MS + 1);
+			const edgeOld = String(NOW - WEBHOOK_MAX_AGE_MS);
+			const edgeFuture = String(NOW + WEBHOOK_MAX_AGE_MS);
+			expect(checkWebhookTimestamp(tooOld, NOW)).toEqual({
+				valid: false,
+				reason: "too_old",
+			});
+			expect(checkWebhookTimestamp(tooFuture, NOW)).toEqual({
+				valid: false,
+				reason: "too_future",
+			});
+			expect(checkWebhookTimestamp(edgeOld, NOW).valid).toBe(true);
+			expect(checkWebhookTimestamp(edgeFuture, NOW).valid).toBe(true);
+		});
+	});
+
+	describe("verifyWebhookSignatureWithTimestamp", () => {
+		const payload = JSON.stringify({ eventType: "BOOKING_CREATED" });
+		const secret = "shh";
+
+		it("defaults to skip-on-missing-header (valid, signature still checked)", async () => {
+			const sig = await signWithNode(payload, secret);
+			const result = await verifyWebhookSignatureWithTimestamp(
+				payload,
+				sig,
+				null,
+				secret,
+			);
+			expect(result).toEqual({
+				valid: true,
+				reason: "skipped",
+				signatureOk: true,
+			});
+		});
+
+		it("requireTimestamp rejects a missing header before signature work", async () => {
+			const sig = await signWithNode(payload, secret);
+			const result = await verifyWebhookSignatureWithTimestamp(
+				payload,
+				sig,
+				null,
+				secret,
+				undefined,
+				{ requireTimestamp: true },
+			);
+			expect(result).toEqual({
+				valid: false,
+				reason: "missing",
+				signatureOk: false,
+			});
+		});
+
+		it("accepts valid signature + fresh timestamp", async () => {
+			const sig = await signWithNode(payload, secret);
+			const result = await verifyWebhookSignatureWithTimestamp(
+				payload,
+				sig,
+				String(Date.now()),
+				secret,
+			);
+			expect(result).toEqual({ valid: true, signatureOk: true });
 		});
 	});
 });

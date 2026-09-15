@@ -6,6 +6,7 @@ import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { logger } from "./lib/logger";
+import { isUnconfiguredDeployment, trustedOriginsForDeployment } from "./lib/siteUrl";
 
 const http = httpRouter();
 
@@ -21,10 +22,12 @@ const http = httpRouter();
 authComponent.registerRoutesLazy(http, createAuth, {
   basePath: "/api/auth",
   cors: true,
-  trustedOrigins: [
-    process.env.SITE_URL ?? "http://127.0.0.1:3020",
-    process.env.CONVEX_SITE_URL,
-  ].filter((origin): origin is string => typeof origin === "string"),
+  // SITE_URL-fallback policy (fleet 2026-09-13): on a configured
+  // deployment with SITE_URL unset, do NOT synthesize a localhost
+  // trust anchor (the CSRF edge named in the finding). Unconfigured
+  // deployments — local dev, unit tests, push-time codegen — keep it.
+  // Shared helper so auth_security.test.ts pins this exact path.
+  trustedOrigins: trustedOriginsForDeployment(),
 });
 
 // Mount OTA webhook routes. Each provider's handler is registered
@@ -308,12 +311,7 @@ function isAllowedBookingOrigin(origin: string | null): boolean {
 		// tests) — stay permissive. A SET, non-local site URL is production:
 		// fail closed so a missing allowlist can't disable the only CSRF
 		// barrier on an unauthenticated endpoint (fleet audit 2026-09-01).
-		const siteUrl = process.env.CONVEX_SITE_URL?.trim() ?? "";
-		const isUnconfigured =
-			siteUrl === "" ||
-			siteUrl.includes("127.0.0.1") ||
-			siteUrl.includes("localhost");
-		if (isUnconfigured) return true;
+		if (isUnconfiguredDeployment()) return true;
 		logger.error(
 			"[booking] PUBLIC_BOOKING_ALLOWED_ORIGINS is not set — rejecting " +
 				"booking attempts. Set it to the marketing-site origin(s) to " +
