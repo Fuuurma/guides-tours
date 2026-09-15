@@ -134,7 +134,10 @@ http.route({
 		} catch {
 			return bookingResponse("failed to read body", 400, request);
 		}
-		if (rawBody.length > MAX_BODY_BYTES) {
+		// String length is UTF-16 code units, not bytes — a 4 KB body of
+		// multibyte chars is ~8+ KB on the wire. Measure the real byte
+		// size so the cap means what it says (F51).
+		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
 			return bookingResponse("payload too large", 413, request);
 		}
 
@@ -204,10 +207,13 @@ http.route({
 		}
 
 		// Extract client IP for per-IP rate limiting. CF-Connecting-IP
-		// is set by Cloudflare; X-Forwarded-For is the standard fallback.
+		// is set by Cloudflare; for X-Forwarded-For the LAST element is
+		// the edge-observed address — the first is client-supplied and
+		// spoofable, letting an attacker pick their own bucket (F65).
+		const xff = request.headers.get("x-forwarded-for");
 		const ip =
 			request.headers.get("cf-connecting-ip") ??
-			request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+			xff?.split(",").at(-1)?.trim() ??
 			"";
 
 		const { internal } = await import("./_generated/api");
