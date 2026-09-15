@@ -73,6 +73,7 @@ function DashboardLayout() {
 					</div>
 					<div className="flex flex-1 flex-col gap-2 px-3">
 						{Array.from({ length: 8 }, (_, i) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: static skeleton placeholders never reorder
 							<Skeleton key={i} className="h-8 w-full rounded-lg" />
 						))}
 					</div>
