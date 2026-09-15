@@ -128,6 +128,25 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(await res.text()).toBe("missing integrationId");
 	});
 
+	it("rejects a malformed integrationId with 400, not a 500 (F123)", async () => {
+		const t = convexTest(schema, modules);
+		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const sig = await hmacHex("test-secret", body);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=not-a-real-id`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(res.status).toBe(400);
+		expect(await res.text()).toBe("invalid integrationId");
+	});
+
 	it("rejects when integration's provider doesn't match the route", async () => {
 		const t = convexTest(schema, modules);
 		const { encrypt } = await import("../lib/crypto");

@@ -74,10 +74,31 @@ export function createWebhookHandler(config: WebhookConfig) {
 			return new Response("missing integrationId", { status: 400 });
 		}
 
-		const integration = await ctx.runQuery(
-			internal.ota.integrations.getForWebhook,
-			{ integrationId: integrationId as Id<"otaIntegrations"> },
-		);
+		let integration: {
+			organizationId: string;
+			provider: string;
+			isActive: boolean;
+			webhookSecret?: string;
+		} | null;
+		try {
+			integration = await ctx.runQuery(
+				internal.ota.integrations.getForWebhook,
+				{ integrationId: integrationId as Id<"otaIntegrations"> },
+			);
+		} catch (err) {
+			// A malformed integrationId fails the v.id arg validator
+			// inside the query — map it to 400 so the provider isn't
+			// told to retry a request that can never succeed (F123).
+			// Any other failure is a real internal error and keeps
+			// propagating as a 500.
+			if (
+				err instanceof Error &&
+				err.message.includes("Expected ID for table")
+			) {
+				return new Response("invalid integrationId", { status: 400 });
+			}
+			throw err;
+		}
 		if (!integration) {
 			return new Response("unknown integration", { status: 404 });
 		}
