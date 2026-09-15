@@ -200,10 +200,10 @@ export const dispatchScheduled = internalAction({
 			result.rendered.subject ||
 			fallbackSubject(scheduled.template.templateType);
 
-		const markSent = result.status === "sent" || result.status === "skipped";
 		await ctx.runMutation(internal.notifications.recordDispatchResult, {
 			scheduledId: args.scheduledId,
-			success: markSent,
+			success: result.status === "sent",
+			skipped: result.status === "skipped",
 			errorMessage: result.error,
 			channel: result.channel,
 			recipient: to,
@@ -258,7 +258,8 @@ export const dispatchImmediateBookingConfirmation = internalAction({
 				organizationId: ctx_.booking.organizationId,
 				bookingId: args.bookingId,
 				channel: result.channel,
-				success: result.status === "sent" || result.status === "skipped",
+				success: result.status === "sent",
+				skipped: result.status === "skipped",
 				errorMessage: result.error,
 				recipient: to,
 				subject,
@@ -297,9 +298,15 @@ async function sendEmail(params: {
 	}
 
 	if (result.status === "skipped") {
+		// sendTemplatedEmail skips only when SES env is missing — that
+		// is a delivery FAILURE (nothing was sent), not an intentional
+		// skip. Report it as failed so the row retries and the log is
+		// honest; recorded "sent" hid unconfigured-SES orgs entirely
+		// (F48).
 		return {
 			channel: "email",
-			status: "skipped",
+			status: "failed",
+			error: result.reason,
 			rendered: {
 				to: params.to,
 				subject: params.subject,

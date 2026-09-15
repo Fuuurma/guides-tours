@@ -113,6 +113,12 @@ http.route({
 		if (slugIdx < 0 || slugIdx === segments.length - 1) {
 			return bookingResponse("missing slug", 400, request);
 		}
+		// `/book/<slug>` must be the tail — trailing segments route
+		// identically while logs/rate-limit rows record the clean
+		// slug, hiding scans and confusing caches (F52).
+		if (slugIdx + 2 !== segments.length) {
+			return bookingResponse("not found", 404, request);
+		}
 		const slug = segments[slugIdx + 1];
 
 		// Validate slug format: alphanumeric, hyphens, underscores only.

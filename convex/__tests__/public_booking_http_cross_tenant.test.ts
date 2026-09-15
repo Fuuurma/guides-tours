@@ -202,5 +202,46 @@ describe("convex/http — public booking cross-tenant guards at the httpAction b
 		const lastAttempt = attempts[attempts.length - 1];
 		expect(lastAttempt.email).toBe(VALID_PAYLOAD.customerEmail);
 		expect(lastAttempt.slug).toBe(orgA.slug);
+		// F60: the outcome must be the funnel's canonical vocabulary
+		// (`rejected_*`) with the org stamped — the old `failure_*`
+		// strings never matched a bucket and org-less rows were
+		// invisible to the by_org_created funnel query.
+		expect(lastAttempt.outcome).toBe("rejected_validation");
+		expect(lastAttempt.organizationId).toBe(orgA.id);
+	});
+
+	it("rate-limit rejections are org-scoped for the funnel (F60)", async () => {
+		const { t, orgA } = await setupTwoOrgs();
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx, { orgId: orgA.id }),
+		);
+		// Same email past MAX_ATTEMPTS_PER_EMAIL=5 — the 6th is rejected.
+		for (let i = 0; i < 6; i++) {
+			await post(t, orgA.slug, { ...VALID_PAYLOAD, tourId });
+		}
+		const attempts = await t.run(async (ctx) =>
+			ctx.db.query("publicBookingAttempts").collect(),
+		);
+		const rejected = attempts.find((a) => a.outcome === "rejected_rate_limit");
+		expect(rejected).toBeDefined();
+		// The row was recorded pre-org-resolution; the handler now
+		// stamps the org afterward so the per-org funnel counts it.
+		expect(rejected?.organizationId).toBe(orgA.id);
+	});
+
+	it("unknown-slug attempts record rejected_unknown_slug with no org", async () => {
+		const t = convexTest(schema, modules);
+		registerBetterAuthMock(t);
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx, { orgId: "org_none", name: "Ghost tour" }),
+		);
+		await post(t, "ghost-slug", { ...VALID_PAYLOAD, tourId });
+		const attempts = await t.run(async (ctx) =>
+			ctx.db.query("publicBookingAttempts").collect(),
+		);
+		// An unresolvable slug has no org to attribute — the row keeps
+		// organizationId undefined but must carry the canonical outcome.
+		expect(attempts[0]?.outcome).toBe("rejected_unknown_slug");
+		expect(attempts[0]?.organizationId).toBeUndefined();
 	});
 });

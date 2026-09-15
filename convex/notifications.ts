@@ -193,6 +193,11 @@ export const recordDispatchResult = internalMutation({
 	args: {
 		scheduledId: v.id("scheduledNotifications"),
 		success: v.boolean(),
+		// Intentional non-delivery (inactive template, no reachable/
+		// consented channel): terminal, logged as "skipped" — never
+		// "sent" (F48). Infra failures (SES missing) come through as
+		// success:false and keep retrying.
+		skipped: v.optional(v.boolean()),
 		errorMessage: v.optional(v.string()),
 		channel: v.optional(v.string()),
 		recipient: v.optional(v.string()),
@@ -204,7 +209,11 @@ export const recordDispatchResult = internalMutation({
 		if (!scheduled || scheduled.sent) return;
 
 		const now = Date.now();
-		const status = args.success ? "sent" : "failed";
+		const status = args.skipped
+			? "skipped"
+			: args.success
+				? "sent"
+				: "failed";
 
 		const logId = await ctx.db.insert("notificationLogs", {
 			organizationId: scheduled.organizationId,
@@ -222,7 +231,10 @@ export const recordDispatchResult = internalMutation({
 			createdAt: now,
 		});
 
-		if (args.success) {
+		if (args.success || args.skipped) {
+			// Terminal either way: sent stops the cron; skipped is a
+			// deliberate non-delivery — no point retrying a booking the
+			// customer can't be reached for or an inactive template.
 			await ctx.db.patch(args.scheduledId, {
 				sent: true,
 				processedAt: now,
@@ -342,6 +354,9 @@ export const recordImmediateDispatchResult = internalMutation({
 		bookingId: v.id("bookings"),
 		channel: v.string(),
 		success: v.boolean(),
+		// Deliberate non-delivery — logged as immediate_skipped, not
+		// immediate_sent (F48).
+		skipped: v.optional(v.boolean()),
 		errorMessage: v.optional(v.string()),
 		recipient: v.string(),
 		subject: v.string(),
@@ -351,9 +366,11 @@ export const recordImmediateDispatchResult = internalMutation({
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: "system",
-			action: args.success
-				? "notification.immediate_sent"
-				: "notification.immediate_failed",
+			action: args.skipped
+				? "notification.immediate_skipped"
+				: args.success
+					? "notification.immediate_sent"
+					: "notification.immediate_failed",
 			resourceType: "booking",
 			resourceId: args.bookingId,
 			oldValues: {},

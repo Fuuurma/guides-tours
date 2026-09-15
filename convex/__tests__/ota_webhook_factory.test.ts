@@ -23,6 +23,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import { extractEventId } from "../ota/webhook_handler";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -553,6 +554,42 @@ describe("createWebhookHandler — shared factory contract", () => {
 		);
 		expect(rows.length).toBe(1);
 		expect((rows[0] as any).otaReservationId).toBe("RES-FAC-001");
+	});
+});
+
+describe("extractEventId — availability.update dedup key (F55)", () => {
+	it("identical retry payloads collapse to one eventId", () => {
+		const a = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 5 },
+		} as never);
+		const b = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 5 },
+		} as never);
+		expect(a).toBe(b);
+	});
+
+	it("a CHANGED payload for the same product/date is not deduped", () => {
+		const a = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 5 },
+		} as never);
+		const b = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 3 },
+		} as never);
+		// Previously keyed on productId+date only — a second update for
+		// the same slot deduped against the first and never dispatched.
+		expect(a).not.toBe(b);
 	});
 });
 

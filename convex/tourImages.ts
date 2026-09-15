@@ -397,17 +397,16 @@ export const internalRemove = internalMutation({
 		}
 		await ctx.db.delete(args.imageId);
 		// Drop matching files metadata row (blob deleted below).
-		const fileRows = await ctx.db
+		// Direct storageId index — the old by_org_purpose take(500)
+		// scan missed the row past 500 tour-image files (F58).
+		const fileRow = await ctx.db
 			.query("files")
-			.withIndex("by_org_purpose", (q) =>
-				q.eq("organizationId", args.organizationId).eq("purpose", "tour-image"),
+			.withIndex("by_storage_id", (q) =>
+				q.eq("storageId", existing.storageId),
 			)
-			.take(500);
-		for (const f of fileRows) {
-			if (f.storageId === existing.storageId) {
-				await ctx.db.delete(f._id);
-				break;
-			}
+			.unique();
+		if (fileRow && fileRow.organizationId === args.organizationId) {
+			await ctx.db.delete(fileRow._id);
 		}
 		// Best-effort: also delete the storage blob
 		try {

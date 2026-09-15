@@ -139,6 +139,23 @@ describe("checkWebhookTimestamp", () => {
 		expect(checkWebhookTimestamp("", NOW).reason).toBe("skipped");
 	});
 
+	test("requireTimestamp rejects a missing header instead of skipping (F83)", () => {
+		// Opt-in enforcement: providers that DO send a timestamp can
+		// demand it, so a stripped-header replay attack fails closed.
+		expect(
+			checkWebhookTimestamp(null, NOW, undefined, { requireTimestamp: true }),
+		).toEqual({ valid: false, reason: "missing" });
+		expect(
+			checkWebhookTimestamp("", NOW, undefined, { requireTimestamp: true }),
+		).toEqual({ valid: false, reason: "missing" });
+		// A present+valid timestamp still passes under the flag.
+		expect(
+			checkWebhookTimestamp(String(NOW), NOW, undefined, {
+				requireTimestamp: true,
+			}).valid,
+		).toBe(true);
+	});
+
 	test("rejects non-numeric header", () => {
 		expect(checkWebhookTimestamp("not-a-number", NOW).reason).toBe("not_numeric");
 		expect(checkWebhookTimestamp("123.45", NOW).reason).toBe("not_numeric");

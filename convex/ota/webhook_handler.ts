@@ -38,6 +38,10 @@ export interface WebhookConfig {
 	timestampHeader: string;
 	/** Log prefix for this provider, e.g. "[airbnb-webhook]". */
 	logPrefix: string;
+	/** When true, a missing timestamp header rejects the request
+	 * instead of silently skipping replay protection. Opt-in — most
+	 * real OTAs never send a timestamp (F83). */
+	requireTimestamp?: boolean;
 	/** Normalize a parsed payload into our internal event shape. */
 	normalize: (parsed: unknown) => NormalizedProviderEvent | null;
 }
@@ -139,6 +143,8 @@ export function createWebhookHandler(config: WebhookConfig) {
 			signature,
 			timestampHeader,
 			secret,
+			undefined,
+			{ requireTimestamp: config.requireTimestamp },
 		);
 		if (!verifyResult.valid) {
 			// Don't echo the failure reason — it tells a caller which
@@ -148,6 +154,14 @@ export function createWebhookHandler(config: WebhookConfig) {
 				`${config.logPrefix} webhook rejected on integration ${integrationId}: ${verifyResult.reason ?? "invalid signature"}`,
 			);
 			return new Response("invalid signature", { status: 401 });
+		}
+		// Surface a skipped replay check — the request verified, but
+		// an operator auditing replay protection needs to see which
+		// providers never send a timestamp (F83).
+		if (verifyResult.reason === "skipped") {
+			logger.info(
+				`${config.logPrefix} replay check skipped (no timestamp header) on integration ${integrationId}`,
+			);
 		}
 
 		let parsed: unknown;
@@ -289,10 +303,11 @@ export function extractEventId(event: NormalizedProviderEvent): string | null {
 		return `${event.kind}:${event.reservationId}`;
 	}
 	if (event.kind === "availability.update") {
-		// availability.update has no reservationId. Build a
-		// deterministic id from productId + date so the (source,
-		// eventId) unique index still works.
-		return `availability:${event.productId}:${event.date}`;
+		// availability.update has no reservationId — and productId+date
+		// alone would dedup every later update for that slot against the
+		// first (F55). Hash the payload so identical retries collapse
+		// while a changed availability payload dispatches.
+		return `availability:${event.productId}:${event.date}:${djb2Hash(JSON.stringify(event.rawPayload))}`;
 	}
 	return null;
 }

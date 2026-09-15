@@ -9,7 +9,8 @@
 //   - dispatcher renders the subject + body for each templateType
 //   - dispatcher marks scheduled.sent=true on success
 //   - dispatcher marks scheduled.sent=true on skip (no email/phone)
-//     so the cron stops re-picking it
+//     so the cron stops re-picking it — but logs status "skipped",
+//     not "sent" (F48)
 //   - dispatcher leaves sent=false on failure so cron retries it
 
 import { convexTest } from "convex-test";
@@ -154,19 +155,21 @@ describe("convex/notification_dispatch", () => {
 			// Issue 2 regression: recipient must be the customer's email,
 			// NOT the errorMessage (which is undefined here).
 			expect(log?.recipient).toBe("alice@example.com");
-			expect(log?.errorMessage).toBeUndefined();
+			// SES env is unset in the test harness, so the send fails —
+			// the log must say "failed" with the reason, not "sent" (F48).
+			expect(log?.errorMessage).toContain("SES not configured");
 			// Issue 4 regression: templateName comes from the loaded template.
 			expect(log?.templateName).toBe("24h Reminder");
 			// Issue 1 regression: subject is captured in metadata.
 			expect(log?.metadata).toMatchObject({
 				subject: "Your tour is tomorrow",
 			});
-			expect(log?.status).toBe("sent");
+			expect(log?.status).toBe("failed");
 			expect(log?.channel).toBe("email");
 		});
 	});
 
-	it("marks the scheduled row sent on success", async () => {
+	it("keeps the scheduled row retryable when the send fails", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {
 			const { scheduledId } = await seedScheduledForTemplate(
@@ -181,8 +184,10 @@ describe("convex/notification_dispatch", () => {
 			);
 
 			const after = await ctx.db.get(scheduledId);
-			expect(after?.sent).toBe(true);
-			expect(after?.processedAt).toBeTypeOf("number");
+			// Failed sends stay retryable — sent stays false and the
+			// retry counter advances (F48: previously recorded "sent").
+			expect(after?.sent).toBe(false);
+			expect(after?.retryCount).toBe(1);
 			expect(after?.notificationLogId).toBeDefined();
 		});
 	});
@@ -241,7 +246,7 @@ describe("convex/notification_dispatch", () => {
 		});
 	});
 
-	it("is idempotent — second call no-ops because scheduled.sent is true", async () => {
+	it("re-dispatches while the row is retryable — failed sends are not terminal", async () => {
 		const t = convexTest(schema, modules);
 		await t.run(async (ctx) => {
 			const { scheduledId } = await seedScheduledForTemplate(
@@ -260,11 +265,14 @@ describe("convex/notification_dispatch", () => {
 			);
 
 			const after = await ctx.db.get(scheduledId);
-			// Only one log row — second call returned early via the
-			// `if (!scheduled || scheduled.sent) return;` guard.
+			// Both attempts logged as failed; the row stays retryable —
+			// F48: skipped/failed sends used to be recorded "sent" and
+			// dropped on the floor.
 			const logs = await ctx.db.query("notificationLogs").collect();
-			expect(logs).toHaveLength(1);
-			expect(after?.sent).toBe(true);
+			expect(logs).toHaveLength(2);
+			expect(logs.every((l) => l.status === "failed")).toBe(true);
+			expect(after?.sent).toBe(false);
+			expect(after?.retryCount).toBe(2);
 		});
 	});
 
@@ -485,13 +493,13 @@ describe("convex/notification_dispatch", () => {
 
 			const after = await ctx.db.get(scheduledId);
 			// Skip = "we tried, we know there's nothing to do, stop
-			// re-running." Marking sent prevents the cron from re-picking.
+			// re-running." Terminal so the cron stops re-picking.
 			expect(after?.sent).toBe(true);
 			const logs = await ctx.db.query("notificationLogs").collect();
-			// Log captures the intent: channel=none, recorded as sent
-			// (so the row is no longer actionable). The dispatcher
-			// chose this on purpose — there's no transport to retry.
-			expect(logs[0]?.status).toBe("sent");
+			// The log must say "skipped", not "sent" — nothing was
+			// delivered, and reporting it as sent made unreachable
+			// customers look like successful deliveries (F48).
+			expect(logs[0]?.status).toBe("skipped");
 			expect(logs[0]?.channel).toBe("none");
 		});
 	});

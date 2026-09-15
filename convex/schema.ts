@@ -320,7 +320,11 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_tour", ["tourId"])
 		.index("by_tour_primary", ["tourId", "isPrimary"])
-		.index("by_tour_order", ["tourId", "displayOrder"]),
+		.index("by_tour_order", ["tourId", "displayOrder"])
+		// Blob back-reference lookups — files.internalRemove resolves the
+		// gallery row by storageId; a by_org take(500) scan missed rows
+		// past the cap and left dangling references (F58).
+		.index("by_storage_id", ["storageId"]),
 
 	// ----- Fleet -----
 
@@ -1046,7 +1050,10 @@ export default defineSchema({
 			"purpose",
 			"createdAt",
 		])
-		.index("by_uploader", ["uploadedBy"]),
+		.index("by_uploader", ["uploadedBy"])
+		// tourImages.internalRemove resolves the files row by storageId
+		// (F58 — same dangling-reference class as the reverse lookup).
+		.index("by_storage_id", ["storageId"]),
 
 	// ----- Public booking attempts (rate limit + audit) -----
 	//
