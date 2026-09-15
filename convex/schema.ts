@@ -1031,6 +1031,14 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_org_purpose", ["organizationId", "purpose"])
+		// list() must cap the NEWEST files, not the oldest — the
+		// time-ordered variants let take(N) bound the right window (F57).
+		.index("by_org_created", ["organizationId", "createdAt"])
+		.index("by_org_purpose_created", [
+			"organizationId",
+			"purpose",
+			"createdAt",
+		])
 		.index("by_uploader", ["uploadedBy"]),
 
 	// ----- Public booking attempts (rate limit + audit) -----

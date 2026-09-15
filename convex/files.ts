@@ -12,6 +12,8 @@ import {
 	query,
 	mutation,
 	internalMutation,
+	internalQuery,
+	type QueryCtx,
 } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
@@ -20,36 +22,57 @@ import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
+const MAX_FILES = 500;
+
+async function listRows(
+	ctx: QueryCtx,
+	orgId: string,
+	args: { purpose?: string },
+) {
+	// The time-tailed indexes make take() bound the NEWEST files — the
+	// old by_org/by_org_purpose scans returned the 500 oldest rows and
+	// the JS sort only reordered that stale window (F57).
+	const all = args.purpose
+		? await ctx.db
+				.query("files")
+				.withIndex("by_org_purpose_created", (q) =>
+					q.eq("organizationId", orgId).eq("purpose", args.purpose!),
+				)
+				.order("desc")
+				.take(MAX_FILES)
+		: await ctx.db
+				.query("files")
+				.withIndex("by_org_created", (q) => q.eq("organizationId", orgId))
+				.order("desc")
+				.take(MAX_FILES);
+	return {
+		items: await Promise.all(
+			all.map(async (f) => ({
+				...f,
+				url: await ctx.storage.getUrl(f.storageId),
+			})),
+		),
+		truncated: all.length >= MAX_FILES,
+	};
+}
+
 export const list = query({
 	args: {
 		purpose: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const orgId = member.organizationId;
-		const MAX_FILES = 500;
-		let all;
-		if (args.purpose) {
-			all = await ctx.db
-				.query("files")
-				.withIndex("by_org_purpose", (q) =>
-					q.eq("organizationId", orgId).eq("purpose", args.purpose!),
-				)
-				.take(MAX_FILES);
-		} else {
-			all = await ctx.db
-				.query("files")
-				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
-				.take(MAX_FILES);
-		}
-		const sorted = all.sort((a, b) => b.createdAt - a.createdAt);
-		return await Promise.all(
-			sorted.map(async (f) => ({
-				...f,
-				url: await ctx.storage.getUrl(f.storageId),
-			})),
-		);
+		return listRows(ctx, member.organizationId, args);
 	},
+});
+
+// Internal mirror for tests — takes the org explicitly.
+export const listInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		purpose: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => listRows(ctx, args.organizationId, args),
 });
 
 export const get = query({
