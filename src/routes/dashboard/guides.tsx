@@ -87,12 +87,21 @@ function metaErrors(
 	});
 }
 
+// F81: shared invite-role union — the submit path and the ToggleGroup
+// options both derive from this list instead of an inline cast.
+const INVITE_ROLES = [
+	{ value: "guide", label: "Guide" },
+	{ value: "member", label: "Member" },
+	{ value: "admin", label: "Admin" },
+] as const;
+type InviteRole = (typeof INVITE_ROLES)[number]["value"];
+
 function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 	const [open, setOpen] = useState(false);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
 
 	const form = useForm({
-		defaultValues: { email: "", role: "guide" },
+		defaultValues: { email: "", role: "guide" as InviteRole },
 		onSubmit: async ({ value }) => {
 			setSubmitErr(null);
 			const emailErr = validateEmail(value.email);
@@ -103,14 +112,19 @@ function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 				}));
 				return;
 			}
-			const role = value.role as "guide" | "member" | "admin";
+			const role = value.role;
 			try {
 				const { error } = await organization.inviteMember({
 					email: value.email.trim().toLowerCase(),
 					role,
 				});
 				if (error) throw new Error(error.message ?? "Invite failed");
-				toast.success(`Invitation sent to ${value.email.trim().toLowerCase()}`);
+				// F77: claim what we can observe — the invitation row was
+				// created. Email delivery is best-effort server-side and
+				// can't be confirmed here.
+				toast.success(
+					`Invitation created for ${value.email.trim().toLowerCase()}`,
+				);
 				form.reset();
 				setOpen(false);
 				onInvited();
@@ -179,12 +193,16 @@ function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 										size="sm"
 										value={field.state.value}
 										onValueChange={(v) => {
-											if (v) field.handleChange(v);
+											if (INVITE_ROLES.some((r) => r.value === v)) {
+												field.handleChange(v as InviteRole);
+											}
 										}}
 									>
-										<ToggleGroupItem value="guide">Guide</ToggleGroupItem>
-										<ToggleGroupItem value="member">Member</ToggleGroupItem>
-										<ToggleGroupItem value="admin">Admin</ToggleGroupItem>
+										{INVITE_ROLES.map((r) => (
+											<ToggleGroupItem key={r.value} value={r.value}>
+												{r.label}
+											</ToggleGroupItem>
+										))}
 									</ToggleGroup>
 								</Field>
 							)}
@@ -273,7 +291,9 @@ type InviteRow = {
 function PendingInvitesSection() {
 	const [invites, setInvites] = useState<InviteRow[] | null>(null);
 	const [loading, setLoading] = useState(true);
-	const [busyId, setBusyId] = useState<string | null>(null);
+	// F82: per-invitation in-flight set — a second row's action must not
+	// overwrite the first's pending state and re-enable its button.
+	const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(new Set());
 
 	useEffect(() => {
 		let cancelled = false;
@@ -315,7 +335,7 @@ function PendingInvitesSection() {
 	};
 
 	const onCancel = async (invitationId: string) => {
-		setBusyId(invitationId);
+		setBusyIds((prev) => new Set(prev).add(invitationId));
 		try {
 			const { error } = await organization.cancelInvitation({ invitationId });
 			if (error) throw new Error(error.message ?? "Cancel failed");
@@ -324,7 +344,11 @@ function PendingInvitesSection() {
 		} catch (err) {
 			toast.error(getErrorMessage(err));
 		} finally {
-			setBusyId(null);
+			setBusyIds((prev) => {
+				const next = new Set(prev);
+				next.delete(invitationId);
+				return next;
+			});
 		}
 	};
 
@@ -371,13 +395,13 @@ function PendingInvitesSection() {
 								type="button"
 								size="sm"
 								variant="outline"
-								disabled={busyId === inv.id}
+								disabled={busyIds.has(inv.id)}
 								onClick={() => void onCancel(inv.id)}
 							>
-								{busyId === inv.id ? (
+								{busyIds.has(inv.id) ? (
 									<Spinner data-icon="inline-start" />
 								) : null}
-								{busyId === inv.id ? "Cancelling…" : "Cancel"}
+								{busyIds.has(inv.id) ? "Cancelling…" : "Cancel"}
 							</Button>
 						</li>
 					))}

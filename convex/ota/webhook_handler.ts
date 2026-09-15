@@ -238,15 +238,38 @@ export function createWebhookHandler(config: WebhookConfig) {
 				// duplicate (needs-work 2026-09-11: failed dispatches
 				// were unrecoverable because retries were swallowed).
 				const s = recorded.existingStatus;
-				if (s === "processed" || s === "skipped") {
+				let dropAsDuplicate = s === "processed" || s === "skipped";
+				if (dropAsDuplicate && event.kind === "booking.created") {
+					// F89: eventId is `booking.created:<reservationId>` — a
+					// re-emitted BOOKING_CREATED after a cancel is a
+					// re-confirmation, not a retry. It must reach
+					// upsertOtaBooking to clear cancelledAt; only drop when
+					// the booking is still confirmed (a real duplicate).
+					const bookingStatus = await ctx.runQuery(
+						internal.ota.upsert.getOtaBookingStatus,
+						{
+							integrationId: integrationId as Id<"otaIntegrations">,
+							reservationId: event.reservationId,
+						},
+					);
+					if (bookingStatus !== "confirmed") {
+						dropAsDuplicate = false;
+						logger.info(
+							`${config.logPrefix} re-confirmation ${eventId} on integration ${integrationId} (booking is ${bookingStatus ?? "missing"})`,
+						);
+					}
+				}
+				if (dropAsDuplicate) {
 					logger.info(
 						`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,
 					);
 					return new Response("ok (duplicate)", { status: 200 });
 				}
-				logger.warn(
-					`${config.logPrefix} re-dispatching event ${eventId} on integration ${integrationId} (prior status: ${s ?? "unknown"})`,
-				);
+				if (s !== "processed" && s !== "skipped") {
+					logger.warn(
+						`${config.logPrefix} re-dispatching event ${eventId} on integration ${integrationId} (prior status: ${s ?? "unknown"})`,
+					);
+				}
 			}
 		}
 

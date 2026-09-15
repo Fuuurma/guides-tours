@@ -580,6 +580,64 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(rows.length).toBe(1);
 		expect((rows[0] as any).otaReservationId).toBe("RES-FAC-001");
 	});
+
+	it("re-emitted booking.created after a cancel re-confirms instead of deduping (F89)", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", secret),
+		);
+
+		const post = async (body: string) => {
+			const sig = await hmacHex("test-secret", body);
+			return t.fetch(`${WEBHOOK_PATH}?integrationId=${integrationId}`, {
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			});
+		};
+		const bookingRow = () =>
+			t.run(async (ctx) =>
+				ctx.db
+					.query("otaBookings")
+					.withIndex("by_integration_reservation", (q: any) =>
+						q
+							.eq("integrationId", integrationId)
+							.eq("otaReservationId", "RES-FAC-001"),
+					)
+					.unique(),
+			);
+
+		const createBody = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const cancelBody = JSON.stringify(VIATOR_CANCEL_PAYLOAD);
+
+		// 1. Create delivers and confirms.
+		expect((await post(createBody)).status).toBe(200);
+		expect(((await bookingRow()) as any)?.status).toBe("confirmed");
+
+		// 2. A true duplicate retry while still confirmed is dropped.
+		const dup = await post(createBody);
+		expect(await dup.text()).toBe("ok (duplicate)");
+
+		// 3. Cancel flips the row.
+		expect((await post(cancelBody)).status).toBe(200);
+		const cancelled = (await bookingRow()) as any;
+		expect(cancelled?.status).toBe("cancelled");
+		expect(cancelled?.cancelledAt).toBeDefined();
+
+		// 4. Re-emitted create hits the completed-dedup key but the
+		// booking is cancelled — it's a re-confirmation and must reach
+		// upsertOtaBooking to clear cancelledAt, not be acked away.
+		const reconfirm = await post(createBody);
+		expect(await reconfirm.text()).toBe("ok");
+		const reconfirmed = (await bookingRow()) as any;
+		expect(reconfirmed?.status).toBe("confirmed");
+		expect(reconfirmed?.cancelledAt).toBeUndefined();
+	});
 });
 
 describe("extractEventId — availability.update dedup key (F55)", () => {
