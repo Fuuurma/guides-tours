@@ -184,6 +184,21 @@ function AnalyticsPage() {
 		}));
 	}, [topTours, sparklineByTour]);
 	const { displayName } = useOrgMembers(["guide", "owner", "admin"]);
+	// Every analytics builder reports `truncated` when its 10k-row scan
+	// cap was hit — surface it once instead of silently showing partial
+	// totals (fleet needs-work 09-08 F76).
+	const anyTruncated = [
+		overview,
+		topTours,
+		tourStats,
+		guideStats,
+		dailyStats,
+		channels,
+		financialHealth,
+		conversions,
+		cachedTourDays,
+		leaderboardTourDays,
+	].some((d) => d?.truncated === true);
 
 	if (orgError || overviewError || revenueError) {
 		return (
@@ -275,6 +290,13 @@ function AnalyticsPage() {
 					)}
 				</div>
 			</header>
+
+			{anyTruncated && (
+				<p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 text-xs dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+					Some figures only cover the first 10,000 matching rows in this window.
+					Narrow the date range for exact totals.
+				</p>
+			)}
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
 				{/* Stagger each stat card in 50ms after the previous so the
