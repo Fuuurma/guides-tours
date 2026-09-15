@@ -1099,6 +1099,75 @@ describe("convex/payments — audit logging", () => {
 		)) as any;
 		expect(bookingAfter?.depositAmountCents).toBe(0n);
 	});
+
+	it("markRefunded dedups a re-delivered partial refund while still succeeded (F129)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_partial_redelivery";
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				totalAmountCents: 3000n,
+				depositAmountCents: 3000n,
+			}),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 3000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_partial_redelivery",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+
+		const partialCall = {
+			paymentId,
+			fullyRefunded: false,
+			refund: {
+				stripeRefundId: "re_dup_1",
+				amountCents: 1000n,
+				currency: "USD",
+			},
+		};
+		await t.mutation(internal.payments.markRefunded, partialCall);
+		// Stripe re-sends the FULL refunds list on every charge.refunded —
+		// the same refund id arrives again while status is still succeeded.
+		await t.mutation(internal.payments.markRefunded, partialCall);
+
+		const refunds = await t.run(async (ctx) =>
+			ctx.db
+				.query("refunds")
+				.withIndex("by_payment", (q) => q.eq("paymentId", paymentId))
+				.collect(),
+		);
+		expect(refunds.length).toBe(1);
+
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		expect(booking?.depositAmountCents).toBe(2000n);
+		expect(booking?.balanceDueCents).toBe(1000n);
+
+		const payment = (await t.run(async (ctx) =>
+			ctx.db.get(paymentId),
+		)) as any;
+		expect(payment?.status).toBe("succeeded");
+
+		// A later delivery carrying the SAME refund id but now marked
+		// fully-refunded still flips the status — dedup only guards the
+		// refund row + reversal, not the transition.
+		await t.mutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded: true,
+			refund: {
+				stripeRefundId: "re_dup_1",
+				amountCents: 1000n,
+				currency: "USD",
+			},
+		});
+		const paymentAfter = (await t.run(async (ctx) =>
+			ctx.db.get(paymentId),
+		)) as any;
+		expect(paymentAfter?.status).toBe("refunded");
+	});
 });
 
 // Tests for countFailedSince — the home-page "what's broken" pill
