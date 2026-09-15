@@ -491,8 +491,19 @@ export const create = mutation({
 			);
 		}
 
+		// Money-field validation (fleet audit 09-16): every other field
+		// here gets defense-in-depth checks, but raw int64 deposits fed
+		// straight into balance = total - deposit — a negative deposit or
+		// deposit > total would corrupt balanceDueCents and every revenue
+		// sum downstream.
 		const deposit = args.depositAmountCents ?? 0n;
 		const total = args.totalAmountCents ?? 0n;
+		if (deposit < 0n || total < 0n) {
+			throw new ConvexError("Amounts cannot be negative");
+		}
+		if (deposit > total) {
+			throw new ConvexError("Deposit cannot exceed total amount");
+		}
 		const balance = total - deposit;
 		const now = Date.now();
 
