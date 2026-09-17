@@ -57,8 +57,10 @@ http.route({
 //
 // Hardening:
 // - Origin allowlist via PUBLIC_BOOKING_ALLOWED_ORIGINS env var.
-//   If unset, all origins are allowed (development-friendly
-//   default). Set this in production to your marketing-site domain
+//   If unset: local dev stays permissive, but a configured
+//   (non-localhost) deployment FAILS CLOSED — every booking attempt
+//   is rejected with 403. Set this in production to your
+//   marketing-site domain(s)
 //   (e.g. "https://tours.example.com,https://www.example.com").
 //   The Origin header is optional in modern browsers for same-origin
 //   POST; we only reject when an Origin is present and not allowed.
@@ -114,6 +116,12 @@ http.route({
 		if (slugIdx < 0 || slugIdx === segments.length - 1) {
 			return bookingResponse("missing slug", 400, request);
 		}
+		// `/book/<slug>` must be the tail — trailing segments route
+		// identically while logs/rate-limit rows record the clean
+		// slug, hiding scans and confusing caches (F52).
+		if (slugIdx + 2 !== segments.length) {
+			return bookingResponse("not found", 404, request);
+		}
 		const slug = segments[slugIdx + 1];
 
 		// Validate slug format: alphanumeric, hyphens, underscores only.
@@ -135,7 +143,10 @@ http.route({
 		} catch {
 			return bookingResponse("failed to read body", 400, request);
 		}
-		if (rawBody.length > MAX_BODY_BYTES) {
+		// String length is UTF-16 code units, not bytes — a 4 KB body of
+		// multibyte chars is ~8+ KB on the wire. Measure the real byte
+		// size so the cap means what it says (F51).
+		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
 			return bookingResponse("payload too large", 413, request);
 		}
 
@@ -205,10 +216,13 @@ http.route({
 		}
 
 		// Extract client IP for per-IP rate limiting. CF-Connecting-IP
-		// is set by Cloudflare; X-Forwarded-For is the standard fallback.
+		// is set by Cloudflare; for X-Forwarded-For the LAST element is
+		// the edge-observed address — the first is client-supplied and
+		// spoofable, letting an attacker pick their own bucket (F65).
+		const xff = request.headers.get("x-forwarded-for");
 		const ip =
 			request.headers.get("cf-connecting-ip") ??
-			request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+			xff?.split(",").at(-1)?.trim() ??
 			"";
 
 		const { internal } = await import("./_generated/api");

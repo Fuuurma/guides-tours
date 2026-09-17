@@ -293,6 +293,10 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_org_period", ["organizationId", "periodDate", "periodType"])
+		// list(periodType=…) needs org + periodType equality with a date
+		// range — by_org_period's middle field is the ranged one, which
+		// forced periodType into JS post-filtering (F8).
+		.index("by_org_type_date", ["organizationId", "periodType", "periodDate"])
 		.index("by_tour_period", ["tourId", "periodDate"])
 		.index("by_period", ["periodType", "periodDate"]),
 
@@ -316,7 +320,11 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_tour", ["tourId"])
 		.index("by_tour_primary", ["tourId", "isPrimary"])
-		.index("by_tour_order", ["tourId", "displayOrder"]),
+		.index("by_tour_order", ["tourId", "displayOrder"])
+		// Blob back-reference lookups — files.internalRemove resolves the
+		// gallery row by storageId; a by_org take(500) scan missed rows
+		// past the cap and left dangling references (F58).
+		.index("by_storage_id", ["storageId"]),
 
 	// ----- Fleet -----
 
@@ -693,7 +701,14 @@ export default defineSchema({
 		processedAt: v.optional(v.number()),
 	})
 		.index("by_org", ["organizationId"])
-		.index("by_source_event", ["source", "eventId"])
+		// Dedup must be per-org: two orgs on the same OTA feed can receive
+		// the same provider eventId — a global (source, eventId) key would
+		// mark org B's delivery "duplicate" and skip it entirely (F14).
+		.index("by_org_source_event", [
+			"organizationId",
+			"source",
+			"eventId",
+		])
 		.index("by_org_status", ["organizationId", "status"])
 		.index("by_org_received", ["organizationId", "receivedAt"])
 		.index("by_org_status_received", [
@@ -1027,7 +1042,18 @@ export default defineSchema({
 	})
 		.index("by_org", ["organizationId"])
 		.index("by_org_purpose", ["organizationId", "purpose"])
-		.index("by_uploader", ["uploadedBy"]),
+		// list() must cap the NEWEST files, not the oldest — the
+		// time-ordered variants let take(N) bound the right window (F57).
+		.index("by_org_created", ["organizationId", "createdAt"])
+		.index("by_org_purpose_created", [
+			"organizationId",
+			"purpose",
+			"createdAt",
+		])
+		.index("by_uploader", ["uploadedBy"])
+		// tourImages.internalRemove resolves the files row by storageId
+		// (F58 — same dangling-reference class as the reverse lookup).
+		.index("by_storage_id", ["storageId"]),
 
 	// ----- Public booking attempts (rate limit + audit) -----
 	//

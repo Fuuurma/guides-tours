@@ -11,9 +11,13 @@ import {
 	query,
 	mutation,
 	internalMutation,
+	internalQuery,
+	type MutationCtx,
+	type QueryCtx,
 } from "./_generated/server";
 
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
@@ -21,63 +25,92 @@ import { utcYmd, addDaysYmd } from "./lib/staffingGaps";
 
 const PAGE_SIZE = 1_000;
 
-// ---- queries ----
+// Bound the result so an org with thousands of analytics
+// rows doesn't OOM the response. The FE page renders at
+// most a few hundred.
+const MAX_ANALYTICS = 1000;
 
-export const list = query({
+const listArgs = {
+	tourId: v.optional(v.id("tours")),
+	periodType: v.optional(
+		v.union(v.literal("daily"), v.literal("weekly"), v.literal("monthly")),
+	),
+	dateFrom: v.optional(v.string()),
+	dateTo: v.optional(v.string()),
+};
+
+async function listRows(
+	ctx: QueryCtx,
+	orgId: string,
 	args: {
-		tourId: v.optional(v.id("tours")),
-		periodType: v.optional(v.string()),
-		dateFrom: v.optional(v.string()),
-		dateTo: v.optional(v.string()),
+		tourId?: Id<"tours">;
+		periodType?: "daily" | "weekly" | "monthly";
+		dateFrom?: string;
+		dateTo?: string;
 	},
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-const orgId = member.organizationId;
-		// Bound the result so an org with thousands of analytics
-		// rows doesn't OOM the response. The FE page renders at
-		// most a few hundred.
-		const MAX_ANALYTICS = 1000;
-		let all;
-		if (args.tourId) {
-			// SECURITY: scope to org even when filtering by tourId.
-			// tourId is globally unique in Convex so cross-org rows
-			// can't actually share an ID, but the explicit filter
-			// documents the tenant isolation and keeps the pattern
-			// consistent with other modules.
-			all = await ctx.db
-				.query("tourAnalytics")
-				.withIndex("by_tour_period", (q) => q.eq("tourId", args.tourId!))
-				.filter((q) => q.eq(q.field("organizationId"), orgId))
-				.take(MAX_ANALYTICS);
-		} else if (args.periodType) {
-			// by_org_period leads with (org, periodDate, periodType).
-			// Apply the date range at the index level, then filter
-			// periodType in JS since it's the trailing field.
-			all = await ctx.db
-				.query("tourAnalytics")
-				.withIndex("by_org_period", (q) => {
-					const eq = q
-						.eq("organizationId", orgId)
-						.gte("periodDate", args.dateFrom ?? "")
-						.lte("periodDate", args.dateTo ?? "￿");
-					return eq;
-				})
-				.take(MAX_ANALYTICS);
-		} else {
-			all = await ctx.db
-				.query("tourAnalytics")
-				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
-				.take(MAX_ANALYTICS);
-		}
-		return all
+) {
+	let all;
+	if (args.tourId) {
+		// SECURITY: scope to org even when filtering by tourId.
+		// tourId is globally unique in Convex so cross-org rows
+		// can't actually share an ID, but the explicit filter
+		// documents the tenant isolation and keeps the pattern
+		// consistent with other modules.
+		all = await ctx.db
+			.query("tourAnalytics")
+			.withIndex("by_tour_period", (q) => q.eq("tourId", args.tourId!))
+			.filter((q) => q.eq(q.field("organizationId"), orgId))
+			.take(MAX_ANALYTICS);
+	} else if (args.periodType) {
+		// by_org_type_date is (org, periodType, periodDate): both
+		// equalities and the date range resolve at index level, so
+		// the cap bounds MATCHING rows — the old by_org_period scan
+		// took 1000 mixed-period rows then JS-filtered, truncating
+		// the real result set (F8).
+		all = await ctx.db
+			.query("tourAnalytics")
+			.withIndex("by_org_type_date", (q) =>
+				q
+					.eq("organizationId", orgId)
+					.eq("periodType", args.periodType!)
+					.gte("periodDate", args.dateFrom ?? "")
+					.lte("periodDate", args.dateTo ?? "￿"),
+			)
+			.take(MAX_ANALYTICS);
+	} else {
+		all = await ctx.db
+			.query("tourAnalytics")
+			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+			.take(MAX_ANALYTICS);
+	}
+	return {
+		items: all
 			.filter((r) => {
 				if (args.periodType && r.periodType !== args.periodType) return false;
 				if (args.dateFrom && r.periodDate < args.dateFrom) return false;
 				if (args.dateTo && r.periodDate > args.dateTo) return false;
 				return true;
 			})
-			.sort((a, b) => a.periodDate.localeCompare(b.periodDate));
+			.sort((a, b) => a.periodDate.localeCompare(b.periodDate)),
+		// Loud-overflow convention (analyticsBuilders): the caller can
+		// tell a full page from a capped one.
+		truncated: all.length >= MAX_ANALYTICS,
+	};
+}
+
+export const list = query({
+	args: listArgs,
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		return listRows(ctx, member.organizationId, args);
 	},
+});
+
+// Internal mirror for tests and scheduler paths — takes the org
+// explicitly, no membership gate.
+export const listInternal = internalQuery({
+	args: { organizationId: v.string(), ...listArgs },
+	handler: async (ctx, args) => listRows(ctx, args.organizationId, args),
 });
 
 export const get = query({
@@ -367,6 +400,37 @@ export const computeForOrgDay = internalMutation({
  * component-owned (Better Auth), which is why discovery rides the
  * tours table rather than an orgs query.
  */
+
+// Sentinel marking the post-discovery scheduling phase — `cursor` is
+// free for reuse once the tours scan is done.
+const SCHEDULE_PHASE = "schedule";
+// Well under Convex's scheduled-functions-per-mutation cap.
+const ORG_SCHEDULE_BATCH = 200;
+
+async function scheduleOrgSlice(
+	ctx: MutationCtx,
+	orgIds: string[],
+	periodDate: string,
+) {
+	const slice = orgIds.slice(0, ORG_SCHEDULE_BATCH);
+	await Promise.all(
+		slice.map((organizationId) =>
+			ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
+				organizationId,
+				periodDate,
+			}),
+		),
+	);
+	const rest = orgIds.slice(ORG_SCHEDULE_BATCH);
+	if (rest.length > 0) {
+		await ctx.scheduler.runAfter(0, internal.tourAnalytics.runDaily, {
+			cursor: SCHEDULE_PHASE,
+			discovered: rest,
+		});
+	}
+	return { orgs: slice.length, done: rest.length === 0, periodDate };
+}
+
 export const runDaily = internalMutation({
 	args: {
 		cursor: v.optional(v.string()),
@@ -374,6 +438,15 @@ export const runDaily = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const yesterday = addDaysYmd(utcYmd(), -1);
+
+		// Phase 2: discovery finished — schedule compute jobs in bounded
+		// slices. One mutation can only schedule so many functions, so a
+		// many-org day that fanned out all at once would hit the
+		// scheduled-calls cap (F7); leftovers self-continue.
+		if (args.cursor === SCHEDULE_PHASE) {
+			return scheduleOrgSlice(ctx, args.discovered ?? [], yesterday);
+		}
+
 		const discovered = [...(args.discovered ?? [])];
 
 		const result = await ctx.db
@@ -397,15 +470,6 @@ export const runDaily = internalMutation({
 			return { orgs: unique.length, done: false };
 		}
 
-		const orgIds = unique;
-		await Promise.all(
-			orgIds.map((organizationId) =>
-				ctx.scheduler.runAfter(0, internal.tourAnalytics.computeForOrgDay, {
-					organizationId,
-					periodDate: yesterday,
-				}),
-			),
-		);
-		return { orgs: orgIds.length, done: true, periodDate: yesterday };
+		return scheduleOrgSlice(ctx, unique, yesterday);
 	},
 });

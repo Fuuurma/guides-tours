@@ -182,6 +182,14 @@ export interface TimestampCheckOptions {
  * defense-in-depth bonus when the header IS present, not a hard
  * requirement.
  */
+export interface TimestampCheckOptions {
+	/** When true, an absent/empty timestamp header REJECTS the request
+	 * (reason: "missing") instead of skipping the replay check. Opt-in
+	 * per provider — default false because most real OTAs never send a
+	 * timestamp header and rejecting would break their webhooks (F83). */
+	requireTimestamp?: boolean;
+}
+
 export function checkWebhookTimestamp(
 	timestampHeader: string | null,
 	nowMs: number = Date.now(),
@@ -198,6 +206,9 @@ export function checkWebhookTimestamp(
 		// Skip replay check — the provider doesn't send a timestamp.
 		// The HMAC signature still protects against tampering; only
 		// replay of a captured valid payload is unchecked.
+		if (options?.requireTimestamp) {
+			return { valid: false, reason: "missing" };
+		}
 		return { valid: true, reason: "skipped" };
 	}
 	// Reject anything that isn't a pure integer string. parseInt is

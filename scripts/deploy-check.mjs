@@ -71,7 +71,9 @@ const groups = [
   },
   {
     label: "Frontend build (local .env)",
-    keys: ["VITE_CONVEX_URL", "VITE_CONVEX_SITE_URL", "VITE_SITE_URL"],
+    // VITE_SITE_URL deliberately absent — no source file reads it
+    // (F96); the frontend uses VITE_CONVEX_URL/VITE_CONVEX_SITE_URL.
+    keys: ["VITE_CONVEX_URL", "VITE_CONVEX_SITE_URL"],
     check: (key) => getLocalEnv(key, fileVars),
   },
   {
@@ -96,7 +98,16 @@ const groups = [
     check: (key) => (convexProdHas(key) ? "set" : ""),
   },
   {
+    label: "Convex prod — Google OAuth (optional, only if sign-in is enabled)",
+    // auth.ts:googleSocialProviders reads these; isGoogleEnabled hides the
+    // button when unset, so a miss silently disables Google sign-in (F97).
+    keys: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+    check: (key) => (convexProdHas(key) ? "set" : ""),
+    optional: true,
+  },
+  {
     label: "Convex prod — OTA (optional, only needed if integrating)",
+    optional: true,
     keys: [
       "OTA_VIATOR_API_KEY",
       "OTA_GETYOURGUIDE_API_KEY",
@@ -111,7 +122,7 @@ const groups = [
 ]
 
 let missing = 0
-let missingOta = 0
+let missingOptional = 0
 
 console.log("Deploy readiness — guides-tours\n")
 console.log(
@@ -124,23 +135,23 @@ for (const group of groups) {
     if (group.check(key)) {
       console.log(`  ✓ ${key}`)
     } else {
-      const isOta = group.label.startsWith("Convex prod — OTA")
-      if (isOta) missingOta++
+      const isOptional = group.optional === true
+      if (isOptional) missingOptional++
       else missing++
-      console.log(`  ${isOta ? "○" : "✗"} ${key} — missing${isOta ? " (optional)" : ""}`)
+      console.log(`  ${isOptional ? "○" : "✗"} ${key} — missing${isOptional ? " (optional)" : ""}`)
     }
   }
   console.log()
 }
 
 const blocking = missing
-if (blocking === 0 && missingOta === 0) {
-  console.log("All checked vars present (incl. OTA). Run: pnpm deploy")
+if (blocking === 0 && missingOptional === 0) {
+  console.log("All checked vars present (incl. optional). Run: pnpm deploy")
   process.exit(0)
 }
 if (blocking === 0) {
   console.log(
-    `${missingOta} optional OTA var(s) missing — fine if you don't need OTA integrations.`,
+    `${missingOptional} optional var(s) missing — fine if you don't need Google sign-in or OTA integrations.`,
   )
   console.log("All required vars present. Run: pnpm deploy")
   process.exit(0)

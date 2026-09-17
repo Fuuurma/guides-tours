@@ -44,6 +44,20 @@ function getPublicOrganizationId(
 	return org?.id ?? org?._id;
 }
 
+/** Map a createForSlug failure to the funnel's canonical outcome
+ * vocabulary (analyticsBuilders.buildConversions). The funnel only
+ * counts `rejected_*`/`success` — raw `failure_<message>` strings
+ * were written before and never matched a bucket (F60). */
+function classifyAttemptOutcome(err: unknown): string {
+	const msg = err instanceof ConvexError ? String(err.data) : "";
+	// The slot couldn't take the booking: over capacity, over the
+	// tour's maxGuests, or a cancelled/unavailable schedule.
+	if (/capacity|maximum|cancelled schedule/i.test(msg)) {
+		return "rejected_capacity";
+	}
+	return "rejected_validation";
+}
+
 // ----- Public query: org + active tours by slug -----
 //
 // Used by the public booking page (no auth required) to render the
@@ -217,28 +231,40 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 			outcome: "pending",
 			ip: args.ip,
 		});
+		// Resolve organization via Better Auth component adapter query.
+		// `model: "organization"` is added at runtime by the org plugin;
+		// the static type only includes the default tables, so we cast.
+		const findOrg = () =>
+			ctx.runQuery(components.betterAuth.adapter.findOne as never, {
+				model: "organization" as never,
+				where: [{ field: "slug", value: args.slug }] as never,
+			}) as Promise<PublicOrganizationRecord | null>;
+
 		if (!rateCheck.allowed) {
+			// Stamp the resolved org on the rejected row so the per-org
+			// funnel counts rate-limit rejections — the row was recorded
+			// pre-resolution with organizationId:undefined and stayed
+			// invisible to the by_org_created index (F60). Unknown slugs
+			// have no org to attribute; they stay unscoped.
+			const orgForRejection = await findOrg();
+			const rejectedOrgId = getPublicOrganizationId(orgForRejection);
+			if (rejectedOrgId) {
+				await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+					attemptId: rateCheck.attemptId,
+					outcome: "rejected_rate_limit",
+					organizationId: rejectedOrgId,
+				});
+			}
 			throw new ConvexError(
 				`rate limit exceeded: try again later (${rateCheck.attempts} email / ${rateCheck.ipAttempts ?? 0} ip attempts in window)`,
 			);
 		}
 
-		// Resolve organization via Better Auth component adapter query.
-		// `model: "organization"` is added at runtime by the org plugin;
-		// the static type only includes the default tables, so we cast.
-		const org = (await ctx.runQuery(
-			components.betterAuth.adapter.findOne as never,
-			{
-				model: "organization" as never,
-				where: [
-					{ field: "slug", value: args.slug },
-				] as never,
-			},
-		)) as PublicOrganizationRecord | null;
+		const org = await findOrg();
 		if (!org) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
-				outcome: "failure_org_not_found",
+				outcome: "rejected_unknown_slug",
 			});
 			throw new ConvexError("organization not found");
 		}
@@ -246,7 +272,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		if (!organizationId) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
-				outcome: "failure_org_no_id",
+				outcome: "rejected_unknown_slug",
 			});
 			throw new ConvexError("organization has no id");
 		}
@@ -302,7 +328,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		} catch (err) {
 			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
-				outcome: `failure_${err instanceof ConvexError ? err.data : "unknown"}`,
+				outcome: classifyAttemptOutcome(err),
 				organizationId,
 			});
 			throw err;

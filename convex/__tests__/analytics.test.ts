@@ -315,7 +315,7 @@ describe("analytics", () => {
 			seedBooking(ctx, orgId, tourId, custId, { source: "direct" }),
 		);
 
-		const sources = await t.query(
+		const result = await t.query(
 			internal.analytics.getBookingSourcesInternal,
 			{
 				organizationId: orgId,
@@ -323,11 +323,12 @@ describe("analytics", () => {
 				endDate: "2026-07-31",
 			},
 		);
-		expect(sources.length).toBe(2);
-		expect(sources[0]!.source).toBe("viator");
-		expect(sources[0]!.totalBookings).toBe(2);
-		expect(sources[1]!.source).toBe("direct");
-		expect(sources[1]!.totalBookings).toBe(1);
+		expect(result.truncated).toBe(false);
+		expect(result.sources.length).toBe(2);
+		expect(result.sources[0]!.source).toBe("viator");
+		expect(result.sources[0]!.totalBookings).toBe(2);
+		expect(result.sources[1]!.source).toBe("direct");
+		expect(result.sources[1]!.totalBookings).toBe(1);
 	});
 
 	it("getTopTours: ranks by revenue and respects limit", async () => {

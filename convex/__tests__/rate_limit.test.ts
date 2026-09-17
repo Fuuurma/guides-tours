@@ -15,6 +15,7 @@ import { internal } from "../_generated/api";
 import type { FunctionReference } from "convex/server";
 import {
 	MAX_ATTEMPTS_PER_EMAIL,
+	MAX_ATTEMPTS_PER_IP,
 	WINDOW_MS,
 } from "../lib/rate_limit";
 
@@ -33,6 +34,7 @@ const recordAttempt = (internal as unknown as {
 				slug: string;
 				organizationId: string | undefined;
 				outcome: string;
+				ip?: string;
 			},
 			{
 				allowed: boolean;
@@ -49,8 +51,8 @@ const recordAttempt = (internal as unknown as {
 		purgeOld: FunctionReference<
 			"mutation",
 			"internal",
-			Record<string, never>,
-			{ deleted: number }
+			{ cursor?: string; deleted?: number },
+			{ deleted: number; isDone: boolean; continueCursor: string }
 		>;
 		updateAttemptOutcome: FunctionReference<
 			"mutation",
@@ -201,6 +203,65 @@ describe("public booking rate limit", () => {
 			ctx.db.query("publicBookingAttempts").collect(),
 		);
 		expect(rows.length).toBe(1);
+	});
+
+	test("headerless attempts share the 'unknown' IP bucket and get capped (F59)", async () => {
+		const t = convexTest(schema, modules);
+		// Burn the IP quota with attempts that carry no ip — pre-fix the
+		// stored row held "" while the lookup queried "unknown", so the
+		// cap never fired.
+		for (let i = 0; i < MAX_ATTEMPTS_PER_IP; i++) {
+			await t.mutation(recordAttempt.recordAttempt, {
+				email: `spray${i}@example.com`, // fresh emails — email cap untouched
+				slug: "test-org",
+				organizationId: undefined,
+				outcome: "pending",
+				ip: "",
+			});
+		}
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "another@example.com",
+			slug: "test-org",
+			organizationId: undefined,
+			outcome: "pending",
+			ip: "",
+		});
+		expect(r.allowed).toBe(false);
+	});
+
+	test("purgeOld paginates past one page (F61)", async () => {
+		const t = convexTest(schema, modules);
+		// Seed more than the old 500-row take() bound — pre-fix a single
+		// invocation could never drain this backlog.
+		const total = 600;
+		await t.run(async (ctx) => {
+			for (let i = 0; i < total; i++) {
+				await ctx.db.insert("publicBookingAttempts", {
+					organizationId: undefined,
+					email: `old${i}@example.com`,
+					ip: "1.2.3.4",
+					slug: "test-org",
+					outcome: "pending",
+					createdAt: Date.now() - 5 * 60 * 60 * 1000,
+				});
+			}
+		});
+		let res = await t.mutation(recordAttempt.purgeOld, {});
+		let guard = 0;
+		while (!res.isDone && guard++ < 10) {
+			res = await t.mutation(recordAttempt.purgeOld, {
+				cursor: res.continueCursor,
+				deleted: res.deleted,
+			});
+		}
+		expect(res.isDone).toBe(true);
+		// deleted is >= one full page (the scheduled self-continuation may
+		// also drain inside the harness, so don't pin the exact count).
+		expect(res.deleted).toBeGreaterThanOrEqual(500);
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("publicBookingAttempts").collect(),
+		);
+		expect(rows.length).toBe(0);
 	});
 
 	test("recordAttempt returns attemptId for later outcome update", async () => {

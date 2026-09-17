@@ -21,10 +21,11 @@ import {
 import { requireMembership } from "./lib/authz";
 
 /**
- * Record a webhook delivery. Idempotent on (source, eventId) — if a
- * row with the same key already exists, returns the existing row's id
- * without modifying it. The caller can then decide whether to skip
- * processing ("duplicate eventId") or update the existing row.
+ * Record a webhook delivery. Idempotent on (org, source, eventId) —
+ * if a row with the same key already exists, returns the existing
+ * row's id without modifying it. Per-org scoping matters: providers
+ * can broadcast the same eventId to multiple orgs, and a global key
+ * would drop all but the first org's delivery (F14).
  */
 export const recordDelivery = internalMutation({
 	args: {
@@ -41,8 +42,11 @@ export const recordDelivery = internalMutation({
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
 			.query("webhookDeliveries")
-			.withIndex("by_source_event", (q) =>
-				q.eq("source", args.source).eq("eventId", args.eventId),
+			.withIndex("by_org_source_event", (q) =>
+				q
+					.eq("organizationId", args.organizationId)
+					.eq("source", args.source)
+					.eq("eventId", args.eventId),
 			)
 			.first();
 		if (existing) {
@@ -68,10 +72,12 @@ export const recordDelivery = internalMutation({
 
 /**
  * Update a webhook delivery status (e.g. after processing completes).
- * Idempotent on (source, eventId) — finds the existing row.
+ * Scoped by (org, source, eventId) — the org arg prevents a webhook
+ * for org A from patching org B's delivery row on a shared eventId.
  */
 export const updateDeliveryStatus = internalMutation({
 	args: {
+		organizationId: v.string(),
 		source: v.string(),
 		eventId: v.string(),
 		status: v.union(
@@ -88,8 +94,11 @@ export const updateDeliveryStatus = internalMutation({
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
 			.query("webhookDeliveries")
-			.withIndex("by_source_event", (q) =>
-				q.eq("source", args.source).eq("eventId", args.eventId),
+			.withIndex("by_org_source_event", (q) =>
+				q
+					.eq("organizationId", args.organizationId)
+					.eq("source", args.source)
+					.eq("eventId", args.eventId),
 			)
 			.first();
 		if (!existing) {

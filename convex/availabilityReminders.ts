@@ -80,19 +80,28 @@ export function formatAvailabilityReminder(input: {
 }
 
 export const listReminderTargets = internalQuery({
-	args: {},
-	handler: async (ctx) => {
-		const rows = await ctx.db.query("notificationSettings").take(MAX_ORGS);
-		return rows
-			.filter((r) => r.availabilityReminderEnabled === true)
-			.map((r) => ({
-				organizationId: r.organizationId,
-				daysAhead: Math.min(
-					14,
-					Math.max(1, r.availabilityReminderDaysAhead ?? 7),
-				),
-				emailFromEmail: r.emailFromEmail,
-			}));
+	args: { cursor: v.optional(v.string()) },
+	handler: async (ctx, args) => {
+		// Paged scan — the old take(MAX_ORGS) silently skipped every org
+		// past row 100, so those orgs never received reminders (F11).
+		// runDaily pages through with the returned cursor.
+		const result = await ctx.db
+			.query("notificationSettings")
+			.paginate({ numItems: MAX_ORGS, cursor: args.cursor ?? null });
+		return {
+			isDone: result.isDone,
+			continueCursor: result.continueCursor,
+			targets: result.page
+				.filter((r) => r.availabilityReminderEnabled === true)
+				.map((r) => ({
+					organizationId: r.organizationId,
+					daysAhead: Math.min(
+						14,
+						Math.max(1, r.availabilityReminderDaysAhead ?? 7),
+					),
+					emailFromEmail: r.emailFromEmail,
+				})),
+		};
 	},
 });
 
@@ -321,18 +330,25 @@ export const runForOrg = internalAction({
 });
 
 export const runDaily = internalMutation({
-	args: {},
-	handler: async (ctx) => {
-		const targets = (await ctx.runQuery(
+	args: { cursor: v.optional(v.string()) },
+	handler: async (ctx, args) => {
+		// One page per execution + self-continuation: paginate is limited
+		// to one call per function, and scheduling every org in a single
+		// mutation would hit the scheduled-calls cap at scale (F11).
+		const { targets, isDone, continueCursor } = (await ctx.runQuery(
 			internal.availabilityReminders.listReminderTargets,
-			{},
-		)) as Array<{
-			organizationId: string;
-			daysAhead: number;
-			emailFromEmail?: string;
-		}>;
-		// Schedule all orgs in parallel — the scheduler calls are
-		// independent and were previously sequential.
+			{ cursor: args.cursor },
+		)) as {
+			targets: Array<{
+				organizationId: string;
+				daysAhead: number;
+				emailFromEmail?: string;
+			}>;
+			isDone: boolean;
+			continueCursor: string;
+		};
+		// Schedule all orgs on this page in parallel — the scheduler calls
+		// are independent and were previously sequential.
 		await Promise.all(
 			targets.map((t) =>
 				ctx.scheduler.runAfter(
@@ -346,7 +362,12 @@ export const runDaily = internalMutation({
 				),
 			),
 		);
-		return { scheduled: targets.length };
+		if (!isDone) {
+			await ctx.scheduler.runAfter(0, internal.availabilityReminders.runDaily, {
+				cursor: continueCursor,
+			});
+		}
+		return { scheduled: targets.length, done: isDone };
 	},
 });
 

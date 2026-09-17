@@ -22,6 +22,7 @@ import {
 	mutation,
 	query,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { encrypt } from "./lib/crypto";
@@ -150,6 +151,28 @@ export const list = query({
 });
 
 /**
+ * Refund rows for one booking, newest first. Powers the booking
+ * detail "Payment activity" section — refund inserts populate
+ * `bookingId` so the `by_booking` index resolves them (F100).
+ * Membership-gated; the org check on the row keeps cross-tenant
+ * booking IDs from leaking refund data.
+ */
+export const listRefundsForBooking = query({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		const member = await requireMembership(ctx);
+		return await ctx.db
+			.query("refunds")
+			.withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
+			.order("desc")
+			.collect()
+			.then((rows) =>
+				rows.filter((r) => r.organizationId === member.organizationId),
+			);
+	},
+});
+
+/**
  * Home-page "what's broken" feed: how many payment rows for the
  * active org ended up in a terminal-failure state since the
  * given cutoff (defaults to 24h). Bounded to `take(100)` so the
@@ -191,6 +214,42 @@ export const get = query({
 		if (!p) return null;
 		if (p.organizationId !== member.organizationId) return null;
 		return p;
+	},
+});
+
+/**
+ * One-shot backfill (F100): refunds written before the bookingId
+ * link was populated never resolve under `by_booking`. Paginates
+ * all refunds, copies `payment.bookingId` onto rows missing it,
+ * and self-continues until done. Run once via the dashboard /
+ * `npx convex run internal.payments.backfillRefundBookingIds`.
+ */
+export const backfillRefundBookingIds = internalMutation({
+	args: {
+		cursor: v.optional(v.string()),
+		patched: v.optional(v.number()),
+	},
+	handler: async (ctx, args) => {
+		const page = await ctx.db
+			.query("refunds")
+			.paginate({ numItems: 200, cursor: args.cursor ?? null });
+		let patched = args.patched ?? 0;
+		for (const r of page.page) {
+			if (r.bookingId !== undefined) continue;
+			const payment = await ctx.db.get(r.paymentId);
+			if (payment?.bookingId) {
+				await ctx.db.patch(r._id, { bookingId: payment.bookingId });
+				patched++;
+			}
+		}
+		if (!page.isDone) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.payments.backfillRefundBookingIds,
+				{ cursor: page.continueCursor, patched },
+			);
+		}
+		return { patched, isDone: page.isDone };
 	},
 });
 
@@ -453,6 +512,7 @@ export const refund = mutation({
 		await ctx.db.insert("refunds", {
 			organizationId: p.organizationId,
 			paymentId: p._id,
+			bookingId: p.bookingId,
 			stripeRefundId: `manual_${now}_${args.paymentId}`,
 			amountCents: p.amountCents,
 			currency: p.currency,
@@ -768,6 +828,14 @@ export const getPaymentForRefund = internalQuery({
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
 		if (!p) return null;
+		// Count prior refunds so refundViaStripe can scope its Stripe
+		// idempotency key per-attempt — a payment-scoped key would replay
+		// the FIRST refund on a second call now that partial refunds keep
+		// status "succeeded" (F5).
+		const refunds = await ctx.db
+			.query("refunds")
+			.withIndex("by_payment", (q) => q.eq("paymentId", args.paymentId))
+			.collect();
 		return {
 			_id: p._id,
 			organizationId: p.organizationId,
@@ -776,6 +844,9 @@ export const getPaymentForRefund = internalQuery({
 			currency: p.currency,
 			stripePaymentIntentId: p.stripePaymentIntentId,
 			bookingId: p.bookingId,
+			refundCount: refunds.filter(
+				(r) => r.status === "succeeded" || r.status === "pending",
+			).length,
 		};
 	},
 });
@@ -898,6 +969,7 @@ export const markRefunded = internalMutation({
 					await ctx.db.insert("refunds", {
 						organizationId: p.organizationId,
 						paymentId: p._id,
+						bookingId: p.bookingId,
 						stripeRefundId: args.refund.stripeRefundId,
 						amountCents: args.refund.amountCents,
 						currency: args.refund.currency,
@@ -935,27 +1007,42 @@ export const markRefunded = internalMutation({
 				updatedAt: now,
 			});
 		}
-		// Write the refunds row when details are present — for both full
-		// and partial refunds (the refunds table is the per-refund truth).
+		// Insert the refunds row + reverse its amount only when the refund
+		// is new — charge.refunded re-sends the FULL refund list on every
+		// delivery, so dedup on by_stripe_refund keeps retries as no-ops
+		// during the partial-refund window where status stays succeeded.
+		let inserted = false;
 		if (args.refund) {
-			await ctx.db.insert("refunds", {
-				organizationId: p.organizationId,
-				paymentId: p._id,
-				stripeRefundId: args.refund.stripeRefundId,
-				amountCents: args.refund.amountCents,
-				currency: args.refund.currency,
-				status: "succeeded",
-				reason: args.refund.reason,
-				refundedBy: "stripe_webhook",
-				refundedAt: now,
-				processedAt: args.refund.processedAt ?? now,
-				metadata: {},
-				createdAt: now,
-				updatedAt: now,
-			});
+			const existing = await ctx.db
+				.query("refunds")
+				.withIndex("by_stripe_refund", (q) =>
+					q.eq("stripeRefundId", args.refund!.stripeRefundId),
+				)
+				.first();
+			if (!existing) {
+				await ctx.db.insert("refunds", {
+					organizationId: p.organizationId,
+					paymentId: p._id,
+					bookingId: p.bookingId,
+					stripeRefundId: args.refund.stripeRefundId,
+					amountCents: args.refund.amountCents,
+					currency: args.refund.currency,
+					status: "succeeded",
+					reason: args.refund.reason,
+					refundedBy: "stripe_webhook",
+					refundedAt: now,
+					processedAt: args.refund.processedAt ?? now,
+					metadata: {},
+					createdAt: now,
+					updatedAt: now,
+				});
+				inserted = true;
+			}
 		}
 
-		if (p.bookingId) {
+		// A call without refund details reverses only when it flips the
+		// status — a bare partial-refund call has no amount to attribute.
+		if (p.bookingId && (inserted || (!args.refund && fully))) {
 			await reversePaymentOnBooking(ctx, {
 				organizationId: p.organizationId,
 				bookingId: p.bookingId,
@@ -964,15 +1051,19 @@ export const markRefunded = internalMutation({
 			});
 		}
 
-		await logAudit(ctx, {
-			organizationId: p.organizationId,
-			userId: "stripe_webhook",
-			action: "payment.refunded",
-			resourceType: "payment",
-			resourceId: args.paymentId,
-			oldValues: { status: p.status },
-			newValues: { status: fully ? "refunded" : "succeeded" },
-		});
+		// Audit only on a real state change — a deduped re-delivery with
+		// no status flip is a true no-op.
+		if (inserted || fully) {
+			await logAudit(ctx, {
+				organizationId: p.organizationId,
+				userId: "stripe_webhook",
+				action: "payment.refunded",
+				resourceType: "payment",
+				resourceId: args.paymentId,
+				oldValues: { status: p.status },
+				newValues: { status: fully ? "refunded" : "succeeded" },
+			});
+		}
 		return args.paymentId;
 	},
 });

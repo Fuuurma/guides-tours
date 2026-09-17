@@ -20,11 +20,16 @@ import { klookWebhook } from "./klook_webhook";
 import { bookingWebhook } from "./booking_webhook";
 import { expediaWebhook } from "./expedia_webhook";
 
+// Paths use the canonical lowercase provider ids from types.ts —
+// the dashboard (ota.tsx) and DEPLOYMENT.md publish
+// /api/ota/webhooks/{providerId}, and httpRouter matches paths
+// case-sensitively, so camelCase mounts would 404 the registered URL
+// before signature verification (F91).
 const ROUTES = [
 	{ path: "/api/ota/webhooks/viator", handler: viatorWebhook },
-	{ path: "/api/ota/webhooks/getYourGuide", handler: getYourGuideWebhook },
+	{ path: "/api/ota/webhooks/getyourguide", handler: getYourGuideWebhook },
 	{ path: "/api/ota/webhooks/airbnb", handler: airbnbWebhook },
-	{ path: "/api/ota/webhooks/tripAdvisor", handler: tripAdvisorWebhook },
+	{ path: "/api/ota/webhooks/tripadvisor", handler: tripAdvisorWebhook },
 	{ path: "/api/ota/webhooks/klook", handler: klookWebhook },
 	{ path: "/api/ota/webhooks/booking", handler: bookingWebhook },
 	{ path: "/api/ota/webhooks/expedia", handler: expediaWebhook },

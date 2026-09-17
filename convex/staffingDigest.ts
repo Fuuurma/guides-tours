@@ -32,22 +32,31 @@ const MAX_ROWS = 500;
 const MAX_ORGS_PER_RUN = 100;
 
 export const listDigestTargets = internalQuery({
-	args: {},
-	handler: async (ctx) => {
-		const rows = await ctx.db.query("notificationSettings").take(MAX_ORGS_PER_RUN);
-		return rows
-			.filter((r) => r.staffingDigestEnabled === true)
-			.filter((r) => Boolean(r.staffingDigestEmail) || Boolean(r.staffingDigestPhone))
-			.map((r) => ({
-				organizationId: r.organizationId,
-				email: r.staffingDigestEmail,
-				phone: r.staffingDigestPhone,
-				daysAhead: Math.min(14, Math.max(1, r.staffingDigestDaysAhead ?? 3)),
-				emailEnabled: r.emailEnabled,
-				emailFromEmail: r.emailFromEmail,
-				emailFromName: r.emailFromName,
-				phoneRemindWithDigest: r.phoneRemindWithDigest === true,
-			}));
+	args: { cursor: v.optional(v.string()) },
+	handler: async (ctx, args) => {
+		// Paged scan — the old take(MAX_ORGS_PER_RUN) silently skipped
+		// every org past row 100, so those orgs never received the digest
+		// (F11). runDaily pages through with the returned cursor.
+		const result = await ctx.db
+			.query("notificationSettings")
+			.paginate({ numItems: MAX_ORGS_PER_RUN, cursor: args.cursor ?? null });
+		return {
+			isDone: result.isDone,
+			continueCursor: result.continueCursor,
+			targets: result.page
+				.filter((r) => r.staffingDigestEnabled === true)
+				.filter((r) => Boolean(r.staffingDigestEmail) || Boolean(r.staffingDigestPhone))
+				.map((r) => ({
+					organizationId: r.organizationId,
+					email: r.staffingDigestEmail,
+					phone: r.staffingDigestPhone,
+					daysAhead: Math.min(14, Math.max(1, r.staffingDigestDaysAhead ?? 3)),
+					emailEnabled: r.emailEnabled,
+					emailFromEmail: r.emailFromEmail,
+					emailFromName: r.emailFromName,
+					phoneRemindWithDigest: r.phoneRemindWithDigest === true,
+				})),
+		};
 	},
 });
 
@@ -267,23 +276,30 @@ export const sendForOrg = internalAction({
 
 /** Cron entry: fan out digests to opted-in orgs. */
 export const runDaily = internalMutation({
-	args: {},
-	handler: async (ctx) => {
-		const targets = (await ctx.runQuery(
+	args: { cursor: v.optional(v.string()) },
+	handler: async (ctx, args) => {
+		// One page per execution + self-continuation: paginate is limited
+		// to one call per function, and scheduling every org in a single
+		// mutation would hit the scheduled-calls cap at scale (F11).
+		const { targets, isDone, continueCursor } = (await ctx.runQuery(
 			internal.staffingDigest.listDigestTargets,
-			{},
-		)) as Array<{
-			organizationId: string;
-			email?: string;
-			phone?: string;
-			daysAhead: number;
-			emailEnabled: boolean;
-			emailFromEmail?: string;
-			emailFromName?: string;
-			phoneRemindWithDigest?: boolean;
-		}>;
-		// Schedule all orgs in parallel — the scheduler calls are
-		// independent and were previously sequential.
+			{ cursor: args.cursor },
+		)) as {
+			targets: Array<{
+				organizationId: string;
+				email?: string;
+				phone?: string;
+				daysAhead: number;
+				emailEnabled: boolean;
+				emailFromEmail?: string;
+				emailFromName?: string;
+				phoneRemindWithDigest?: boolean;
+			}>;
+			isDone: boolean;
+			continueCursor: string;
+		};
+		// Schedule all orgs on this page in parallel — the scheduler calls
+		// are independent and were previously sequential.
 		await Promise.all(
 			targets.map((t) =>
 				ctx.scheduler.runAfter(0, internal.staffingDigest.sendForOrg, {
@@ -298,7 +314,12 @@ export const runDaily = internalMutation({
 				}),
 			),
 		);
-		return { scheduled: targets.length };
+		if (!isDone) {
+			await ctx.scheduler.runAfter(0, internal.staffingDigest.runDaily, {
+				cursor: continueCursor,
+			});
+		}
+		return { scheduled: targets.length, done: isDone };
 	},
 });
 

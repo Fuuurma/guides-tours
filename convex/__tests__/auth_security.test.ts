@@ -16,7 +16,7 @@
 process.env.ENCRYPTION_KEY ??= "a".repeat(64);
 
 import { convexTest } from "convex-test";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
 import { createAuthOptions } from "../auth";
@@ -26,6 +26,27 @@ import {
 } from "../lib/siteUrl";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
+
+// These tests mutate deployment env vars (SITE_URL, GOOGLE_*). Without
+// a restore, the last-writer value leaks into later cases and any file
+// sharing the worker — snapshot and restore around each test (F132).
+const ENV_KEYS = [
+	"SITE_URL",
+	"GOOGLE_CLIENT_ID",
+	"GOOGLE_CLIENT_SECRET",
+] as const;
+let savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string>>;
+beforeEach(() => {
+	savedEnv = Object.fromEntries(
+		ENV_KEYS.map((k) => [k, process.env[k]]),
+	) as typeof savedEnv;
+});
+afterEach(() => {
+	for (const k of ENV_KEYS) {
+		if (savedEnv[k] === undefined) delete process.env[k];
+		else process.env[k] = savedEnv[k];
+	}
+});
 
 describe("auth security configuration", () => {
 	// createAuthOptions captures ctx in a closure (for the DB adapter) but

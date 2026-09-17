@@ -101,6 +101,28 @@ describe("convex/http — public booking httpAction routing and input validation
 		expect(res.status).toBe(400);
 	});
 
+	it("rejects trailing path segments after the slug (F52)", async () => {
+		const t = convexTest(schema, modules);
+		const res = await t.fetch("/api/public/book/some-org/extra/parts", {
+			method: "POST",
+			body: JSON.stringify(VALID_PAYLOAD),
+			headers: { "content-type": "application/json" },
+		});
+		expect(res.status).toBe(404);
+	});
+
+	it("returns 413 when the body exceeds 8 KB in bytes, not code units (F51)", async () => {
+		const t = convexTest(schema, modules);
+		// 5000 '€' = 5000 UTF-16 units (passes a .length cap) but
+		// ~15 KB UTF-8 on the wire — the byte-measured cap must fire.
+		const res = await t.fetch(PUBLIC_BOOK_PATH("any-slug"), {
+			method: "POST",
+			body: JSON.stringify({ notes: "€".repeat(5000) }),
+			headers: { "content-type": "application/json" },
+		});
+		expect(res.status).toBe(413);
+	});
+
 	it("returns 400 when required fields are missing", async () => {
 		const t = convexTest(schema, modules);
 		const res = await post(t, "any-slug", { ...VALID_PAYLOAD, tourId: "" });

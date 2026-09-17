@@ -23,6 +23,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import { extractEventId } from "../ota/webhook_handler";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -112,6 +113,31 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(await res.text()).toBe("missing signature");
 	});
 
+	// F91: the dashboard and DEPLOYMENT.md publish
+	// /api/ota/webhooks/{providerId} using the lowercase ids from
+	// types.ts/ota-providers.ts. Router paths must match exactly —
+	// httpRouter is case-sensitive, so a camelCase mount 404s the
+	// registered URL before any signature check.
+	it.each([
+		"airbnb",
+		"booking",
+		"expedia",
+		"getyourguide",
+		"klook",
+		"tripadvisor",
+		"viator",
+	])("mounts /api/ota/webhooks/%s at the canonical lowercase path", async (provider) => {
+		const t = convexTest(schema, modules);
+		const res = await t.fetch(`/api/ota/webhooks/${provider}`, {
+			method: "POST",
+			body: "{}",
+		});
+		// Reaching the handler = 400 "missing signature"; a wrong-case
+		// mount would fall through the router as 404.
+		expect(res.status).toBe(400);
+		expect(await res.text()).toBe("missing signature");
+	});
+
 	it("rejects missing integrationId query param with 400", async () => {
 		const t = convexTest(schema, modules);
 		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
@@ -126,6 +152,25 @@ describe("createWebhookHandler — shared factory contract", () => {
 		});
 		expect(res.status).toBe(400);
 		expect(await res.text()).toBe("missing integrationId");
+	});
+
+	it("rejects a malformed integrationId with 400, not a 500 (F123)", async () => {
+		const t = convexTest(schema, modules);
+		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const sig = await hmacHex("test-secret", body);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=not-a-real-id`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(res.status).toBe(400);
+		expect(await res.text()).toBe("invalid integrationId");
 	});
 
 	it("rejects when integration's provider doesn't match the route", async () => {
@@ -225,6 +270,46 @@ describe("createWebhookHandler — shared factory contract", () => {
 			},
 		);
 		expect(res.status).toBe(401);
+	});
+
+	it("signed-but-malformed payload gets 400 + a failed delivery audit row (F130)", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_malformed", "viator", secret),
+		);
+		// Parses as JSON but normalize() throws — the reservation has no
+		// id/reservationId for stringOrThrow.
+		const body = JSON.stringify({
+			eventType: "BOOKING_CREATED",
+			reservation: { productCode: "P-1" },
+		});
+		const sig = await hmacHex("test-secret", body);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(res.status).toBe(400);
+		expect(await res.text()).toBe("malformed payload");
+		// The poison delivery is audited as failed, not silent.
+		const deliveries = await t.run(async (ctx) =>
+			ctx.db
+				.query("webhookDeliveries")
+				.withIndex("by_org", (q) => q.eq("organizationId", "org_malformed"))
+				.collect(),
+		);
+		expect(deliveries.length).toBe(1);
+		expect(deliveries[0]?.eventType).toBe("malformed");
+		expect(deliveries[0]?.status).toBe("failed");
+		expect(deliveries[0]?.eventId).toMatch(/^malformed:/);
 	});
 
 	it("rejects invalid JSON with 400", async () => {
@@ -494,6 +579,100 @@ describe("createWebhookHandler — shared factory contract", () => {
 		);
 		expect(rows.length).toBe(1);
 		expect((rows[0] as any).otaReservationId).toBe("RES-FAC-001");
+	});
+
+	it("re-emitted booking.created after a cancel re-confirms instead of deduping (F89)", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", secret),
+		);
+
+		const post = async (body: string) => {
+			const sig = await hmacHex("test-secret", body);
+			return t.fetch(`${WEBHOOK_PATH}?integrationId=${integrationId}`, {
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			});
+		};
+		const bookingRow = () =>
+			t.run(async (ctx) =>
+				ctx.db
+					.query("otaBookings")
+					.withIndex("by_integration_reservation", (q: any) =>
+						q
+							.eq("integrationId", integrationId)
+							.eq("otaReservationId", "RES-FAC-001"),
+					)
+					.unique(),
+			);
+
+		const createBody = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const cancelBody = JSON.stringify(VIATOR_CANCEL_PAYLOAD);
+
+		// 1. Create delivers and confirms.
+		expect((await post(createBody)).status).toBe(200);
+		expect(((await bookingRow()) as any)?.status).toBe("confirmed");
+
+		// 2. A true duplicate retry while still confirmed is dropped.
+		const dup = await post(createBody);
+		expect(await dup.text()).toBe("ok (duplicate)");
+
+		// 3. Cancel flips the row.
+		expect((await post(cancelBody)).status).toBe(200);
+		const cancelled = (await bookingRow()) as any;
+		expect(cancelled?.status).toBe("cancelled");
+		expect(cancelled?.cancelledAt).toBeDefined();
+
+		// 4. Re-emitted create hits the completed-dedup key but the
+		// booking is cancelled — it's a re-confirmation and must reach
+		// upsertOtaBooking to clear cancelledAt, not be acked away.
+		const reconfirm = await post(createBody);
+		expect(await reconfirm.text()).toBe("ok");
+		const reconfirmed = (await bookingRow()) as any;
+		expect(reconfirmed?.status).toBe("confirmed");
+		expect(reconfirmed?.cancelledAt).toBeUndefined();
+	});
+});
+
+describe("extractEventId — availability.update dedup key (F55)", () => {
+	it("identical retry payloads collapse to one eventId", () => {
+		const a = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 5 },
+		} as never);
+		const b = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 5 },
+		} as never);
+		expect(a).toBe(b);
+	});
+
+	it("a CHANGED payload for the same product/date is not deduped", () => {
+		const a = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 5 },
+		} as never);
+		const b = extractEventId({
+			kind: "availability.update",
+			productId: "P-1",
+			date: "2026-08-01",
+			rawPayload: { seats: 3 },
+		} as never);
+		// Previously keyed on productId+date only — a second update for
+		// the same slot deduped against the first and never dispatched.
+		expect(a).not.toBe(b);
 	});
 });
 

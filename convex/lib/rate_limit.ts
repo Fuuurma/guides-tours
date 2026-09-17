@@ -14,6 +14,7 @@
 // Cleanup: convex/crons.ts runs purgeOldPublicBookingAttempts
 // daily to drop rows older than the window.
 
+import { internal } from "../_generated/api";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import type { GenericMutationCtx, GenericQueryCtx } from "convex/server";
@@ -84,7 +85,11 @@ export const recordAttempt = internalMutation({
 	handler: async (ctx, args) => {
 		const now = Date.now();
 		const recent = await collectRecentAttempts(ctx, args.email, now);
-		const ip = (args.ip ?? "").trim();
+		// Store the effective bucket key, not the raw header value — the
+		// read path maps empty → "unknown", so a stored "" row never
+		// matched its own lookup and headerless requests escaped the
+		// per-IP cap entirely (F59).
+		const ip = (args.ip ?? "").trim() || "unknown";
 		const recentByIp = await collectRecentAttemptsByIp(ctx, ip, now);
 
 		const emailAllowed = recent.length < MAX_ATTEMPTS_PER_EMAIL;
@@ -125,19 +130,33 @@ export const countAttempts = internalQuery({
 	},
 });
 
-/** Cron-cleaned: drops attempts older than 2× the window. */
+/** Cron-cleaned: drops attempts older than 2× the window. Paginates
+ * and self-continues — a fixed take(500) on a daily job can't keep
+ * pace with a high-volume spray day and rows would accumulate
+ * forever (F61). */
 export const purgeOld = internalMutation({
-	args: {},
-	handler: async (ctx) => {
+	args: { cursor: v.optional(v.string()), deleted: v.optional(v.number()) },
+	handler: async (ctx, args) => {
 		const cutoff = Date.now() - 2 * WINDOW_MS;
-		const old = await ctx.db
+		const page = await ctx.db
 			.query("publicBookingAttempts")
 			.withIndex("by_created", (q) => q.lt("createdAt", cutoff))
-			.take(500);
-		for (const row of old) {
+			.paginate({ numItems: 500, cursor: args.cursor ?? null });
+		for (const row of page.page) {
 			await ctx.db.delete(row._id);
 		}
-		return { deleted: old.length };
+		const deleted = (args.deleted ?? 0) + page.page.length;
+		if (!page.isDone) {
+			await ctx.scheduler.runAfter(0, internal.lib.rate_limit.purgeOld, {
+				cursor: page.continueCursor,
+				deleted,
+			});
+		}
+		return {
+			deleted,
+			isDone: page.isDone,
+			continueCursor: page.continueCursor,
+		};
 	},
 });
 

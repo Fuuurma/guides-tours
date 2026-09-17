@@ -187,7 +187,13 @@ export function StaffDepartureForm({
 			if (mustPublish) {
 				if (!resolvedEnd) fail("endTime", "End time is required");
 				if (value.startTime && resolvedEnd && value.startTime >= resolvedEnd) {
-					fail("endTime", "End time must be after start time");
+					// An end <= start means the departure crosses midnight —
+					// either auto-filled by start+duration or typed. Say so
+					// plainly instead of the generic ordering error (F64).
+					fail(
+						"endTime",
+						"End time must be after start time — departures crossing midnight can't be published",
+					);
 				}
 				const capErr = validatePositiveInteger(resolvedCapacity, "Capacity");
 				if (capErr) fail("capacityTotal", capErr);

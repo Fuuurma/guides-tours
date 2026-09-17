@@ -39,7 +39,8 @@ export interface WebhookConfig {
 	/** Reject deliveries whose timestamp header is absent instead of
 	 * skipping the replay check. Opt-in per provider: real OTAs often
 	 * send no timestamp header, so the default (false) stays
-	 * compatible. Only enable for providers known to always send one. */
+	 * compatible. Only enable for providers known to always send one
+	 * (F83). */
 	requireTimestamp?: boolean;
 	/** Log prefix for this provider, e.g. "[airbnb-webhook]". */
 	logPrefix: string;
@@ -89,10 +90,31 @@ export function createWebhookHandler(config: WebhookConfig) {
 			return new Response("missing integrationId", { status: 400 });
 		}
 
-		const integration = await ctx.runQuery(
-			internal.ota.integrations.getForWebhook,
-			{ integrationId: integrationId as Id<"otaIntegrations"> },
-		);
+		let integration: {
+			organizationId: string;
+			provider: string;
+			isActive: boolean;
+			webhookSecret?: string;
+		} | null;
+		try {
+			integration = await ctx.runQuery(
+				internal.ota.integrations.getForWebhook,
+				{ integrationId: integrationId as Id<"otaIntegrations"> },
+			);
+		} catch (err) {
+			// A malformed integrationId fails the v.id arg validator
+			// inside the query — map it to 400 so the provider isn't
+			// told to retry a request that can never succeed (F123).
+			// Any other failure is a real internal error and keeps
+			// propagating as a 500.
+			if (
+				err instanceof Error &&
+				err.message.includes("Expected ID for table")
+			) {
+				return new Response("invalid integrationId", { status: 400 });
+			}
+			throw err;
+		}
 		if (!integration) {
 			return new Response("unknown integration", { status: 404 });
 		}
@@ -124,7 +146,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 			timestampHeader,
 			secret,
 			undefined,
-			config.requireTimestamp ? { requireTimestamp: true } : undefined,
+			{ requireTimestamp: config.requireTimestamp },
 		);
 		if (verifyResult.reason === "skipped") {
 			// Observability: surface providers that don't send a
@@ -143,6 +165,14 @@ export function createWebhookHandler(config: WebhookConfig) {
 			);
 			return new Response("invalid signature", { status: 401 });
 		}
+		// Surface a skipped replay check — the request verified, but
+		// an operator auditing replay protection needs to see which
+		// providers never send a timestamp (F83).
+		if (verifyResult.reason === "skipped") {
+			logger.info(
+				`${config.logPrefix} replay check skipped (no timestamp header) on integration ${integrationId}`,
+			);
+		}
 
 		let parsed: unknown;
 		try {
@@ -150,35 +180,30 @@ export function createWebhookHandler(config: WebhookConfig) {
 		} catch {
 			return new Response("invalid JSON", { status: 400 });
 		}
-		// Fleet F86 (09-14): a signed-but-malformed payload used to escape
-		// normalize() as a 5xx BEFORE recordDelivery — zero audit trail and
-		// infinite 5xx poison retries, contradicting the documented
-		// "4xx so the provider retries" contract. Controlled 400 + a
-		// failed-delivery audit row (the webhookDeliveries 'failed' shape
-		// the dispatch-failure path already uses); the provider retries
-		// per contract and ops can inspect the poison payload.
+		// A signed-but-malformed payload escaping normalize() would
+		// otherwise 5xx BEFORE recordDelivery — zero audit trail and
+		// infinite poison retries. Controlled 400 + a failed-delivery
+		// audit row; identical retries dedup via a body hash (F86/F130).
 		let event: NormalizedProviderEvent | null;
 		try {
 			event = config.normalize(parsed);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : String(err);
 			const malformedId = `malformed:${integrationId}:${djb2Hash(rawBody)}`;
-			await ctx.runMutation(
-				internal.webhookDeliveries.recordDelivery,
-				{
-					organizationId: integration.organizationId,
-					source: config.provider,
-					eventId: malformedId,
-					eventType: "malformed",
-					integrationId: integrationId as Id<"otaIntegrations">,
-					ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
-					userAgent: request.headers.get("user-agent") ?? undefined,
-					payload: parsed,
-				},
-			);
+			await ctx.runMutation(internal.webhookDeliveries.recordDelivery, {
+				organizationId: integration.organizationId,
+				source: config.provider,
+				eventId: malformedId,
+				eventType: "malformed",
+				integrationId: integrationId as Id<"otaIntegrations">,
+				ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
+				userAgent: request.headers.get("user-agent") ?? undefined,
+				payload: parsed,
+			});
 			await ctx.runMutation(
 				internal.webhookDeliveries.updateDeliveryStatus,
 				{
+					organizationId: integration.organizationId,
 					source: config.provider,
 					eventId: malformedId,
 					status: "failed",
@@ -223,15 +248,38 @@ export function createWebhookHandler(config: WebhookConfig) {
 				// duplicate (needs-work 2026-09-11: failed dispatches
 				// were unrecoverable because retries were swallowed).
 				const s = recorded.existingStatus;
-				if (s === "processed" || s === "skipped") {
+				let dropAsDuplicate = s === "processed" || s === "skipped";
+				if (dropAsDuplicate && event.kind === "booking.created") {
+					// F89: eventId is `booking.created:<reservationId>` — a
+					// re-emitted BOOKING_CREATED after a cancel is a
+					// re-confirmation, not a retry. It must reach
+					// upsertOtaBooking to clear cancelledAt; only drop when
+					// the booking is still confirmed (a real duplicate).
+					const bookingStatus = await ctx.runQuery(
+						internal.ota.upsert.getOtaBookingStatus,
+						{
+							integrationId: integrationId as Id<"otaIntegrations">,
+							reservationId: event.reservationId,
+						},
+					);
+					if (bookingStatus !== "confirmed") {
+						dropAsDuplicate = false;
+						logger.info(
+							`${config.logPrefix} re-confirmation ${eventId} on integration ${integrationId} (booking is ${bookingStatus ?? "missing"})`,
+						);
+					}
+				}
+				if (dropAsDuplicate) {
 					logger.info(
 						`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,
 					);
 					return new Response("ok (duplicate)", { status: 200 });
 				}
-				logger.warn(
-					`${config.logPrefix} re-dispatching event ${eventId} on integration ${integrationId} (prior status: ${s ?? "unknown"})`,
-				);
+				if (s !== "processed" && s !== "skipped") {
+					logger.warn(
+						`${config.logPrefix} re-dispatching event ${eventId} on integration ${integrationId} (prior status: ${s ?? "unknown"})`,
+					);
+				}
 			}
 		}
 
@@ -247,6 +295,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 				await ctx.runMutation(
 					internal.webhookDeliveries.updateDeliveryStatus,
 					{
+						organizationId: integration.organizationId,
 						source: config.provider,
 						eventId,
 						status: "processed",
@@ -258,6 +307,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 				await ctx.runMutation(
 					internal.webhookDeliveries.updateDeliveryStatus,
 					{
+						organizationId: integration.organizationId,
 						source: config.provider,
 						eventId,
 						status: "failed",
@@ -286,10 +336,11 @@ export function extractEventId(event: NormalizedProviderEvent): string | null {
 		return `${event.kind}:${event.reservationId}`;
 	}
 	if (event.kind === "availability.update") {
-		// availability.update has no reservationId. Build a
-		// deterministic id from productId + date so the (source,
-		// eventId) unique index still works.
-		return `availability:${event.productId}:${event.date}`;
+		// availability.update has no reservationId — and productId+date
+		// alone would dedup every later update for that slot against the
+		// first (F55). Hash the payload so identical retries collapse
+		// while a changed availability payload dispatches.
+		return `availability:${event.productId}:${event.date}:${djb2Hash(JSON.stringify(event.rawPayload))}`;
 	}
 	return null;
 }

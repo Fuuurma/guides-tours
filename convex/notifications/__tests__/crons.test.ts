@@ -264,12 +264,20 @@ describe("convex/crons — cleanupOldAssignments", () => {
 				updatedAt: 0,
 			});
 
+			// Statuses run one-per-invocation now (paginated +
+			// self-continuation): first call archives completed, then
+			// the mutation self-chains into cancelled. Drive the second
+			// phase directly rather than relying on scheduler drain.
 			const result = await t.mutation(
 				internal.notifications.cleanupOldAssignments,
 				{},
 			);
-
-			expect(result.archived).toBe(2);
+			expect(result.archived).toBe(1);
+			const cancelled = await t.mutation(
+				internal.notifications.cleanupOldAssignments,
+				{ status: "cancelled" },
+			);
+			expect(cancelled.archived).toBe(1);
 
 			expect((await ctx.db.get(oldCompleted))?.deletedAt).toBeDefined();
 			expect((await ctx.db.get(oldCancelled))?.deletedAt).toBeDefined();

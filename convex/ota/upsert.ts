@@ -9,7 +9,7 @@
 //     otaReservationId per source)
 
 import { v, ConvexError } from "convex/values";
-import { internalMutation } from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { logAudit } from "../lib/audit";
 
 /**
@@ -188,6 +188,30 @@ export const upsertOtaBooking = internalMutation({
 			},
 		});
 		return { id, created: true };
+	},
+});
+
+/**
+ * Current status of the OTA booking for (integrationId, reservationId)
+ * — null when no row exists. Used by the webhook dedup path to tell a
+ * true retry (booking still confirmed) from a re-confirmation after a
+ * cancel (F89).
+ */
+export const getOtaBookingStatus = internalQuery({
+	args: {
+		integrationId: v.id("otaIntegrations"),
+		reservationId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const row = await ctx.db
+			.query("otaBookings")
+			.withIndex("by_integration_reservation", (q) =>
+				q
+					.eq("integrationId", args.integrationId)
+					.eq("otaReservationId", args.reservationId),
+			)
+			.unique();
+		return row?.status ?? null;
 	},
 });
 

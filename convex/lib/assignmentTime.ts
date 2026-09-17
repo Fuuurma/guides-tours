@@ -45,3 +45,51 @@ export function rangesOverlap(
 		timeToMinutes(endA) > timeToMinutes(startB)
 	);
 }
+
+/** Day number for a YYYY-MM-DD string (UTC days since epoch). */
+function dayIndex(date: string): number {
+	const [y, m, d] = date.split("-").map(Number);
+	return Date.UTC(y ?? 0, (m ?? 1) - 1, d ?? 1) / 86_400_000;
+}
+
+/** Shift a YYYY-MM-DD date by `days` (negative = earlier). */
+export function shiftDate(date: string, days: number): string {
+	const [y, m, d] = date.split("-").map(Number);
+	return new Date(Date.UTC(y ?? 0, (m ?? 1) - 1, (d ?? 1) + days))
+		.toISOString()
+		.slice(0, 10);
+}
+
+/**
+ * Absolute-minute window for a dated slot. endTime <= startTime means
+ * the assignment wraps past midnight into the next calendar day —
+ * endTime "01:00" on 09-05 is really 09-06 01:00 (F62). A missing
+ * endTime stays zero-length at start (never overlaps), matching the
+ * historical fallback.
+ */
+export function absWindow(
+	date: string,
+	startTime: string,
+	endTime: string | undefined,
+): [number, number] {
+	const dayStart = dayIndex(date) * 1440;
+	const start = dayStart + timeToMinutes(startTime);
+	if (endTime === undefined) return [start, start];
+	let end = dayStart + timeToMinutes(endTime);
+	if (end <= start) end += 1440;
+	return [start, end];
+}
+
+/** Dated-window overlap — midnight-safe replacement for rangesOverlap. */
+export function windowsOverlapAbs(
+	aDate: string,
+	aStart: string,
+	aEnd: string | undefined,
+	bDate: string,
+	bStart: string,
+	bEnd: string | undefined,
+): boolean {
+	const [as, ae] = absWindow(aDate, aStart, aEnd);
+	const [bs, be] = absWindow(bDate, bStart, bEnd);
+	return as < be && ae > bs;
+}

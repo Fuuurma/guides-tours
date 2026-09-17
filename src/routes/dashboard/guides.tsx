@@ -93,12 +93,21 @@ function metaErrors(
 	});
 }
 
+// F81: shared invite-role union — the submit path and the ToggleGroup
+// options both derive from this list instead of an inline cast.
+const INVITE_ROLES = [
+	{ value: "guide", label: "Guide" },
+	{ value: "member", label: "Member" },
+	{ value: "admin", label: "Admin" },
+] as const;
+type InviteRole = (typeof INVITE_ROLES)[number]["value"];
+
 function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 	const [open, setOpen] = useState(false);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
 
 	const form = useForm({
-		defaultValues: { email: "", role: "guide" },
+		defaultValues: { email: "", role: "guide" as InviteRole },
 		onSubmit: async ({ value }) => {
 			setSubmitErr(null);
 			const emailErr = validateEmail(value.email);
@@ -194,12 +203,16 @@ function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 										size="sm"
 										value={field.state.value}
 										onValueChange={(v) => {
-											if (v) field.handleChange(v);
+											if (INVITE_ROLES.some((r) => r.value === v)) {
+												field.handleChange(v as InviteRole);
+											}
 										}}
 									>
-										<ToggleGroupItem value="guide">Guide</ToggleGroupItem>
-										<ToggleGroupItem value="member">Member</ToggleGroupItem>
-										<ToggleGroupItem value="admin">Admin</ToggleGroupItem>
+										{INVITE_ROLES.map((r) => (
+											<ToggleGroupItem key={r.value} value={r.value}>
+												{r.label}
+											</ToggleGroupItem>
+										))}
 									</ToggleGroup>
 								</Field>
 							)}

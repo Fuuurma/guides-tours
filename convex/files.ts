@@ -12,6 +12,8 @@ import {
 	query,
 	mutation,
 	internalMutation,
+	internalQuery,
+	type QueryCtx,
 } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
@@ -20,36 +22,57 @@ import { logAudit } from "./lib/audit";
 
 // ---- queries ----
 
+const MAX_FILES = 500;
+
+async function listRows(
+	ctx: QueryCtx,
+	orgId: string,
+	args: { purpose?: string },
+) {
+	// The time-tailed indexes make take() bound the NEWEST files — the
+	// old by_org/by_org_purpose scans returned the 500 oldest rows and
+	// the JS sort only reordered that stale window (F57).
+	const all = args.purpose
+		? await ctx.db
+				.query("files")
+				.withIndex("by_org_purpose_created", (q) =>
+					q.eq("organizationId", orgId).eq("purpose", args.purpose!),
+				)
+				.order("desc")
+				.take(MAX_FILES)
+		: await ctx.db
+				.query("files")
+				.withIndex("by_org_created", (q) => q.eq("organizationId", orgId))
+				.order("desc")
+				.take(MAX_FILES);
+	return {
+		items: await Promise.all(
+			all.map(async (f) => ({
+				...f,
+				url: await ctx.storage.getUrl(f.storageId),
+			})),
+		),
+		truncated: all.length >= MAX_FILES,
+	};
+}
+
 export const list = query({
 	args: {
 		purpose: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const orgId = member.organizationId;
-		const MAX_FILES = 500;
-		let all;
-		if (args.purpose) {
-			all = await ctx.db
-				.query("files")
-				.withIndex("by_org_purpose", (q) =>
-					q.eq("organizationId", orgId).eq("purpose", args.purpose!),
-				)
-				.take(MAX_FILES);
-		} else {
-			all = await ctx.db
-				.query("files")
-				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
-				.take(MAX_FILES);
-		}
-		const sorted = all.sort((a, b) => b.createdAt - a.createdAt);
-		return await Promise.all(
-			sorted.map(async (f) => ({
-				...f,
-				url: await ctx.storage.getUrl(f.storageId),
-			})),
-		);
+		return listRows(ctx, member.organizationId, args);
 	},
+});
+
+// Internal mirror for tests — takes the org explicitly.
+export const listInternal = internalQuery({
+	args: {
+		organizationId: v.string(),
+		purpose: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => listRows(ctx, args.organizationId, args),
 });
 
 export const get = query({
@@ -110,7 +133,23 @@ export const internalTrack = internalMutation({
 export const remove = mutation({
 	args: { fileId: v.id("files") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireMembership(ctx);
+		// A tour-image file deletion also drops the tourImages gallery
+		// row (internalRemove below) — that path must honor the
+		// owner/admin gate on tourImages.remove, not the looser member
+		// gate on plain files (F56).
+		const file = await ctx.db.get(args.fileId);
+		if (file && file.organizationId === member.organizationId) {
+			const allowed =
+				file.purpose === "tour-image"
+					? ["owner", "admin"]
+					: ["owner", "admin", "member"];
+			if (!allowed.includes(member.role)) {
+				throw new ConvexError(
+					`Forbidden: requires one of [${allowed.join(", ")}], have ${member.role}`,
+				);
+			}
+		}
 		return await ctx.runMutation(
 			internalRefs.files.internalRemove,
 			{ organizationId: member.organizationId, userId: member.userId, fileId: args.fileId },
@@ -134,20 +173,28 @@ export const internalRemove = internalMutation({
 		// If this blob backed a tour image, remove the gallery row too
 		// so the tour UI doesn't keep a broken storage reference.
 		if (existing.purpose === "tour-image") {
-			// Use by_tour would require knowing the tourId, but we only
-			// have the storageId. Scan by_org and break after match.
-			// There should only be one tourImage per storageId.
-			const images = await ctx.db
+			// Direct storageId index — the old by_org take(500) scan
+			// missed the row past 500 org images and left a dangling
+			// gallery reference (F58).
+			const img = await ctx.db
 				.query("tourImages")
-				.withIndex("by_org", (q) =>
-					q.eq("organizationId", args.organizationId),
+				.withIndex("by_storage_id", (q) =>
+					q.eq("storageId", existing.storageId),
 				)
-				.take(500);
-			for (const img of images) {
-				if (img.storageId === existing.storageId) {
-					await ctx.db.delete(img._id);
-					break;
-				}
+				.unique();
+			if (img && img.organizationId === args.organizationId) {
+				await ctx.db.delete(img._id);
+				// Honest audit — the gallery row removal was previously
+				// invisible under the file.deleted entry (F56).
+				await logAudit(ctx, {
+					organizationId: args.organizationId,
+					userId: args.userId,
+					action: "tourImage.deleted",
+					resourceType: "tourImage",
+					resourceId: img._id,
+					oldValues: { tourId: img.tourId, isPrimary: img.isPrimary },
+					newValues: {},
+				});
 			}
 		}
 		try {

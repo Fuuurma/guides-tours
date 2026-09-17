@@ -117,6 +117,14 @@ export const processPendingNotifications = internalMutation({
 		// Drop anything older than cutoffLow — its scheduled time is
 		// so far in the past that re-sending doesn't make sense.
 		const eligible = due.filter((s) => s.scheduledFor >= cutoffLow);
+		// RETIRE the stale rows, not just skip them — they stay
+		// sent=false at the head of by_sent_scheduled forever, and ≥100
+		// of them starve every cron tick (F47). Deleting is the
+		// retirement path: these are dispatch intents that can never
+		// fire, and cleanupOldNotifications' sent:false sweep is the
+		// daily backstop for whatever a single tick misses.
+		const stale = due.filter((s) => s.scheduledFor < cutoffLow);
+		await Promise.all(stale.map((s) => ctx.db.delete(s._id)));
 
 		let processed = 0;
 		let failed = 0;
@@ -185,6 +193,11 @@ export const recordDispatchResult = internalMutation({
 	args: {
 		scheduledId: v.id("scheduledNotifications"),
 		success: v.boolean(),
+		// Intentional non-delivery (inactive template, no reachable/
+		// consented channel): terminal, logged as "skipped" — never
+		// "sent" (F48). Infra failures (SES missing) come through as
+		// success:false and keep retrying.
+		skipped: v.optional(v.boolean()),
 		errorMessage: v.optional(v.string()),
 		channel: v.optional(v.string()),
 		recipient: v.optional(v.string()),
@@ -196,7 +209,11 @@ export const recordDispatchResult = internalMutation({
 		if (!scheduled || scheduled.sent) return;
 
 		const now = Date.now();
-		const status = args.success ? "sent" : "failed";
+		const status = args.skipped
+			? "skipped"
+			: args.success
+				? "sent"
+				: "failed";
 
 		const logId = await ctx.db.insert("notificationLogs", {
 			organizationId: scheduled.organizationId,
@@ -214,7 +231,10 @@ export const recordDispatchResult = internalMutation({
 			createdAt: now,
 		});
 
-		if (args.success) {
+		if (args.success || args.skipped) {
+			// Terminal either way: sent stops the cron; skipped is a
+			// deliberate non-delivery — no point retrying a booking the
+			// customer can't be reached for or an inactive template.
 			await ctx.db.patch(args.scheduledId, {
 				sent: true,
 				processedAt: now,
@@ -230,7 +250,16 @@ export const recordDispatchResult = internalMutation({
 
 async function bumpRetryOrAbandon(
 	ctx: MutationCtx,
-	scheduled: Pick<Doc<"scheduledNotifications">, "_id" | "retryCount" | "maxRetries" | "notificationLogId">,
+	scheduled: Pick<
+		Doc<"scheduledNotifications">,
+		| "_id"
+		| "organizationId"
+		| "bookingId"
+		| "templateId"
+		| "retryCount"
+		| "maxRetries"
+		| "notificationLogId"
+	>,
 	errorMessage?: string,
 	logId?: Doc<"notificationLogs">["_id"],
 ) {
@@ -249,6 +278,24 @@ async function bumpRetryOrAbandon(
 			sent: true,
 			processedAt: Date.now(),
 			notificationLogId: logId ?? scheduled.notificationLogId,
+		});
+		// Escalation trail (F24): transient logger.warn is invisible to
+		// operators — a durable org-scoped audit row lets the audit view
+		// surface systemic delivery failure (e.g. SES down/misconfigured).
+		await logAudit(ctx, {
+			organizationId: scheduled.organizationId,
+			userId: "system",
+			action: "notification.abandoned",
+			resourceType: "scheduledNotification",
+			resourceId: String(scheduled._id),
+			oldValues: {},
+			newValues: {
+				bookingId: scheduled.bookingId ? String(scheduled.bookingId) : undefined,
+				templateId: scheduled.templateId ? String(scheduled.templateId) : undefined,
+				retryCount: scheduled.retryCount,
+				maxRetries: scheduled.maxRetries,
+				lastError: errorMessage ?? "unknown",
+			},
 		});
 		logger.warn(
 			`[cron] abandoned scheduled ${scheduled._id} after ${scheduled.retryCount} retries: ${errorMessage ?? "unknown"}`,
@@ -334,6 +381,9 @@ export const recordImmediateDispatchResult = internalMutation({
 		bookingId: v.id("bookings"),
 		channel: v.string(),
 		success: v.boolean(),
+		// Deliberate non-delivery — logged as immediate_skipped, not
+		// immediate_sent (F48).
+		skipped: v.optional(v.boolean()),
 		errorMessage: v.optional(v.string()),
 		recipient: v.string(),
 		subject: v.string(),
@@ -343,9 +393,11 @@ export const recordImmediateDispatchResult = internalMutation({
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: "system",
-			action: args.success
-				? "notification.immediate_sent"
-				: "notification.immediate_failed",
+			action: args.skipped
+				? "notification.immediate_skipped"
+				: args.success
+					? "notification.immediate_sent"
+					: "notification.immediate_failed",
 			resourceType: "booking",
 			resourceId: args.bookingId,
 			oldValues: {},
@@ -360,37 +412,34 @@ export const recordImmediateDispatchResult = internalMutation({
 });
 
 export const cleanupOldAssignments = internalMutation({
-	args: {},
-	handler: async (ctx) => {
+	args: {
+		status: v.optional(
+			v.union(v.literal("completed"), v.literal("cancelled")),
+		),
+		cursor: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
 		const cutoffMs =
 			Date.now() - ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000;
 		const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10);
 
-		// Two passes — one per terminal status. The (status, date)
-		// index sorts by status first, so each query is bounded.
-		// Run the two passes in parallel — they hit the same index
-		// but with different status values, so they're independent.
-		// Bound the scan to prevent OOM on orgs with millions of old
-		// assignments.
-		const MAX_CLEANUP = 5000;
-		const [completed, cancelled] = await Promise.all([
-			ctx.db
-				.query("assignments")
-				.withIndex("by_status_date", (q) =>
-					q.eq("status", "completed").lt("date", cutoffDate),
-				)
-				.take(MAX_CLEANUP),
-			ctx.db
-				.query("assignments")
-				.withIndex("by_status_date", (q) =>
-					q.eq("status", "cancelled").lt("date", cutoffDate),
-				)
-				.take(MAX_CLEANUP),
-		]);
+		// One status per invocation, paginated with self-continuation:
+		// archiving sets only deletedAt, so already-archived rows stay
+		// at the head of by_status_date — the old take(5000)+JS-filter
+		// scanned the same archived prefix every run and progressed 0
+		// new rows once 5000 accumulated (F49). Walking pages lets each
+		// run reach the unarchived tail; the archived prefix is re-read
+		// daily but never blocks progress again.
+		const status = args.status ?? "completed";
+		const PAGE = 2000;
+		const result = await ctx.db
+			.query("assignments")
+			.withIndex("by_status_date", (q) =>
+				q.eq("status", status).lt("date", cutoffDate),
+			)
+			.paginate({ numItems: PAGE, cursor: args.cursor ?? null });
 
-		const targets = [...completed, ...cancelled].filter(
-			(a) => a.deletedAt === undefined,
-		);
+		const targets = result.page.filter((a) => a.deletedAt === undefined);
 
 		const now = Date.now();
 		await Promise.all(
@@ -403,7 +452,7 @@ export const cleanupOldAssignments = internalMutation({
 		);
 
 		logger.info(
-			`[cron] cleanupOldAssignments archived ${targets.length} assignments older than ${cutoffDate}`,
+			`[cron] cleanupOldAssignments archived ${targets.length} ${status} assignments older than ${cutoffDate}`,
 		);
 
 		if (targets.length > 0) {
@@ -414,11 +463,32 @@ export const cleanupOldAssignments = internalMutation({
 				resourceType: "assignment",
 				resourceId: targets[0]?._id ?? "",
 				oldValues: {},
-				newValues: { count: targets.length, cutoffDate },
+				newValues: { count: targets.length, status, cutoffDate },
 			});
 		}
 
-		return { archived: targets.length, cutoffDate };
+		if (!result.isDone) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notifications.cleanupOldAssignments,
+				{ status, cursor: result.continueCursor },
+			);
+		} else if (status === "completed") {
+			// Chain into the cancelled pass after completed drains.
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notifications.cleanupOldAssignments,
+				{ status: "cancelled" },
+			);
+		}
+
+		return {
+			archived: targets.length,
+			status,
+			done: result.isDone,
+			continueCursor: result.continueCursor,
+			cutoffDate,
+		};
 	},
 });
 
@@ -432,7 +502,7 @@ export const cleanupOldNotifications = internalMutation({
 		// they're independent ranges on different tables. Bound the
 		// scan to prevent OOM on orgs with millions of old artifacts.
 		const MAX_CLEANUP = 5000;
-		const [oldLogs, oldScheduled] = await Promise.all([
+		const [oldLogs, oldScheduled, deadScheduled] = await Promise.all([
 			ctx.db
 				.query("notificationLogs")
 				.withIndex("by_created_at", (q) => q.lt("createdAt", cutoff))
@@ -443,29 +513,41 @@ export const cleanupOldNotifications = internalMutation({
 					q.eq("sent", true).lt("scheduledFor", cutoff),
 				)
 				.take(MAX_CLEANUP),
+			// sent:false rows far past their scheduledFor are dead
+			// dispatch intents — the process tick retires them, and this
+			// sweep is the daily backstop so a large backlog can't
+			// permanently occupy the pending window head (F47).
+			ctx.db
+				.query("scheduledNotifications")
+				.withIndex("by_sent_scheduled", (q) =>
+					q.eq("sent", false).lt("scheduledFor", cutoff),
+				)
+				.take(MAX_CLEANUP),
 		]);
 
 		// Deletes on different tables are independent — parallelize.
 		await Promise.all([
 			...oldLogs.map((log) => ctx.db.delete(log._id)),
 			...oldScheduled.map((s) => ctx.db.delete(s._id)),
+			...deadScheduled.map((s) => ctx.db.delete(s._id)),
 		]);
 
 		logger.info(
-			`[cron] cleanupOldNotifications deleted ${oldLogs.length} logs, ${oldScheduled.length} scheduled (cutoff=${new Date(cutoff).toISOString()})`,
+			`[cron] cleanupOldNotifications deleted ${oldLogs.length} logs, ${oldScheduled.length} sent scheduled, ${deadScheduled.length} dead pending (cutoff=${new Date(cutoff).toISOString()})`,
 		);
 
-		if (oldLogs.length > 0 || oldScheduled.length > 0) {
+		if (oldLogs.length > 0 || oldScheduled.length > 0 || deadScheduled.length > 0) {
 			await logAudit(ctx, {
 				organizationId: "system",
 				userId: "system",
 				action: "notifications.bulk_cleaned",
 				resourceType: "notificationLog",
-				resourceId: oldLogs[0]?._id ?? "",
+				resourceId: oldLogs[0]?._id ?? oldScheduled[0]?._id ?? deadScheduled[0]?._id ?? "",
 				oldValues: {},
 				newValues: {
 					logsDeleted: oldLogs.length,
 					scheduledDeleted: oldScheduled.length,
+					deadPendingDeleted: deadScheduled.length,
 				},
 			});
 		}
@@ -473,6 +555,7 @@ export const cleanupOldNotifications = internalMutation({
 		return {
 			logsDeleted: oldLogs.length,
 			scheduledDeleted: oldScheduled.length,
+			deadPendingDeleted: deadScheduled.length,
 			cutoff,
 		};
 	},

@@ -1099,6 +1099,155 @@ describe("convex/payments — audit logging", () => {
 		)) as any;
 		expect(bookingAfter?.depositAmountCents).toBe(0n);
 	});
+
+	it("markRefunded writes bookingId so by_booking resolves the row (F100)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_refund_link";
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				totalAmountCents: 3000n,
+				depositAmountCents: 3000n,
+			}),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 3000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_link_1",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		await t.mutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded: true,
+			refund: {
+				stripeRefundId: "re_link_1",
+				amountCents: 3000n,
+				currency: "USD",
+			},
+		});
+		const byBooking = await t.run(async (ctx) =>
+			ctx.db
+				.query("refunds")
+				.withIndex("by_booking", (q) => q.eq("bookingId", bookingId))
+				.collect(),
+		);
+		expect(byBooking.length).toBe(1);
+		expect(byBooking[0]?.bookingId).toBe(bookingId);
+		expect(byBooking[0]?.paymentId).toBe(paymentId);
+	});
+
+	it("backfillRefundBookingIds links legacy refund rows to their booking (F100)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_refund_backfill";
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				totalAmountCents: 3000n,
+				depositAmountCents: 3000n,
+			}),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 3000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_backfill_1",
+		});
+		// A legacy row written before bookingId was populated.
+		const legacyRefundId = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.insert("refunds", {
+				organizationId: orgId,
+				paymentId,
+				stripeRefundId: "re_legacy_1",
+				amountCents: 3000n,
+				currency: "USD",
+				status: "succeeded",
+				refundedAt: 0,
+				processedAt: 0,
+				metadata: {},
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		const res = await t.mutation(
+			internal.payments.backfillRefundBookingIds,
+			{},
+		);
+		expect(res.patched).toBe(1);
+		const row = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.get(legacyRefundId),
+		);
+		expect(row?.bookingId).toBe(bookingId);
+	});
+
+	it("markRefunded dedups a re-delivered partial refund while still succeeded (F129)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_partial_redelivery";
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				totalAmountCents: 3000n,
+				depositAmountCents: 3000n,
+			}),
+		);
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 3000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_partial_redelivery",
+		});
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+
+		const partialCall = {
+			paymentId,
+			fullyRefunded: false,
+			refund: {
+				stripeRefundId: "re_dup_1",
+				amountCents: 1000n,
+				currency: "USD",
+			},
+		};
+		await t.mutation(internal.payments.markRefunded, partialCall);
+		// Stripe re-sends the FULL refunds list on every charge.refunded —
+		// the same refund id arrives again while status is still succeeded.
+		await t.mutation(internal.payments.markRefunded, partialCall);
+
+		const refunds = await t.run(async (ctx) =>
+			ctx.db
+				.query("refunds")
+				.withIndex("by_payment", (q) => q.eq("paymentId", paymentId))
+				.collect(),
+		);
+		expect(refunds.length).toBe(1);
+
+		const booking = (await t.run(async (ctx) =>
+			ctx.db.get(bookingId),
+		)) as any;
+		expect(booking?.depositAmountCents).toBe(2000n);
+		expect(booking?.balanceDueCents).toBe(1000n);
+
+		const payment = (await t.run(async (ctx) =>
+			ctx.db.get(paymentId),
+		)) as any;
+		expect(payment?.status).toBe("succeeded");
+
+		// A later delivery carrying the SAME refund id but now marked
+		// fully-refunded still flips the status — dedup only guards the
+		// refund row + reversal, not the transition.
+		await t.mutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded: true,
+			refund: {
+				stripeRefundId: "re_dup_1",
+				amountCents: 1000n,
+				currency: "USD",
+			},
+		});
+		const paymentAfter = (await t.run(async (ctx) =>
+			ctx.db.get(paymentId),
+		)) as any;
+		expect(paymentAfter?.status).toBe("refunded");
+	});
 });
 
 // Tests for countFailedSince — the home-page "what's broken" pill

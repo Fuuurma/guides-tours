@@ -52,6 +52,7 @@ crons.daily(
 	"cleanup_old_assignments",
 	{ hourUTC: 3, minuteUTC: 0 },
 	internal.notifications.cleanupOldAssignments,
+	{},
 );
 
 // Daily at 04:00 UTC — drop old notification artifacts.
@@ -96,6 +97,7 @@ crons.daily(
 	"staffing_digest",
 	{ hourUTC: 7, minuteUTC: 0 },
 	internal.staffingDigest.runDaily,
+	{},
 );
 
 // Daily at 08:00 UTC — guide availability reminders for unmarked days.
@@ -103,6 +105,7 @@ crons.daily(
 	"availability_reminders",
 	{ hourUTC: 8, minuteUTC: 0 },
 	internal.availabilityReminders.runDaily,
+	{},
 );
 
 export default crons;

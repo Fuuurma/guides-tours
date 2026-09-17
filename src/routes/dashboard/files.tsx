@@ -53,7 +53,7 @@ function FilesPage() {
 	const removeFile = useMutation(api.files.remove);
 	const confirm = useConfirm();
 
-	const items = (files ?? []) as FileRow[];
+	const items = (files?.items ?? []) as FileRow[];
 
 	const purposes = useMemo(() => {
 		const set = new Set<string>(["tour-image"]);

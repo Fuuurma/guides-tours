@@ -72,6 +72,11 @@ function BookingDetailPage() {
 		},
 		{ initialNumItems: 20 },
 	);
+	const { data: refundItems } = useQuery(
+		convexQuery(api.payments.listRefundsForBooking, {
+			bookingId: bookingId as Id<"bookings">,
+		}),
+	);
 	const { data: paySettings } = useQuery(
 		convexQuery(api.payments.getPublicSettings, {}),
 	);
@@ -438,10 +443,10 @@ function BookingDetailPage() {
 			</DetailSection>
 
 			<DetailSection
-				title={`Payment activity (${paymentItems.length})`}
+				title={`Payment activity (${paymentItems.length + (refundItems?.length ?? 0)})`}
 				description="Stripe charges and refunds recorded for this booking"
 			>
-				{paymentItems.length === 0 ? (
+				{paymentItems.length === 0 && (refundItems?.length ?? 0) === 0 ? (
 					<p className="text-muted-foreground text-sm">
 						No payment has been recorded yet. The balance remains outstanding.
 					</p>
@@ -463,6 +468,26 @@ function BookingDetailPage() {
 									</p>
 								</div>
 								<StatusBadge status={payment.status} />
+							</li>
+						))}
+						{(refundItems ?? []).map((refund) => (
+							<li
+								key={refund._id}
+								className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3 text-sm"
+							>
+								<div>
+									<p className="font-medium">
+										−{formatCentsCompact(refund.amountCents)} · Refund
+									</p>
+									<p className="text-muted-foreground text-xs">
+										{refund.currency} ·{" "}
+										{new Date(
+											refund.refundedAt ?? refund.createdAt,
+										).toLocaleString()}
+										{refund.reason ? ` · ${refund.reason}` : ""}
+									</p>
+								</div>
+								<StatusBadge status={refund.status} />
 							</li>
 						))}
 					</ul>

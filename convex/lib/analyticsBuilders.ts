@@ -795,13 +795,20 @@ export async function buildBookingSources(
 		sourceMap.set(source, entry);
 	}
 
-	return Array.from(sourceMap.entries())
-		.map(([source, stats]) => ({
-			source,
-			totalBookings: stats.bookings,
-			totalGuests: stats.guests,
-		}))
-		.sort((a, b) => b.totalBookings - a.totalBookings);
+	// Last stat builder without a truncation flag (F12 residual) —
+	// report the cap-hit like its siblings so a partial source map is
+	// visible to the caller instead of silently dropping tail sources.
+	const truncated = bookings.length >= MAX_ANALYTICS_SCAN;
+	return {
+		sources: Array.from(sourceMap.entries())
+			.map(([source, stats]) => ({
+				source,
+				totalBookings: stats.bookings,
+				totalGuests: stats.guests,
+			}))
+			.sort((a, b) => b.totalBookings - a.totalBookings),
+		truncated,
+	};
 }
 
 export async function buildWeeklyPulse(

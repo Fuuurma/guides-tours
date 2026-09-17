@@ -33,7 +33,7 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 |---|---|---|
 | `SITE_URL` | this app's prod URL | e.g. `https://guides-tours.fuurma.tech` |
 | `VITE_CONVEX_URL` | from `npx convex deploy --prod` output | auto-injected at build time |
-| `VITE_SITE_URL` | this app's prod URL | e.g. `https://guides-tours.fuurma.tech` — must match `SITE_URL` |
+| `VITE_CONVEX_SITE_URL` | from `npx convex deploy --prod` output (`.site` domain) | used for webhook URLs + auth server calls |
 | `ENCRYPTION_KEY` | local `openssl rand -hex 32` | 64-char hex used to encrypt OTA/Stripe secrets at rest in Convex |
 
 ### Convex (via `npx convex env set` or dashboard)
@@ -63,7 +63,7 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 | `OTA_BOOKING_API_SECRET` | Booking.com | optional |
 | `OTA_EXPEDIA_API_KEY` | Expedia | optional |
 | `OTA_EXPEDIA_API_SECRET` | Expedia | optional |
-| `PUBLIC_BOOKING_ALLOWED_ORIGINS` | public booking form | comma-separated origins (e.g. `https://tours.example.com,https://www.example.com`); if unset, all origins allowed (dev only) |
+| `PUBLIC_BOOKING_ALLOWED_ORIGINS` | public booking form | comma-separated origins (e.g. `https://tours.example.com,https://www.example.com`); unset = permissive in local dev, but production **fails closed** (all booking attempts rejected) — required in prod |
 
 ## Deploy
 
@@ -71,9 +71,11 @@ Note the prod URL — it goes into `wrangler.jsonc` as `VITE_CONVEX_URL`.
 # Backend (Convex)
 npx convex deploy --prod
 
-# Frontend (Cloudflare Worker)
-pnpm build
-pnpm wrangler deploy
+# Frontend (Cloudflare Worker) — `pnpm deploy` runs deploy-check.mjs
+# (env gate) + typecheck + build + wrangler deploy. Do not invoke
+# `pnpm build` + `wrangler deploy` directly: that path skips the env
+# gate and can ship a build against unset/misconfigured vars (F98).
+pnpm deploy
 ```
 
 ## Post-deploy verification

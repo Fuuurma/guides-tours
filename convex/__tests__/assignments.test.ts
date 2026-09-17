@@ -840,4 +840,201 @@ describe("convex/assignments — lifecycle", () => {
 		expect((delLog as any)?.oldValues?.guideId).toBe("guide-a");
 		expect((delLog as any)?.oldValues?.date).toBe("2026-09-21");
 	});
+
+	it("uses the published schedule endTime instead of duration math (F122)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_sched_end";
+		// 2h tour: duration-derived end for a 09:00 start is 11:00, but
+		// the schedule publishes a 12:30 end — the published window wins.
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId, 2),
+		);
+		const scheduleId = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.insert("tourSchedules", {
+				organizationId: orgId,
+				tourId,
+				date: "2026-09-25",
+				startTime: "09:00",
+				endTime: "12:30",
+				capacityTotal: 10,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		const aId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-09-25",
+			startTime: "09:00",
+			scheduleId,
+		});
+		const row = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.get(aId),
+		);
+		expect(row?.endTime).toBe("12:30");
+		// The wider window must also drive conflict detection: an 11:30
+		// start overlaps the published 12:30 end even though it is after
+		// the duration-derived 11:00 end.
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId: "guide-a",
+				date: "2026-09-25",
+				startTime: "11:30",
+			}),
+		).rejects.toThrow();
+	});
+
+	it("update keeps schedule endTime while tracking the departure", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_sched_end_upd";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId, 2),
+		);
+		const scheduleId = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.insert("tourSchedules", {
+				organizationId: orgId,
+				tourId,
+				date: "2026-09-26",
+				startTime: "09:00",
+				endTime: "12:30",
+				capacityTotal: 10,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		const aId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-09-26",
+			startTime: "09:00",
+			scheduleId,
+		});
+		// A guide swap leaves date/start untouched — the published end holds.
+		await t.mutation(internal.assignments.internalUpdate, {
+			organizationId: orgId,
+			userId: "u1",
+			assignmentId: aId,
+			guideId: "guide-b",
+		});
+		let row = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.get(aId),
+		);
+		expect(row?.endTime).toBe("12:30");
+		// Moving the assignment off the schedule's slot falls back to
+		// duration math (13:00 start + 2h = 15:00).
+		await t.mutation(internal.assignments.internalUpdate, {
+			organizationId: orgId,
+			userId: "u1",
+			assignmentId: aId,
+			startTime: "13:00",
+		});
+		row = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.get(aId),
+		);
+		expect(row?.endTime).toBe("15:00");
+	});
+
+	it("midnight-wrapping assignments still conflict (F62)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_midnight";
+		const guideId = "guide-mid";
+		// 2h tour starting 23:00 → stored endTime wraps to 01:00.
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId, 2),
+		);
+		await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId,
+			date: "2026-09-30",
+			startTime: "23:00",
+		});
+		// Same-date overlap inside the wrapped window.
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId,
+				date: "2026-09-30",
+				startTime: "23:30",
+			}),
+		).rejects.toThrow();
+		// Next-day overlap: the wrapped row occupies 00:00–01:00 on
+		// 10-01, but its date key is 09-30 — a pre-fix scan of
+		// date = 10-01 never saw it.
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId,
+				date: "2026-10-01",
+				startTime: "00:30",
+			}),
+		).rejects.toThrow();
+	});
+
+	it("update moving the slot still runs the driver dual-role check (F63)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_dual_move";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId, 2),
+		);
+		// "person-1" is a driver on assignment A but a GUIDE on a
+		// separate 14:00–16:00 assignment the same day.
+		const driverId = await t.run(async (ctx) =>
+			(ctx as unknown as TestCtx).db.insert("drivers", {
+				organizationId: orgId,
+				userId: "person-1",
+				licenseInfo: "x",
+				availability: {},
+				notes: "",
+				isActive: true,
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "person-1",
+			date: "2026-10-05",
+			startTime: "14:00",
+		});
+		const aId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-a",
+			date: "2026-10-05",
+			startTime: "09:00",
+			driverId,
+		});
+		// Moving the slot to 14:30 overlaps person-1's guide window —
+		// driverId is unchanged, which the old gate skipped.
+		await expect(
+			t.mutation(internal.assignments.internalUpdate, {
+				organizationId: orgId,
+				userId: "u1",
+				assignmentId: aId,
+				startTime: "14:30",
+			}),
+		).rejects.toThrow(/guide during this time/);
+	});
 });

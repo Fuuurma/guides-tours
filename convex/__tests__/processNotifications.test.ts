@@ -184,5 +184,138 @@ describe("processPendingNotifications (cron)", () => {
 		expect(result.dueCount).toBe(1);
 		expect(result.processed).toBe(0);
 		expect(result.failed).toBe(0);
+		// F47: the stale row must be RETIRED (deleted), not left
+		// sent=false at the head of by_sent_scheduled forever.
+		const remaining = await t.run((ctx) =>
+			ctx.db.query("scheduledNotifications").collect(),
+		);
+		expect(remaining.length).toBe(0);
+	});
+
+	it("retired stale rows can't starve the pending window", async () => {
+		// F47 regression pin: >BATCH_SIZE stale rows used to occupy the
+		// take(100) head forever, blocking every eligible row behind
+		// them. Now each tick deletes the stale subset it scans.
+		const t = convexTest(schema, modules);
+		const orgId = "org_pc3";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const customerId = await t.run((ctx) => seedCustomer(ctx, orgId));
+		const templateId = await t.run((ctx) =>
+			seedTemplate(ctx, orgId, "reminder_24h"),
+		);
+		const bookingId = await t.run((ctx) =>
+			seedBooking(ctx, orgId, tourId, customerId),
+		);
+		const staleFor = Date.now() - 24 * 60 * 60_000;
+		const dueFor = Date.now() - 60_000;
+		const eligibleId = await t.run(async (ctx) => {
+			// 150 stale rows (> BATCH_SIZE=100) + 1 eligible row at the
+			// tail of the index window.
+			for (let i = 0; i < 150; i++) {
+				await ctx.db.insert("scheduledNotifications", {
+					organizationId: orgId,
+					bookingId,
+					templateId,
+					scheduledFor: staleFor - i,
+					sent: false,
+					retryCount: 0,
+					maxRetries: 3,
+					createdAt: 0,
+				});
+			}
+			return await ctx.db.insert("scheduledNotifications", {
+				organizationId: orgId,
+				bookingId,
+				templateId,
+				scheduledFor: dueFor,
+				sent: false,
+				retryCount: 0,
+				maxRetries: 3,
+				createdAt: 0,
+			});
+		});
+
+		// Tick 1: scans the 100-row head = 100 stale + the eligible row
+		// is beyond the window — deletes the 100 stale.
+		const r1 = await t.mutation(
+			internal.notifications.processPendingNotifications,
+		);
+		expect(r1.dueCount).toBe(100);
+		// Tick 2: the next 50 stale + the eligible row.
+		const r2 = await t.mutation(
+			internal.notifications.processPendingNotifications,
+		);
+		expect(r2.dueCount).toBe(51);
+		expect(r2.processed + r2.failed).toBe(1);
+		// Tick 3: only the (now enqueued) eligible row remains until
+		// dispatch marks it sent — and no stale rows at all.
+		const remaining = await t.run((ctx) =>
+			ctx.db
+				.query("scheduledNotifications")
+				.withIndex("by_sent_scheduled", (q) => q.eq("sent", false))
+				.collect(),
+		);
+		expect(remaining.length).toBeLessThanOrEqual(1);
+		expect(
+			remaining.every((r: any) => r._id === eligibleId),
+		).toBe(true);
+	});
+
+	it("cleanupOldAssignments pages past the archived prefix (F49)", async () => {
+		// Old take(5000) + JS deletedAt filter scanned the same archived
+		// head every run and progressed 0 rows once 5000 archived
+		// accumulated. The paginated walk must reach the unarchived
+		// tail — proven here with a >PAGE (2000) archived prefix.
+		const t = convexTest(schema, modules);
+		const orgId = "org_ca1";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const oldDate = "2020-01-01"; // far past the 90-day cutoff
+		const liveId = await t.run(async (ctx) => {
+			// PAGE+50 already-archived rows occupy the index head.
+			for (let i = 0; i < 2050; i++) {
+				await ctx.db.insert("assignments", {
+					organizationId: orgId,
+					tourId,
+					guideId: "g-archived",
+					date: oldDate,
+					startTime: "09:00",
+					status: "completed",
+					createdAt: 0,
+					updatedAt: 0,
+					deletedAt: 1,
+				});
+			}
+			// The unarchived tail — the row the old code could never reach.
+			return await ctx.db.insert("assignments", {
+				organizationId: orgId,
+				tourId,
+				guideId: "g-live",
+				date: oldDate,
+				startTime: "10:00",
+				status: "completed",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		// Drive the continuation cursor manually — same shape as the
+		// staffingDigest cursor test.
+		let cursor: string | undefined;
+		let pages = 0;
+		let archived = 0;
+		for (;;) {
+			const r = await t.mutation(
+				internal.notifications.cleanupOldAssignments,
+				{ status: "completed", cursor },
+			);
+			pages += 1;
+			archived += r.archived;
+			if (r.done) break;
+			cursor = r.continueCursor;
+		}
+		expect(pages).toBeGreaterThan(1);
+		expect(archived).toBe(1);
+		const row = await t.run((ctx) => ctx.db.get(liveId));
+		expect(row?.deletedAt).toBeGreaterThan(0);
 	});
 });

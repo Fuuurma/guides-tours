@@ -79,11 +79,12 @@ function googleSocialProviders():
 	};
 }
 
-// Returns BetterAuthOptions for components that need the raw config
-// (e.g. `convex/betterAuth/adapter.ts`'s `createApi(schema, ...)`).
-// TypeScript widens the plugin tuple through this annotation; `createAuth`
-// below passes the tuple inline to preserve full plugin inference.
-export const createAuthOptions = (
+// Shared option fields — plugins stay OUT of this helper: `createAuth`
+// must pass the plugin tuple inline for `Auth<>` inference, while
+// `createAuthOptions` widens it through the BetterAuthOptions annotation.
+// The BetterAuthOptions return type supplies the contextual typing the
+// inline literal used to get (literal field types, closure params).
+const authOptionsBase = (
 	ctx: GenericCtx<DataModel>,
 ): BetterAuthOptions => ({
 	baseURL: getSiteUrl(),
@@ -135,6 +136,16 @@ export const createAuthOptions = (
 			isActive: { type: "boolean", required: false, defaultValue: true },
 		},
 	},
+});
+
+// Returns BetterAuthOptions for components that need the raw config
+// (e.g. `convex/betterAuth/adapter.ts`'s `createApi(schema, ...)`).
+// TypeScript widens the plugin tuple through this annotation; `createAuth`
+// below passes the tuple inline to preserve full plugin inference.
+export const createAuthOptions = (
+	ctx: GenericCtx<DataModel>,
+): BetterAuthOptions => ({
+	...authOptionsBase(ctx),
 	plugins: [...plugins],
 });
 
@@ -143,56 +154,7 @@ export const createAuthOptions = (
 // `auth.api.listMembers`, `auth.api.listOrganizations`, etc.
 export const createAuth = (ctx: GenericCtx<DataModel>) =>
 	betterAuth({
-		baseURL: getSiteUrl(),
-		database: authComponent.adapter(ctx),
-		emailAndPassword: {
-			enabled: true,
-			// Local dev skips email verification so sign-up auto-signs-in
-			// and the onboarding flow works without SES. Production
-			// requires it.
-			requireEmailVerification: isLocalDev() ? false : true,
-			minPasswordLength: 8,
-			sendResetPassword: async ({ user, url }) => {
-				await sendTemplatedEmail({
-					to: user.email,
-					subject: "Reset your password on guides-tours",
-					bodyText: `Click the link below to reset your password:\n${url}\n\nIf you didn't request this, you can safely ignore this email.`,
-					bodyHtml: `<p>Click the link below to reset your password:</p><p><a href="${url}">Reset password</a></p><p>If you didn't request this, you can safely ignore this email.</p>`,
-				});
-			},
-		},
-		emailVerification: {
-			// After a user verifies via the emailed link, sign them in
-			// automatically (production flow).
-			autoSignInAfterVerification: true,
-			sendVerificationEmail: async ({ user, url }) => {
-				await sendTemplatedEmail({
-					to: user.email,
-					subject: "Verify your email on guides-tours",
-					bodyText: `Click the link below to verify your email:\n${url}\n\nIf you didn't create an account, you can safely ignore this email.`,
-					bodyHtml: `<p>Click the link below to verify your email:</p><p><a href="${url}">Verify email</a></p><p>If you didn't create an account, you can safely ignore this email.</p>`,
-				});
-			},
-		},
-		socialProviders: googleSocialProviders(),
-		user: {
-			additionalFields: {
-				phone: { type: "string", required: false, defaultValue: "" },
-				bio: { type: "string", required: false, defaultValue: "" },
-				photoUrl: { type: "string", required: false, defaultValue: "" },
-				vacationDays: {
-					type: "number",
-					required: false,
-					defaultValue: 20,
-				},
-				vacationDaysUsed: {
-					type: "number",
-					required: false,
-					defaultValue: 0,
-				},
-				isActive: { type: "boolean", required: false, defaultValue: true },
-			},
-		},
+		...authOptionsBase(ctx),
 		plugins,
 	});
 

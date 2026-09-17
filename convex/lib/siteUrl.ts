@@ -8,6 +8,8 @@
  * every HTTP route and can break `convex push` codegen.) */
 import { logger } from "./logger";
 
+// Warn once per isolate, not per call — reminder/digest jobs call this
+// per org row and would spam logs otherwise (F93).
 let warnedMissingSiteUrl = false;
 
 export function getSiteUrl(): string {
@@ -19,6 +21,14 @@ export function getSiteUrl(): string {
 				"[siteUrl] SITE_URL is not set on a configured deployment — " +
 					"auth baseURL and email links are degraded to " +
 					"http://127.0.0.1:3020. Set SITE_URL on the Convex dashboard.",
+			);
+		}
+		if (isUnconfiguredDeployment() && !warnedMissingSiteUrl) {
+			warnedMissingSiteUrl = true;
+			logger.warn(
+				"[siteUrl] SITE_URL unset — falling back to " +
+					"http://127.0.0.1:3020 (dev only; configured deployments " +
+					"degrade with a loud error)",
 			);
 		}
 		return "http://127.0.0.1:3020";
