@@ -36,12 +36,14 @@ export interface WebhookConfig {
 	signatureHeader: string;
 	/** HTTP header carrying the timestamp (optional for some providers). */
 	timestampHeader: string;
+	/** Reject deliveries whose timestamp header is absent instead of
+	 * skipping the replay check. Opt-in per provider: real OTAs often
+	 * send no timestamp header, so the default (false) stays
+	 * compatible. Only enable for providers known to always send one
+	 * (F83). */
+	requireTimestamp?: boolean;
 	/** Log prefix for this provider, e.g. "[airbnb-webhook]". */
 	logPrefix: string;
-	/** When true, a missing timestamp header rejects the request
-	 * instead of silently skipping replay protection. Opt-in — most
-	 * real OTAs never send a timestamp (F83). */
-	requireTimestamp?: boolean;
 	/** Normalize a parsed payload into our internal event shape. */
 	normalize: (parsed: unknown) => NormalizedProviderEvent | null;
 }
@@ -146,6 +148,14 @@ export function createWebhookHandler(config: WebhookConfig) {
 			undefined,
 			{ requireTimestamp: config.requireTimestamp },
 		);
+		if (verifyResult.reason === "skipped") {
+			// Observability: surface providers that don't send a
+			// timestamp header so operators can decide to flip
+			// requireTimestamp on for them.
+			logger.info(
+				`${config.logPrefix} timestamp header absent — replay check skipped (provider compat)`,
+			);
+		}
 		if (!verifyResult.valid) {
 			// Don't echo the failure reason — it tells a caller which
 			// check (signature vs timestamp) failed and aids probing.
