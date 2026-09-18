@@ -10,6 +10,10 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import {
+	acceptInvitationForSession,
+	googleCallbackUrl,
+} from "@/lib/invitations";
 
 export const Route = createFileRoute("/sign-in")({
 	validateSearch: (search: Record<string, unknown>) => {
@@ -59,18 +63,19 @@ function SignInPage() {
 
 			if (invitationId) {
 				// Coming from the invite "sign in to accept" link — accept
-				// the invitation after a successful sign-in.
-				await authClient.organization.acceptInvitation({ invitationId });
-				// Same pin as the standard path (design step 1): a first-time
-				// member signs in with no active org set — pin their (only)
-				// org so authz never falls back to "first org".
-				const { data: invitedOrgs } = await authClient.organization.list();
-				if (invitedOrgs && invitedOrgs.length === 1) {
-					await authClient.organization.setActive({
-						organizationId: invitedOrgs[0].id,
-					});
+				// the invitation after a successful sign-in. The result must
+				// be checked: an expired or mismatched invite stays unjoined,
+				// so surface the error instead of landing on /dashboard.
+				const accept = await acceptInvitationForSession(invitationId);
+				if (!accept.ok) {
+					setServerError(accept.message);
+					return;
 				}
-				await navigate({ to: "/dashboard" });
+				// Same destination split as the standard path — a user with
+				// no org (e.g. the join raced) routes through onboarding.
+				await navigate({
+					to: accept.orgs.length > 0 ? "/dashboard" : "/onboarding",
+				});
 				return;
 			}
 
@@ -188,22 +193,33 @@ function SignInPage() {
 					</div>
 
 					<GoogleSignInButton
-						callbackURL={
-							redirect
-								? `${typeof window !== "undefined" ? window.location.origin : ""}${redirect}`
-								: "/dashboard"
-						}
+						callbackURL={googleCallbackUrl({
+							invitationId,
+							redirect,
+							origin:
+								typeof window !== "undefined" ? window.location.origin : "",
+						})}
 					/>
 
 					<p className="pt-2 text-center text-sm text-muted-foreground">
 						No account yet?{" "}
-						<Link
-							to="/sign-up"
-							search={redirect ? { redirect } : {}}
-							className="font-medium text-foreground underline"
-						>
-							Create one
-						</Link>
+						{invitationId ? (
+							<Link
+								to="/invite/$invitationId"
+								params={{ invitationId }}
+								className="font-medium text-foreground underline"
+							>
+								Create one
+							</Link>
+						) : (
+							<Link
+								to="/sign-up"
+								search={redirect ? { redirect } : {}}
+								className="font-medium text-foreground underline"
+							>
+								Create one
+							</Link>
+						)}
 					</p>
 				</FieldGroup>
 			</form>

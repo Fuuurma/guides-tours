@@ -1,3 +1,5 @@
+import { authClient } from "@/lib/auth-client";
+
 // Pending-invitation helpers shared by the dashboard invites UI.
 //
 // Why these exist: Better Auth's resend path (`findPendingInvitation`)
@@ -41,4 +43,59 @@ export function planInvitationResend(
 	return invites
 		.filter((i) => i.email.toLowerCase() === email && isInviteExpired(i, now))
 		.map((i) => i.id);
+}
+
+// Result of accepting an org invitation for the freshly signed-in
+// user. `orgs` is the post-accept org list so callers route exactly
+// like the standard sign-in path (no org → /onboarding, otherwise the
+// post-auth destination) instead of assuming the join succeeded.
+export type AcceptInvitationResult =
+	| { ok: true; orgs: { id: string }[] }
+	| { ok: false; message: string };
+
+// Accepts a pending org invitation, then applies the design step-1
+// single-org pin so backend authz never falls back to "first org".
+// Failure is returned, not thrown — both the sign-in form and the
+// OAuth callback must surface it rather than navigating on regardless
+// (an expired/mismatched invite must not silently land the user on
+// /dashboard still unjoined).
+export async function acceptInvitationForSession(
+	invitationId: string,
+): Promise<AcceptInvitationResult> {
+	const accept = await authClient.organization.acceptInvitation({
+		invitationId,
+	});
+	if (accept.error) {
+		return {
+			ok: false,
+			message: accept.error.message ?? "Could not accept invitation",
+		};
+	}
+	const { data: orgs } = await authClient.organization.list();
+	const list = orgs ?? [];
+	if (list.length === 1) {
+		await authClient.organization.setActive({
+			organizationId: list[0].id,
+		});
+	}
+	return { ok: true, orgs: list };
+}
+
+// Where the Google sign-in button should land after OAuth. An
+// invitationId must route through /auth/callback so the invite gets
+// accepted once the session exists — sending the browser straight to
+// the destination would drop the invite silently (F148).
+export function googleCallbackUrl(opts: {
+	invitationId?: string;
+	redirect?: string;
+	origin?: string;
+}): string {
+	const { invitationId, redirect, origin = "" } = opts;
+	if (invitationId) {
+		const params = new URLSearchParams({ invitationId });
+		if (redirect) params.set("redirect", redirect);
+		return `/auth/callback?${params.toString()}`;
+	}
+	if (redirect) return `${origin}${redirect}`;
+	return "/dashboard";
 }
