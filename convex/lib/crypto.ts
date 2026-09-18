@@ -52,19 +52,14 @@ function getKeyMaterial(): Uint8Array {
 	);
 }
 
-// The CryptoKey cache below is deliberately module-scope (verdict 2026-09-10,
-// worker shift): the key is imported non-extractable, so isolate memory holds
-// nothing the env var doesn't already provide to the same isolate. Env
-// rotation takes effect on the next Convex push/deploy — re-bundling
-// re-instantiates the module and resets the cache; no TTL or per-call re-read
-// is needed. NOTE for a future key rotation with existing ciphertexts: the
+// No module-scope key cache: the CryptoKey is imported fresh from
+// process.env.ENCRYPTION_KEY on every encrypt/decrypt call so key rotation
+// takes effect without a redeploy and the key is not held in isolate memory
+// between calls. NOTE for a future key rotation with existing ciphertexts: the
 // format "iv:ct:tag" carries no key version — add a version prefix (e.g.
 // "v2:…") and per-version key lookups BEFORE rotating, or old data becomes
-// undecryptable. That is an owner-scale change, not a cache change.
-let cachedKey: CryptoKey | null = null;
-
+// undecryptable.
 async function getKey(): Promise<CryptoKey> {
-	if (cachedKey) return cachedKey;
 	const material = getKeyMaterial();
 	if (material.length !== 32) {
 		throw new Error(`ENCRYPTION_KEY decoded to ${material.length} bytes, need 32`);
@@ -74,22 +69,25 @@ async function getKey(): Promise<CryptoKey> {
 	// fromHex is rejected — ArrayBufferLike can be SharedArrayBuffer).
 	const copy = new Uint8Array(material.byteLength);
 	copy.set(material);
-	cachedKey = await getCrypto().subtle.importKey(
-		"raw",
-		copy.buffer as ArrayBuffer,
-		{ name: ALGO },
-		false,
-		["encrypt", "decrypt"],
-	);
-	return cachedKey;
+	material.fill(0);
+	try {
+		return await getCrypto().subtle.importKey(
+			"raw",
+			copy.buffer as ArrayBuffer,
+			{ name: ALGO },
+			false,
+			["encrypt", "decrypt"],
+		);
+	} finally {
+		copy.fill(0);
+	}
 }
 
-/** Reset the cached key. Test-only — guarded against production use. */
+/** No-op since the module-scope key cache was removed. Kept for test compat. */
 export function _resetKeyForTest(): void {
 	if (process.env.NODE_ENV === "production") {
 		throw new Error("_resetKeyForTest must not be called in production");
 	}
-	cachedKey = null;
 }
 
 /** Encrypt a plaintext string. Returns "iv_hex:ct_hex:tag_hex". */
