@@ -6,10 +6,9 @@
 //
 // Defaults:
 //   - Max 5 booking attempts per email per 15 minutes
-//   - (Per-IP rate limiting would require CF-Connecting-IP parsing
-//     from headers — left as a future enhancement; email cap
-//     alone blocks the most common spam pattern, re-booking
-//     attempts for the same email.)
+//   - Max 10 booking attempts per IP per 15 minutes (client IP from
+//     CF-Connecting-IP, else the last X-Forwarded-For entry; empty
+//     maps to an "unknown" bucket so it can't bypass the cap).
 //
 // Cleanup: convex/crons.ts runs purgeOldPublicBookingAttempts
 // daily to drop rows older than the window.
