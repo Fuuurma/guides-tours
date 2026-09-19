@@ -1071,7 +1071,7 @@ function NeedsAttentionRow({
 									item.tone === "danger" &&
 										"border-destructive/30 hover:border-destructive/60 hover:bg-destructive/5",
 									item.tone === "warning" &&
-										"border-chart-4/40 hover:border-chart-4/70 hover:bg-chart-4/10",
+										"border-warning/40 hover:border-warning/70 hover:bg-warning/10",
 									item.tone === "info" &&
 										"hover:border-chart-1/50 hover:bg-chart-1/5",
 								)}
@@ -1081,7 +1081,7 @@ function NeedsAttentionRow({
 										"flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold tabular-nums",
 										item.tone === "danger" &&
 											"bg-destructive/10 text-destructive",
-										item.tone === "warning" && "bg-chart-4/15 text-chart-4",
+										item.tone === "warning" && "bg-warning/15 text-warning",
 										item.tone === "info" && "bg-chart-1/10 text-chart-1",
 									)}
 								>
@@ -1097,7 +1097,7 @@ function NeedsAttentionRow({
 											item.tone === "danger" &&
 												"text-destructive/70 group-hover:text-destructive",
 											item.tone === "warning" &&
-												"text-chart-4 group-hover:text-chart-4",
+												"text-warning group-hover:text-warning",
 											item.tone === "info" &&
 												"text-chart-1/70 group-hover:text-chart-1",
 										)}
