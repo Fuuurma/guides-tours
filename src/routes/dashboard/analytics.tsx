@@ -298,11 +298,12 @@ function AnalyticsPage() {
 				</p>
 			)}
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				{/* Stagger each stat card in 50ms after the previous so the
 				    analytics page feels responsive when the data loads.
-				    Eye lands on 'Total bookings' first, then naturally
-				    follows to the rest. */}
+				    Lead metric spans wider so the row is not four equal
+				    cards — eye lands on 'Total assignments' first, then
+				    naturally follows to the rest. */}
 				<motion.div
 					initial={{ opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
