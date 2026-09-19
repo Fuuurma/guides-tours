@@ -501,6 +501,7 @@ function MonthGrid({
 }) {
 	const totalDays = daysInMonthLocal(year, month);
 	const firstDow = new Date(year, month, 1).getDay();
+	const trailingCount = (7 - ((firstDow + totalDays) % 7)) % 7;
 	const today = localYmd(new Date());
 
 	return (
@@ -605,6 +606,27 @@ function MonthGrid({
 					);
 				},
 			)}
+			{[...Array(trailingCount).keys()].map((pad) => {
+				const d = new Date(year, month + 1, pad + 1);
+				const date = localYmd(d);
+				return (
+					<div
+						key={`empty-${year}-${month}-after-${pad}`}
+						className="bg-muted/20 min-h-24 p-1 flex flex-col gap-0.5"
+					>
+						<div className="flex items-center px-0.5">
+							<Link
+								to="/dashboard/assignments/new"
+								search={{ date }}
+								className="text-xs text-muted-foreground hover:underline size-6 flex items-center justify-center rounded-full"
+								title={`New assignment on ${date}`}
+							>
+								{d.getDate()}
+							</Link>
+						</div>
+					</div>
+				);
+			})}
 		</div>
 	);
 }
