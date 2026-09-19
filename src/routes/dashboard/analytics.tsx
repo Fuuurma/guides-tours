@@ -353,28 +353,47 @@ function AnalyticsPage() {
 				</motion.div>
 			</div>
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<MetricCard
-					label="Tours"
-					value={overview?.totalTours}
-					isPending={overviewPending}
-				/>
-				<MetricCard
-					label="Guides"
-					value={overview?.totalGuides}
-					isPending={overviewPending}
-				/>
-				<MetricCard
-					label="Upcoming (7 days)"
-					value={overview?.upcomingThisWeek}
-					isPending={overviewPending}
-				/>
-				<MetricCard
-					label="Pending vacations"
-					value={overview?.pendingVacations}
-					isPending={overviewPending}
-				/>
-			</div>
+			<Card>
+				<CardContent className="grid grid-cols-2 gap-4 py-4 md:grid-cols-4">
+					{overviewPending ? (
+						<>
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+							<Skeleton className="h-10 w-full" />
+						</>
+					) : (
+						<>
+							<div>
+								<p className="text-muted-foreground text-xs">Tours</p>
+								<p className="text-lg font-medium tabular-nums">
+									{overview?.totalTours ?? "—"}
+								</p>
+							</div>
+							<div>
+								<p className="text-muted-foreground text-xs">Guides</p>
+								<p className="text-lg font-medium tabular-nums">
+									{overview?.totalGuides ?? "—"}
+								</p>
+							</div>
+							<div>
+								<p className="text-muted-foreground text-xs">Upcoming (7 days)</p>
+								<p className="text-lg font-medium tabular-nums">
+									{overview?.upcomingThisWeek ?? "—"}
+								</p>
+							</div>
+							<div>
+								<p className="text-muted-foreground text-xs">
+									Pending vacations
+								</p>
+								<p className="text-lg font-medium tabular-nums">
+									{overview?.pendingVacations ?? "—"}
+								</p>
+							</div>
+						</>
+					)}
+				</CardContent>
+			</Card>
 
 			<Card>
 				<CardHeader>
