@@ -520,9 +520,9 @@ function MonthGrid({
 				return (
 					<div
 						key={`empty-${year}-${month}-before-${pad}`}
-						className="bg-muted/20 min-h-24 p-1 flex flex-col gap-0.5"
+						className="group bg-muted/20 min-h-24 p-1 flex flex-col gap-0.5 hover:bg-muted/40 transition-colors"
 					>
-						<div className="flex items-center px-0.5">
+						<div className="flex items-center justify-between gap-1 px-0.5">
 							<Link
 								to="/dashboard/assignments/new"
 								search={{ date }}
@@ -530,6 +530,14 @@ function MonthGrid({
 								title={`New assignment on ${date}`}
 							>
 								{d.getDate()}
+							</Link>
+							<Link
+								to="/dashboard/schedules/new"
+								search={{ date }}
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+								title={`New schedule on ${date}`}
+							>
+								+ Schedule
 							</Link>
 						</div>
 					</div>
