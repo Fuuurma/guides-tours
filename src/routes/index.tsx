@@ -298,7 +298,7 @@ function Home() {
 								<span>Tour operations, without the chaos</span>
 							</Badge>
 						</motion.div>
-						<h1 className="mt-7 max-w-2xl text-pretty text-5xl leading-[0.98] font-semibold tracking-[-0.055em] sm:text-6xl lg:text-[5.15rem]">
+						<h1 className="mt-7 max-w-2xl font-display text-pretty text-5xl leading-[0.98] font-normal tracking-[-0.02em] sm:text-6xl lg:text-[5.15rem]">
 							<span className="block overflow-hidden pb-1">
 								<motion.span
 									className="block"
