@@ -513,12 +513,27 @@ function MonthGrid({
 					{d}
 				</div>
 			))}
-			{[...Array(firstDow).keys()].map((pad) => (
-				<div
-					key={`empty-${year}-${month}-before-${pad}`}
-					className="bg-muted/20 min-h-24"
-				/>
-			))}
+			{[...Array(firstDow).keys()].map((pad) => {
+				const d = new Date(year, month, pad - firstDow + 1);
+				const date = localYmd(d);
+				return (
+					<div
+						key={`empty-${year}-${month}-before-${pad}`}
+						className="bg-muted/20 min-h-24 p-1 flex flex-col gap-0.5"
+					>
+						<div className="flex items-center px-0.5">
+							<Link
+								to="/dashboard/assignments/new"
+								search={{ date }}
+								className="text-xs text-muted-foreground hover:underline size-6 flex items-center justify-center rounded-full"
+								title={`New assignment on ${date}`}
+							>
+								{d.getDate()}
+							</Link>
+						</div>
+					</div>
+				);
+			})}
 			{Array.from({ length: totalDays }, (_, dayZero) => dayZero + 1).map(
 				(day) => {
 					const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
