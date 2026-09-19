@@ -93,7 +93,7 @@ export async function collectMissingStaffPhones(
 	return buildMissingStaffPhones({ guideCounts, drivers, contacts });
 }
 
-async function assertOrgMember(
+async function assertUserIsOrgMember(
 	ctx: Parameters<typeof requireMembership>[0],
 	organizationId: string,
 	userId: string,
@@ -121,7 +121,7 @@ export const getContact = query({
 	args: { userId: v.string() },
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		await assertOrgMember(ctx, member.organizationId, args.userId);
+		await assertUserIsOrgMember(ctx, member.organizationId, args.userId);
 
 		const user = await loadUserContact(ctx, args.userId);
 		return {
@@ -192,7 +192,7 @@ export const updatePhone = mutation({
 			);
 		}
 
-		await assertOrgMember(ctx, member.organizationId, targetUserId);
+		await assertUserIsOrgMember(ctx, member.organizationId, targetUserId);
 
 		await ctx.runMutation(components.betterAuth.adapter.updateOne as never, {
 			input: {

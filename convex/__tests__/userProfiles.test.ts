@@ -353,7 +353,7 @@ describe("userProfiles — getContact", () => {
 		});
 
 		// User A tries to get contact for user B (in org B only).
-		// assertOrgMember lists members of org A — user B is not there.
+		// assertUserIsOrgMember lists members of org A — user B is not there.
 		await expect(
 			t.query(api.userProfiles.getContact, {
 				userId: userBId,
