@@ -946,19 +946,21 @@ function WeeklyPulseRow({
 					delta={
 						deltas
 							? {
-									// For cancellation rate, "up is bad" — invert the
-									// direction so the arrow color matches the operator's
-									// intent (red up arrow = worse).
+									// For cancellation rate, "up is bad": the arrow
+									// points the way the DATA moved (up = rate rose)
+									// and the tone carries the judgement via
+									// deltaTone="invert" (red up arrow = worse).
 									value: `${deltas.cancelDelta >= 0 ? "+" : ""}${deltas.cancelDelta.toFixed(1)}pp`,
 									direction:
 										deltas.cancelDelta > 0
-											? "down"
+											? "up"
 											: deltas.cancelDelta < 0
-												? "up"
+												? "down"
 												: "flat",
 								}
 							: null
 					}
+					deltaTone="invert"
 					icon={Sparkles}
 					href="/dashboard/analytics"
 				/>
@@ -974,6 +976,7 @@ function PulseMetric({
 	icon: Icon,
 	href,
 	featured = false,
+	deltaTone = "auto",
 }: {
 	label: string;
 	value: string | number | undefined;
@@ -981,7 +984,13 @@ function PulseMetric({
 	icon: typeof Wallet;
 	href: string;
 	featured?: boolean;
+	/** "auto": up is good (success). "invert": up is bad (destructive) —
+	 *  for inverse metrics like cancellation rate. The arrow still points
+	 *  the way the DATA moved; only the tone inverts. */
+	deltaTone?: "auto" | "invert";
 }) {
+	const upTone = deltaTone === "invert" ? "text-destructive" : "text-success";
+	const downTone = deltaTone === "invert" ? "text-success" : "text-destructive";
 	return (
 		<Link
 			to={href}
@@ -1010,12 +1019,12 @@ function PulseMetric({
 				<div className="mt-2 flex items-center gap-1.5 text-xs">
 					{delta.direction === "up" ? (
 						<TrendingUp
-							className="size-3.5 text-success"
+							className={`size-3.5 ${upTone}`}
 							aria-hidden="true"
 						/>
 					) : delta.direction === "down" ? (
 						<TrendingDown
-							className="size-3.5 text-destructive"
+							className={`size-3.5 ${downTone}`}
 							aria-hidden="true"
 						/>
 					) : (
@@ -1027,9 +1036,8 @@ function PulseMetric({
 					<span
 						className={cn(
 							"tabular-nums",
-							delta.direction === "up" &&
-								"text-success",
-							delta.direction === "down" && "text-destructive",
+							delta.direction === "up" && upTone,
+							delta.direction === "down" && downTone,
 							delta.direction === "flat" && "text-muted-foreground",
 						)}
 					>
