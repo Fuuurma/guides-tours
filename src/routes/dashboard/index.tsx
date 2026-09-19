@@ -999,12 +999,12 @@ function PulseMetric({
 				<div className="mt-2 flex items-center gap-1.5 text-xs">
 					{delta.direction === "up" ? (
 						<TrendingUp
-							className="size-3.5 text-emerald-600 dark:text-emerald-400"
+							className="size-3.5 text-success"
 							aria-hidden="true"
 						/>
 					) : delta.direction === "down" ? (
 						<TrendingDown
-							className="size-3.5 text-rose-600 dark:text-rose-400"
+							className="size-3.5 text-destructive"
 							aria-hidden="true"
 						/>
 					) : (
@@ -1017,8 +1017,8 @@ function PulseMetric({
 						className={cn(
 							"tabular-nums",
 							delta.direction === "up" &&
-								"text-emerald-700 dark:text-emerald-300",
-							delta.direction === "down" && "text-rose-700 dark:text-rose-300",
+								"text-success",
+							delta.direction === "down" && "text-destructive",
 							delta.direction === "flat" && "text-muted-foreground",
 						)}
 					>
