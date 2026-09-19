@@ -881,7 +881,7 @@ function WeeklyPulseRow({
 					<Skeleton className="h-3 w-56" />
 				)}
 			</header>
-			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				<PulseMetric
 					label="Revenue"
 					value={pulse ? formatCentsWhole(pulse.revenueCents) : undefined}
@@ -900,6 +900,7 @@ function WeeklyPulseRow({
 					}
 					icon={Wallet}
 					href="/dashboard/analytics"
+					featured
 				/>
 				<PulseMetric
 					label="Bookings"
@@ -972,17 +973,22 @@ function PulseMetric({
 	delta,
 	icon: Icon,
 	href,
+	featured = false,
 }: {
 	label: string;
 	value: string | number | undefined;
 	delta: { value: string; direction: "up" | "down" | "flat" } | null;
 	icon: typeof Wallet;
 	href: string;
+	featured?: boolean;
 }) {
 	return (
 		<Link
 			to={href}
-			className="group block rounded-xl border bg-card p-5 transition-colors hover:border-chart-1/50 hover:bg-chart-4/5"
+			className={cn(
+				"group block rounded-xl border bg-card transition-colors hover:border-chart-1/50 hover:bg-chart-4/5",
+				featured ? "p-6" : "p-5",
+			)}
 		>
 			<div className="flex items-start justify-between gap-3">
 				<p className="text-sm text-muted-foreground">{label}</p>
@@ -992,7 +998,12 @@ function PulseMetric({
 					aria-hidden="true"
 				/>
 			</div>
-			<p className="mt-2 font-display text-3xl font-medium tracking-tight tabular-nums">
+			<p
+				className={cn(
+					"mt-2 font-display font-medium tracking-tight tabular-nums",
+					featured ? "text-4xl" : "text-3xl",
+				)}
+			>
 				{value ?? "—"}
 			</p>
 			{delta ? (
