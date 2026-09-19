@@ -367,19 +367,19 @@ function AnalyticsPage() {
 						<>
 							<div>
 								<p className="text-muted-foreground text-xs">Tours</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.totalTours ?? "—"}
 								</p>
 							</div>
 							<div>
 								<p className="text-muted-foreground text-xs">Guides</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.totalGuides ?? "—"}
 								</p>
 							</div>
 							<div>
 								<p className="text-muted-foreground text-xs">Upcoming (7 days)</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.upcomingThisWeek ?? "—"}
 								</p>
 							</div>
@@ -387,7 +387,7 @@ function AnalyticsPage() {
 								<p className="text-muted-foreground text-xs">
 									Pending vacations
 								</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.pendingVacations ?? "—"}
 								</p>
 							</div>

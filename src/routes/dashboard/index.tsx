@@ -717,7 +717,9 @@ function LinkedMetric({
 			<p className="text-sm text-muted-foreground">{label}</p>
 			<p
 				className={cn(
-					"mt-2 font-semibold tracking-tight tabular-nums",
+					// Mirror PulseMetric's numeric through-line (F235) — the two
+					// components share the dashboard home row.
+					"mt-2 font-display font-medium tracking-tight tabular-nums",
 					featured ? "text-4xl" : "text-2xl",
 				)}
 			>
