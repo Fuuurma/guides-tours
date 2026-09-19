@@ -302,7 +302,7 @@ function DashboardIndex() {
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
-					<h1 className="text-2xl font-semibold tracking-tight">Today</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">Today</h1>
 					<p className="mt-0.5 text-sm text-muted-foreground">
 						{new Date().toLocaleDateString(undefined, {
 							weekday: "long",
