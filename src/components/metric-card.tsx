@@ -43,7 +43,7 @@ export function MetricCard({
 						(badgeVariant ? (
 							<Badge variant={badgeVariant}>{value ?? "—"}</Badge>
 						) : (
-							<p className="text-2xl font-semibold tracking-tight tabular-nums">
+							<p className="font-display text-2xl font-medium tracking-tight tabular-nums">
 								{value ?? "—"}
 							</p>
 						)))
