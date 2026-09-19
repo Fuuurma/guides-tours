@@ -250,7 +250,12 @@ export function NewBookingPage() {
 			s.capacityBooked < s.capacityTotal &&
 			(!date || s.date === date),
 	);
-	daySlotsRef.current = daySlots;
+	// Commit-phase assignment: render-phase ref writes are unsafe under
+	// concurrent rendering (react-doctor). The only consumer is the submit
+	// validator, which always reads post-commit.
+	useEffect(() => {
+		daySlotsRef.current = daySlots;
+	});
 
 	useEffect(() => {
 		if (!prefillSchedule) return;
