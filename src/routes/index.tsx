@@ -1230,7 +1230,7 @@ function FeatureCard({
 }) {
 	const toneClasses = {
 		ocean: "bg-chart-2/10 text-chart-2",
-		sun: "bg-chart-4/15 text-chart-4",
+		sun: "bg-sun/15 text-sun",
 		coral: "bg-chart-1/10 text-chart-1",
 	} as const;
 
@@ -1519,7 +1519,7 @@ function WorkspacePreview() {
 							<ScheduleLine
 								title="Wine Country"
 								time="15:30"
-								color="bg-chart-4"
+								color="bg-sun"
 							/>
 						</div>
 					</div>
