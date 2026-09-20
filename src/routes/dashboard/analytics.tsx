@@ -377,7 +377,9 @@ function AnalyticsPage() {
 								</p>
 							</div>
 							<div>
-								<p className="text-muted-foreground text-xs">Upcoming (7 days)</p>
+								<p className="text-muted-foreground text-xs">
+									Upcoming (7 days)
+								</p>
 								<p className="text-lg font-medium tabular-nums">
 									{overview?.upcomingThisWeek ?? "—"}
 								</p>
