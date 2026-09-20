@@ -1516,11 +1516,7 @@ function WorkspacePreview() {
 								time="11:00"
 								color="bg-chart-2"
 							/>
-							<ScheduleLine
-								title="Wine Country"
-								time="15:30"
-								color="bg-sun"
-							/>
+							<ScheduleLine title="Wine Country" time="15:30" color="bg-sun" />
 						</div>
 					</div>
 				</div>

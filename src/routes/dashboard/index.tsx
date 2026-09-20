@@ -302,7 +302,9 @@ function DashboardIndex() {
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
-					<h1 className="font-display text-2xl font-medium tracking-tight">Today</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">
+						Today
+					</h1>
 					<p className="mt-0.5 text-sm text-muted-foreground">
 						{new Date().toLocaleDateString(undefined, {
 							weekday: "long",
@@ -1020,10 +1022,7 @@ function PulseMetric({
 			{delta ? (
 				<div className="mt-2 flex items-center gap-1.5 text-xs">
 					{delta.direction === "up" ? (
-						<TrendingUp
-							className={`size-3.5 ${upTone}`}
-							aria-hidden="true"
-						/>
+						<TrendingUp className={`size-3.5 ${upTone}`} aria-hidden="true" />
 					) : delta.direction === "down" ? (
 						<TrendingDown
 							className={`size-3.5 ${downTone}`}
