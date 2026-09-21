@@ -56,10 +56,18 @@ function DashboardIndex() {
 	const { data: org } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
-	const { data: bookings, error: bookingsError } = useQuery(
+	const {
+		data: bookings,
+		error: bookingsError,
+		isPending: bookingsPending,
+	} = useQuery(
 		convexQuery(api.bookings.list, { dateFrom: today, dateTo: today }),
 	);
-	const { data: pendingBookingPage, error: pendingBookingsError } = useQuery(
+	const {
+		data: pendingBookingPage,
+		error: pendingBookingsError,
+		isPending: pendingBookingsPending,
+	} = useQuery(
 		convexQuery(api.bookings.list, {
 			status: "pending",
 			sortBy: "createdAt",
@@ -73,9 +81,11 @@ function DashboardIndex() {
 	const { data: customers, error: customersError } = useQuery(
 		convexQuery(api.customers.list, {}),
 	);
-	const { data: tours, error: toursError } = useQuery(
-		convexQuery(api.tours.list, {}),
-	);
+	const {
+		data: tours,
+		error: toursError,
+		isPending: toursPending,
+	} = useQuery(convexQuery(api.tours.list, {}));
 	const { data: staffingGaps, error: staffingError } = useQuery(
 		convexQuery(api.assignments.staffingGaps, {
 			dateFrom: today,
@@ -152,7 +162,10 @@ function DashboardIndex() {
 	const topGaps = gaps.slice(0, 5);
 	const missing = missingPhones ?? [];
 	const topMissing = missing.slice(0, 5);
+	const isFirstRunLoading =
+		toursPending || bookingsPending || pendingBookingsPending;
 	const isFirstRun =
+		!isFirstRunLoading &&
 		totalTours === 0 &&
 		todaysBookings.length === 0 &&
 		pendingBookings.length === 0;
@@ -327,7 +340,15 @@ function DashboardIndex() {
 				</div>
 			</header>
 
-			{isFirstRun ? (
+			{isFirstRunLoading ? (
+				<div className="flex flex-col gap-4" aria-label="Loading dashboard">
+					<Skeleton className="h-32 w-full" />
+					<div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+						<Skeleton className="h-28 w-full" />
+						<Skeleton className="h-28 w-full" />
+					</div>
+				</div>
+			) : isFirstRun ? (
 				<Empty className="border">
 					<EmptyHeader>
 						<EmptyMedia variant="icon">
