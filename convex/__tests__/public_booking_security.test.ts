@@ -135,6 +135,73 @@ describe("convex/public_booking — security edge cases", () => {
 		expect(schedule?.capacityBooked).toBe(1);
 	});
 
+	it("two concurrent bookings at capacity=1: exactly one wins (no double-book)", async () => {
+		// Atomic capacity claim: internalCreate inserts the booking and
+		// check-and-increments the schedule's capacityBooked inside the
+		// same Convex transaction (via incrementBooked). Two racing
+		// attempts on the last seat can therefore never both succeed —
+		// Convex serializes conflicting transactions, so the loser sees
+		// the winner's committed capacityBooked and throws.
+		const t = convexTest(schema, modules);
+		const orgId = "org_sec_race";
+		const date = "2027-09-10";
+		const startTime = "10:00";
+
+		const { tourId, scheduleId } = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, orgId, 20);
+			const scheduleId = await seedSchedule(c, {
+				orgId,
+				tourId,
+				date,
+				startTime,
+				capacityTotal: 1,
+				capacityBooked: 0,
+			});
+			return { tourId, scheduleId };
+		});
+
+		const attempt = (name: string, email: string) =>
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				scheduleId,
+				customerName: name,
+				customerEmail: email,
+				date,
+				startTime,
+				guests: 1,
+			});
+
+		const results = await Promise.allSettled([
+			attempt("Racer One", "racer1@example.com"),
+			attempt("Racer Two", "racer2@example.com"),
+		]);
+
+		const fulfilled = results.filter((r) => r.status === "fulfilled");
+		const rejected = results.filter((r) => r.status === "rejected");
+		expect(fulfilled).toHaveLength(1);
+		expect(rejected).toHaveLength(1);
+		if (rejected[0]?.status === "rejected") {
+			expect(String(rejected[0].reason)).toMatch(/over capacity/i);
+		}
+
+		// Exactly one booking survives — the winner's. The loser rolled
+		// back entirely: no orphaned pending row, no customer row.
+		const allBookings = await t.run(async (ctx) =>
+			ctx.db.query("bookings").collect(),
+		);
+		expect(allBookings).toHaveLength(1);
+		expect(allBookings[0]?.status).toBe("pending");
+
+		// The single seat is claimed exactly once.
+		const schedule = await t.run(async (ctx) =>
+			ctx.db.get(scheduleId),
+		);
+		expect(schedule?.capacityBooked).toBe(1);
+		expect(schedule?.status).toBe("full");
+	});
+
 	it("rejects a malformed email (no TLD / no @)", async () => {
 		// The existing overlong-email test covers the >254 char path.
 		// This pins the EMAIL_REGEX shape check: an email with no
