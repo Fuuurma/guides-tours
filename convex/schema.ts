@@ -728,6 +728,38 @@ export default defineSchema({
 			"receivedAt",
 		]),
 
+	// Stripe event dedupe — the idempotency gate for
+	// /api/payments/stripe/webhook. Distinct from webhookDeliveries
+	// (the audit log): this table answers "has this org already
+	// processed evt_X?" atomically. `claim` inserts transactionally;
+	// a "processed" row is a hard duplicate, while "failed" or stale
+	// "processing" rows are reclaimed so Stripe retries can re-drive
+	// delivery instead of being dropped (fleet DST-guides-tours-02).
+	stripeEvents: defineTable({
+		organizationId: orgId,
+		// Stripe event id (evt_*)
+		eventId: v.string(),
+		// payment_intent.succeeded | payment_intent.payment_failed |
+		// checkout.session.completed | charge.refunded | ...
+		eventType: v.string(),
+		// processing | processed | failed
+		status: v.union(
+			v.literal("processing"),
+			v.literal("processed"),
+			v.literal("failed"),
+		),
+		attemptCount: v.number(),
+		errorMessage: v.optional(v.string()),
+		receivedAt: v.number(),
+		processedAt: v.optional(v.number()),
+	})
+		.index("by_org", ["organizationId"])
+		// Dedupe is per-org: the webhook endpoint is shared and event
+		// ids are only unique per Stripe account — org A processing
+		// evt_1 must not suppress org B's copy (same rule as
+		// webhookDeliveries F14).
+		.index("by_org_event", ["organizationId", "eventId"]),
+
 	// ----- Payments -----
 
 	// Stripe PaymentIntent tracking + raw payment records.
