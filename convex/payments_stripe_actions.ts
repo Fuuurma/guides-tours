@@ -815,24 +815,34 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 
 	const stripeEventId = parsed.id;
 	if (stripeEventId) {
-		const recorded = await ctx.runMutation(
-			internal.webhookDeliveries.recordDelivery,
-			{
-				organizationId: orgId,
-				source: "stripe",
-				eventId: stripeEventId,
-				eventType: eventType ?? "unknown",
-				ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
-				userAgent: request.headers.get("user-agent") ?? undefined,
-				payload: parsed,
-			},
-		);
-		if (recorded.isDuplicate) {
+		// Idempotency gate (stripeEvents table): the check + insert run
+		// in one mutation — a single transaction — so concurrent
+		// deliveries can't both pass. "processed" rows and fresh
+		// in-flight claims are duplicates; "failed"/stale claims are
+		// reclaimed so Stripe retries re-drive delivery instead of
+		// being dropped (fleet DST-guides-tours-02).
+		const claimResult = await ctx.runMutation(internal.stripeEvents.claim, {
+			organizationId: orgId,
+			eventId: stripeEventId,
+			eventType: eventType ?? "unknown",
+		});
+		if (claimResult === "duplicate") {
 			logger.info(
 				`[stripe-webhook] duplicate event ${stripeEventId} for org ${orgId}`,
 			);
 			return new Response("ok (duplicate)", { status: 200 });
 		}
+		// Audit log (webhookDeliveries) — retained for admin
+		// visibility; dedupe gating lives in stripeEvents.
+		await ctx.runMutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: stripeEventId,
+			eventType: eventType ?? "unknown",
+			ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
+			userAgent: request.headers.get("user-agent") ?? undefined,
+			payload: parsed,
+		});
 	}
 
 	try {
@@ -955,6 +965,11 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		}
 
 		if (stripeEventId) {
+			await ctx.runMutation(internal.stripeEvents.settle, {
+				organizationId: orgId,
+				eventId: stripeEventId,
+				status: "processed",
+			});
 			await ctx.runMutation(
 				internal.webhookDeliveries.updateDeliveryStatus,
 				{
@@ -967,6 +982,14 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		}
 	} catch (err) {
 		if (stripeEventId) {
+			// "failed" leaves the claim reclaimable — the next Stripe
+			// retry re-drives delivery rather than deduping away.
+			await ctx.runMutation(internal.stripeEvents.settle, {
+				organizationId: orgId,
+				eventId: stripeEventId,
+				status: "failed",
+				errorMessage: err instanceof Error ? err.message : String(err),
+			});
 			await ctx.runMutation(
 				internal.webhookDeliveries.updateDeliveryStatus,
 				{
