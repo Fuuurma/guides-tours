@@ -513,9 +513,9 @@ function PublicBookingPage() {
 	return (
 		<PublicBookingFrame orgName={data.organizationName}>
 			<header className="mb-8">
-				<h1 className="text-3xl font-semibold tracking-[-0.05em]">
+				<h1 className="font-display text-3xl font-normal tracking-tight">
 					Book with{" "}
-					<span className="font-display font-normal italic tracking-normal text-chart-1">
+					<span className="italic text-chart-1">
 						{data.organizationName}
 					</span>
 				</h1>
