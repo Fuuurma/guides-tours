@@ -308,7 +308,7 @@ export function NewBookingPage() {
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<div>
 				<PageBackLink to="/dashboard/bookings" />
-				<h1 className="mt-2 text-2xl font-semibold tracking-tight">
+				<h1 className="mt-2 font-display text-2xl font-medium tracking-tight">
 					New booking
 				</h1>
 				<p className="mt-1 text-sm text-muted-foreground">
