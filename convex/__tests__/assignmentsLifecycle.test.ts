@@ -281,3 +281,180 @@ describe("assignmentsLifecycle.performCreate — schedule validation", () => {
 		expect(row?.status).toBe("scheduled");
 	});
 });
+
+// ---- Batch 2: performUpdate ----
+
+import { seedDriver, seedVehicle } from "./helpers";
+import { performUpdate } from "../lib/assignmentsLifecycle";
+
+describe("assignmentsLifecycle.performUpdate — guards", () => {
+	it("refuses deleted, cancelled, completed, and foreign-org updates", async () => {
+		const t = convexTest(schema, modules);
+		const deleted = await seedAssigned(t);
+		await t.run(async (ctx) => {
+			await ctx.db.patch(deleted.assignmentId, { deletedAt: Date.now() });
+		});
+		await t.run(async (ctx) => {
+			const a = await ctx.db.get(deleted.assignmentId);
+			await expect(
+				performUpdate(ctx, {
+					assignmentId: deleted.assignmentId,
+					guideId: "guide_2",
+					organizationId: ORG,
+					userId: "user_1",
+				}),
+			).rejects.toThrow("Assignment is deleted");
+			void a;
+		});
+		for (const status of ["cancelled", "completed"] as const) {
+			const { assignmentId } = await seedAssigned(t, { status });
+			await t.run(async (ctx) => {
+				await expect(
+					performUpdate(ctx, {
+						assignmentId,
+						guideId: "guide_2",
+						organizationId: ORG,
+						userId: "user_1",
+					}),
+				).rejects.toThrow(`Cannot modify a ${status} assignment`);
+			});
+		}
+		const live = await seedAssigned(t);
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, {
+					assignmentId: live.assignmentId,
+					guideId: "guide_2",
+					organizationId: "org_other",
+					userId: "user_1",
+				}),
+			).rejects.toThrow("Forbidden: wrong organization");
+		});
+	});
+
+	it("refuses an inactive driver", async () => {
+		const t = convexTest(schema, modules);
+		const ids = await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const assignmentId = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+			});
+			const driverId = await seedDriver(ctx, {
+				orgId: ORG,
+				userId: "user_driver_1",
+				isActive: false,
+			});
+			return { assignmentId, driverId };
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, {
+					assignmentId: ids.assignmentId,
+					driverId: ids.driverId,
+					organizationId: ORG,
+					userId: "user_1",
+				}),
+			).rejects.toThrow("Driver is not active");
+		});
+	});
+
+	it("refuses the same person as guide and driver", async () => {
+		const t = convexTest(schema, modules);
+		const ids = await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const assignmentId = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "user_guide_1",
+			});
+			const driverId = await seedDriver(ctx, {
+				orgId: ORG,
+				userId: "user_guide_1",
+			});
+			return { assignmentId, driverId };
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, {
+					assignmentId: ids.assignmentId,
+					driverId: ids.driverId,
+					organizationId: ORG,
+					userId: "user_1",
+				}),
+			).rejects.toThrow(
+				"The same person cannot be both guide and driver on one assignment",
+			);
+		});
+	});
+
+	it("refuses a second, different vehicle on the slot", async () => {
+		const t = convexTest(schema, modules);
+		const ids = await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const a1 = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				vehicleId: await seedVehicle(ctx, { orgId: ORG }),
+			});
+			const v2 = await seedVehicle(ctx, { orgId: ORG, name: "Van B" });
+			const a2 = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_2",
+			});
+			void a1;
+			return { a2, v2 };
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, {
+					assignmentId: ids.a2,
+					vehicleId: ids.v2,
+					organizationId: ORG,
+					userId: "user_1",
+				}),
+			).rejects.toThrow(
+				"This departure already has a different vehicle assigned",
+			);
+		});
+	});
+
+	it("clears vehicle/driver and re-stamps endTime on update", async () => {
+		const t = convexTest(schema, modules);
+		const ids = await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const vehicleId = await seedVehicle(ctx, { orgId: ORG });
+			const driverId = await seedDriver(ctx, {
+				orgId: ORG,
+				userId: "user_driver_2",
+			});
+			const assignmentId = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				vehicleId,
+				driverId,
+			});
+			return { assignmentId };
+		});
+		await t.run(async (ctx) => {
+			await performUpdate(ctx, {
+				assignmentId: ids.assignmentId,
+				clearVehicle: true,
+				clearDriver: true,
+				organizationId: ORG,
+				userId: "user_1",
+			});
+		});
+		const row = await t.run((ctx) => ctx.db.get(ids.assignmentId));
+		expect(row?.vehicleId).toBeUndefined();
+		expect(row?.driverId).toBeUndefined();
+		const audits = await t.run(async (ctx) =>
+			ctx.db.query("auditLogs").collect(),
+		);
+		expect(audits.some((a) => a.action === "assignment.updated")).toBe(true);
+	});
+});
