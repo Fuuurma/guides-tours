@@ -81,9 +81,7 @@ export function AuthShell({
 
 						<h2 className="mt-14 max-w-md font-display text-pretty text-4xl leading-[1.05] font-normal tracking-[-0.02em]">
 							The calm behind every{" "}
-							<span className="italic text-chart-1">
-								great tour.
-							</span>
+							<span className="italic text-chart-1">great tour.</span>
 						</h2>
 						<p className="mt-5 max-w-sm text-base leading-7 text-primary-foreground/70">
 							Run tours, bookings, schedules, and your whole team from one
@@ -139,9 +137,7 @@ export function AuthShell({
 							<h1 className="font-display text-3xl font-normal tracking-tight">
 								{title}{" "}
 								{serifAccent ? (
-									<span className="italic text-chart-1">
-										{serifAccent}
-									</span>
+									<span className="italic text-chart-1">{serifAccent}</span>
 								) : null}
 							</h1>
 							{description ? (

@@ -279,7 +279,9 @@ function NotificationSettingsForm({ settings }: { settings: Settings | null }) {
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<header className="flex items-center justify-between gap-4">
 				<div>
-					<h1 className="font-display text-2xl font-medium tracking-tight">Notification settings</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">
+						Notification settings
+					</h1>
 					<p className="text-muted-foreground text-sm">
 						Channel configuration and delivery preferences
 					</p>

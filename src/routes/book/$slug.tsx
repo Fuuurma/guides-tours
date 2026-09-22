@@ -515,9 +515,7 @@ function PublicBookingPage() {
 			<header className="mb-8">
 				<h1 className="font-display text-3xl font-normal tracking-tight">
 					Book with{" "}
-					<span className="italic text-chart-1">
-						{data.organizationName}
-					</span>
+					<span className="italic text-chart-1">{data.organizationName}</span>
 				</h1>
 				<p className="mt-2 text-base text-muted-foreground">
 					Request a tour — no account required. The operator confirms before it

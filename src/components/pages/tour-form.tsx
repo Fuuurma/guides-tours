@@ -273,7 +273,9 @@ export function TourForm({
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<div>
 				<PageBackLink to={backTo} />
-				<h1 className="mt-2 font-display text-2xl font-medium tracking-tight">{title}</h1>
+				<h1 className="mt-2 font-display text-2xl font-medium tracking-tight">
+					{title}
+				</h1>
 				<p className="mt-1 text-sm text-muted-foreground">{description}</p>
 			</div>
 			<Card>
