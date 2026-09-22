@@ -209,7 +209,7 @@ function BookingDetailPage() {
 
 	return (
 		<DetailPage
-			title={`Booking ${b._id.slice(-8)}`}
+			title={b.customer?.name ?? b.tour?.name ?? "Booking"}
 			subtitle={`${b.date} at ${b.startTime} · ${b.guests} guests`}
 			backTo="/dashboard/bookings"
 			actions={
