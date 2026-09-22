@@ -368,7 +368,7 @@ function PublicBookingPage() {
 							<span className="mb-2 grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
 								<Check />
 							</span>
-							<h2 className="text-2xl font-semibold tracking-tight">
+							<h2 className="font-display text-2xl font-normal tracking-tight">
 								Booking request received
 							</h2>
 							<CardDescription>
