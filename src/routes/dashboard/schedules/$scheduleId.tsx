@@ -373,7 +373,7 @@ function ScheduleDetailPage() {
 				title="Capacity"
 				description={`${utilization}% of seats are booked`}
 			>
-				<p className="text-3xl font-semibold">{utilization}%</p>
+				<p className="font-display text-3xl font-medium tracking-tight tabular-nums">{utilization}%</p>
 				<p className="text-muted-foreground text-sm">
 					{seatsRemaining > 0
 						? `${seatsRemaining} seat${seatsRemaining === 1 ? "" : "s"} remaining`
