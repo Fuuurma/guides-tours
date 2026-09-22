@@ -674,7 +674,7 @@ function Home() {
 							>
 								Sample workspace
 							</Badge>
-							<h2 className="mt-5 text-pretty text-4xl leading-tight font-semibold tracking-[-0.05em] sm:text-5xl">
+							<h2 className="mt-5 font-display text-pretty text-4xl leading-tight font-normal tracking-[-0.02em] sm:text-5xl">
 								A workspace your whole team can read in{" "}
 								<span className="font-display font-normal italic text-chart-1">
 									seconds.
@@ -818,7 +818,7 @@ function Home() {
 						<Badge className="border-chart-1/30 bg-chart-1/15 text-chart-1">
 							Ready when you are
 						</Badge>
-						<h2 className="mt-5 text-pretty text-4xl leading-tight font-semibold tracking-[-0.05em] sm:text-5xl">
+						<h2 className="mt-5 font-display text-pretty text-4xl leading-tight font-normal tracking-[-0.02em] sm:text-5xl">
 							Your next great season starts with a{" "}
 							<span className="font-display font-normal italic text-chart-1">
 								clearer day.
@@ -1195,7 +1195,7 @@ function SectionIntro({
 			</p>
 			<h2
 				className={cn(
-					"mt-4 text-pretty text-4xl leading-tight font-semibold tracking-[-0.05em] sm:text-5xl",
+					"mt-4 font-display text-pretty text-4xl leading-tight font-normal tracking-[-0.02em] sm:text-5xl",
 					invert && "text-primary-foreground",
 				)}
 			>
