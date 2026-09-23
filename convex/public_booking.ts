@@ -240,16 +240,16 @@ async function buildCheckoutResponse(
 		{ bookingId } as never,
 	)) as { balanceDueCents?: bigint; status?: string } | null;
 	const settings = (await ctx.runQuery(
-		internal.payments.getStripeSecrets as never,
+		internal.payments.getPublicStripeAvailability as never,
 		{ organizationId } as never,
 	)) as {
 		stripeEnabled?: boolean;
-		stripeSecretKey?: string;
+		hasStripeSecret?: boolean;
 		stripePublishableKey?: string;
 	} | null;
 	const balanceDueCents = checkout?.balanceDueCents ?? 0n;
 	const canPay =
-		Boolean(settings?.stripeEnabled && settings.stripeSecretKey) &&
+		Boolean(settings?.stripeEnabled && settings.hasStripeSecret) &&
 		balanceDueCents > 0n &&
 		COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
 

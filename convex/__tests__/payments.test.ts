@@ -474,6 +474,37 @@ describe("convex/payments — getStripeSecrets (returns ciphertext)", () => {
 	});
 });
 
+describe("convex/payments — public Stripe availability", () => {
+	it("returns payment availability without either stored secret", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			await ctx.db.insert("paymentSettings", {
+				organizationId: "org_public_availability",
+				stripeEnabled: true,
+				stripePublishableKey: "pk_test_public",
+				stripeSecretKey: "encrypted-secret-ciphertext",
+				stripeWebhookSecret: "encrypted-webhook-ciphertext",
+				stripeIsSandbox: true,
+				acceptDeposits: true,
+				depositPercentage: 20,
+				defaultCurrency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		const result = await t.query(
+			internal.payments.getPublicStripeAvailability,
+			{ organizationId: "org_public_availability" },
+		);
+		expect(result).toEqual({
+			stripeEnabled: true,
+			hasStripeSecret: true,
+			stripePublishableKey: "pk_test_public",
+		});
+	});
+});
+
 describe("convex/payments — intent lookup helpers", () => {
 	it("getPaymentRowByIntent returns org when intent exists", async () => {
 		const t = convexTest(schema, modules);

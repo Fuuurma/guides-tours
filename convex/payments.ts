@@ -758,6 +758,24 @@ export const getStripeSecrets = internalQuery({
 	},
 });
 
+export const getPublicStripeAvailability = internalQuery({
+	args: { organizationId: v.string() },
+	handler: async (ctx, args) => {
+		const s = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) =>
+				q.eq("organizationId", args.organizationId),
+			)
+			.unique();
+		if (!s) return null;
+		return {
+			stripeEnabled: s.stripeEnabled,
+			hasStripeSecret: Boolean(s.stripeSecretKey),
+			stripePublishableKey: s.stripePublishableKey,
+		};
+	},
+});
+
 /** Internal: load the booking (with orgId) for Stripe checkout. */
 export const getBookingForCheckout = internalQuery({
 	args: { bookingId: v.id("bookings") },
