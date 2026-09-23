@@ -337,7 +337,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				startTime: "10:00",
 				guests: 0,
 			}),
-		).rejects.toThrow(/guests must be > 0/);
+		).rejects.toThrow(/guests must be a positive integer/);
 	});
 
 	it("rejects past dates", async () => {
@@ -742,12 +742,13 @@ describe("convex/public_booking — schedule capacity", () => {
 		});
 	}
 
-	it("attaches scheduleId and increments capacityBooked", async () => {
+	it("creates booking, pending payment, and capacity claim atomically", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_cap_a";
 		const { tourId, scheduleId } = await t.run(async (ctx) => {
 			const c = ctx as unknown as TestCtx;
 			const tourId = await seedTour(c, orgId, 20);
+			await c.db.patch(tourId, { basePriceCents: 5000n });
 			const scheduleId = await seedSchedule(c, orgId, tourId, 10);
 			return { tourId, scheduleId };
 		});
@@ -772,6 +773,20 @@ describe("convex/public_booking — schedule capacity", () => {
 
 		const schedule = await t.run(async (ctx) => ctx.db.get(scheduleId));
 		expect(schedule?.capacityBooked).toBe(3);
+		const payments = await t.run(async (ctx) =>
+			ctx.db
+				.query("payments")
+				.withIndex("by_booking", (q) => q.eq("bookingId", bookingId))
+				.collect(),
+		);
+		expect(payments).toHaveLength(1);
+		expect(payments[0]).toMatchObject({
+			bookingId,
+			amountCents: 15000n,
+			status: "pending",
+			provider: "stripe",
+		});
+		expect(payments[0]?.stripePaymentIntentId).toBeUndefined();
 	});
 
 	it("rejects when schedule is over capacity", async () => {
@@ -780,6 +795,7 @@ describe("convex/public_booking — schedule capacity", () => {
 		const { tourId, scheduleId } = await t.run(async (ctx) => {
 			const c = ctx as unknown as TestCtx;
 			const tourId = await seedTour(c, orgId, 20);
+			await c.db.patch(tourId, { basePriceCents: 5000n });
 			const scheduleId = await seedSchedule(c, orgId, tourId, 4);
 			await c.db.patch(scheduleId, { capacityBooked: 3 });
 			return { tourId, scheduleId };
@@ -797,6 +813,23 @@ describe("convex/public_booking — schedule capacity", () => {
 				guests: 2,
 			}),
 		).rejects.toThrow(/over capacity/i);
+
+		const schedule = await t.run(async (ctx) => ctx.db.get(scheduleId));
+		const bookings = await t.run(async (ctx) =>
+			ctx.db
+				.query("bookings")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.collect(),
+		);
+		const payments = await t.run(async (ctx) =>
+			ctx.db
+				.query("payments")
+				.withIndex("by_org", (q) => q.eq("organizationId", orgId))
+				.collect(),
+		);
+		expect(schedule?.capacityBooked).toBe(3);
+		expect(bookings).toHaveLength(0);
+		expect(payments).toHaveLength(0);
 	});
 
 	it("auto-attaches matching schedule when scheduleId omitted", async () => {
