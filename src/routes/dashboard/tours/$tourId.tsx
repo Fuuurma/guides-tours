@@ -443,7 +443,9 @@ function TourDetailPage() {
 				title="Capacity utilization"
 				description="How much of the capacity is committed at max"
 			>
-				<p className="font-display text-3xl font-medium tracking-tight tabular-nums">{utilizationPercent}%</p>
+				<p className="font-display text-3xl font-medium tracking-tight tabular-nums">
+					{utilizationPercent}%
+				</p>
 				<p className="text-muted-foreground text-sm">
 					maxGuests {tour.maxGuests} / capacity {tour.capacity}
 				</p>

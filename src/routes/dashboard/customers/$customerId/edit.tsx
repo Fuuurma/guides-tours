@@ -3,7 +3,7 @@ import { EditCustomerPage } from "../../../../components/pages/edit-customer-pag
 
 function Edit$customeridRoute() {
 	const { customerId } = Route.useParams();
-	return <EditCustomerPage customerId={ customerId } />;
+	return <EditCustomerPage customerId={customerId} />;
 }
 
 export const Route = createFileRoute("/dashboard/customers/$customerId/edit")({
