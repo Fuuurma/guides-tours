@@ -34,6 +34,16 @@ export const Route = createRootRouteWithContext<{
 	queryClient: QueryClient;
 	convexQueryClient: ConvexQueryClient;
 }>()({
+	beforeLoad: async (ctx) => {
+		const token = await getAuth();
+		if (token) {
+			ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
+		}
+		return {
+			isAuthenticated: !!token,
+			token,
+		};
+	},
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },
@@ -60,16 +70,6 @@ export const Route = createRootRouteWithContext<{
 			},
 		],
 	}),
-	beforeLoad: async (ctx) => {
-		const token = await getAuth();
-		if (token) {
-			ctx.context.convexQueryClient.serverHttpClient?.setAuth(token);
-		}
-		return {
-			isAuthenticated: !!token,
-			token,
-		};
-	},
 	component: RootComponent,
 });
 

@@ -187,13 +187,7 @@ function SignInPage() {
 						</div>
 					</div>
 
-					<GoogleSignInButton
-						callbackURL={
-							redirect
-								? `${typeof window !== "undefined" ? window.location.origin : ""}${redirect}`
-								: "/dashboard"
-						}
-					/>
+					<GoogleSignInButton callbackURL={redirect ?? "/dashboard"} />
 
 					<p className="pt-2 text-center text-sm text-muted-foreground">
 						No account yet?{" "}

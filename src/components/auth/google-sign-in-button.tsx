@@ -43,8 +43,15 @@ export function GoogleSignInButton({ callbackURL }: { callbackURL: string }) {
 	async function onClick() {
 		setPending(true);
 		try {
+			// Absolute origin is only known on the client — compose it at
+			// click time so render never branches on `window` (the sign-in
+			// route used to, causing a hydration-branch diagnostic).
+			const absoluteCallback =
+				callbackURL.startsWith("/")
+					? `${window.location.origin}${callbackURL}`
+					: callbackURL;
 			const result = await authClient.signIn.social({
-				callbackURL,
+				callbackURL: absoluteCallback,
 				provider: "google",
 			});
 			if (result.error) {
