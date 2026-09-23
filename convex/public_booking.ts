@@ -306,12 +306,12 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 				{ bookingId },
 			);
 			const settings = await ctx.runQuery(
-				internal.payments.getStripeSecrets,
+				internal.payments.getPublicStripeAvailability,
 				{ organizationId },
 			);
 			const balanceDueCents = checkout?.balanceDueCents ?? 0n;
 			const canPay =
-				Boolean(settings?.stripeEnabled && settings.stripeSecretKey) &&
+				Boolean(settings?.stripeEnabled && settings.hasStripeSecret) &&
 				balanceDueCents > 0n &&
 				COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
 
