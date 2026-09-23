@@ -394,14 +394,10 @@ function Home() {
 					<div className="mx-auto mt-10 grid max-w-3xl grid-cols-3 divide-x">
 						<TrustMetric value={7} label="OTA channels into one board" />
 						<TrustMetric value={1} label="workspace for the dispatch desk" />
-						<div className="flex flex-col items-center gap-1 px-3 text-center first:pl-0 last:pr-0">
-							<p className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
-								Today
-							</p>
-							<p className="max-w-32 text-xs text-muted-foreground sm:text-sm">
-								departures, gaps, and assignments
-							</p>
-						</div>
+						<TrustMetric
+							valueText="Today"
+							label="departures, gaps, and assignments"
+						/>
 					</div>
 				</div>
 			</section>
@@ -1146,18 +1142,20 @@ function CountUp({ to, suffix = "" }: { to: number; suffix?: string }) {
 }
 
 function TrustMetric({
-	value,
+	value = 0,
 	label,
 	suffix = "",
+	valueText,
 }: {
-	value: number;
+	value?: number;
 	label: string;
 	suffix?: string;
+	valueText?: string;
 }) {
 	return (
 		<div className="flex flex-col items-center gap-1 px-3 text-center first:pl-0 last:pr-0">
 			<p className="text-2xl font-semibold tracking-[-0.04em] tabular-nums sm:text-3xl">
-				<CountUp to={value} suffix={suffix} />
+				{valueText ?? <CountUp to={value} suffix={suffix} />}
 			</p>
 			<p className="max-w-32 text-xs text-muted-foreground sm:text-sm">
 				{label}
