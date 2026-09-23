@@ -341,7 +341,11 @@ function DashboardIndex() {
 			</header>
 
 			{isFirstRunLoading ? (
-				<div className="flex flex-col gap-4" aria-label="Loading dashboard">
+				<div
+					className="flex flex-col gap-4"
+					role="status"
+					aria-label="Loading dashboard"
+				>
 					<Skeleton className="h-32 w-full" />
 					<div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
 						<Skeleton className="h-28 w-full" />

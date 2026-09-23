@@ -1141,21 +1141,21 @@ function CountUp({ to, suffix = "" }: { to: number; suffix?: string }) {
 	return <span ref={ref}>0{suffix}</span>;
 }
 
-function TrustMetric({
-	value = 0,
-	label,
-	suffix = "",
-	valueText,
-}: {
-	value?: number;
-	label: string;
-	suffix?: string;
-	valueText?: string;
-}) {
+type TrustMetricProps = { label: string } & (
+	| { value: number; suffix?: string; valueText?: never }
+	| { valueText: string; value?: never; suffix?: never }
+);
+
+function TrustMetric(props: TrustMetricProps) {
+	const { label } = props;
 	return (
 		<div className="flex flex-col items-center gap-1 px-3 text-center first:pl-0 last:pr-0">
 			<p className="text-2xl font-semibold tracking-[-0.04em] tabular-nums sm:text-3xl">
-				{valueText ?? <CountUp to={value} suffix={suffix} />}
+				{props.valueText !== undefined ? (
+					props.valueText
+				) : (
+					<CountUp to={props.value} suffix={props.suffix} />
+				)}
 			</p>
 			<p className="max-w-32 text-xs text-muted-foreground sm:text-sm">
 				{label}

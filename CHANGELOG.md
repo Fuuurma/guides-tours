@@ -4,6 +4,16 @@ All notable changes to guides-tours. Dates in YYYY-MM-DD.
 
 ## [Unreleased]
 
+### TrustMetric hero tile DRY (2026-09-24)
+
+**DRY/UI-consistency:**
+
+- The third hero tile on the landing page (`src/routes/index.tsx`) duplicated the `TrustMetric` wrapper markup inline — and had drifted by dropping `tabular-nums` from the value `<p>`. Replaced it with `<TrustMetric valueText="Today" label="departures, gaps, and assignments" />` so all three tiles share the component shell.
+- `TrustMetric` props are now a discriminated union: exactly one of `value: number` (renders `CountUp`, optional `suffix`) or `valueText: string` (literal text). A bare `<TrustMetric label />` or a `valueText`+`suffix` combo is a compile error instead of silently rendering `CountUp to 0` or dropping the suffix.
+- Fixed a pre-existing biome `a11y/useAriaPropsSupportedByRole` error on the dashboard first-run loading skeleton (`src/routes/dashboard/index.tsx`): the `aria-label="Loading dashboard"` div now carries `role="status"` so the label is valid and the loading region announces politely.
+
+**Stats:** 90 test files, **1045 passing tests** (unchanged — no behavior change), tsc clean, `pnpm check` green (0 errors, 0 warnings; was 1 pre-existing error on base), `pnpm build` clean (588.92 kB server bundle).
+
 ### Shared money formatters + 7 tests (2026-06-29 session 15)
 
 **DRY refactor:**
