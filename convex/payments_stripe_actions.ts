@@ -1004,7 +1004,7 @@ export const refundViaStripe = action({
 				`Only succeeded payments can be refunded (was ${payment.status})`,
 			);
 		}
-		if (!payment.stripePaymentIntentId.startsWith("pi_")) {
+		if (!payment.stripePaymentIntentId?.startsWith("pi_")) {
 			throw new ConvexError("Payment has no Stripe PaymentIntent to refund");
 		}
 

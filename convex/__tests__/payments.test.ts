@@ -129,6 +129,44 @@ describe("convex/payments — record (idempotent by stripePaymentIntentId)", () 
 		expect(row?.amountCents).toBe(10000n);
 	});
 
+	it("attaches a Stripe intent to an existing pending payment row", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pay_public_placeholder";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId),
+		);
+		const placeholderId = await t.run(async (ctx) =>
+			ctx.db.insert("payments", {
+				organizationId: orgId,
+				bookingId,
+				amountCents: 10000n,
+				currency: "USD",
+				status: "pending",
+				provider: "stripe",
+				createdAt: Date.now(),
+				updatedAt: Date.now(),
+			}),
+		);
+
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			amountCents: 10000n,
+			currency: "USD",
+			stripePaymentIntentId: "pi_public_attached",
+		});
+
+		const payments = await t.run(async (ctx) =>
+			ctx.db
+				.query("payments")
+				.withIndex("by_booking", (q) => q.eq("bookingId", bookingId))
+				.collect(),
+		);
+		expect(paymentId).toBe(placeholderId);
+		expect(payments).toHaveLength(1);
+		expect(payments[0]?.stripePaymentIntentId).toBe("pi_public_attached");
+	});
+
 	it("second record with same intent id returns the existing row", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pay_b";

@@ -773,7 +773,7 @@ export default defineSchema({
 		// PENDING | SUCCEEDED | FAILED | REFUNDED | CANCELLED
 		status: v.string(),
 		provider: v.string(),
-		stripePaymentIntentId: v.string(),
+		stripePaymentIntentId: v.optional(v.string()),
 		processedAt: v.optional(v.number()),
 		createdAt: v.number(),
 		updatedAt: v.number(),

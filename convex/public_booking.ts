@@ -424,8 +424,8 @@ export const internalCreate = internalMutation({
 		if (!tour.isActive) {
 			throw new ConvexError("Tour is not active");
 		}
-		if (args.guests <= 0) {
-			throw new ConvexError("guests must be > 0");
+		if (args.guests <= 0 || !Number.isInteger(args.guests)) {
+			throw new ConvexError("guests must be a positive integer");
 		}
 		if (tour.maxGuests && args.guests > tour.maxGuests) {
 			throw new ConvexError(
@@ -438,6 +438,11 @@ export const internalCreate = internalMutation({
 		let scheduleId = args.scheduleId;
 		let date = args.date;
 		let startTime = args.startTime;
+		let scheduleCapacity: {
+			capacityBooked: number;
+			capacityTotal: number;
+			status: "available" | "cancelled" | "full";
+		} | undefined;
 		if (scheduleId) {
 			const schedule = await ctx.db.get(scheduleId);
 			if (!schedule || schedule.organizationId !== args.organizationId) {
@@ -449,6 +454,11 @@ export const internalCreate = internalMutation({
 			if (schedule.status === "cancelled") {
 				throw new ConvexError("Cannot book a cancelled schedule");
 			}
+			scheduleCapacity = {
+				capacityBooked: schedule.capacityBooked,
+				capacityTotal: schedule.capacityTotal,
+				status: schedule.status,
+			};
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
@@ -466,6 +476,11 @@ export const internalCreate = internalMutation({
 					throw new ConvexError("Cannot book a cancelled schedule");
 				}
 				scheduleId = match._id;
+				scheduleCapacity = {
+					capacityBooked: match.capacityBooked,
+					capacityTotal: match.capacityTotal,
+					status: match.status,
+				};
 			}
 		}
 
@@ -621,30 +636,49 @@ export const internalCreate = internalMutation({
 			updatedAt: now,
 		});
 
-		if (scheduleId) {
-			try {
-				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked,
-					{
-						organizationId: args.organizationId,
-						scheduleId,
-						guests: args.guests,
-					},
-				);
-			} catch (err) {
-				// Compensating action: if incrementBooked fails (e.g.,
-				// over capacity, schedule cancelled between check and
-				// increment), cancel the orphaned booking so we don't
-				// leave a "pending" row that will never be confirmed.
-				await ctx.runMutation(
-					internal.bookings.internalCancel,
-					{
-						bookingId,
-						reason: "capacity_exceeded",
-					},
-				);
-				throw err;
+		if (scheduleId && scheduleCapacity) {
+			const newBooked = scheduleCapacity.capacityBooked + args.guests;
+			if (newBooked > scheduleCapacity.capacityTotal) {
+				throw new ConvexError("Schedule over capacity");
 			}
+			await ctx.db.patch(scheduleId, {
+				capacityBooked: newBooked,
+				status:
+					newBooked >= scheduleCapacity.capacityTotal
+						? "full"
+						: scheduleCapacity.status,
+				updatedAt: now,
+			});
+		}
+
+		if (totalAmountCents > 0n) {
+			const paymentSettings = await ctx.db
+				.query("paymentSettings")
+				.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+				.unique();
+			const paymentId = await ctx.db.insert("payments", {
+				organizationId: args.organizationId,
+				bookingId,
+				amountCents: totalAmountCents,
+				currency: paymentSettings?.defaultCurrency ?? tour.currency.toUpperCase(),
+				status: "pending",
+				provider: "stripe",
+				createdAt: now,
+				updatedAt: now,
+			});
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: "anonymous",
+				action: "payment.intent_requested_public",
+				resourceType: "payment",
+				resourceId: paymentId,
+				oldValues: {},
+				newValues: {
+					bookingId,
+					amountCents: totalAmountCents.toString(),
+					stripePaymentIntentId: null,
+				},
+			});
 		}
 
 		await logAudit(ctx, {

@@ -494,7 +494,7 @@ export const refund = mutation({
 				`Only succeeded payments can be refunded (was ${p.status})`,
 			);
 		}
-		if (p.stripePaymentIntentId.startsWith("pi_")) {
+		if (p.stripePaymentIntentId?.startsWith("pi_")) {
 			throw new ConvexError(
 				"Use Stripe refund (refundViaStripe) for payments with a PaymentIntent",
 			);
@@ -930,6 +930,46 @@ export const recordFromAction = internalMutation({
 			return existing._id;
 		}
 		const now = Date.now();
+		const pendingPublicPayment = await ctx.db
+			.query("payments")
+			.withIndex("by_org_booking_created", (q) =>
+				q
+					.eq("organizationId", args.organizationId)
+					.eq("bookingId", args.bookingId),
+			)
+			.order("desc")
+			.take(100)
+			.then((rows) =>
+				rows.find(
+					(row) =>
+						row.status === "pending" &&
+						row.provider === "stripe" &&
+						row.stripePaymentIntentId === undefined,
+				),
+			);
+		if (pendingPublicPayment) {
+			await ctx.db.patch(pendingPublicPayment._id, {
+				amountCents: args.amountCents,
+				currency: args.currency,
+				stripePaymentIntentId: args.stripePaymentIntentId,
+				updatedAt: now,
+			});
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: "internal",
+				action: "payment.intent_attached",
+				resourceType: "payment",
+				resourceId: pendingPublicPayment._id,
+				oldValues: { stripePaymentIntentId: null },
+				newValues: {
+					amountCents: args.amountCents.toString(),
+					currency: args.currency,
+					bookingId: args.bookingId,
+					stripePaymentIntentId: args.stripePaymentIntentId,
+				},
+			});
+			return pendingPublicPayment._id;
+		}
 		const paymentId = await ctx.db.insert("payments", {
 			organizationId: args.organizationId,
 			bookingId: args.bookingId,
