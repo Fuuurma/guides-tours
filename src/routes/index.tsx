@@ -1150,7 +1150,7 @@ function TrustMetric(props: TrustMetricProps) {
 	const { label } = props;
 	return (
 		<div className="flex flex-col items-center gap-1 px-3 text-center first:pl-0 last:pr-0">
-			<p className="text-2xl font-semibold tracking-[-0.04em] tabular-nums sm:text-3xl">
+			<p className="font-display text-2xl font-medium tracking-[-0.04em] tabular-nums sm:text-3xl">
 				{props.valueText !== undefined ? (
 					props.valueText
 				) : (
