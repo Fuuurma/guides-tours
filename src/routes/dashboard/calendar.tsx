@@ -271,7 +271,9 @@ function CalendarPage() {
 		<div className="flex flex-col gap-6">
 			<header className="flex flex-wrap items-center justify-between gap-4">
 				<div>
-					<h1 className="font-display text-2xl font-medium tracking-tight">Calendar</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">
+						Calendar
+					</h1>
 					<p className="text-muted-foreground text-sm">
 						Who is out this week — guides, vehicles, and open gaps ·{" "}
 						<Link

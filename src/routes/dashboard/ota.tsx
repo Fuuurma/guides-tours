@@ -127,7 +127,9 @@ function OtaIntegrationsPage() {
 		<div className="flex flex-col gap-6">
 			<header className="flex items-center justify-between">
 				<div>
-					<h1 className="font-display text-2xl font-medium tracking-tight">OTA integrations</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">
+						OTA integrations
+					</h1>
 					<p className="text-muted-foreground text-sm">
 						Connect third-party booking platforms to receive reservations via
 						webhooks.
