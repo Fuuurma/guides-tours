@@ -203,7 +203,7 @@ function AnalyticsPage() {
 	if (orgError || overviewError || revenueError) {
 		return (
 			<div className="flex flex-col gap-4">
-				<h1 className="text-2xl font-semibold">Analytics</h1>
+				<h1 className="font-display text-2xl font-medium tracking-tight">Analytics</h1>
 				<ErrorBanner
 					message="Failed to load analytics"
 					hint={
@@ -237,7 +237,7 @@ function AnalyticsPage() {
 		<div className="flex flex-col gap-6">
 			<header className="flex flex-wrap items-end justify-between gap-4">
 				<div>
-					<h1 className="text-2xl font-semibold">Analytics</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">Analytics</h1>
 					<p className="text-muted-foreground text-sm">
 						{range.startDate} → {range.endDate}
 					</p>

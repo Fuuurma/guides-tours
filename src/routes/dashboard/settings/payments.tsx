@@ -165,7 +165,7 @@ function PaymentSettingsForm({
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<header className="flex items-center justify-between gap-4">
 				<div>
-					<h1 className="text-2xl font-semibold">Payment settings</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">Payment settings</h1>
 					<p className="text-muted-foreground text-sm">
 						Stripe configuration and deposit policy
 					</p>
