@@ -314,6 +314,9 @@ function PublicBookingPage() {
 	if (isPending) {
 		return (
 			<PublicBookingFrame>
+				<h1 className="mb-6 font-display text-3xl font-normal tracking-tight">
+					Book a tour
+				</h1>
 				<div className="flex flex-col gap-4">
 					<Skeleton className="h-8 w-2/3" />
 					<Skeleton className="h-4 w-full" />
@@ -327,6 +330,9 @@ function PublicBookingPage() {
 	if (error) {
 		return (
 			<PublicBookingFrame>
+				<h1 className="mb-6 font-display text-3xl font-normal tracking-tight">
+					Book a tour
+				</h1>
 				<Empty className="border">
 					<EmptyHeader>
 						<EmptyTitle>Could not load this page</EmptyTitle>
@@ -340,6 +346,9 @@ function PublicBookingPage() {
 	if (!data) {
 		return (
 			<PublicBookingFrame>
+				<h1 className="mb-6 font-display text-3xl font-normal tracking-tight">
+					Book a tour
+				</h1>
 				<Empty className="border">
 					<EmptyHeader>
 						<EmptyTitle>Booking page not found</EmptyTitle>
