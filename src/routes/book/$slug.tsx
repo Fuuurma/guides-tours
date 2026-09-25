@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction } from "convex/react";
 import { Check, MapPin } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FormField } from "@/components/forms/form-field";
@@ -74,6 +74,7 @@ interface PublicTour {
 
 function PublicBookingPage() {
 	const { slug } = Route.useParams();
+	const reduceMotion = useReducedMotion();
 	const { data, isPending, error } = useQuery(
 		convexQuery(api.public_booking.getOrgAndToursBySlug, { slug }),
 	);
@@ -368,7 +369,7 @@ function PublicBookingPage() {
 		return (
 			<PublicBookingFrame orgName={data.organizationName}>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.3, ease: "easeOut" }}
 				>
@@ -547,7 +548,7 @@ function PublicBookingPage() {
 				</Empty>
 			) : (
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
