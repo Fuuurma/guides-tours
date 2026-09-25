@@ -8,14 +8,14 @@
 // that can drift from the actual query shape. For pages that only
 // need a subset, use Pick<Entity, "field1" | "field2">.
 
-export type BookingStatus =
+type BookingStatus =
 	| "pending"
 	| "confirmed"
 	| "checked_in"
 	| "completed"
 	| "cancelled";
 
-export type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
+type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
 
 type VacationStatus = "pending" | "approved" | "rejected";
 
