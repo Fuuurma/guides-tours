@@ -69,6 +69,42 @@ describe("OTA products", () => {
 		expect(row?.otaCurrency).toBe("USD");
 	});
 
+	it("create: rejects a duplicate (integrationId, otaProductId) pair (F333)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_op_dup";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const integrationId = await t.run((ctx) =>
+			seedIntegration(ctx, orgId),
+		);
+		await t.mutation(internal.otaProducts.internalCreate, {
+			organizationId: orgId,
+			userId: "test-user",
+			tourId,
+			integrationId,
+			otaProductId: "VR-DUP",
+			commissionRate: 0.2,
+		});
+		await expect(
+			t.mutation(internal.otaProducts.internalCreate, {
+				organizationId: orgId,
+				userId: "test-user",
+				tourId,
+				integrationId,
+				otaProductId: "VR-DUP",
+				commissionRate: 0.2,
+			}),
+		).rejects.toThrow(/already linked/);
+		// A different otaProductId on the same integration is fine.
+		await t.mutation(internal.otaProducts.internalCreate, {
+			organizationId: orgId,
+			userId: "test-user",
+			tourId,
+			integrationId,
+			otaProductId: "VR-OTHER",
+			commissionRate: 0.2,
+		});
+	});
+
 	it("create: rejects commissionRate out of range", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_op2";

@@ -9,7 +9,9 @@
 //     otaReservationId per source)
 
 import { v, ConvexError } from "convex/values";
+import type { MutationCtx } from "../_generated/server";
 import { internalMutation, internalQuery } from "../_generated/server";
+import type { Doc, Id } from "../_generated/dataModel";
 import { logAudit } from "../lib/audit";
 
 /**
@@ -135,6 +137,22 @@ export const upsertOtaBooking = internalMutation({
 			confirmedAt: now,
 		};
 
+		// F331: resolve the departure this reservation consumes capacity
+		// on, so OTA-sold seats stop being double-sold on the public
+		// booking picker. Unresolved (no product match, ambiguous
+		// same-day departures, missing tourDate) leaves scheduleId unset
+		// and the row ingest-only.
+		const schedule = product?.tourId
+			? await resolveOtaSchedule(
+					ctx,
+					organizationId,
+					product.tourId,
+					event.tourDate,
+					event.tourTime,
+				)
+			: null;
+		const scheduleId = schedule?._id;
+
 		if (existing) {
 			// A re-delivered/re-emitted BOOKING_CREATED for a previously
 			// cancelled reservation re-confirms it: clear the stale
@@ -143,8 +161,34 @@ export const upsertOtaBooking = internalMutation({
 			// the cancelled→confirmed transition via oldValues.
 			const patchToApply =
 				existing.status === "cancelled"
-					? { ...patch, cancelledAt: undefined }
-					: patch;
+					? { ...patch, cancelledAt: undefined, scheduleId }
+					: { ...patch, scheduleId: scheduleId ?? existing.scheduleId };
+
+			// Capacity bookkeeping. A cancelled row holds no seats, so a
+			// re-confirm re-adds the full guest count; a confirmed re-upsert
+			// only corrects deltas (schedule move or guest-count change).
+			if (existing.status === "cancelled") {
+				if (scheduleId) {
+					await applyOtaCapacity(ctx, organizationId, scheduleId, event.guests);
+				}
+			} else {
+				const priorSchedule = existing.scheduleId;
+				const priorGuests = existing.otaGuests;
+				if (scheduleId && scheduleId !== priorSchedule) {
+					if (priorSchedule) {
+						await applyOtaCapacity(ctx, organizationId, priorSchedule, -priorGuests);
+					}
+					await applyOtaCapacity(ctx, organizationId, scheduleId, event.guests);
+				} else if (scheduleId && priorSchedule === scheduleId && event.guests !== priorGuests) {
+					await applyOtaCapacity(
+						ctx,
+						organizationId,
+						scheduleId,
+						event.guests - priorGuests,
+					);
+				}
+			}
+
 			await ctx.db.patch(existing._id, patchToApply);
 			await logAudit(ctx, {
 				organizationId,
@@ -164,8 +208,12 @@ export const upsertOtaBooking = internalMutation({
 			return { id: existing._id, created: false };
 		}
 
+		if (scheduleId) {
+			await applyOtaCapacity(ctx, organizationId, scheduleId, event.guests);
+		}
 		const id = await ctx.db.insert("otaBookings", {
 			...patch,
+			scheduleId,
 			bookingId: undefined,
 			otaOrderNumber: undefined,
 			otaConfirmationCode: undefined,
@@ -190,6 +238,79 @@ export const upsertOtaBooking = internalMutation({
 		return { id, created: true };
 	},
 });
+
+/**
+ * Resolve the tourSchedules departure an OTA reservation consumes
+ * capacity on (F331). Requires the matched OTA product's tour plus the
+ * event's tourDate; when several departures exist that day, tourTime
+ * must disambiguate to exactly one — otherwise the link is left unset
+ * rather than guessing a schedule.
+ */
+async function resolveOtaSchedule(
+	ctx: MutationCtx,
+	organizationId: string,
+	tourId: Id<"tours">,
+	tourDate: string | undefined,
+	tourTime: string | undefined,
+): Promise<Doc<"tourSchedules"> | null> {
+	if (!tourDate) return null;
+	const candidates = (
+		await ctx.db
+			.query("tourSchedules")
+			.withIndex("by_tour_date", (q) => q.eq("tourId", tourId).eq("date", tourDate))
+			.collect()
+	).filter((s) => s.organizationId === organizationId && s.status !== "cancelled");
+	if (candidates.length === 0) return null;
+	if (candidates.length === 1) return candidates[0];
+	if (tourTime) {
+		const byTime = candidates.filter((s) => s.startTime === tourTime);
+		if (byTime.length === 1) return byTime[0];
+	}
+	return null;
+}
+
+/**
+ * Move an OTA reservation's guest count on/off a schedule's
+ * capacityBooked (F331). Unlike incrementBooked/decrementBooked this
+ * never throws on oversell: the OTA already sold the seat, so
+ * capacityBooked past capacityTotal records the true oversell and the
+ * "full" flip stops new direct bookings. Decrement floors at 0 with a
+ * warn — a cancelled row must never strand the reservation's removal.
+ */
+async function applyOtaCapacity(
+	ctx: MutationCtx,
+	organizationId: string,
+	scheduleId: Id<"tourSchedules">,
+	guests: number,
+): Promise<void> {
+	const schedule = await ctx.db.get(scheduleId);
+	if (!schedule || schedule.organizationId !== organizationId) return;
+	if (guests > 0) {
+		if (schedule.status === "cancelled") return;
+		const newBooked = schedule.capacityBooked + guests;
+		await ctx.db.patch(scheduleId, {
+			capacityBooked: newBooked,
+			status: newBooked >= schedule.capacityTotal ? "full" : schedule.status,
+			updatedAt: Date.now(),
+		});
+	} else if (guests < 0) {
+		const newBooked = schedule.capacityBooked + guests;
+		if (newBooked < 0) {
+			console.warn(
+				`ota capacity: decrement of ${-guests} exceeds capacityBooked ${schedule.capacityBooked} on schedule ${scheduleId} — flooring at 0`,
+			);
+		}
+		const clamped = Math.max(0, newBooked);
+		await ctx.db.patch(scheduleId, {
+			capacityBooked: clamped,
+			status:
+				schedule.status === "full" && clamped < schedule.capacityTotal
+					? "available"
+					: schedule.status,
+			updatedAt: Date.now(),
+		});
+	}
+}
 
 /**
  * Current status of the OTA booking for (integrationId, reservationId)
@@ -232,6 +353,16 @@ export const cancelOtaBooking = internalMutation({
 			.unique();
 		if (!existing) return null;
 		const now = Date.now();
+		// Release the seats this reservation held (F331) — only when the
+		// row was actually holding them (confirmed + linked schedule).
+		if (existing.status === "confirmed" && existing.scheduleId) {
+			await applyOtaCapacity(
+				ctx,
+				existing.organizationId,
+				existing.scheduleId,
+				-existing.otaGuests,
+			);
+		}
 		await ctx.db.patch(existing._id, {
 			status: "cancelled",
 			cancelledAt: now,

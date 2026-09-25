@@ -157,6 +157,23 @@ export const internalCreate = internalMutation({
 		if (integration.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: integration belongs to a different organization");
 		}
+		// F333: (integrationId, otaProductId) must be unique — a second
+		// insert makes the by_integration_product lookups in
+		// upsertOtaBooking/upsertAvailabilityCache pick an arbitrary row,
+		// splitting capacity and sync state across the duplicate pair.
+		const duplicate = await ctx.db
+			.query("otaProducts")
+			.withIndex("by_integration_product", (q) =>
+				q
+					.eq("integrationId", args.integrationId)
+					.eq("otaProductId", args.otaProductId),
+			)
+			.first();
+		if (duplicate) {
+			throw new ConvexError(
+				`OTA product ${args.otaProductId} is already linked to this integration`,
+			);
+		}
 		const now = Date.now();
 		const id = await ctx.db.insert("otaProducts", {
 			organizationId: args.organizationId,

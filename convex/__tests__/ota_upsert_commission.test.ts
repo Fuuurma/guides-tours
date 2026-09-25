@@ -353,3 +353,210 @@ describe("convex/ota/upsert — upsertAvailabilityCache product mapping (F340)",
 		expect(rows[0].availableSpaces).toBe(5);
 	});
 });
+
+describe("convex/ota/upsert — schedule capacity link (F331)", () => {
+	const makeEvent = (over: Record<string, unknown> = {}) => ({
+		kind: "booking.created" as const,
+		reservationId: "RES-CAP-1",
+		customerName: "Cap",
+		customerEmail: "cap@example.com",
+		productId: "PROD-CAP",
+		tourDate: "2026-08-20",
+		tourTime: "09:00",
+		guests: 3,
+		currency: "USD",
+		rawPayload: {},
+		...over,
+	});
+
+	it("consumes schedule capacity for a matched product+departure", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_a";
+		let integrationId!: Id<"otaIntegrations">;
+		let scheduleId!: Id<"tourSchedules">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			scheduleId = await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 5,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		const { id } = (await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			event: makeEvent(),
+			rawData: {},
+		})) as { id: Id<"otaBookings">; created: boolean };
+
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.scheduleId).toBe(scheduleId);
+		const schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+	});
+
+	it("flips to full at capacity and releases seats on cancel", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_b";
+		let integrationId!: Id<"otaIntegrations">;
+		let scheduleId!: Id<"tourSchedules">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			scheduleId = await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 3,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			event: makeEvent(),
+			rawData: {},
+		});
+		let schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+		expect(schedule?.status).toBe("full");
+
+		await t.mutation(internal.ota.upsert.cancelOtaBooking, {
+			integrationId,
+			reservationId: "RES-CAP-1",
+			rawData: {},
+		});
+		schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(0);
+		expect(schedule?.status).toBe("available");
+	});
+
+	it("re-confirm after cancel re-adds capacity once", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_c";
+		let integrationId!: Id<"otaIntegrations">;
+		let scheduleId!: Id<"tourSchedules">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			scheduleId = await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 10,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		const call = () =>
+			t.mutation(internal.ota.upsert.upsertOtaBooking, {
+				integrationId,
+				organizationId,
+				provider: "viator",
+				event: makeEvent(),
+				rawData: {},
+			});
+		await call();
+		await t.mutation(internal.ota.upsert.cancelOtaBooking, {
+			integrationId,
+			reservationId: "RES-CAP-1",
+			rawData: {},
+		});
+		await call();
+		let schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+
+		// A duplicate confirmed upsert must not double-count.
+		await call();
+		schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+	});
+
+	it("leaves scheduleId unset when same-day departures are ambiguous", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_d";
+		let integrationId!: Id<"otaIntegrations">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			for (const startTime of ["09:00", "14:00"]) {
+				await ctx.db.insert("tourSchedules", {
+					organizationId,
+					tourId: seeded.tourId,
+					date: "2026-08-20",
+					startTime,
+					endTime: "11:00",
+					capacityTotal: 10,
+					capacityBooked: 0,
+					status: "available",
+					notes: "",
+					createdAt: 0,
+					updatedAt: 0,
+				});
+			}
+		});
+
+		const { id } = (await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			// tourTime matches neither departure's startTime.
+			event: makeEvent({ tourTime: "18:00" }),
+			rawData: {},
+		})) as { id: Id<"otaBookings">; created: boolean };
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.scheduleId).toBeUndefined();
+		const booked = await t.run(async (ctx) =>
+			(await ctx.db.query("tourSchedules").collect()).map(
+				(s) => s.capacityBooked,
+			),
+		);
+		expect(booked).toEqual([0, 0]);
+	});
+});
+

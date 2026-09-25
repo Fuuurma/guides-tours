@@ -654,6 +654,44 @@ describe("createWebhookHandler — shared factory contract", () => {
 		const reconfirmed = (await bookingRow()) as any;
 		expect(reconfirmed?.status).toBe("confirmed");
 		expect(reconfirmed?.cancelledAt).toBeUndefined();
+
+		// F332: the converse hole — a second cancel after the re-confirm
+		// hits the same `booking.cancelled:<id>` dedup key but the row is
+		// confirmed again, so it's a new cancellation, not a retry.
+		const recancel = await post(cancelBody);
+		expect(await recancel.text()).toBe("ok");
+		const recancelled = (await bookingRow()) as any;
+		expect(recancelled?.status).toBe("cancelled");
+		expect(recancelled?.cancelledAt).toBeDefined();
+	});
+
+	it("a true duplicate cancel on a still-cancelled booking is dropped (F332)", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", secret),
+		);
+
+		const post = async (body: string) => {
+			const sig = await hmacHex("test-secret", body);
+			return t.fetch(`${WEBHOOK_PATH}?integrationId=${integrationId}`, {
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			});
+		};
+
+		expect((await post(JSON.stringify(VIATOR_BOOKING_PAYLOAD))).status).toBe(200);
+		expect((await post(JSON.stringify(VIATOR_CANCEL_PAYLOAD))).status).toBe(200);
+
+		// Provider retry of the same cancel — booking still cancelled —
+		// is a true duplicate and stays acked, not re-dispatched.
+		const dup = await post(JSON.stringify(VIATOR_CANCEL_PAYLOAD));
+		expect(await dup.text()).toBe("ok (duplicate)");
 	});
 });
 

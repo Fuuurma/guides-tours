@@ -278,6 +278,27 @@ export function createWebhookHandler(config: WebhookConfig) {
 						);
 					}
 				}
+				if (dropAsDuplicate && event.kind === "booking.cancelled") {
+					// F332: mirror of the F89 re-confirmation check —
+					// eventId is `booking.cancelled:<reservationId>`, so a
+					// cancel re-emitted after a re-confirm dedups against
+					// the earlier cancel and gets swallowed while the row
+					// stays confirmed forever. Only a still-cancelled
+					// booking makes this a true retry.
+					const bookingStatus = await ctx.runQuery(
+						internal.ota.upsert.getOtaBookingStatus,
+						{
+							integrationId: integrationId as Id<"otaIntegrations">,
+							reservationId: event.reservationId,
+						},
+					);
+					if (bookingStatus !== "cancelled") {
+						dropAsDuplicate = false;
+						logger.info(
+							`${config.logPrefix} re-cancellation ${eventId} on integration ${integrationId} (booking is ${bookingStatus ?? "missing"})`,
+						);
+					}
+				}
 				if (dropAsDuplicate) {
 					logger.info(
 						`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,

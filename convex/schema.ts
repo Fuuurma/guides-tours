@@ -569,6 +569,12 @@ export default defineSchema({
 		organizationId: orgId,
 		// FK -> bookings (nullable — OTA booking may arrive before our record)
 		bookingId: v.optional(v.id("bookings")),
+		// FK -> tourSchedules: the departure this reservation consumed
+		// capacity on. Set whenever the OTA product resolves to a tour +
+		// the tourDate (+tourTime) resolves to exactly one schedule; the
+		// capacity increment lives on that schedule's capacityBooked so
+		// OTA-sold seats stop being double-sold on /book/$slug (F331).
+		scheduleId: v.optional(v.id("tourSchedules")),
 		integrationId: v.id("otaIntegrations"),
 		otaReservationId: v.string(),
 		otaConfirmationCode: v.optional(v.string()),
