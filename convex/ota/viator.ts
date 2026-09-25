@@ -17,7 +17,7 @@
 // Source verified webhook events list:
 //   parse_webhook_event(event_type) → ("booking_created" | "booking_cancelled")
 
-import { OTAHttpClient, HttpError } from "./http_client";
+import { OTAHttpClient } from "./http_client";;
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
 const PROD_BASE_URL = "https://api.viator.com/partner/v1";
@@ -257,4 +257,3 @@ function numberOrUndefined(v: unknown): number | undefined {
 }
 
 // Re-export so consumers don't need a second import.
-export { HttpError };
