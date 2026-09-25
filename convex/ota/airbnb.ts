@@ -18,7 +18,7 @@ import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 const PROD_BASE_URL = "https://api.airbnb.com/v1";
 const SANDBOX_BASE_URL = "https://sandbox-api.airbnb.com/v1";
 
-export interface AirbnbOptions {
+interface AirbnbOptions {
 	credentials: DecryptedCredentials;
 	isSandbox: boolean;
 	timeoutMs?: number;

@@ -23,7 +23,7 @@ import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 const PROD_BASE_URL = "https://api.viator.com/partner/v1";
 const SANDBOX_BASE_URL = "https://api-sandbox.viator.com/partner/v1";
 
-export interface ViatorOptions {
+interface ViatorOptions {
 	credentials: DecryptedCredentials;
 	isSandbox: boolean;
 	timeoutMs?: number;

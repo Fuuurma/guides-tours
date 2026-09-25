@@ -21,7 +21,7 @@ import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 const PROD_BASE_URL = "https://api.expedia.com/v1";
 const SANDBOX_BASE_URL = "https://api-sandbox.expedia.com/v1";
 
-export interface ExpediaOptions {
+interface ExpediaOptions {
 	credentials: DecryptedCredentials;
 	isSandbox: boolean;
 	timeoutMs?: number;
