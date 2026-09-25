@@ -739,9 +739,9 @@ function ExceptionDialog({
 				if (
 					value.startTime &&
 					value.endTime &&
-					value.endTime < value.startTime
+					value.endTime <= value.startTime
 				) {
-					fail("endTime", "End must be on or after start");
+					fail("endTime", "End must be after start");
 				}
 			}
 			if (value.reason.length > MAX_NOTES_LEN) {

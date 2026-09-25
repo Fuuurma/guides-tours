@@ -379,6 +379,9 @@ export interface SeedExceptionOptions {
 	tourId: Id<"tours">;
 	date: string;
 	exceptionType: "added" | "removed" | "modified";
+	startTime?: string;
+	endTime?: string;
+	capacityOverride?: number;
 	reason?: string;
 }
 
@@ -391,6 +394,9 @@ export async function seedException(
 		tourId: opts.tourId,
 		date: opts.date,
 		exceptionType: opts.exceptionType,
+		startTime: opts.startTime,
+		endTime: opts.endTime,
+		capacityOverride: opts.capacityOverride,
 		reason: opts.reason ?? "Test exception",
 		notes: "",
 		createdAt: 0,

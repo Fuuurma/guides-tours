@@ -26,6 +26,7 @@ import type { Id } from "./_generated/dataModel";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
 import { isBlackoutHelper } from "./tourBlackoutDates";
+import { exceptionForDateHelper } from "./tourExceptionDates";
 import {
 	assertValidCustomerInput,
 	normalizeEmail,
@@ -136,6 +137,19 @@ export const listAvailableSlots = query({
 		const blackedOut = await isBlackoutHelper(ctx, args.tourId, args.date);
 		if (blackedOut) return [];
 
+		// F344: exception dates enforce live like blackouts — generate is
+		// additive-only and never retracts already-materialized rows, so
+		// without this a "removed" date stays bookable and a "modified"
+		// exception with a new startTime sells a second slot that splits
+		// capacity against the materialized original.
+		const ex = await exceptionForDateHelper(ctx, args.tourId, organizationId, args.date);
+		if (ex?.exceptionType === "removed") return [];
+		const exceptionTime =
+			ex?.exceptionType === "modified" || ex?.exceptionType === "added"
+				? ex.startTime
+				: undefined;
+		const capacityOf = (capacityTotal: number) => ex?.capacityOverride ?? capacityTotal;
+
 		const schedules = await ctx.db
 			.query("tourSchedules")
 			.withIndex("by_tour_date", (q) =>
@@ -150,7 +164,8 @@ export const listAvailableSlots = query({
 			.filter((s) => {
 				if (s.organizationId !== organizationId) return false;
 				if (s.status !== "available") return false;
-				if (s.capacityBooked >= s.capacityTotal) return false;
+				if (exceptionTime !== undefined && s.startTime !== exceptionTime) return false;
+				if (s.capacityBooked >= capacityOf(s.capacityTotal)) return false;
 				const tourTs = parseBookingTime(s.date, s.startTime);
 				if (tourTs === null || tourTs <= nowMs) return false;
 				if (cutoffMs > 0 && tourTs - nowMs < cutoffMs) return false;
@@ -160,9 +175,9 @@ export const listAvailableSlots = query({
 				_id: s._id,
 				startTime: s.startTime,
 				endTime: s.endTime,
-				capacityTotal: s.capacityTotal,
+				capacityTotal: capacityOf(s.capacityTotal),
 				capacityBooked: s.capacityBooked,
-				seatsLeft: s.capacityTotal - s.capacityBooked,
+				seatsLeft: capacityOf(s.capacityTotal) - s.capacityBooked,
 			}))
 			.sort((a, b) => a.startTime.localeCompare(b.startTime));
 	},
@@ -456,6 +471,34 @@ export const internalCreate = internalMutation({
 			throw new ConvexError(
 				"This date is not available for booking. Please pick another date.",
 			);
+		}
+
+		// F344: exception dates enforce live like blackouts — a "removed"
+		// exception must not stay bookable, and a "modified"/"added"
+		// exception with an explicit startTime makes only that slot valid
+		// (a re-generated exception row otherwise splits capacity against
+		// the materialized original). capacityOverride caps the sellable
+		// seats on the attached schedule.
+		const ex = await exceptionForDateHelper(ctx, args.tourId, args.organizationId, date);
+		if (ex?.exceptionType === "removed") {
+			throw new ConvexError(
+				"This date is not available for booking. Please pick another date.",
+			);
+		}
+		if (
+			(ex?.exceptionType === "modified" || ex?.exceptionType === "added") &&
+			ex.startTime !== undefined &&
+			startTime !== ex.startTime
+		) {
+			throw new ConvexError(
+				"This time slot is not available for booking. Please pick another time.",
+			);
+		}
+		if (scheduleId && ex?.capacityOverride !== undefined) {
+			const attached = await ctx.db.get(scheduleId);
+			if (attached && attached.capacityBooked + args.guests > ex.capacityOverride) {
+				throw new ConvexError("Not enough seats left for this tour slot");
+			}
 		}
 
 		const emailConsent = args.emailConsent === true;

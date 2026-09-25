@@ -343,6 +343,16 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		if (nextDate !== existing.date || nextStart !== existing.startTime) {
+			// F346: bookings freeze their own date/startTime copies at
+			// insert — rescheduling a departure with bookings desyncs
+			// every linked booking and its reminders without touching
+			// capacity or notifying guests. Same gate as cancel/remove:
+			// the operator must cancel the bookings first.
+			if (existing.capacityBooked > 0) {
+				throw new ConvexError(
+					`Cannot reschedule a departure with ${existing.capacityBooked} booked guest(s); cancel their bookings first`,
+				);
+			}
 			await assertScheduleSlotFree(ctx, {
 				tourId: existing.tourId,
 				date: nextDate,
