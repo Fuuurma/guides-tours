@@ -375,7 +375,7 @@ function PublicBookingPage() {
 					<Card>
 						<CardHeader className="items-center text-center">
 							<span className="mb-2 grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
-								<Check />
+								<Check aria-hidden="true" />
 							</span>
 							<h2 className="font-display text-2xl font-normal tracking-tight">
 								Booking request received
