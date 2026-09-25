@@ -560,3 +560,53 @@ describe("convex/ota/upsert — schedule capacity link (F331)", () => {
 	});
 });
 
+describe("convex/ota/upsert — cancelOtaBooking org guard (F312)", () => {
+	it("throws when the booking row's organizationId does not match the integration's", async () => {
+		const t = convexTest(schema, modules);
+		let integrationId!: Id<"otaIntegrations">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				"org_xt_a",
+				"PROD-XT",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			// A row whose stored organizationId diverges from the
+			// integration's — the shape a forged/mismatched pair takes.
+			await ctx.db.insert("otaBookings", {
+				organizationId: "org_xt_b",
+				integrationId,
+				otaReservationId: "RES-XT",
+				otaCustomerData: { guests: 2 },
+				otaGuests: 2,
+				otaCurrency: "USD",
+				status: "confirmed",
+				rawOtaData: {},
+				receivedAt: 0,
+			});
+		});
+
+		await expect(
+			t.mutation(internal.ota.upsert.cancelOtaBooking, {
+				integrationId,
+				reservationId: "RES-XT",
+				rawData: {},
+			}),
+		).rejects.toThrow(/does not match OTA integration/);
+
+		// The foreign row is untouched.
+		const row = await t.run(async (ctx) =>
+			ctx.db
+				.query("otaBookings")
+				.withIndex("by_integration_reservation", (q) =>
+					q
+						.eq("integrationId", integrationId)
+						.eq("otaReservationId", "RES-XT"),
+				)
+				.unique(),
+		);
+		expect(row?.status).toBe("confirmed");
+	});
+});
+

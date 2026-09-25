@@ -343,15 +343,25 @@ export const cancelOtaBooking = internalMutation({
 		rawData: v.any(),
 	},
 	handler: async (ctx, args) => {
-		const existing = await ctx.db
-			.query("otaBookings")
-			.withIndex("by_integration_reservation", (q) =>
-				q
-					.eq("integrationId", args.integrationId)
-					.eq("otaReservationId", args.reservationId),
-			)
-			.unique();
+		// SECURITY: same cross-tenant guard as upsertOtaBooking — verify
+		// the resolved row's organizationId matches the integration's
+		// before patching, so a forged/mismatched pair can't cancel a
+		// booking in another org (F312).
+		const [existing, integration] = await Promise.all([
+			ctx.db
+				.query("otaBookings")
+				.withIndex("by_integration_reservation", (q) =>
+					q
+						.eq("integrationId", args.integrationId)
+						.eq("otaReservationId", args.reservationId),
+				)
+				.unique(),
+			ctx.db.get(args.integrationId),
+		]);
 		if (!existing) return null;
+		if (!integration || existing.organizationId !== integration.organizationId) {
+			throw new ConvexError("organizationId does not match OTA integration");
+		}
 		const now = Date.now();
 		// Release the seats this reservation held (F331) — only when the
 		// row was actually holding them (confirmed + linked schedule).
