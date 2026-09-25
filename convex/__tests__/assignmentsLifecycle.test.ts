@@ -458,3 +458,78 @@ describe("assignmentsLifecycle.performUpdate — guards", () => {
 		expect(audits.some((a) => a.action === "assignment.updated")).toBe(true);
 	});
 });
+
+describe("driver vacation enforcement (F347)", () => {
+	const seedDriverOnLeave = async (t: TClient) =>
+		t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const driverId = await seedDriver(ctx, {
+				orgId: ORG,
+				userId: "user_driver_1",
+			});
+			await ctx.db.insert("vacationRequests", {
+				organizationId: ORG,
+				userId: "user_driver_1",
+				startDate: "2026-07-10",
+				endDate: "2026-07-20",
+				reason: "Trip",
+				status: "approved",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return { tourId, driverId };
+		});
+
+	it("performCreate refuses a driver on approved vacation", async () => {
+		const t = convexTest(schema, modules);
+		const { tourId, driverId } = await seedDriverOnLeave(t);
+		await t.run(async (ctx) => {
+			await expect(
+				performCreate(ctx, {
+					tourId,
+					guideId: "guide_1",
+					date: "2026-07-15",
+					startTime: "09:00",
+					driverId,
+					organizationId: ORG,
+					userId: "user_1",
+				}),
+			).rejects.toThrow("Driver is on approved vacation on this date");
+		});
+	});
+
+	it("performCreate allows the same driver outside the leave window", async () => {
+		const t = convexTest(schema, modules);
+		const { tourId, driverId } = await seedDriverOnLeave(t);
+		await t.run(async (ctx) => {
+			const id = await performCreate(ctx, {
+				tourId,
+				guideId: "guide_1",
+				date: "2026-08-01",
+				startTime: "09:00",
+				driverId,
+				organizationId: ORG,
+				userId: "user_1",
+			});
+			expect(id).toBeDefined();
+		});
+	});
+
+	it("performUpdate refuses swapping in a driver on approved vacation", async () => {
+		const t = convexTest(schema, modules);
+		const { tourId, driverId } = await seedDriverOnLeave(t);
+		const assignmentId = await t.run(async (ctx) =>
+			seedAssignment(ctx, { orgId: ORG, tourId, guideId: "guide_1" }),
+		);
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, {
+					assignmentId,
+					driverId,
+					organizationId: ORG,
+					userId: "user_1",
+				}),
+			).rejects.toThrow("Driver is on approved vacation on this date");
+		});
+	});
+});

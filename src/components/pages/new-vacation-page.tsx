@@ -75,6 +75,42 @@ function NewVacationForm({
 	const navigate = useNavigate();
 	const create = useMutation(api.vacationRequests.create);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
+	const [conflictErr, setConflictErr] = useState<{
+		message: string;
+		retry: () => Promise<void>;
+	} | null>(null);
+
+	const submit = async (value: VacationValues, force: boolean) => {
+		const onBehalf = isAdmin && value.userId && value.userId !== myId;
+		try {
+			const id = await create({
+				startDate: value.startDate,
+				endDate: value.endDate,
+				reason: value.reason.trim() || undefined,
+				userId: onBehalf ? value.userId : undefined,
+				force: force || undefined,
+			});
+			toast.success(
+				onBehalf
+					? "Time off recorded and approved"
+					: "Vacation request submitted",
+			);
+			void navigate({
+				to: "/dashboard/vacations/$vacationId",
+				params: { vacationId: id },
+			});
+		} catch (err) {
+			const msg = getErrorMessage(err);
+			if (msg.includes("VACATION_ASSIGNMENT_CONFLICT")) {
+				setConflictErr({
+					message: msg.replace(/^VACATION_ASSIGNMENT_CONFLICT:\s*/, ""),
+					retry: () => submit(value, true),
+				});
+			} else {
+				setSubmitErr(msg);
+			}
+		}
+	};
 
 	const form = useForm({
 		defaultValues: {
@@ -85,6 +121,7 @@ function NewVacationForm({
 		} satisfies VacationValues,
 		onSubmit: async ({ value }) => {
 			setSubmitErr(null);
+			setConflictErr(null);
 			let invalid = false;
 			const fail = (name: keyof VacationValues, message: string) => {
 				form.setFieldMeta(name, (prev) => ({
@@ -108,26 +145,7 @@ function NewVacationForm({
 			if (reasonErr) fail("reason", reasonErr);
 			if (invalid) return;
 
-			const onBehalf = isAdmin && value.userId && value.userId !== myId;
-			try {
-				const id = await create({
-					startDate: value.startDate,
-					endDate: value.endDate,
-					reason: value.reason.trim() || undefined,
-					userId: onBehalf ? value.userId : undefined,
-				});
-				toast.success(
-					onBehalf
-						? "Time off recorded and approved"
-						: "Vacation request submitted",
-				);
-				void navigate({
-					to: "/dashboard/vacations/$vacationId",
-					params: { vacationId: id },
-				});
-			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-			}
+			await submit(value, false);
 		},
 	});
 
@@ -247,6 +265,23 @@ function NewVacationForm({
 							</form.Field>
 
 							{submitErr ? <ErrorBanner message={submitErr} /> : null}
+
+							{conflictErr ? (
+								<div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4">
+									<p className="text-sm text-destructive">
+										{conflictErr.message}
+									</p>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										className="mt-3"
+										onClick={() => void conflictErr.retry()}
+									>
+										Record anyway
+									</Button>
+								</div>
+							) : null}
 
 							<form.Subscribe
 								selector={(state) =>

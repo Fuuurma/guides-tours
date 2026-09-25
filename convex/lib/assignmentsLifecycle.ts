@@ -218,6 +218,24 @@ if (args.driverId) {
 			"This departure already has a different driver assigned",
 		);
 	}
+	// Driver vacation check (mirrors the guide check above) — the
+	// system accepts vacation rows for drivers, so writes must
+	// enforce them or the rows are dead data (F347).
+	const driverVacations = (
+		await ctx.db
+			.query("vacationRequests")
+			.withIndex("by_user_status", (q) =>
+				q.eq("userId", driver.userId).eq("status", "approved"),
+			)
+			.collect()
+	).filter((vr) => vr.organizationId === args.organizationId);
+	if (
+		driverVacations.some(
+			(vr) => vr.startDate <= date && vr.endDate >= date,
+		)
+	) {
+		throw new ConvexError("Driver is on approved vacation on this date");
+	}
 } else if (staffing.requiresDriver && !slotHasDriver) {
 	throw new ConvexError(
 		"This tour requires a driver — select one before assigning",
@@ -540,6 +558,28 @@ export async function performUpdate(
 			throw new ConvexError(
 				"This departure already has a different driver assigned",
 			);
+		}
+		// Driver vacation check (mirrors internalCreate). Only needed
+		// when the driver or the date changed — an unchanged assignment
+		// already passed this check at write time (F347).
+		if (next.driverId !== existing.driverId || next.date !== existing.date) {
+			const driverVacations = (
+				await ctx.db
+					.query("vacationRequests")
+					.withIndex("by_user_status", (q) =>
+						q.eq("userId", driver.userId).eq("status", "approved"),
+					)
+					.collect()
+			).filter((vr) => vr.organizationId === args.organizationId);
+			if (
+				driverVacations.some(
+					(vr) => vr.startDate <= next.date && vr.endDate >= next.date,
+				)
+			) {
+				throw new ConvexError(
+					"Driver is on approved vacation on this date",
+				);
+			}
 		}
 	} else if (staffing.requiresDriver && !slotHasDriver) {
 		throw new ConvexError(

@@ -11,7 +11,7 @@ import {
 	internalMutation,
 	internalQuery,
 } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
@@ -35,6 +35,68 @@ export function calculateVacationDays(
 	const startMs = Date.parse(effectiveStart);
 	const endMs = Date.parse(effectiveEnd);
 	return Math.floor((endMs - startMs) / 86_400_000) + 1;
+}
+
+/**
+ * Scheduled assignments a leave window conflicts with, across BOTH
+ * staffed roles: guide rows keyed by userId plus driver rows keyed by
+ * the member's drivers row — a person staffed as a driver is just as
+ * blocked by leave, and a guide-only scan silently approves the clash
+ * (F347). Shared by internalApprove and internalCreate (F348).
+ */
+async function assignmentConflictsForVacation(
+	ctx: MutationCtx,
+	args: {
+		organizationId: string;
+		userId: string;
+		startDate: string;
+		endDate: string;
+	},
+) {
+	const guideHits = await ctx.db
+		.query("assignments")
+		.withIndex("by_guide_date", (q) =>
+			q
+				.eq("guideId", args.userId)
+				.gte("date", args.startDate)
+				.lte("date", args.endDate),
+		)
+		.take(500);
+	const driverRow = await ctx.db
+		.query("drivers")
+		.withIndex("by_org_user", (q) =>
+			q.eq("organizationId", args.organizationId).eq("userId", args.userId),
+		)
+		.unique();
+	const driverHits = driverRow
+		? await ctx.db
+				.query("assignments")
+				.withIndex("by_driver_date", (q) =>
+					q
+						.eq("driverId", driverRow._id)
+						.gte("date", args.startDate)
+						.lte("date", args.endDate),
+				)
+				.take(500)
+		: [];
+	return [...guideHits, ...driverHits].filter(
+		(a) =>
+			a.organizationId === args.organizationId &&
+			a.status === "scheduled" &&
+			a.deletedAt === undefined,
+	);
+}
+
+function throwVacationAssignmentConflict(conflicts: { date: string; startTime: string }[]): never {
+	const sample = conflicts
+		.slice(0, 3)
+		.map((a) => `${a.date} ${a.startTime}`)
+		.join(", ");
+	// Stable code prefix — FE shows "Approve anyway" when this
+	// appears; do not rename without updating the vacation pages.
+	throw new ConvexError(
+		`VACATION_ASSIGNMENT_CONFLICT: Guide has ${conflicts.length} scheduled assignment(s) in this range (${sample}). Approve anyway to proceed.`,
+	);
 }
 
 // ---- queries ----
@@ -61,13 +123,17 @@ export const list = query({
 		// the userId query — the status filter was silently dropped.
 		let all;
 		if (args.status && args.userId) {
+			// Per-user sets are naturally small — query the user index
+			// and filter status in memory so the 200-window is per-user,
+			// not org-wide (F349's silent-cap sibling).
 			all = await ctx.db
 				.query("vacationRequests")
-				.withIndex("by_org_status", (q) =>
-					q.eq("organizationId", orgId).eq("status", args.status!),
+				.withIndex("by_org_user", (q) =>
+					q.eq("organizationId", orgId).eq("userId", args.userId!),
 				)
+				.order("desc")
 				.take(MAX_VACATION_REQUESTS);
-			all = all.filter((vr) => vr.userId === args.userId);
+			all = all.filter((vr) => vr.status === args.status);
 		} else if (args.status) {
 			all = await ctx.db
 				.query("vacationRequests")
@@ -221,6 +287,10 @@ export const create = mutation({
 		// Owner/admin may file for another org member. Omitted or equal
 		// to the caller stays a pending self-request.
 		userId: v.optional(v.string()),
+		// Same explicit-override contract as approve — only meaningful
+		// on the on-behalf (auto-approved) path; pending self-requests
+		// have no conflict gate to force past.
+		force: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member", "guide", "driver"]);
@@ -260,6 +330,7 @@ export const create = mutation({
 				reason: args.reason,
 				status,
 				reviewedBy,
+				force: args.force,
 			},
 		);
 	},
@@ -274,6 +345,7 @@ export const internalCreate = internalMutation({
 		reason: v.optional(v.string()),
 		status: v.optional(v.union(v.literal("pending"), v.literal("approved"))),
 		reviewedBy: v.optional(v.string()),
+		force: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		// Date validation (source: vacation_service.py:119-120).
@@ -312,8 +384,23 @@ export const internalCreate = internalMutation({
 			);
 		}
 
-		const now = Date.now();
+		// Same assignment-conflict gate internalApprove enforces — the
+		// on-behalf "Record time off" path sets status=approved directly
+		// and must not bypass it (F348). `force` mirrors approve.
 		const status = args.status ?? "pending";
+		if (status === "approved") {
+			const conflicts = await assignmentConflictsForVacation(ctx, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+				startDate: args.startDate,
+				endDate: args.endDate,
+			});
+			if (conflicts.length > 0 && !args.force) {
+				throwVacationAssignmentConflict(conflicts);
+			}
+		}
+
+		const now = Date.now();
 		const requestId = await ctx.db.insert("vacationRequests", {
 			organizationId: args.organizationId,
 			userId: args.userId,
@@ -394,31 +481,14 @@ export const internalApprove = internalMutation({
 
 		// Block approve when the guide already has scheduled assignments
 		// in the vacation window — unless the operator explicitly forces.
-		const overlapping = await ctx.db
-			.query("assignments")
-			.withIndex("by_guide_date", (q) =>
-				q
-					.eq("guideId", vr.userId)
-					.gte("date", vr.startDate)
-					.lte("date", vr.endDate),
-			)
-			.take(500);
-		const conflicts = overlapping.filter(
-			(a) =>
-				a.organizationId === args.organizationId &&
-				a.status === "scheduled" &&
-				a.deletedAt === undefined,
-		);
+		const conflicts = await assignmentConflictsForVacation(ctx, {
+			organizationId: args.organizationId,
+			userId: vr.userId,
+			startDate: vr.startDate,
+			endDate: vr.endDate,
+		});
 		if (conflicts.length > 0 && !args.force) {
-			const sample = conflicts
-				.slice(0, 3)
-				.map((a) => `${a.date} ${a.startTime}`)
-				.join(", ");
-			// Stable code prefix — FE shows "Approve anyway" when this
-			// appears; do not rename without updating the vacation detail page.
-			throw new ConvexError(
-				`VACATION_ASSIGNMENT_CONFLICT: Guide has ${conflicts.length} scheduled assignment(s) in this range (${sample}). Approve anyway to proceed.`,
-			);
+			throwVacationAssignmentConflict(conflicts);
 		}
 
 		const now = Date.now();
