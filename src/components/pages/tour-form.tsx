@@ -47,7 +47,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 const NONE = "__none__";
 
-export type TourFormValues = {
+type TourFormValues = {
 	name: string;
 	description: string;
 	tourType: string;

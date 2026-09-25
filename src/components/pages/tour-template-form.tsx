@@ -39,7 +39,7 @@ import {
 	validatePositiveNumber,
 } from "@/lib/validation";
 
-export type TourTemplateFormValues = {
+type TourTemplateFormValues = {
 	name: string;
 	description: string;
 	tourType: string;

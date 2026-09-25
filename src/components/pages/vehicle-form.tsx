@@ -28,7 +28,7 @@ import {
 const OWNERSHIP_TYPES = ["owned", "rented", "leased"] as const;
 const STATUSES = ["available", "in_use", "maintenance", "retired"] as const;
 
-export type VehicleFormValues = {
+type VehicleFormValues = {
 	name: string;
 	vehicleType: string;
 	capacity: string;

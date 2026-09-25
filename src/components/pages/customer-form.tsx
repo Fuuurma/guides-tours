@@ -30,7 +30,7 @@ import {
 	validatePhoneOptional,
 } from "@/lib/validation";
 
-export type CustomerFormValues = {
+type CustomerFormValues = {
 	name: string;
 	email: string;
 	phone: string;

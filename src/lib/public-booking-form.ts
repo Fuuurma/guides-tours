@@ -46,7 +46,7 @@ export const publicBookingSchema = z.object({
 	smsConsent: z.boolean(),
 });
 
-export type PublicBookingForm = z.infer<typeof publicBookingSchema>;
+type PublicBookingForm = z.infer<typeof publicBookingSchema>;
 
 export const publicBookingDefaults: PublicBookingForm = {
 	tourId: "",
