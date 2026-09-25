@@ -67,7 +67,7 @@ export function shiftDate(date: string, days: number): string {
  * endTime stays zero-length at start (never overlaps), matching the
  * historical fallback.
  */
-export function absWindow(
+function absWindow(
 	date: string,
 	startTime: string,
 	endTime: string | undefined,

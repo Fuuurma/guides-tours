@@ -80,7 +80,7 @@ export async function findTargetSchedule(
 	return match ?? null;
 }
 
-export async function clearPendingBookingReminders(
+async function clearPendingBookingReminders(
 	ctx: MutationCtx,
 	bookingId: Id<"bookings">,
 ) {
