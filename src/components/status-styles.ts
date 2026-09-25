@@ -1,18 +1,21 @@
-// Centralized status → badge class lookup.
+// Centralized status → badge variant lookup.
 //
 // Replaces 6 duplicate statusColors maps across the codebase
 // (customers/tours/bookings/schedules/assignments/vacations/vehicles
-// /notifications). The "completed" / "cancelled" status had two
-// conflicting color assignments depending on context — we standardize
-// here:
-//   - cancelled → gray (terminal neutral)
-//   - completed → green (success terminal)
-//   - checked_in, scheduled, in_use, email → blue (active/operational)
-//   - available, confirmed, approved, sms → green (positive state)
-//   - pending, full, maintenance → yellow (caution / waiting)
-//   - rejected → red (failure)
-//   - retired → gray (decommissioned)
-//   - both → purple (combined channel)
+// /notifications). The old maps assigned literal colors (green / blue /
+// yellow / red / gray / purple) per context, with "completed" /
+// "cancelled" conflicting between contexts. We standardize on shadcn
+// Badge variants instead, so this module delivers variant semantics
+// rather than literal colors:
+//   - default (solid primary) → confirmed, completed, available,
+//     approved, sms, active (positive / success terminal)
+//   - secondary (muted) → checked_in, scheduled, in_use, email
+//     (active/operational) plus cancelled, retired, inactive,
+//     regular (terminal neutral)
+//   - outline (neutral bordered) → pending, full, maintenance
+//     (caution / waiting) plus both, vip, and the unknown-status
+//     fallback
+//   - destructive (red) → rejected (failure)
 //
 // Use the StatusBadge component — it reads from this map and renders
 // a shadcn <Badge variant="..."> consistent with the rest of the UI.
