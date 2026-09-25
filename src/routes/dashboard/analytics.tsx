@@ -21,6 +21,13 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
@@ -184,6 +191,17 @@ function AnalyticsPage() {
 		}));
 	}, [topTours, sparklineByTour]);
 	const { displayName } = useOrgMembers(["guide", "owner", "admin"]);
+	// New org with zero data: overview + revenue report nothing at
+	// all. Show one guided empty state with next steps instead of a
+	// wall of zeros and per-section muted text.
+	const isNewOrgEmpty =
+		!overviewPending &&
+		!revenuePending &&
+		overview !== undefined &&
+		revenue !== undefined &&
+		(overview.totalTours ?? 0) === 0 &&
+		(overview.totalAssignments ?? 0) === 0 &&
+		(revenue.totalBookings ?? 0) === 0;
 	// Every analytics builder reports `truncated` when its 10k-row scan
 	// cap was hit — surface it once instead of silently showing partial
 	// totals (fleet needs-work 09-08 F76).
@@ -300,6 +318,28 @@ function AnalyticsPage() {
 					Some figures only cover the first 10,000 matching rows in this window.
 					Narrow the date range for exact totals.
 				</p>
+			)}
+
+			{isNewOrgEmpty && (
+				<Empty className="border">
+					<EmptyHeader>
+						<EmptyTitle>No analytics yet</EmptyTitle>
+						<EmptyDescription>
+							Charts and totals appear here once you have tours, schedules,
+							and bookings. Create your first tour to get started.
+						</EmptyDescription>
+					</EmptyHeader>
+					<EmptyContent>
+						<div className="flex flex-wrap justify-center gap-2">
+							<Button asChild size="sm">
+								<Link to="/dashboard/tours/new">Create your first tour</Link>
+							</Button>
+							<Button asChild variant="outline" size="sm">
+								<Link to="/dashboard/bookings/new">Add a booking</Link>
+							</Button>
+						</div>
+					</EmptyContent>
+				</Empty>
 			)}
 
 			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
