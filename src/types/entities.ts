@@ -17,7 +17,7 @@ export type BookingStatus =
 
 export type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
 
-export type VacationStatus = "pending" | "approved" | "rejected";
+type VacationStatus = "pending" | "approved" | "rejected";
 
 export interface Booking {
 	_id: string;
