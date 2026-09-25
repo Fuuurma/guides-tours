@@ -83,6 +83,15 @@ export function createWebhookHandler(config: WebhookConfig) {
 
 		const timestampHeader = request.headers.get(config.timestampHeader);
 		const rawBody = await request.text();
+		// F341: unauthenticated route — cap the body before JSON.parse,
+		// HMAC, and recordDelivery's rawPayload storage. Measure real
+		// bytes (UTF-16 length lies for multibyte payloads — same F51
+		// contract as the public booking path). 64 KB is generous for a
+		// provider event while still bounding memory per request.
+		const MAX_BODY_BYTES = 64 * 1024;
+		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
+			return new Response("payload too large", { status: 413 });
+		}
 
 		const url = new URL(request.url);
 		const integrationId = url.searchParams.get("integrationId");
@@ -284,7 +293,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 		}
 
 		try {
-			await dispatchEvent(
+			const outcome = await dispatchEvent(
 				ctx,
 				integrationId,
 				integration.organizationId,
@@ -292,15 +301,36 @@ export function createWebhookHandler(config: WebhookConfig) {
 				config.provider,
 			);
 			if (eventId) {
-				await ctx.runMutation(
-					internal.webhookDeliveries.updateDeliveryStatus,
-					{
-						organizationId: integration.organizationId,
-						source: config.provider,
-						eventId,
-						status: "processed",
-					},
-				);
+				if (outcome === "unmatched_product") {
+					// F340: availability.update for an otaProductId we have no
+					// mapping for — nothing was cached. Mark skipped (not
+					// processed) with a reason so ops can see and fix the
+					// mapping; a later provider retry after the product is
+					// mapped re-dispatches through the non-processed path.
+					logger.warn(
+						`${config.logPrefix} ${eventId} dropped: no product mapping for this otaProductId`,
+					);
+					await ctx.runMutation(
+						internal.webhookDeliveries.updateDeliveryStatus,
+						{
+							organizationId: integration.organizationId,
+							source: config.provider,
+							eventId,
+							status: "skipped",
+							skipReason: "unknown otaProductId — no product mapping",
+						},
+					);
+				} else {
+					await ctx.runMutation(
+						internal.webhookDeliveries.updateDeliveryStatus,
+						{
+							organizationId: integration.organizationId,
+							source: config.provider,
+							eventId,
+							status: "processed",
+						},
+					);
+				}
 			}
 		} catch (err) {
 			if (eventId) {
@@ -345,13 +375,18 @@ export function extractEventId(event: NormalizedProviderEvent): string | null {
 	return null;
 }
 
+/** F340: outcome the caller needs for honest audit — "unmatched_product"
+ * means the event referenced an otaProductId we have no mapping for, so
+ * nothing was cached. The delivery must not be marked "processed". */
+type DispatchOutcome = "processed" | "unmatched_product";
+
 async function dispatchEvent(
 	ctx: ActionCtx,
 	integrationId: string,
 	organizationId: string,
 	event: NormalizedProviderEvent,
 	provider: string,
-): Promise<void> {
+): Promise<DispatchOutcome> {
 	if (event.kind === "booking.created") {
 		await ctx.runMutation(internal.ota.upsert.upsertOtaBooking, {
 			integrationId: integrationId as Id<"otaIntegrations">,
@@ -360,7 +395,7 @@ async function dispatchEvent(
 			event,
 			rawData: event.rawPayload,
 		});
-		return;
+		return "processed";
 	}
 	if (event.kind === "booking.cancelled") {
 		await ctx.runMutation(internal.ota.upsert.cancelOtaBooking, {
@@ -368,12 +403,17 @@ async function dispatchEvent(
 			reservationId: event.reservationId,
 			rawData: event.rawPayload,
 		});
-		return;
+		return "processed";
 	}
 	if (event.kind === "availability.update") {
-		await ctx.runMutation(internal.ota.upsert.upsertAvailabilityCache, {
-			integrationId: integrationId as Id<"otaIntegrations">,
-			event,
-		});
+		const result = await ctx.runMutation(
+			internal.ota.upsert.upsertAvailabilityCache,
+			{
+				integrationId: integrationId as Id<"otaIntegrations">,
+				event,
+			},
+		);
+		return result === null ? "unmatched_product" : "processed";
 	}
+	return "processed";
 }

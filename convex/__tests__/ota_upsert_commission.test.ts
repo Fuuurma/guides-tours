@@ -296,3 +296,60 @@ describe("convex/ota/upsert — commission math", () => {
 		expect(row?.netRevenueCents).toBe(10000n);
 	});
 });
+
+describe("convex/ota/upsert — upsertAvailabilityCache product mapping (F340)", () => {
+	it("returns null and writes nothing for an unmapped otaProductId", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_av_unmapped";
+		const { integrationId } = await t.run(async (ctx) =>
+			seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-KNOWN", 0.2),
+		);
+		const result = await t.mutation(
+			internal.ota.upsert.upsertAvailabilityCache,
+			{
+				integrationId,
+				event: {
+					kind: "availability.update",
+					productId: "PROD-UNKNOWN",
+					date: "2026-10-01",
+					availableSpaces: 5,
+					totalSpaces: 10,
+					rawPayload: { seats: 5 },
+				},
+			},
+		);
+		expect(result).toBeNull();
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("otaAvailabilityCache").collect(),
+		);
+		expect(rows).toHaveLength(0);
+	});
+
+	it("writes the cache row for a mapped otaProductId", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_av_mapped";
+		const { integrationId } = await t.run(async (ctx) =>
+			seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-KNOWN", 0.2),
+		);
+		const result = await t.mutation(
+			internal.ota.upsert.upsertAvailabilityCache,
+			{
+				integrationId,
+				event: {
+					kind: "availability.update",
+					productId: "PROD-KNOWN",
+					date: "2026-10-01",
+					availableSpaces: 5,
+					totalSpaces: 10,
+					rawPayload: { seats: 5 },
+				},
+			},
+		);
+		expect(result).not.toBeNull();
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("otaAvailabilityCache").collect(),
+		);
+		expect(rows).toHaveLength(1);
+		expect(rows[0].availableSpaces).toBe(5);
+	});
+});

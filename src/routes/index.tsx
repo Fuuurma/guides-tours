@@ -392,12 +392,15 @@ function Home() {
 					</p>
 					<ProviderMarquee />
 					<div className="mx-auto mt-10 grid max-w-3xl grid-cols-3 divide-x">
-						<TrustMetric value={7} label="OTA channels into one board" />
-						<TrustMetric value={1} label="workspace for the dispatch desk" />
 						<TrustMetric
-							valueText="Today"
-							label="departures, gaps, and assignments"
+							value={ALL_PROVIDERS.length}
+							label="OTA channels into one board"
 						/>
+						<TrustMetric
+							value={4}
+							label="tour, guide, driver & vehicle on every departure"
+						/>
+						<TrustMetric value={7} label="days on the week board" />
 					</div>
 				</div>
 			</section>

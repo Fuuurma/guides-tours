@@ -138,6 +138,23 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(await res.text()).toBe("missing signature");
 	});
 
+	it("rejects an oversized body with 413 before any signature work (F341)", async () => {
+		const t = convexTest(schema, modules);
+		// > 64 KB of body on the unauthenticated route — the cap must
+		// fire before integration lookup, HMAC, or payload storage.
+		const body = JSON.stringify({ pad: "x".repeat(70 * 1024) });
+		const res = await t.fetch(WEBHOOK_PATH, {
+			method: "POST",
+			body,
+			headers: {
+				"x-viator-signature": "deadbeef",
+				"x-viator-timestamp": String(Date.now()),
+			},
+		});
+		expect(res.status).toBe(413);
+		expect(await res.text()).toBe("payload too large");
+	});
+
 	it("rejects missing integrationId query param with 400", async () => {
 		const t = convexTest(schema, modules);
 		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
