@@ -578,8 +578,9 @@ function MonthGrid({
 										<span
 											className="text-[10px] font-medium text-destructive"
 											title={`${gaps} departure(s) need staffing`}
-											aria-label={`${gaps} departure(s) need staffing`}
 										>
+											{/* text content already reads the gaps; a span
+											   can't carry aria-label without a role */}
 											{gaps} gap{gaps === 1 ? "" : "s"}
 										</span>
 									)}
