@@ -13,7 +13,9 @@ export type BookingStatus =
 	| "confirmed"
 	| "checked_in"
 	| "completed"
-	| "cancelled";
+	| "cancelled"
+	| "expired"
+	| "no_show";
 
 export type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
 

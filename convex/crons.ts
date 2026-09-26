@@ -45,6 +45,15 @@ crons.interval(
 	internal.notifications.processPendingNotifications,
 );
 
+// Every 5 minutes — expire pending bookings that were never
+// confirmed (hold > 15m). Releases their held capacity through
+// the same atomic decrementBooked path as a manual cancel.
+crons.interval(
+	"expire_stale_pending_bookings",
+	{ minutes: 5 },
+	internal.bookings.expireStalePending,
+);
+
 // Daily at 03:00 UTC — archive stale assignments.
 // We pick a low-traffic hour so the cleanup doesn't fight active
 // reads/writes. Adjust if your peak load is in UTC.

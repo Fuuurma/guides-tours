@@ -24,6 +24,18 @@ import {
 } from "./validation";
 import { isBlackoutHelper } from "../tourBlackoutDates";
 
+// Booking lifecycle states (mirrors the schema union).
+// pending → confirmed | cancelled | expired
+// confirmed → checked_in | cancelled | no_show
+// checked_in → completed | cancelled
+// Terminal: completed | cancelled | expired | no_show.
+type BookingStatus = Doc<"bookings">["status"];
+
+// Pending bookings hold capacity from create time; if they are not
+// confirmed within this window the cron expires them and releases
+// the seats. Source pattern: 15-minute holds (system-design-primer).
+export const PENDING_EXPIRY_MS = 15 * 60 * 1000;
+
 // Whitelisted update fields — mirrors source's ALLOWED_BOOKING_UPDATE_FIELDS
 // minus currency/conversion noise (we are cents-only).
 export const ALLOWED_UPDATE_FIELDS = new Set([
@@ -138,9 +150,14 @@ export async function performUpdate(
 	},
 ): Promise<Id<"bookings">> {
 	// Source: backend/tours/services/booking_service.py:206-207.
-	// Modify refuses: completed | cancelled | no_show. We carry
-	// `completed` + `cancelled` (no `no_show` in our schema union).
-	if (booking.status === "cancelled" || booking.status === "completed") {
+	// Modify refuses terminal states: completed | cancelled |
+	// expired | no_show.
+	if (
+		booking.status === "cancelled" ||
+		booking.status === "completed" ||
+		booking.status === "expired" ||
+		booking.status === "no_show"
+	) {
 		throw new ConvexError(
 			`Cannot modify a ${booking.status} booking`,
 		);
@@ -346,6 +363,70 @@ export async function performUpdate(
 	return args.bookingId;
 }
 
+/**
+ * Restore the matching tourSchedule's capacityBooked counter.
+ * Shared by performCancel and performExpire so pending-expiry
+ * releases through the SAME atomic decrementBooked path as a
+ * manual cancel — never a parallel decrement.
+ *
+ * Prefers the explicit scheduleId on the booking; falls back to a
+ * (tourId, date, startTime) lookup for older bookings that predate
+ * the scheduleId field.
+ */
+export async function releaseBookingCapacity(
+	ctx: MutationCtx,
+	booking: {
+		_id: Id<"bookings">;
+		organizationId: string;
+		tourId: Id<"tours">;
+		scheduleId?: Id<"tourSchedules">;
+		date: string;
+		startTime: string;
+		guests: number;
+	},
+): Promise<void> {
+	let scheduleId: Id<"tourSchedules"> | undefined = booking.scheduleId;
+	if (!scheduleId) {
+		const schedule = await ctx.db
+			.query("tourSchedules")
+			.withIndex("by_tour_date", (q) =>
+				q.eq("tourId", booking.tourId).eq("date", booking.date),
+			)
+			.filter((q) =>
+				q.and(
+					q.eq(q.field("organizationId"), booking.organizationId),
+					q.eq(q.field("startTime"), booking.startTime),
+				),
+			)
+			.first();
+		scheduleId = schedule?._id;
+	}
+	if (scheduleId) {
+		try {
+			await ctx.runMutation(
+				internal.tourSchedules.decrementBooked,
+				{
+					organizationId: booking.organizationId,
+					scheduleId,
+					guests: booking.guests,
+				},
+			);
+		} catch (err) {
+			// Capacity restore is best-effort; the status transition
+			// is the source of truth and the schedule can be
+			// reconciled manually if needed. But silent swallow
+			// hides permanent capacity loss from operators
+			// (fleet needs-work 2026-09-08 P1) — log it.
+			logger.error("[bookingsLifecycle] decrementBooked failed", {
+				scheduleId,
+				bookingId: booking._id,
+				guests: booking.guests,
+				error: err instanceof Error ? err.message : String(err),
+			});
+		}
+	}
+}
+
 export async function performConfirm(
 	ctx: MutationCtx,
 	booking: {
@@ -353,7 +434,7 @@ export async function performConfirm(
 		organizationId: string;
 		date: string;
 		startTime: string;
-		status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
+		status: BookingStatus;
 	},
 	userId: string,
 ) {
@@ -388,7 +469,7 @@ export async function performCancel(
 		customerId: Id<"customers">;
 		tourId: Id<"tours">;
 		scheduleId?: Id<"tourSchedules">;
-		status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
+		status: BookingStatus;
 		notes: string;
 		date: string;
 		startTime: string;
@@ -413,6 +494,9 @@ export async function performCancel(
 	if (booking.status === "completed") {
 		throw new ConvexError("Cannot cancel a completed booking");
 	}
+	if (booking.status === "expired" || booking.status === "no_show") {
+		throw new ConvexError(`Cannot cancel a ${booking.status} booking`);
+	}
 	if (booking.status === "checked_in") {
 		throw new ConvexError(
 			"Cannot cancel a checked-in booking; complete it first",
@@ -430,50 +514,7 @@ export async function performCancel(
 		updatedAt: now,
 	});
 
-	// Restore the matching tourSchedule's capacityBooked counter.
-	// Prefer the explicit scheduleId on the booking; fall back to
-	// a (tourId, date, startTime) lookup for older bookings that
-	// predate the scheduleId field.
-	let scheduleId: Id<"tourSchedules"> | undefined = booking.scheduleId;
-	if (!scheduleId) {
-		const schedule = await ctx.db
-			.query("tourSchedules")
-			.withIndex("by_tour_date", (q) =>
-				q.eq("tourId", booking.tourId).eq("date", booking.date),
-			)
-			.filter((q) =>
-				q.and(
-					q.eq(q.field("organizationId"), booking.organizationId),
-					q.eq(q.field("startTime"), booking.startTime),
-				),
-			)
-			.first();
-		scheduleId = schedule?._id;
-	}
-	if (scheduleId) {
-		try {
-			await ctx.runMutation(
-				internal.tourSchedules.decrementBooked,
-				{
-					organizationId: booking.organizationId,
-					scheduleId,
-					guests: booking.guests,
-				},
-			);
-		} catch (err) {
-			// Capacity restore is best-effort; the cancellation
-			// is the source of truth and the schedule can be
-			// reconciled manually if needed. But silent swallow
-			// hides permanent capacity loss from operators
-			// (fleet needs-work 2026-09-08 P1) — log it.
-			logger.error("[bookingsLifecycle] decrementBooked failed", {
-				scheduleId,
-				bookingId: booking._id,
-				guests: booking.guests,
-				error: err instanceof Error ? err.message : String(err),
-			});
-		}
-	}
+	await releaseBookingCapacity(ctx, booking);
 
 	// Clear the customer's nextBookingDate if it pointed at this
 	// booking's date. Without this, a cancelled booking still
@@ -515,6 +556,14 @@ export async function performCancel(
 		oldValues: { status: booking.status },
 		newValues: { status: "cancelled", reason: reason ?? "" },
 	});
+
+	// Transitions notify the customer via SES (falls back to the
+	// built-in cancellation copy when the org has no template).
+	await ctx.scheduler.runAfter(
+		0,
+		internal.notification_dispatch.dispatchImmediateBookingTransition,
+		{ bookingId: booking._id, templateType: "booking_cancellation" },
+	);
 }
 export async function performComplete(
 	ctx: MutationCtx,
@@ -522,7 +571,7 @@ export async function performComplete(
 		_id: Id<"bookings">;
 		organizationId: string;
 		customerId: Id<"customers">;
-		status: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
+		status: BookingStatus;
 		checkedInAt?: number;
 		totalAmountCents: bigint;
 	},
@@ -536,12 +585,16 @@ export async function performComplete(
 	if (booking.status === "completed") {
 		throw new ConvexError("Booking is already completed");
 	}
-	// Terminal state guard: cancelled bookings must never be
-	// completed. performCancel doesn't clear checkedInAt, so a
-	// checked-in booking can be cancelled and then erroneously
+	// Terminal state guard: cancelled/expired/no_show bookings must
+	// never be completed. performCancel doesn't clear checkedInAt,
+	// so a checked-in booking can be cancelled and then erroneously
 	// completed via this path. Refuse explicitly.
-	if (booking.status === "cancelled") {
-		throw new ConvexError("Cannot complete a cancelled booking");
+	if (
+		booking.status === "cancelled" ||
+		booking.status === "expired" ||
+		booking.status === "no_show"
+	) {
+		throw new ConvexError(`Cannot complete a ${booking.status} booking`);
 	}
 	if (!booking.checkedInAt) {
 		throw new ConvexError("Only checked-in bookings can be completed");
@@ -584,4 +637,121 @@ export async function performComplete(
 		oldValues: { status: "checked_in" },
 		newValues: { status: "completed", completedAt: now },
 	});
+}
+
+/**
+ * Expire a stale pending booking (pending > PENDING_EXPIRY_MS).
+ * Terminal transition pending → expired: releases the held seats
+ * through the same atomic decrementBooked path as performCancel,
+ * cancels queued reminders, and notifies the customer via SES.
+ *
+ * Caller guards status === "pending" (internalExpire does the
+ * load + guard so the cron's fan-out stays per-booking atomic).
+ */
+export async function performExpire(
+	ctx: MutationCtx,
+	booking: {
+		_id: Id<"bookings">;
+		organizationId: string;
+		customerId: Id<"customers">;
+		tourId: Id<"tours">;
+		scheduleId?: Id<"tourSchedules">;
+		status: BookingStatus;
+		notes: string;
+		date: string;
+		startTime: string;
+		guests: number;
+	},
+	userIdForAudit: string,
+): Promise<void> {
+	if (booking.status !== "pending") {
+		throw new ConvexError(
+			`Only pending bookings can expire (was ${booking.status})`,
+		);
+	}
+
+	const now = Date.now();
+	await ctx.db.patch(booking._id, {
+		status: "expired",
+		notes: booking.notes
+			? `${booking.notes}\n[EXPIRED] pending confirmation timed out`
+			: "[EXPIRED] pending confirmation timed out",
+		updatedAt: now,
+	});
+
+	// Same atomic capacity-release path as performCancel.
+	await releaseBookingCapacity(ctx, booking);
+
+	// Same customer-facing cleanup as cancel: clear nextBookingDate
+	// if it pointed at this booking's date.
+	const customer = await ctx.db.get(booking.customerId);
+	if (customer?.nextBookingDate === booking.date) {
+		await ctx.db.patch(booking.customerId, {
+			nextBookingDate: undefined,
+			updatedAt: now,
+		});
+	}
+
+	// Cancel any pending scheduledNotifications for this booking so
+	// the cron doesn't fire 24h/2h reminders about an expired hold.
+	await clearPendingBookingReminders(ctx, booking._id);
+
+	await logAudit(ctx, {
+		organizationId: booking.organizationId,
+		userId: userIdForAudit,
+		action: "booking.expired",
+		resourceType: "booking",
+		resourceId: booking._id,
+		oldValues: { status: "pending" },
+		newValues: { status: "expired" },
+	});
+
+	await ctx.scheduler.runAfter(
+		0,
+		internal.notification_dispatch.dispatchImmediateBookingTransition,
+		{ bookingId: booking._id, templateType: "booking_expired" },
+	);
+}
+
+/**
+ * Mark a confirmed booking as no_show (confirmed → no_show).
+ * Terminal: the tour slot was consumed, so capacity is NOT
+ * released — the guest simply never arrived.
+ */
+export async function performNoShow(
+	ctx: MutationCtx,
+	booking: {
+		_id: Id<"bookings">;
+		organizationId: string;
+		status: BookingStatus;
+	},
+	userIdForAudit: string,
+): Promise<void> {
+	if (booking.status !== "confirmed") {
+		throw new ConvexError(
+			`Only confirmed bookings can be marked no-show (was ${booking.status})`,
+		);
+	}
+
+	const now = Date.now();
+	await ctx.db.patch(booking._id, {
+		status: "no_show",
+		updatedAt: now,
+	});
+
+	await logAudit(ctx, {
+		organizationId: booking.organizationId,
+		userId: userIdForAudit,
+		action: "booking.no_show",
+		resourceType: "booking",
+		resourceId: booking._id,
+		oldValues: { status: "confirmed" },
+		newValues: { status: "no_show" },
+	});
+
+	await ctx.scheduler.runAfter(
+		0,
+		internal.notification_dispatch.dispatchImmediateBookingTransition,
+		{ bookingId: booking._id, templateType: "booking_no_show" },
+	);
 }

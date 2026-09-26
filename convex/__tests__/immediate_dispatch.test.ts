@@ -133,7 +133,7 @@ async function seedBooking(
 }
 
 describe("immediate booking-confirmation dispatch", () => {
-	it("returns null when no active template exists", async () => {
+	it("returns template=null when no active template exists", async () => {
 		const t = convexTest(schema, modules);
 		const { bookingId } = await t.run(async (ctx) => {
 			const tourId = await seedTour(ctx, "org_imm_a");
@@ -149,10 +149,14 @@ describe("immediate booking-confirmation dispatch", () => {
 			internal.notifications.getBookingForImmediateDispatch,
 			{ bookingId },
 		);
-		expect(result).toBeNull();
+		// The query now returns booking/customer with a null template
+		// so transition dispatch can fall back to built-in copy; the
+		// confirmation dispatcher still treats this as a skip.
+		expect(result).not.toBeNull();
+		expect(result?.template).toBeNull();
 	});
 
-	it("returns null when template is inactive", async () => {
+	it("returns template=null when template is inactive", async () => {
 		const t = convexTest(schema, modules);
 		const { bookingId } = await t.run(async (ctx) => {
 			const tourId = await seedTour(ctx, "org_imm_b");
@@ -169,7 +173,8 @@ describe("immediate booking-confirmation dispatch", () => {
 			internal.notifications.getBookingForImmediateDispatch,
 			{ bookingId },
 		);
-		expect(result).toBeNull();
+		expect(result).not.toBeNull();
+		expect(result?.template).toBeNull();
 	});
 
 	it("returns shape { template, booking, customer } with correct fields", async () => {

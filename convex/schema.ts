@@ -464,12 +464,21 @@ export default defineSchema({
 		languageRequired: v.string(),
 		notes: v.string(),
 		// PENDING | CONFIRMED | CHECKED_IN | COMPLETED | CANCELLED
+		//   | EXPIRED | NO_SHOW
+		// Transitions: pending → confirmed | cancelled | expired
+		//              confirmed → checked_in | cancelled | no_show
+		//              checked_in → completed | cancelled
+		// `expired` is set by the stale-pending cron (>15m unconfirmed)
+		// and releases capacity via the same decrementBooked path as
+		// cancel. `no_show` is terminal — the seat was consumed.
 		status: v.union(
 			v.literal("pending"),
 			v.literal("confirmed"),
 			v.literal("checked_in"),
 			v.literal("completed"),
 			v.literal("cancelled"),
+			v.literal("expired"),
+			v.literal("no_show"),
 		),
 		// Cents-only (drop DecimalField dollars from source)
 		depositAmountCents: v.int64(),
@@ -494,6 +503,9 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_org_date", ["organizationId", "date"])
 		.index("by_org_status", ["organizationId", "status"])
+		// Cron scan: stale pending bookings across all orgs
+		// (status = "pending" AND createdAt < cutoff).
+		.index("by_status_created", ["status", "createdAt"])
 		.index("by_customer_date", ["customerId", "date"])
 		.index("by_tour_date", ["tourId", "date"])
 		.index("by_schedule", ["scheduleId"])

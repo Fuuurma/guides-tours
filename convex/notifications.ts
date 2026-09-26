@@ -304,19 +304,25 @@ async function bumpRetryOrAbandon(
 }
 
 /**
- * Load the booking + customer + active `booking_confirmation`
- * template for immediate dispatch. Returns null if the booking was
- * deleted, the customer was deleted, or no active template exists
- * (the dispatcher logs/skips in all three cases).
+ * Load the booking + customer + active template of `templateType`
+ * (default `booking_confirmation`) for immediate dispatch. Returns
+ * null if the booking or customer was deleted. `template` is null
+ * when no active template exists — the confirmation dispatcher
+ * skips in that case, while the transition dispatcher falls back
+ * to the built-in copy.
  */
 export const getBookingForImmediateDispatch = internalQuery({
-	args: { bookingId: v.id("bookings") },
+	args: {
+		bookingId: v.id("bookings"),
+		templateType: v.optional(v.string()),
+	},
 	handler: async (ctx, args) => {
+		const templateType = args.templateType ?? "booking_confirmation";
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) return null;
 		// Customer and tour are independent of each other (both
 		// reference the booking) — fetch in parallel.
-		// Fetch all active booking_confirmation templates for this
+		// Fetch all active templates of this type for this
 		// org, then prefer isDefault. Previously used .first() which
 		// returns the oldest by _creationTime — not necessarily the
 		// default. Bound the scan: an org with hundreds of templates
@@ -329,7 +335,7 @@ export const getBookingForImmediateDispatch = internalQuery({
 				.withIndex("by_org_type", (q) =>
 					q
 						.eq("organizationId", booking.organizationId)
-						.eq("templateType", "booking_confirmation"),
+						.eq("templateType", templateType),
 				)
 				.filter((q) => q.eq(q.field("isActive"), true))
 				.take(100),
@@ -338,19 +344,20 @@ export const getBookingForImmediateDispatch = internalQuery({
 		// Prefer isDefault; fall back to first active if none is
 		// marked default (backwards compat with orgs that never set one).
 		const template = templates.find((t) => t.isDefault) ?? templates[0];
-		if (!template) return null;
 		const tourName = tour?.name ?? "your tour";
 		return {
-			template: {
-				name: template.name,
-				templateType: template.templateType,
-				channel: template.channel,
-				isActive: template.isActive,
-				emailSubject: template.emailSubject,
-				emailBodyText: template.emailBodyText,
-				emailBodyHtml: template.emailBodyHtml,
-				smsBody: template.smsBody,
-			},
+			template: template
+				? {
+						name: template.name,
+						templateType: template.templateType,
+						channel: template.channel,
+						isActive: template.isActive,
+						emailSubject: template.emailSubject,
+						emailBodyText: template.emailBodyText,
+						emailBodyHtml: template.emailBodyHtml,
+						smsBody: template.smsBody,
+					}
+				: null,
 			booking: {
 				_id: booking._id,
 				organizationId: booking.organizationId,

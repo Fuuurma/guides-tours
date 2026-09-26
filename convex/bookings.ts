@@ -9,7 +9,9 @@
 //
 // Lifecycle states (per schema union):
 //   pending → confirmed → cancelled (terminal)
+//            ↘ expired (terminal; cron auto-release after 15m)
 //                            ↘ checked_in → completed (terminal)
+//                  ↘ no_show (terminal)
 //
 // We expose:
 //   - create (pending by default; supports staff override)
@@ -20,6 +22,8 @@
 //   - confirm (pending → confirmed; sends customer confirmation + reminders)
 //   - checkIn (confirmed → checked_in; records by/at)
 //   - complete (checked_in → completed; bumps customer loyalty/vip)
+//   - markNoShow (confirmed → no_show)
+//   - expireStalePending (cron; pending > 15m → expired + releases capacity)
 //   - recordReview (post-tour review rating/comment)
 
 import { v, ConvexError } from "convex/values";
@@ -39,11 +43,15 @@ import {
 } from "./lib/validation";
 import { isBlackoutHelper } from "./tourBlackoutDates";
 import {
+	PENDING_EXPIRY_MS,
 	performCancel,
 	performComplete,
 	performConfirm,
+	performExpire,
+	performNoShow,
 	performUpdate,
 } from "./lib/bookingsLifecycle";
+import { logger } from "./lib/logger";
 
 // ----- Queries -----
 
@@ -728,8 +736,9 @@ export const cancel = mutation({
 	},
 });
 
-/** Internal mirror of cancel — no auth, used by tests + scheduled
- *  job that auto-cancels stale pending bookings (future work). */
+/** Internal mirror of cancel — no auth, used by tests. Stale
+ *  pending bookings go through internalExpire / expireStalePending
+ *  (expired status), not this path. */
 export const internalCancel = internalMutation({
 	args: {
 		bookingId: v.id("bookings"),
@@ -809,6 +818,90 @@ export const internalComplete = internalMutation({
 		if (!booking) throw new ConvexError("Booking not found");
 		await performComplete(ctx, booking, "system");
 		return args.bookingId;
+	},
+});
+
+/** Mark a confirmed booking as no-show. Terminal — the seat was
+ *  held, so capacity is NOT released. */
+export const markNoShow = mutation({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		// Enforce declared RBAC: booking:update (owner/admin only).
+		const member = await requirePermission(ctx, "booking", "update");
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) throw new ConvexError("Booking not found");
+		if (booking.organizationId !== member.organizationId) {
+			throw new ConvexError("Forbidden: wrong organization");
+		}
+		await performNoShow(ctx, booking, member.userId);
+		return args.bookingId;
+	},
+});
+
+/** Internal mirror of markNoShow — no auth, used by tests. */
+export const internalNoShow = internalMutation({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) throw new ConvexError("Booking not found");
+		await performNoShow(ctx, booking, "system");
+		return args.bookingId;
+	},
+});
+
+/**
+ * Expire one stale pending booking (pending → expired). Loads the
+ * row and guards status so the cron fan-out is safe to retry —
+ * a booking confirmed between scan and expire is skipped, not
+ * clobbered.
+ */
+export const internalExpire = internalMutation({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		const booking = await ctx.db.get(args.bookingId);
+		if (!booking) throw new ConvexError("Booking not found");
+		if (booking.status !== "pending") return args.bookingId; // already transitioned
+		await performExpire(ctx, booking, "system:cron");
+		return args.bookingId;
+	},
+});
+
+/**
+ * Cron entry: find pending bookings older than PENDING_EXPIRY_MS
+ * and expire each via internalExpire so capacity is released
+ * through the same atomic decrementBooked path as a manual cancel.
+ * Per-booking runMutation isolates failures — one bad row doesn't
+ * block the rest of the batch.
+ */
+export const expireStalePending = internalMutation({
+	args: {},
+	handler: async (ctx) => {
+		const cutoff = Date.now() - PENDING_EXPIRY_MS;
+		// Bound the batch: a backlog larger than this is expiring
+		// faster than the cron interval can drain, which the count
+		// in the log makes visible.
+		const MAX_BATCH = 100;
+		const stale = await ctx.db
+			.query("bookings")
+			.withIndex("by_status_created", (q) =>
+				q.eq("status", "pending").lt("createdAt", cutoff),
+			)
+			.take(MAX_BATCH);
+		let expired = 0;
+		for (const booking of stale) {
+			try {
+				await ctx.runMutation(internal.bookings.internalExpire, {
+					bookingId: booking._id,
+				});
+				expired++;
+			} catch (err) {
+				logger.error("[bookings] internalExpire failed", {
+					bookingId: booking._id,
+					error: err instanceof Error ? err.message : String(err),
+				});
+			}
+		}
+		return { scanned: stale.length, expired };
 	},
 });
 

@@ -224,7 +224,7 @@ export const dispatchImmediateBookingConfirmation = internalAction({
 			internal.notifications.getBookingForImmediateDispatch,
 			{ bookingId: args.bookingId },
 		);
-		if (!ctx_) {
+		if (!ctx_ || !ctx_.template) {
 			return {
 				channel: "none",
 				status: "skipped",
@@ -264,6 +264,77 @@ export const dispatchImmediateBookingConfirmation = internalAction({
 				recipient: to,
 				subject,
 				templateName: ctx_.template.name,
+			},
+		);
+
+		return result;
+	},
+});
+
+/**
+ * Notify the customer about a booking lifecycle transition
+ * (cancellation / expiry / no-show) via SES. Unlike the
+ * confirmation dispatcher, transitions fall back to the built-in
+ * copy when the org has no stored template for the type — the
+ * state machine requires transitions to notify, and operators
+ * shouldn't have to seed a template before expiry emails work.
+ */
+export const dispatchImmediateBookingTransition = internalAction({
+	args: {
+		bookingId: v.id("bookings"),
+		templateType: v.string(),
+	},
+	handler: async (ctx, args): Promise<DispatchResult> => {
+		const ctx_ = await ctx.runQuery(
+			internal.notifications.getBookingForImmediateDispatch,
+			{ bookingId: args.bookingId, templateType: args.templateType },
+		);
+		if (!ctx_) {
+			return {
+				channel: "none",
+				status: "skipped",
+				error: "booking/customer not found",
+				rendered: { to: "", subject: "", bodyText: "", bodyHtml: "" },
+			};
+		}
+
+		const template = ctx_.template ?? {
+			name: `builtin:${args.templateType}`,
+			templateType: args.templateType,
+			isActive: true,
+		};
+
+		const result = await renderAndDispatch(
+			ctx as never,
+			{
+				organizationId: ctx_.booking.organizationId,
+				template,
+				booking: {
+					_id: ctx_.booking._id,
+					tourName: ctx_.booking.tourName,
+					date: ctx_.booking.date,
+					startTime: ctx_.booking.startTime,
+				},
+				customer: ctx_.customer,
+			},
+			"immediate",
+		);
+		const to = ctx_.customer.email || ctx_.customer.phone || "";
+		const subject =
+			result.rendered.subject || fallbackSubject(template.templateType);
+
+		await ctx.runMutation(
+			internal.notifications.recordImmediateDispatchResult,
+			{
+				organizationId: ctx_.booking.organizationId,
+				bookingId: args.bookingId,
+				channel: result.channel,
+				success: result.status === "sent",
+				skipped: result.status === "skipped",
+				errorMessage: result.error,
+				recipient: to,
+				subject,
+				templateName: template.name,
 			},
 		);
 
