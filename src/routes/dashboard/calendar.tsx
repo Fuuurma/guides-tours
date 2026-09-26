@@ -536,7 +536,7 @@ function MonthGrid({
 							<Link
 								to="/dashboard/schedules/new"
 								search={{ date }}
-								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
 								title={`New schedule on ${date}`}
 							>
 								+ Schedule
@@ -637,7 +637,7 @@ function MonthGrid({
 							<Link
 								to="/dashboard/schedules/new"
 								search={{ date }}
-								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
 								title={`New schedule on ${date}`}
 							>
 								+ Schedule
