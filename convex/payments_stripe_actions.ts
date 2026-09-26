@@ -134,6 +134,101 @@ function paymentIntentIdFrom(obj: StripeObject | undefined): string | null {
 	return null;
 }
 
+/** PaymentIntent states where re-opening the SAME intent is safe
+ *  (F375 checkout dedup). Terminal states (succeeded / canceled) and
+ *  requires_capture are excluded — reuse those paths mint fresh. */
+const PI_REUSABLE_STATUSES = new Set([
+	"requires_payment_method",
+	"requires_confirmation",
+	"requires_action",
+	"processing",
+]);
+
+type StripePaymentIntent = StripeObject & {
+	id?: string;
+	status?: string;
+	client_secret?: string;
+};
+
+/** Fetch a PaymentIntent from Stripe. Null on any failure — the caller
+ *  falls back to minting fresh, so a transient Stripe hiccup must not
+ *  break checkout. */
+async function retrievePaymentIntent(
+	stripeSecret: string,
+	piId: string,
+): Promise<StripePaymentIntent | null> {
+	if (!piId.startsWith("pi_") || piId.length > 200) return null;
+	try {
+		const res = await fetch(
+			`${STRIPE_API_BASE}/payment_intents/${encodeURIComponent(piId)}`,
+			{ headers: { Authorization: `Bearer ${stripeSecret}` } },
+		);
+		if (!res.ok) return null;
+		const pi = (await res.json()) as StripePaymentIntent;
+		return pi.id ? pi : null;
+	} catch {
+		return null;
+	}
+}
+
+/** True when a stored intent can be re-opened for a new checkout
+ *  session: same amount + currency as the current balance (a stale
+ *  intent for a changed price must not be reused) and still in a
+ *  reusable Stripe state. */
+function intentMatchesBalance(
+	pi: StripePaymentIntent,
+	balanceCents: bigint,
+	currencyDb: string,
+): boolean {
+	return (
+		pi.status !== undefined &&
+		PI_REUSABLE_STATUSES.has(pi.status) &&
+		pi.amount === Number(balanceCents) &&
+		(pi.currency ?? "").toUpperCase() === currencyDb
+	);
+}
+
+/** Per-email sliding-window gate on the unauthenticated payment
+ *  actions (F375). Shares the publicBookingAttempts machinery with
+ *  booking submissions — a legit guest spends ~1 booking attempt +
+ *  1-2 payment attempts, well inside the 5/15min cap, while spray is
+ *  bounded. slug records the payment target for audit. */
+async function rateLimitPublicPayment(
+	ctx: ActionCtx,
+	email: string,
+	bookingId: string,
+): Promise<void> {
+	const rl = await ctx.runMutation(internal.lib.rate_limit.recordAttempt, {
+		email,
+		slug: `payment:${bookingId}`,
+		outcome: "pending",
+	});
+	if (!rl.allowed) {
+		throw new ConvexError(
+			"Too many payment attempts — please try again in a few minutes",
+		);
+	}
+}
+
+/** Look up a still-open intent for this booking and verify it against
+ *  the Stripe API + current balance. Returns null whenever anything
+ *  doesn't line up — callers mint fresh. */
+async function findReusableIntent(
+	ctx: ActionCtx,
+	stripeSecret: string,
+	bookingId: string,
+	balanceCents: bigint,
+	currencyDb: string,
+): Promise<StripePaymentIntent | null> {
+	const open = await ctx.runQuery(internal.payments.getOpenIntentForBooking, {
+		bookingId: bookingId as import("./_generated/dataModel").Id<"bookings">,
+	});
+	if (!open) return null;
+	const pi = await retrievePaymentIntent(stripeSecret, open.stripePaymentIntentId);
+	if (!pi || !intentMatchesBalance(pi, balanceCents, currencyDb)) return null;
+	return pi;
+}
+
 async function assertBookingCheckoutAllowed(
 	ctx: ActionCtx,
 	bookingId: string,
@@ -299,6 +394,7 @@ export const createPublicPaymentIntent = action({
 	}> => {
 		const email = normalizeEmail(args.customerEmail);
 		if (!email) throw new ConvexError("Invalid email address");
+		await rateLimitPublicPayment(ctx, email, args.bookingId);
 
 		const booking = await ctx.runQuery(
 			internal.payments.getBookingForCheckout,
@@ -329,6 +425,27 @@ export const createPublicPaymentIntent = action({
 		const stripeSecret = await decrypt(settings.stripeSecretKey);
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
+
+		// F375 dedup: re-open the booking's existing pending intent when
+		// it is still usable instead of minting a fresh one per call —
+		// abandoned sessions left unlimited pending rows and a guest
+		// completing two of them got double-charged.
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			balance,
+			currencyDb,
+		);
+		if (reusable?.client_secret && reusable.id) {
+			return {
+				stripePaymentIntentId: reusable.id,
+				clientSecret: reusable.client_secret,
+				amountCents: balance,
+				currency: currencyDb,
+				publishableKey: settings.stripePublishableKey,
+			};
+		}
 
 		const params = new URLSearchParams();
 		params.append("amount", balance.toString());
@@ -522,6 +639,7 @@ export const createPublicHostedCheckout = action({
 	): Promise<{ url: string; sessionId: string }> => {
 		const email = normalizeEmail(args.customerEmail);
 		if (!email) throw new ConvexError("Invalid email address");
+		await rateLimitPublicPayment(ctx, email, args.bookingId);
 
 		const booking = await ctx.runQuery(
 			internal.payments.getBookingForCheckout,
@@ -550,6 +668,23 @@ export const createPublicHostedCheckout = action({
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
 
+		// F375 dedup: attach the booking's existing pending intent to the
+		// new session (Checkout accepts an unconfirmed intent via the
+		// payment_intent parameter) so completing two sessions still
+		// captures one PaymentIntent — the double-charge path is dead.
+		// Hosted reuse needs requires_payment_method (unconfirmed).
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			balance,
+			currencyDb,
+		);
+		const reusedPiId =
+			reusable?.id && reusable.status === "requires_payment_method"
+				? reusable.id
+				: null;
+
 		const siteUrl = checkoutSiteOrigin();
 		const successPath = checkoutReturnPath(
 			args.successPath,
@@ -560,41 +695,61 @@ export const createPublicHostedCheckout = action({
 			`/book/paid?bookingId=${args.bookingId}&cancelled=1`,
 		);
 
-		const params = new URLSearchParams();
-		params.append("mode", "payment");
-		params.append("success_url", `${siteUrl}${successPath}`);
-		params.append("cancel_url", `${siteUrl}${cancelPath}`);
-		params.append("line_items[0][quantity]", "1");
-		params.append("line_items[0][price_data][currency]", currencyStripe);
-		params.append(
-			"line_items[0][price_data][unit_amount]",
-			balance.toString(),
-		);
-		params.append(
-			"line_items[0][price_data][product_data][name]",
-			`Tour booking ${args.bookingId}`,
-		);
-		params.append("metadata[bookingId]", args.bookingId);
-		params.append("metadata[organizationId]", booking.organizationId);
-		params.append(
-			"payment_intent_data[metadata][bookingId]",
-			args.bookingId,
-		);
-		params.append(
-			"payment_intent_data[metadata][organizationId]",
-			booking.organizationId,
-		);
-		params.append("expand[]", "payment_intent");
-		params.append("customer_email", email);
+		const buildSessionParams = (withReusedPi: boolean) => {
+			const params = new URLSearchParams();
+			params.append("mode", "payment");
+			params.append("success_url", `${siteUrl}${successPath}`);
+			params.append("cancel_url", `${siteUrl}${cancelPath}`);
+			params.append("line_items[0][quantity]", "1");
+			params.append("line_items[0][price_data][currency]", currencyStripe);
+			params.append(
+				"line_items[0][price_data][unit_amount]",
+				balance.toString(),
+			);
+			params.append(
+				"line_items[0][price_data][product_data][name]",
+				`Tour booking ${args.bookingId}`,
+			);
+			params.append("metadata[bookingId]", args.bookingId);
+			params.append("metadata[organizationId]", booking.organizationId);
+			params.append(
+				"payment_intent_data[metadata][bookingId]",
+				args.bookingId,
+			);
+			params.append(
+				"payment_intent_data[metadata][organizationId]",
+				booking.organizationId,
+			);
+			params.append("expand[]", "payment_intent");
+			params.append("customer_email", email);
+			if (withReusedPi && reusedPiId) {
+				params.append("payment_intent", reusedPiId);
+			}
+			return params;
+		};
 
-		const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${stripeSecret}`,
-				"Content-Type": "application/x-www-form-urlencoded",
-			},
-			body: params.toString(),
-		});
+		const createSession = async (withReusedPi: boolean) => {
+			const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${stripeSecret}`,
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: buildSessionParams(withReusedPi).toString(),
+			});
+			return res;
+		};
+
+		let res = await createSession(reusedPiId !== null);
+		if (!res.ok && reusedPiId) {
+			// Stripe refused the reused intent (state moved, method types
+			// drifted) — fall back to a fresh session rather than fail the
+			// guest's payment. The stale row goes terminal via the webhook.
+			logger.warn(
+				`payment_intent reuse rejected for booking ${args.bookingId}, minting fresh`,
+			);
+			res = await createSession(false);
+		}
 		if (!res.ok) {
 			const errText = await res.text();
 			throw new ConvexError(

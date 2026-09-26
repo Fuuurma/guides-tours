@@ -219,6 +219,7 @@ async function seedPayment(
 		stripePaymentIntentId: string;
 		status: string;
 		amountCents: bigint;
+		createdAt: number;
 	}> = {},
 ): Promise<Id<"payments">> {
 	return (await ctx.db.insert("payments", {
@@ -229,7 +230,7 @@ async function seedPayment(
 		currency: "USD",
 		status: overrides.status ?? "succeeded",
 		provider: "stripe",
-		createdAt: 0,
+		createdAt: overrides.createdAt ?? 0,
 		updatedAt: 0,
 	})) as Id<"payments">;
 }
@@ -461,6 +462,124 @@ describe("payments_stripe_actions — createPublicPaymentIntent", () => {
 		expect(result.amountCents).toBe(8000n);
 	});
 
+	it("re-opens the booking's pending intent instead of minting (F375)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_pi_reuse";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				customerEmail: "guest@example.com",
+				totalAmountCents: 8000n,
+				balanceDueCents: 8000n,
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+		await t.run(async (ctx) =>
+			seedPayment(ctx as unknown as TestCtx, orgId, bookingId, {
+				stripePaymentIntentId: "pi_open_1",
+				status: "pending",
+				amountCents: 8000n,
+				createdAt: Date.now(),
+			}),
+		);
+		mockFetchSuccess({
+			id: "pi_open_1",
+			client_secret: "pi_open_1_secret",
+			amount: 8000,
+			currency: "usd",
+			status: "requires_payment_method",
+		});
+
+		const result = await t.action(api.payments_stripe_actions.createPublicPaymentIntent, {
+			bookingId,
+			customerEmail: "guest@example.com",
+		});
+
+		// Same intent handed back — the client resumes it, no new mint.
+		expect(result.stripePaymentIntentId).toBe("pi_open_1");
+		expect(result.clientSecret).toBe("pi_open_1_secret");
+		// Only the GET verify ran — no POST /payment_intents.
+		const posts = mockState.fetchCalls.filter((c) => c.method === "POST");
+		expect(posts).toHaveLength(0);
+	});
+
+	it("mints fresh when the stored intent is stale-priced (F375)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_pi_stale";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				customerEmail: "guest@example.com",
+				totalAmountCents: 8000n,
+				balanceDueCents: 8000n,
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+		await t.run(async (ctx) =>
+			seedPayment(ctx as unknown as TestCtx, orgId, bookingId, {
+				stripePaymentIntentId: "pi_stale_1",
+				status: "pending",
+				amountCents: 5000n, // balance moved since this intent was minted
+				createdAt: Date.now(),
+			}),
+		);
+		mockFetchSuccess({
+			id: "pi_fresh_1",
+			client_secret: "pi_fresh_1_secret",
+			amount: 8000,
+			currency: "usd",
+			status: "succeeded",
+		});
+
+		const result = await t.action(api.payments_stripe_actions.createPublicPaymentIntent, {
+			bookingId,
+			customerEmail: "guest@example.com",
+		});
+
+		expect(result.stripePaymentIntentId).toBe("pi_fresh_1");
+		const posts = mockState.fetchCalls.filter((c) => c.method === "POST");
+		expect(posts).toHaveLength(1);
+	});
+
+	it("rate-limits repeated public payment attempts (F375)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_pi_rl";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				customerEmail: "guest@example.com",
+				totalAmountCents: 8000n,
+				balanceDueCents: 8000n,
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+		// status succeeded → every call takes the mint path, so each
+		// attempt consumes one rate-limit slot.
+		mockFetchSuccess({
+			id: "pi_rl_1",
+			client_secret: "pi_rl_1_secret",
+			amount: 8000,
+			currency: "usd",
+			status: "succeeded",
+		});
+
+		for (let i = 0; i < 5; i++) {
+			await t.action(api.payments_stripe_actions.createPublicPaymentIntent, {
+				bookingId,
+				customerEmail: "guest@example.com",
+			});
+		}
+		await expect(
+			t.action(api.payments_stripe_actions.createPublicPaymentIntent, {
+				bookingId,
+				customerEmail: "guest@example.com",
+			}),
+		).rejects.toThrow(/Too many payment attempts/i);
+	});
+
 	it("rejects when email does not match booking", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub_pi_2";
@@ -670,6 +789,165 @@ describe("payments_stripe_actions — createPublicHostedCheckout", () => {
 		expect(body.get("cancel_url")).toBe(
 			`https://guides-tours.example/book/paid?bookingId=${bookingId}&cancelled=1`,
 		);
+	});
+
+	it("attaches the booking's pending intent to the session (F375)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_hosted_reuse";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				customerEmail: "guest@example.com",
+				totalAmountCents: 8000n,
+				balanceDueCents: 8000n,
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+		await t.run(async (ctx) =>
+			seedPayment(ctx as unknown as TestCtx, orgId, bookingId, {
+				stripePaymentIntentId: "pi_hosted_open",
+				status: "pending",
+				amountCents: 8000n,
+				createdAt: Date.now(),
+			}),
+		);
+		// GET verify returns the open intent; POST session create returns
+		// the session — one fixed object can't carry both ids, so branch
+		// by URL (same pattern as the fallback test below).
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (url: string, opts: { method?: string; body?: unknown } = {}) => {
+				mockState.fetchCalls.push({
+					url: String(url),
+					method: opts?.method ?? "GET",
+					body: typeof opts?.body === "string" ? opts.body : undefined,
+				});
+				if (url.includes("/payment_intents/")) {
+					return {
+						ok: true,
+						status: 200,
+						json: async () => ({
+							id: "pi_hosted_open",
+							amount: 8000,
+							currency: "usd",
+							status: "requires_payment_method",
+						}),
+						text: async (): Promise<string> => "",
+					};
+				}
+				return {
+					ok: true,
+					status: 200,
+					json: async () => ({
+						id: "cs_pub_reuse",
+						url: "https://checkout.stripe.com/c/pay/cs_pub_reuse",
+						payment_intent: "pi_hosted_open",
+					}),
+					text: async (): Promise<string> => "",
+				};
+			}),
+		);
+
+		const result = await t.action(api.payments_stripe_actions.createPublicHostedCheckout, {
+			bookingId,
+			customerEmail: "guest@example.com",
+		});
+
+		expect(result.url).toContain("cs_pub_reuse");
+		const create = mockState.fetchCalls.find(
+			(c) => c.method === "POST" && c.url.includes("/checkout/sessions"),
+		);
+		const body = new URLSearchParams(create?.body);
+		expect(body.get("payment_intent")).toBe("pi_hosted_open");
+	});
+
+	it("falls back to a fresh session when Stripe rejects the reused intent (F375)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_hosted_fallback";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				customerEmail: "guest@example.com",
+				totalAmountCents: 8000n,
+				balanceDueCents: 8000n,
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+		await t.run(async (ctx) =>
+			seedPayment(ctx as unknown as TestCtx, orgId, bookingId, {
+				stripePaymentIntentId: "pi_hosted_stale",
+				status: "pending",
+				amountCents: 8000n,
+				createdAt: Date.now(),
+			}),
+		);
+		// Sequence: GET verify → open; POST with payment_intent → 400;
+		// POST without → session. The stub reads mockState per call, and
+		// this test drives the branch by URL/body (GET vs POST#1 vs POST#2).
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (url: string, opts: { method?: string; body?: unknown } = {}) => {
+				mockState.fetchCalls.push({
+					url: String(url),
+					method: opts?.method ?? "GET",
+					body: typeof opts?.body === "string" ? opts.body : undefined,
+				});
+				if (url.includes("/payment_intents/")) {
+					return {
+						ok: true,
+						status: 200,
+						json: async () => ({
+							id: "pi_hosted_stale",
+							amount: 8000,
+							currency: "usd",
+							status: "requires_payment_method",
+						}),
+						text: async (): Promise<string> => "",
+					};
+				}
+				const body = typeof opts?.body === "string" ? opts.body : "";
+				if (new URLSearchParams(body).get("payment_intent")) {
+					return {
+						ok: false,
+						status: 400,
+						json: async () => ({
+							error: { message: "payment_intent is not attachable" },
+						}),
+						text: async (): Promise<string> => "payment_intent is not attachable",
+					};
+				}
+				return {
+					ok: true,
+					status: 200,
+					json: async () => ({
+						id: "cs_fresh",
+						url: "https://checkout.stripe.com/c/pay/cs_fresh",
+						payment_intent: "pi_new_fresh",
+					}),
+					text: async (): Promise<string> => "",
+				};
+			}),
+		);
+
+		const result = await t.action(api.payments_stripe_actions.createPublicHostedCheckout, {
+			bookingId,
+			customerEmail: "guest@example.com",
+		});
+
+		// First POST carried the reuse attempt, second did not.
+		const posts = mockState.fetchCalls.filter(
+			(c) => c.method === "POST" && c.url.includes("/checkout/sessions"),
+		);
+		expect(posts).toHaveLength(2);
+		expect(
+			new URLSearchParams(posts[0]?.body).get("payment_intent"),
+		).toBe("pi_hosted_stale");
+		expect(
+			new URLSearchParams(posts[1]?.body).get("payment_intent"),
+		).toBeNull();
+		expect(result.sessionId).toBe("cs_fresh");
 	});
 
 	it("rejects public Checkout protocol-relative return URLs", async () => {

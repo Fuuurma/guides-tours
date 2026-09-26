@@ -776,6 +776,44 @@ export const getBookingForCheckout = internalQuery({
 	},
 });
 
+/** How long a pending payment row's intent stays reusable for
+ *  checkout dedup. Past this, callers mint fresh (the stale row goes
+ *  terminal via the webhook/expiry path). */
+export const PI_REUSE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Internal: newest reusable pending intent for one booking.
+ * Public checkout dedup (F375): every createPublicPaymentIntent /
+ * createPublicHostedCheckout call used to mint a fresh Stripe
+ * PaymentIntent + pending row — abandoned sessions piled up, and a
+ * guest completing two of them was double-charged. Callers re-open
+ * this intent when it is still usable instead. Bounded walk over the
+ * by_booking index (newest first, take(8)); only rows inside the
+ * reuse window qualify.
+ */
+export const getOpenIntentForBooking = internalQuery({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		const cutoff = Date.now() - PI_REUSE_WINDOW_MS;
+		const rows = await ctx.db
+			.query("payments")
+			.withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
+			.order("desc")
+			.take(8);
+		for (const p of rows) {
+			if (p.status !== "pending") continue;
+			if (!p.stripePaymentIntentId.startsWith("pi_")) continue;
+			if (p.createdAt < cutoff) return null;
+			return {
+				stripePaymentIntentId: p.stripePaymentIntentId,
+				amountCents: p.amountCents,
+				currency: p.currency,
+			};
+		}
+		return null;
+	},
+});
+
 /** Internal: look up a payment by Stripe PaymentIntent ID, scoped to org. */
 export const getPaymentByIntent = internalQuery({
 	args: {
