@@ -41,8 +41,10 @@ export const STATUS_VARIANTS: Record<string, StatusVariant> = {
 	maintenance: "outline",
 	// Failure
 	rejected: "destructive",
+	no_show: "destructive",
 	// Terminal neutral
 	cancelled: "secondary",
+	expired: "secondary",
 	retired: "secondary",
 	// Special
 	email: "secondary",

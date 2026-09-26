@@ -13,7 +13,9 @@ type BookingStatus =
 	| "confirmed"
 	| "checked_in"
 	| "completed"
-	| "cancelled";
+	| "cancelled"
+	| "expired"
+	| "no_show";
 
 type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
 
