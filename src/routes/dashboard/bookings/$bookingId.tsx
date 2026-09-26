@@ -266,7 +266,8 @@ function BookingDetailPage() {
 				/>
 			)}
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			{/* Total leads at 1.5x weight; Deposit / Balance due / Net revenue trail. */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				<MetricCard
 					label="Total"
 					value={formatCentsCompact(b.totalAmountCents)}
