@@ -32,7 +32,11 @@ import {
 	normalizeEmail,
 } from "./lib/validation";
 
-const COLLECTIBLE_PUBLIC = new Set(["confirmed", "checked_in"]);
+// Aligned with COLLECTIBLE_STATUSES in payments_stripe_actions.ts: public
+// bookings are inserted as "pending" and are immediately collectible —
+// the response gate must include "pending" or the entire pay-now UI is
+// dead code while the server action still accepts the charge.
+const COLLECTIBLE_PUBLIC = new Set(["pending", "confirmed", "checked_in"]);
 type PublicOrganizationRecord = {
 	id?: string;
 	_id?: string;
