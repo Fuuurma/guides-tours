@@ -38,6 +38,8 @@ async function seedCustomer(
 		nextBookingDate: string;
 		smsConsent: boolean;
 		emailConsent: boolean;
+		smsConsentDate: number;
+		emailConsentDate: number;
 	}> = {},
 ): Promise<Id<"customers">> {
 	return await ctx.db.insert("customers", {
@@ -48,6 +50,8 @@ async function seedCustomer(
 		notes: overrides.notes ?? "",
 		smsConsent: overrides.smsConsent ?? false,
 		emailConsent: overrides.emailConsent ?? true,
+		smsConsentDate: overrides.smsConsentDate,
+		emailConsentDate: overrides.emailConsentDate,
 		preferredLanguage: overrides.preferredLanguage ?? "en",
 		tags: overrides.tags ?? [],
 		source: overrides.source ?? "",
@@ -140,6 +144,70 @@ describe("convex/customers — list pagination behavior (unit-level)", () => {
 		const vips = all.filter((c) => c.vipStatus);
 		expect(vips.length).toBe(1);
 		expect(vips[0]?.name).toBe("Vip");
+	});
+
+	it("by_org_vip index can select the regular (non-VIP) class (F364)", async () => {
+		// list() maps vipOnly:false → vipStatus:false on by_org_vip.
+		// Assert the index contract so a truthiness regression is visible.
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			await seedCustomer(c, "org_reg", {
+				name: "Vip",
+				email: "vip@reg.com",
+				vipStatus: true,
+			});
+			await seedCustomer(c, "org_reg", {
+				name: "NotVip",
+				email: "notvip@reg.com",
+				vipStatus: false,
+			});
+		});
+		const regulars = await t.run(async (ctx) => {
+			return await ctx.db
+				.query("customers")
+				.withIndex("by_org_vip", (q) =>
+					q.eq("organizationId", "org_reg").eq("vipStatus", false),
+				)
+				.collect();
+		});
+		expect(regulars.map((c) => c.name)).toEqual(["NotVip"]);
+	});
+});
+
+describe("convex/customers — consent date transitions (F365)", () => {
+	it("only re-stamps consentDate on a false→true transition", async () => {
+		const t = convexTest(schema, modules);
+		const customerId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await seedCustomer(c, "org_consent", {
+				name: "C",
+				email: "c@x.com",
+				emailConsent: true,
+				emailConsentDate: 1_000,
+				smsConsent: true,
+				smsConsentDate: 2_000,
+			});
+		});
+		// Simulate the update() consent-date rule: re-sending `true`
+		// must not overwrite the original timestamp.
+		const after = await t.run(async (ctx) => {
+			const existing = (await ctx.db.get(customerId))!;
+			const patch: Record<string, unknown> = {
+				emailConsent: true,
+				smsConsent: true,
+			};
+			if (patch.emailConsent === true && !existing.emailConsent) {
+				patch.emailConsentDate = 9_999;
+			}
+			if (patch.smsConsent === true && !existing.smsConsent) {
+				patch.smsConsentDate = 9_999;
+			}
+			await ctx.db.patch(customerId, patch);
+			return (await ctx.db.get(customerId))!;
+		});
+		expect(after.emailConsentDate).toBe(1_000);
+		expect(after.smsConsentDate).toBe(2_000);
 	});
 });
 

@@ -96,12 +96,41 @@ export const upsertOtaBooking = internalMutation({
 		const rawRate = event.commissionRate ?? product?.commissionRate ?? 0;
 		const rate = Math.max(0, Math.min(rawRate, 1));
 		const paidCents = event.totalPaidCents;
+		// F361: guests drives capacityBooked — non-positive/fractional
+		// values would take the decrement branch in applyOtaCapacity or
+		// store a fractional seat claim. Floor and floor-at-1.
+		if (!Number.isFinite(event.guests)) {
+			throw new ConvexError("guests must be a finite number");
+		}
+		const guests = Math.max(1, Math.floor(event.guests));
+		if (guests !== event.guests) {
+			console.warn(
+				`ota guests: clamping ${event.guests} → ${guests} for ${event.reservationId}`,
+			);
+		}
 		let commissionCents = event.commissionCents;
 		if (commissionCents === undefined && paidCents !== undefined && rate > 0) {
 			// Derive from rate × totalPaid, rounded to whole cents.
 			// Use BigInt arithmetic to avoid floating-point loss.
 			commissionCents =
 				(BigInt(Math.round(rate * 1_000_000)) * paidCents) / 1_000_000n;
+		}
+		// F397: explicit commissionCents is not rate-clamped — a signed
+		// payload with commissionCents > totalPaidCents would store a
+		// negative net. Clamp commission into [0, paid] so the
+		// net ≥ 0 invariant holds regardless of source.
+		if (commissionCents !== undefined && paidCents !== undefined) {
+			if (commissionCents < 0n) {
+				console.warn(
+					`ota commission: clamping negative ${commissionCents} → 0 for ${event.reservationId}`,
+				);
+				commissionCents = 0n;
+			} else if (commissionCents > paidCents) {
+				console.warn(
+					`ota commission: clamping ${commissionCents} > paid ${paidCents} → paid for ${event.reservationId}`,
+				);
+				commissionCents = paidCents;
+			}
 		}
 		const netRevenueCents =
 			paidCents !== undefined
@@ -120,12 +149,12 @@ export const upsertOtaBooking = internalMutation({
 			otaCustomerCountry: event.customerCountry,
 			otaCustomerData: {
 				productId: event.productId,
-				guests: event.guests,
+				guests,
 			},
 			otaTourName: product?.otaTitle ?? event.productId,
 			otaTourDate: event.tourDate,
 			otaTourTime: event.tourTime,
-			otaGuests: event.guests,
+			otaGuests: guests,
 			otaTotalPaidCents: paidCents,
 			otaCurrency: event.currency ?? "USD",
 			commissionRate: rate,
@@ -134,7 +163,6 @@ export const upsertOtaBooking = internalMutation({
 			status: "confirmed" as const,
 			lastSyncAt: now,
 			rawOtaData: rawData,
-			confirmedAt: now,
 		};
 
 		// F331: resolve the departure this reservation consumes capacity
@@ -159,32 +187,54 @@ export const upsertOtaBooking = internalMutation({
 			// cancelledAt so the row isn't left in an inconsistent
 			// confirmed+cancelledAt state. The audit row below records
 			// the cancelled→confirmed transition via oldValues.
-			const patchToApply =
-				existing.status === "cancelled"
-					? { ...patch, cancelledAt: undefined, scheduleId }
-					: { ...patch, scheduleId: scheduleId ?? existing.scheduleId };
+			// Prefer a freshly resolved schedule; otherwise keep the
+			// existing link (F396 — a resolve miss must not drop it).
+			const effectiveScheduleId = scheduleId ?? existing.scheduleId;
+			const isReconfirm = existing.status === "cancelled";
+			const patchToApply = isReconfirm
+				? {
+						...patch,
+						cancelledAt: undefined,
+						scheduleId: effectiveScheduleId,
+						confirmedAt: now,
+					}
+				: {
+						...patch,
+						scheduleId: effectiveScheduleId,
+						// F360: plain re-dispatch keeps the original stamp.
+						confirmedAt: existing.confirmedAt ?? now,
+					};
 
 			// Capacity bookkeeping. A cancelled row holds no seats, so a
 			// re-confirm re-adds the full guest count; a confirmed re-upsert
 			// only corrects deltas (schedule move or guest-count change).
-			if (existing.status === "cancelled") {
-				if (scheduleId) {
-					await applyOtaCapacity(ctx, organizationId, scheduleId, event.guests);
+			// F396: when resolve misses but the row still holds a prior
+			// schedule + guest delta, correct that prior schedule — the
+			// stored otaGuests changes either way.
+			if (isReconfirm) {
+				if (effectiveScheduleId) {
+					await applyOtaCapacity(ctx, organizationId, effectiveScheduleId, guests);
 				}
 			} else {
 				const priorSchedule = existing.scheduleId;
 				const priorGuests = existing.otaGuests;
-				if (scheduleId && scheduleId !== priorSchedule) {
+				if (effectiveScheduleId && effectiveScheduleId !== priorSchedule) {
 					if (priorSchedule) {
 						await applyOtaCapacity(ctx, organizationId, priorSchedule, -priorGuests);
 					}
-					await applyOtaCapacity(ctx, organizationId, scheduleId, event.guests);
-				} else if (scheduleId && priorSchedule === scheduleId && event.guests !== priorGuests) {
+					await applyOtaCapacity(ctx, organizationId, effectiveScheduleId, guests);
+				} else if (
+					effectiveScheduleId &&
+					effectiveScheduleId === priorSchedule &&
+					guests !== priorGuests
+				) {
+					// Same link (fresh resolve or prior kept on resolve
+					// miss) + guest delta — correct the seat count.
 					await applyOtaCapacity(
 						ctx,
 						organizationId,
-						scheduleId,
-						event.guests - priorGuests,
+						effectiveScheduleId,
+						guests - priorGuests,
 					);
 				}
 			}
@@ -201,7 +251,7 @@ export const upsertOtaBooking = internalMutation({
 				newValues: {
 					reservationId: event.reservationId,
 					tourDate: event.tourDate,
-					guests: event.guests,
+					guests,
 					status: "confirmed",
 				},
 			});
@@ -209,11 +259,12 @@ export const upsertOtaBooking = internalMutation({
 		}
 
 		if (scheduleId) {
-			await applyOtaCapacity(ctx, organizationId, scheduleId, event.guests);
+			await applyOtaCapacity(ctx, organizationId, scheduleId, guests);
 		}
 		const id = await ctx.db.insert("otaBookings", {
 			...patch,
 			scheduleId,
+			confirmedAt: now,
 			bookingId: undefined,
 			otaOrderNumber: undefined,
 			otaConfirmationCode: undefined,
@@ -231,7 +282,7 @@ export const upsertOtaBooking = internalMutation({
 			newValues: {
 				reservationId: event.reservationId,
 				tourDate: event.tourDate,
-				guests: event.guests,
+				guests,
 				status: "confirmed",
 			},
 		});
