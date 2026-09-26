@@ -8,6 +8,8 @@ import {
 	mutation,
 	internalMutation,
 } from "./_generated/server";
+import { components } from "./_generated/api";
+
 
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
@@ -77,15 +79,26 @@ export const isBlackout = query({
  */
 export const publicIsBlackout = query({
 	args: {
-		organizationId: v.string(),
+		// F371: slug, not the internal tenant key — the org resolves
+		// server-side so visitors never learn organizationId.
+		slug: v.string(),
 		tourId: v.id("tours"),
 		date: v.string(),
 	},
 	handler: async (ctx, args) => {
+		const org = (await ctx.runQuery(
+			components.betterAuth.adapter.findOne as never,
+			{
+				model: "organization" as never,
+				where: [{ field: "slug", value: args.slug }] as never,
+			},
+		)) as { id?: string } | null;
+		const organizationId = org?.id;
+		if (!organizationId) return false;
 		const tour = await ctx.db.get(args.tourId);
 		if (
 			!tour ||
-			tour.organizationId !== args.organizationId ||
+			tour.organizationId !== organizationId ||
 			!tour.isActive ||
 			tour.deletedAt !== undefined
 		) {

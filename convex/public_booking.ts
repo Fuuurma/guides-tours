@@ -93,8 +93,9 @@ export const getOrgAndToursBySlug = query({
 			)
 			.take(200);
 
+		// F371: organizationId stays server-side — the slug is the only
+		// tenant handle the public surface needs.
 		return {
-			organizationId,
 			organizationName: org?.name ?? "Tour operator",
 			tours: tours.map((t) => ({
 				_id: t._id,
