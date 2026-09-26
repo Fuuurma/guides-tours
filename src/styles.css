@@ -83,8 +83,11 @@
 		--chart-1: oklch(0.488 0.243 264.376);
 		--chart-2: oklch(0.696 0.17 162.48);
 		--chart-3: oklch(0.71 0.13 205);
-		--chart-4: oklch(0.627 0.265 303.9);
-		--chart-5: oklch(0.645 0.246 16.439);
+		/* F382: stay on the sun/sand family like light mode — the shadcn
+		   defaults here (purple/red) recolored analytics bars off-brand
+		   and blurred the warning/danger distinction on dark surfaces. */
+		--chart-4: oklch(0.828 0.189 84.429);
+		--chart-5: oklch(0.769 0.188 70.08);
 		--sidebar: oklch(0.26 0.032 85);
 		--sidebar-foreground: oklch(0.96 0.012 85);
 		--sidebar-primary: oklch(0.72 0.09 230);
