@@ -16,7 +16,7 @@ import {
 	Wallet,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -808,10 +808,18 @@ function AssignmentRow({
 }
 
 function PublicBookingLinkBar({ slug }: { slug: string }) {
-	const url =
+	// F114: SSR must render a real URL (not empty + disabled Copy).
+	// Prefer the browser origin; fall back to SITE_URL-shaped env or a
+	// stable relative path the input can still show and Copy can resolve.
+	const [url, setUrl] = useState(() =>
 		typeof window !== "undefined"
 			? `${window.location.origin}/book/${slug}`
-			: "";
+			: `/book/${slug}`,
+	);
+	useEffect(() => {
+		if (typeof window === "undefined") return;
+		setUrl(`${window.location.origin}/book/${slug}`);
+	}, [slug]);
 	const [copied, setCopied] = useState(false);
 
 	const handleCopy = async () => {

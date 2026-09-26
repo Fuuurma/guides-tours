@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
+import { MotionConfig } from "motion/react";
 import type * as React from "react";
 import { useEffect } from "react";
 import { ConfirmProvider } from "@/components/confirm-dialog";
@@ -76,16 +77,20 @@ export const Route = createRootRouteWithContext<{
 function RootComponent() {
 	const context = useRouteContext({ from: Route.id });
 	return (
-		<ConvexBetterAuthProvider
-			client={context.convexQueryClient.convexClient}
-			// biome-ignore lint/suspicious/noExplicitAny: AuthClient from @convex-dev/better-auth 0.12.5 is a discriminated union; our client satisfies PluginsWithCrossDomain but the type narrows useSession().data to `never` which is structural. Cast is safe.
-			authClient={authClient as any}
-			initialToken={context.token}
-		>
-			<RootDocument>
-				<Outlet />
-			</RootDocument>
-		</ConvexBetterAuthProvider>
+		// F272: motion v12 defaults reducedMotion="never" — honor the OS
+		// setting for every motion.div/span (hero, analytics, ota, book).
+		<MotionConfig reducedMotion="user">
+			<ConvexBetterAuthProvider
+				client={context.convexQueryClient.convexClient}
+				// biome-ignore lint/suspicious/noExplicitAny: AuthClient from @convex-dev/better-auth 0.12.5 is a discriminated union; our client satisfies PluginsWithCrossDomain but the type narrows useSession().data to `never` which is structural. Cast is safe.
+				authClient={authClient as any}
+				initialToken={context.token}
+			>
+				<RootDocument>
+					<Outlet />
+				</RootDocument>
+			</ConvexBetterAuthProvider>
+		</MotionConfig>
 	);
 }
 

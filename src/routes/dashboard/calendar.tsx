@@ -676,7 +676,10 @@ function WeekAgenda({
 	const today = localYmd(new Date());
 
 	return (
-		<div className="flex flex-col gap-3">
+		// F109: operator week board — 7 equal day columns on wide screens,
+		// stacked on narrow. Each column keeps day header + empty-state
+		// actions (DESIGN.md: empty week days have Assign / New schedule).
+		<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
 			{days.map((d) => {
 				const date = localYmd(d);
 				const items = byDate.get(date) ?? [];
@@ -688,11 +691,17 @@ function WeekAgenda({
 					day: "numeric",
 				});
 				return (
-					<Card key={date} className={cn(date === today && "border-primary")}>
-						<CardHeader className="flex flex-row items-center justify-between gap-0 py-3">
+					<Card
+						key={date}
+						className={cn(
+							"flex h-full flex-col",
+							date === today && "border-primary",
+						)}
+					>
+						<CardHeader className="flex flex-col gap-2 py-3">
 							<div>
-								<CardTitle className="text-base">{label}</CardTitle>
-								<CardDescription>
+								<CardTitle className="text-sm">{label}</CardTitle>
+								<CardDescription className="text-xs">
 									{items.length} assignment{items.length === 1 ? "" : "s"}
 									{scheduleCount > 0
 										? ` · ${scheduleCount} schedule${scheduleCount === 1 ? "" : "s"}`
@@ -700,20 +709,20 @@ function WeekAgenda({
 									{gaps > 0 ? ` · ${gaps} need staffing` : ""}
 								</CardDescription>
 							</div>
-							<div className="flex gap-2">
+							<div className="flex flex-wrap gap-1">
 								{gaps > 0 && (
-									<Button asChild size="sm" variant="secondary">
+									<Button asChild size="sm" variant="secondary" className="h-7">
 										<Link to="/dashboard/staffing">Gaps</Link>
 									</Button>
 								)}
-								<Button asChild size="sm" variant="outline">
+								<Button asChild size="sm" variant="outline" className="h-7">
 									<Link to="/dashboard/assignments/new" search={{ date }}>
 										+ Assign
 									</Link>
 								</Button>
 							</div>
 						</CardHeader>
-						<CardContent className="pb-3">
+						<CardContent className="flex flex-1 flex-col pb-3">
 							{items.length === 0 ? (
 								<Empty className="min-h-0 border-dashed p-4 md:p-6">
 									<EmptyHeader>
