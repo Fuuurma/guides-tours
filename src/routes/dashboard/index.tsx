@@ -1025,7 +1025,7 @@ function PulseMetric({
 		<Link
 			to={href}
 			className={cn(
-				"group block rounded-xl border bg-card transition-colors hover:border-chart-1/50",
+				"group block rounded-xl border bg-card transition-colors hover:border-chart-1",
 				featured ? "p-6" : "p-5",
 			)}
 		>
