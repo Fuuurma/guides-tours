@@ -397,10 +397,13 @@ function Home() {
 							label="OTA channels into one board"
 						/>
 						<TrustMetric
-							value={4}
-							label="tour, guide, driver & vehicle on every departure"
+							valueText="Every departure"
+							label="tour, guide, driver & vehicle together"
 						/>
-						<TrustMetric value={7} label="days on the week board" />
+						<TrustMetric
+							valueText="One board"
+							label="the whole week at a glance"
+						/>
 					</div>
 				</div>
 			</section>
