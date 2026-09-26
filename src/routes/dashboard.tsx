@@ -144,7 +144,7 @@ function DashboardLayout() {
 	}
 
 	return (
-		<div className="min-h-screen bg-muted/20">
+		<div className="min-h-screen bg-background">
 			<AppSidebar
 				orgName={org.name}
 				userName={user.name}
