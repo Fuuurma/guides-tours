@@ -317,6 +317,26 @@ export const createCheckoutSession = action({
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
 
+		// F378: staff retries/double-clicks must reuse the booking's open
+		// intent, not stack fresh pending rows (same dedup as the public
+		// siblings). Partial collections reuse only an exact-amount intent.
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			args.amountCents,
+			currencyDb,
+		);
+		if (reusable?.client_secret && reusable.id) {
+			return {
+				stripePaymentIntentId: reusable.id,
+				clientSecret: reusable.client_secret,
+				amountCents: args.amountCents,
+				currency: currencyDb,
+				publishableKey: settings.stripePublishableKey,
+			};
+		}
+
 		const params = new URLSearchParams();
 		params.append("amount", args.amountCents.toString());
 		params.append("currency", currencyStripe);
@@ -549,16 +569,31 @@ export const createHostedCheckout = action({
 			`/dashboard/bookings/${args.bookingId}`,
 		);
 
-		const params = new URLSearchParams();
-		params.append("mode", "payment");
-		params.append("success_url", `${siteUrl}${successPath}`);
-		params.append("cancel_url", `${siteUrl}${cancelPath}`);
-		params.append("line_items[0][quantity]", "1");
-		params.append("line_items[0][price_data][currency]", currencyStripe);
-		params.append(
-			"line_items[0][price_data][unit_amount]",
-			amountCents.toString(),
+		// F378: attach the booking's open intent so staff retries capture
+		// one PI. Hosted reuse needs requires_payment_method (unconfirmed).
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			amountCents,
+			currencyDb,
 		);
+		const reusedPiId =
+			reusable?.id && reusable.status === "requires_payment_method"
+				? reusable.id
+				: null;
+
+		const buildSessionParams = (withReusedPi: boolean) => {
+			const params = new URLSearchParams();
+			params.append("mode", "payment");
+			params.append("success_url", `${siteUrl}${successPath}`);
+			params.append("cancel_url", `${siteUrl}${cancelPath}`);
+			params.append("line_items[0][quantity]", "1");
+			params.append("line_items[0][price_data][currency]", currencyStripe);
+			params.append(
+				"line_items[0][price_data][unit_amount]",
+				amountCents.toString(),
+			);
 		params.append(
 			"line_items[0][price_data][product_data][name]",
 			`Booking ${args.bookingId}`,
@@ -576,18 +611,36 @@ export const createHostedCheckout = action({
 		// Expand so we can record a pending row when Stripe already
 		// allocated a PaymentIntent at session create.
 		params.append("expand[]", "payment_intent");
-		if (booking.customerEmail) {
-			params.append("customer_email", booking.customerEmail);
-		}
+			if (booking.customerEmail) {
+				params.append("customer_email", booking.customerEmail);
+			}
+			if (withReusedPi && reusedPiId) {
+				params.append("payment_intent", reusedPiId);
+			}
+			return params;
+		};
 
-		const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${stripeSecret}`,
-				"Content-Type": "application/x-www-form-urlencoded",
-			},
-			body: params.toString(),
-		});
+		const createSession = async (withReusedPi: boolean) => {
+			const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${stripeSecret}`,
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: buildSessionParams(withReusedPi).toString(),
+			});
+			return res;
+		};
+
+		let res = await createSession(reusedPiId !== null);
+		if (!res.ok && reusedPiId) {
+			// Stripe refused the reused intent — fall back to a fresh
+			// session rather than fail the payment (same as public path).
+			logger.warn(
+				`payment_intent reuse rejected for booking ${args.bookingId}, minting fresh`,
+			);
+			res = await createSession(false);
+		}
 		if (!res.ok) {
 			const errText = await res.text();
 			throw new ConvexError(

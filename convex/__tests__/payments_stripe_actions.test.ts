@@ -279,6 +279,47 @@ describe("payments_stripe_actions — createCheckoutSession", () => {
 		mockState.fetchResponse = null;
 	});
 
+	it("re-opens the booking's pending intent on staff retry (F378)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_staff_reuse";
+		const bookingId = await t.run(async (ctx) =>
+			seedBooking(ctx as unknown as TestCtx, orgId, {
+				customerEmail: "guest@example.com",
+				totalAmountCents: 8000n,
+				balanceDueCents: 8000n,
+			}),
+		);
+		await t.run(async (ctx) =>
+			seedPaymentSettings(ctx as unknown as TestCtx, orgId),
+		);
+		await t.run(async (ctx) =>
+			seedPayment(ctx as unknown as TestCtx, orgId, bookingId, {
+				stripePaymentIntentId: "pi_staff_open",
+				status: "pending",
+				amountCents: 8000n,
+				createdAt: Date.now(),
+			}),
+		);
+		mockState.member = { userId: "u1", organizationId: orgId, role: "owner" };
+		mockFetchSuccess({
+			id: "pi_staff_open",
+			client_secret: "pi_staff_open_secret",
+			amount: 8000,
+			currency: "usd",
+			status: "requires_confirmation",
+		});
+
+		const result = await t.action(api.payments_stripe_actions.createCheckoutSession, {
+			bookingId,
+			amountCents: 8000n,
+		});
+
+		expect(result.stripePaymentIntentId).toBe("pi_staff_open");
+		expect(result.clientSecret).toBe("pi_staff_open_secret");
+		const posts = mockState.fetchCalls.filter((c) => c.method === "POST");
+		expect(posts).toHaveLength(0);
+	});
+
 	it("creates a PaymentIntent and records the payment", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_stripe_1";
