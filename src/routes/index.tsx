@@ -299,7 +299,7 @@ function Home() {
 							</Badge>
 						</motion.div>
 						<h1 className="mt-7 max-w-2xl font-display text-pretty text-5xl leading-[0.98] font-normal tracking-[-0.02em] sm:text-6xl lg:text-[5.15rem]">
-							<span className="block overflow-hidden pb-1">
+							<span className="block overflow-hidden pb-[0.18em] -mb-[0.18em]">
 								<motion.span
 									className="block"
 									initial={{ y: "110%" }}
@@ -313,7 +313,7 @@ function Home() {
 									Run the day.
 								</motion.span>
 							</span>
-							<span className="block overflow-hidden pb-2">
+							<span className="block overflow-hidden pb-[0.18em] -mb-[0.18em]">
 								<motion.span
 									className="block"
 									initial={{ y: "110%" }}
