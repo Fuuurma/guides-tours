@@ -523,8 +523,11 @@ function AnalyticsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<div className="grid gap-4 md:grid-cols-4">
+					{/* F377: the conversion KPI leads at double weight; the
+					   reject buckets trail as a 3-col tail. */}
+					<div className="grid gap-4 md:grid-cols-5">
 						<MetricCard
+							className="md:col-span-2"
 							label="Success rate"
 							value={conversions ? `${conversions.successRate}%` : undefined}
 							isPending={!conversions}
