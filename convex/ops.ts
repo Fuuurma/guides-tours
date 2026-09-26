@@ -10,8 +10,7 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import { internalRefs } from "./lib/internalRefs";
 import type { Id } from "./_generated/dataModel";
-import { requireRole } from "./lib/authz";
-import { authComponent, createAuth } from "./auth";
+import { findOrgMember, requireRole } from "./lib/authz";
 
 const staffDepartureArgs = {
 	tourId: v.id("tours"),
@@ -37,14 +36,7 @@ async function assertGuideAssignable(
 	organizationId: string,
 	guideId: string,
 ): Promise<void> {
-	const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-	const memberList = await auth.api.listMembers({
-		headers,
-		query: { organizationId },
-	});
-	const guideMember = memberList.members.find(
-		(m: { userId: string }) => m.userId === guideId,
-	);
+	const guideMember = await findOrgMember(ctx, organizationId, guideId);
 	if (!guideMember) {
 		throw new ConvexError("Guide is not a member of this organization");
 	}

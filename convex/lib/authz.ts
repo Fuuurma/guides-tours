@@ -231,3 +231,25 @@ export async function assertOrgMember(
 	}
 	return member;
 }
+
+/**
+ * Look up a TARGET user's membership in an organization via Better
+ * Auth. Distinct from assertOrgMember (which verifies the CALLER's own
+ * active-org membership) — do not swap the two; several callers verify
+ * a third user (guide, driver, vacation requester). Returns the member
+ * record (userId + role) or null; API errors propagate so callers'
+ * surrounding error handling stays in charge of messaging.
+ */
+export async function findOrgMember(
+  ctx: Ctx,
+  organizationId: string,
+  userId: string,
+): Promise<{ userId: string; role?: string } | null> {
+  const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
+  const memberList = await auth.api.listMembers({
+    headers,
+    query: { organizationId },
+  });
+  const found = (memberList.members ?? []).find((m) => m.userId === userId);
+  return found ? { userId: found.userId, role: found.role } : null;
+}

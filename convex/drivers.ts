@@ -12,14 +12,13 @@ import {
 } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
 	MAX_LICENSE_LEN,
 	MAX_NOTES_LEN,
 	assertFieldWithinLimit,
 } from "./lib/validation";
-import { authComponent, createAuth } from "./auth";
 
 const ALLOWED_UPDATE_FIELDS = ["licenseInfo", "notes", "isActive"] as const;
 const availabilityValidator = v.object({
@@ -86,13 +85,10 @@ export const create = mutation({
 
 		// Mirror assignments.create: the selected user must belong to
 		// this organization. Any org member can be a driver profile.
-		const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-		const memberList = await auth.api.listMembers({
-			headers,
-			query: { organizationId: member.organizationId },
-		});
-		const target = memberList.members.find(
-			(m: { userId: string }) => m.userId === args.userId,
+		const target = await findOrgMember(
+			ctx,
+			member.organizationId,
+			args.userId,
 		);
 		if (!target) {
 			throw new ConvexError(

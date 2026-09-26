@@ -24,9 +24,8 @@ import { internalMutation, mutation, query } from "./_generated/server";
 
 import type { Id, Doc } from "./_generated/dataModel";
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
 
-import { authComponent, createAuth } from "./auth";
 import { resolveTourStaffing, evaluateSlotStaffing } from "./lib/staffing";
 import { computeStaffingGaps } from "./lib/staffingGaps";
 
@@ -492,13 +491,10 @@ export const create = mutation({
 
 		// Validate guide has the "guide" role in this organization
 		// (source: assignment_service.py validates role__in=["guide","staff"]).
-		const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-		const memberList = await auth.api.listMembers({
-			headers,
-			query: { organizationId: member.organizationId },
-		});
-		const guideMember = memberList.members.find(
-			(m: { userId: string }) => m.userId === args.guideId,
+		const guideMember = await findOrgMember(
+			ctx,
+			member.organizationId,
+			args.guideId,
 		);
 		if (!guideMember) {
 			throw new ConvexError("Guide is not a member of this organization");
