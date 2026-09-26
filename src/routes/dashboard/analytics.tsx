@@ -325,8 +325,8 @@ function AnalyticsPage() {
 					<EmptyHeader>
 						<EmptyTitle>No analytics yet</EmptyTitle>
 						<EmptyDescription>
-							Charts and totals appear here once you have tours, schedules,
-							and bookings. Create your first tour to get started.
+							Charts and totals appear here once you have tours, schedules, and
+							bookings. Create your first tour to get started.
 						</EmptyDescription>
 					</EmptyHeader>
 					<EmptyContent>
