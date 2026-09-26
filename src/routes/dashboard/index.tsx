@@ -15,7 +15,7 @@ import {
 	Users,
 	Wallet,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/status-badge";
@@ -51,6 +51,7 @@ export const Route = createFileRoute("/dashboard/")({
 });
 
 function DashboardIndex() {
+	const reduceMotion = useReducedMotion();
 	const today = localYmd();
 	const weekTo = localYmd(addDaysLocal(new Date(), 6));
 	const { data: org } = useQuery(
@@ -311,7 +312,7 @@ function DashboardIndex() {
 			)}
 			<header className="flex flex-wrap items-start justify-between gap-4">
 				<motion.div
-					initial={{ opacity: 0, y: 4 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 4 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
