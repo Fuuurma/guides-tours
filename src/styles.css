@@ -63,9 +63,13 @@
 		   but the chroma 0.03 was so low it read as neutral slate —
 		   bumped to 0.04 to match --secondary/--muted/--accent so the
 		   toggle keeps the sand character instead of dropping it. */
+		/* F430: the three surfaces sat within 0.02 lightness of each
+		   other — chrome/content/cards washed into one band. Sidebar
+		   drops to 0.21 so the shell reads as structure behind the
+		   content plane (spread >= 0.04). */
 		--background: oklch(0.24 0.04 85);
 		--foreground: oklch(0.96 0.012 85);
-		--card: oklch(0.28 0.04 85);
+		--card: oklch(0.29 0.04 85);
 		--card-foreground: oklch(0.96 0.012 85);
 		--popover: oklch(0.28 0.04 85);
 		--popover-foreground: oklch(0.96 0.012 85);
@@ -92,7 +96,7 @@
 		   and blurred the warning/danger distinction on dark surfaces. */
 		--chart-4: oklch(0.828 0.189 84.429);
 		--chart-5: oklch(0.769 0.188 70.08);
-		--sidebar: oklch(0.26 0.04 85);
+		--sidebar: oklch(0.21 0.04 85);
 		--sidebar-foreground: oklch(0.96 0.012 85);
 		--sidebar-primary: oklch(0.72 0.09 230);
 		--sidebar-primary-foreground: oklch(0.22 0.04 230);
