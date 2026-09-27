@@ -98,10 +98,12 @@ function TemplateDetailPage() {
 		>
 			{instantiateErr ? <ErrorBanner message={instantiateErr} /> : null}
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			{/* F119: capacity leads the template row */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				<MetricCard
 					label="Capacity"
 					value={`${template.maxGuests}/${template.capacity}`}
+					featured
 				/>
 				<MetricCard label="Languages" value={template.languages.join(", ")} />
 				<MetricCard

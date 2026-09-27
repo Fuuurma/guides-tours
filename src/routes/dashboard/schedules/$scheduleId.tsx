@@ -281,8 +281,9 @@ function ScheduleDetailPage() {
 				</div>
 			}
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-				<MetricCard label="Date" value={schedule.date} />
+			{/* F119: date leads — not five equal cards */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
+				<MetricCard label="Date" value={schedule.date} featured />
 				<MetricCard
 					label="Time"
 					value={`${schedule.startTime}–${schedule.endTime}`}

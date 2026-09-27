@@ -210,10 +210,12 @@ function TourDetailPage() {
 				</>
 			}
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			{/* F119: capacity leads tour identity — not four equal StatCards */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				<MetricCard
 					label="Capacity"
 					value={`${tour.maxGuests}/${tour.capacity}`}
+					featured
 				/>
 				<MetricCard label="Languages" value={tour.languages.join(", ")} />
 				<MetricCard
@@ -327,8 +329,9 @@ function TourDetailPage() {
 							ariaLabel={`30-day revenue trend for ${tour?.name ?? "this tour"}`}
 						/>
 					</div>
-					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-						<MetricCard label="Bookings" value={stats.totalBookings} />
+					{/* F119: bookings lead the stats row */}
+					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+						<MetricCard label="Bookings" value={stats.totalBookings} featured />
 						<MetricCard label="Guests" value={stats.totalGuests} />
 						<MetricCard
 							label="Revenue"

@@ -64,10 +64,7 @@ function AuthCallback() {
 					// to the destination (authz first-org fallback covers
 					// queries either way).
 					orgListFailed = true;
-					console.warn(
-						"org pinning failed; continuing without pinning",
-						err,
-					);
+					console.warn("org pinning failed; continuing without pinning", err);
 				}
 				void navigate({
 					to:

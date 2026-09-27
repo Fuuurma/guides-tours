@@ -273,8 +273,9 @@ function AssignmentDetailPage() {
 				</>
 			}
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<MetricCard label="Date" value={assignment.date} />
+			{/* F119: date leads the assignment row */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+				<MetricCard label="Date" value={assignment.date} featured />
 				<MetricCard
 					label="Time"
 					value={`${assignment.startTime}–${endTimeDisplay}`}

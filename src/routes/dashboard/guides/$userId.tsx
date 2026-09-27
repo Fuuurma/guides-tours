@@ -148,8 +148,9 @@ function GuideDetailPage() {
 			subtitle={`${member.email || "No email"} · ${member.role}`}
 			backTo="/dashboard/guides"
 		>
+			{/* F119: role leads the guide row */}
 			<div className="grid gap-4 md:grid-cols-3">
-				<MetricCard label="Role" value={member.role} />
+				<MetricCard label="Role" value={member.role} featured />
 				<MetricCard label="Email" value={member.email || "—"} />
 				<MetricCard
 					label="Assignments this month"

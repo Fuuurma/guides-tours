@@ -161,8 +161,8 @@ function DashboardLayout() {
 				<div className="border-b border-[var(--line)] bg-[var(--sun)]/10 px-4 py-3">
 					<div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
 						<p className="text-sm font-medium">
-							Choose which organization you're working in — actions are
-							disabled until you pick one.
+							Choose which organization you're working in — actions are disabled
+							until you pick one.
 						</p>
 						{inactiveOrgs.map((o) => (
 							<Button
