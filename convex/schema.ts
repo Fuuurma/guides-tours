@@ -216,6 +216,39 @@ export default defineSchema({
 		.index("by_org_date", ["organizationId", "date"])
 		.index("by_org_status_date", ["organizationId", "status", "date"]),
 
+	// Denormalized availability projection — ONE doc per (tour, date)
+	// mirroring that day's tourSchedules slots. Rewritten inside the
+	// SAME mutation as every tourSchedules write (create/update/remove,
+	// incrementBooked/decrementBooked, seasonal generate) — never a
+	// scheduler; an out-of-sync projection is the bug this table exists
+	// to prevent. The public booking page reads this single doc via
+	// by_tour_date instead of scanning tourSchedules.
+	// Pattern: availability projection (denormalized), restaurant-
+	// calendar capacity — system-design-primer.
+	tourAvailability: defineTable({
+		organizationId: orgId,
+		tourId: v.id("tours"),
+		date: v.string(),
+		slots: v.array(
+			v.object({
+				scheduleId: v.id("tourSchedules"),
+				startTime: v.string(),
+				endTime: v.string(),
+				capacityTotal: v.number(),
+				capacityBooked: v.number(),
+				seatsLeft: v.number(),
+				status: v.union(
+					v.literal("available"),
+					v.literal("full"),
+					v.literal("cancelled"),
+				),
+			}),
+		),
+		updatedAt: v.number(),
+	})
+		.index("by_tour_date", ["tourId", "date"])
+		.index("by_org_date", ["organizationId", "date"]),
+
 	tourBlackoutDates: defineTable({
 		organizationId: orgId,
 		tourId: v.id("tours"),

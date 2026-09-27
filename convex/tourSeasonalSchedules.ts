@@ -14,6 +14,7 @@ import {
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { syncTourAvailability } from "./lib/availabilityProjection";
 import { assertFieldWithinLimit } from "./lib/validation";
 
 // ---- queries ----
@@ -360,6 +361,9 @@ export const internalGenerate = internalMutation({
 		let skipped = 0;
 		const MAX_DAYS = 366;
 		let dayCount = 0;
+		// Dates that gained a slot — their availability projections are
+		// rebuilt once each after the loop, inside this same mutation.
+		const touchedDates = new Set<string>();
 
 		for (
 			let cursor = args.dateFrom;
@@ -456,7 +460,16 @@ export const internalGenerate = internalMutation({
 				},
 			});
 			existingKeys.add(key);
+			touchedDates.add(date);
 			created++;
+		}
+
+		for (const date of touchedDates) {
+			await syncTourAvailability(ctx, {
+				organizationId: args.organizationId,
+				tourId: args.tourId,
+				date,
+			});
 		}
 
 		await logAudit(ctx, {
