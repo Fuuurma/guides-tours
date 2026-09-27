@@ -540,4 +540,67 @@ describe("webhookDeliveries.countFailedSince (index pipeline)", () => {
 		);
 		expect(count.length).toBe(0);
 	});
+
+	// F445: the handler reads existingStatus on duplicates to decide
+	// ack-and-done vs re-dispatch — pin the contract it depends on.
+	it("a duplicate of a FAILED delivery reports existingStatus failed (F445)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_f445";
+
+		const first = await t.mutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: "evt_f445",
+			eventType: "payment_intent.succeeded",
+			payload: {},
+		});
+		expect(first.isDuplicate).toBe(false);
+
+		await t.mutation(internal.webhookDeliveries.updateDeliveryStatus, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: "evt_f445",
+			status: "failed",
+			errorMessage: "boom",
+		});
+
+		const retry = await t.mutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: "evt_f445",
+			eventType: "payment_intent.succeeded",
+			payload: {},
+		});
+		expect(retry.isDuplicate).toBe(true);
+		expect(retry.existingStatus).toBe("failed");
+	});
+
+	it("a duplicate of a PROCESSED delivery reports existingStatus processed (F445)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_f445b";
+
+		await t.mutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: "evt_ok",
+			eventType: "payment_intent.succeeded",
+			payload: {},
+		});
+		await t.mutation(internal.webhookDeliveries.updateDeliveryStatus, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: "evt_ok",
+			status: "processed",
+		});
+
+		const retry = await t.mutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: "evt_ok",
+			eventType: "payment_intent.succeeded",
+			payload: {},
+		});
+		expect(retry.isDuplicate).toBe(true);
+		expect(retry.existingStatus).toBe("processed");
+	});
 });

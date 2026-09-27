@@ -1036,10 +1036,20 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			},
 		);
 		if (recorded.isDuplicate) {
-			logger.info(
-				`[stripe-webhook] duplicate event ${stripeEventId} for org ${orgId}`,
+			// F445: only a PROCESSED duplicate is acked-and-done. A failed
+			// (or never-completed) duplicate must fall through to the full
+			// dispatch below so Stripe's retry actually re-applies — the
+			// old short-circuit made failed deliveries permanently
+			// unrecoverable (payment stuck pending -> double charge).
+			if (recorded.existingStatus === "processed") {
+				logger.info(
+					`[stripe-webhook] duplicate processed event ${stripeEventId} for org ${orgId}`,
+				);
+				return new Response("ok (duplicate)", { status: 200 });
+			}
+			logger.warn(
+				`[stripe-webhook] re-dispatching ${stripeEventId} (previous status: ${recorded.existingStatus ?? "unknown"}) for org ${orgId}`,
 			);
-			return new Response("ok (duplicate)", { status: 200 });
 		}
 	}
 
