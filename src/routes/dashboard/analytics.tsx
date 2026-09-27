@@ -202,6 +202,47 @@ function AnalyticsPage() {
 		(overview.totalTours ?? 0) === 0 &&
 		(overview.totalAssignments ?? 0) === 0 &&
 		(revenue.totalBookings ?? 0) === 0;
+	// Existing org whose SELECTED date window has no activity
+	// (e.g. operator types a future range, or picks a slack window
+	// between seasons). Each section's "No X in this window"
+	// muted text already fires individually — this surfaces one
+	// guided page-level state with a wider-window CTA on top of
+	// that, so the operator isn't staring at nine near-empty
+	// sections wondering which preset will fill them.
+	//
+	// Excludes `isNewOrgEmpty` (brand-new org needs "create your
+	// first tour", not "widen the window") and any `truncated`
+	// builder (a partial read is not a true empty).
+	const isRangeEmpty =
+		!isNewOrgEmpty &&
+		!overviewPending &&
+		!revenuePending &&
+		overview !== undefined &&
+		revenue !== undefined &&
+		topTours !== undefined &&
+		tourStats !== undefined &&
+		guideStats !== undefined &&
+		dailyStats !== undefined &&
+		channels !== undefined &&
+		conversions !== undefined &&
+		financialHealth !== undefined &&
+		overview.truncated !== true &&
+		revenue.truncated !== true &&
+		topTours.truncated !== true &&
+		tourStats.truncated !== true &&
+		guideStats.truncated !== true &&
+		dailyStats.truncated !== true &&
+		channels.truncated !== true &&
+		conversions.truncated !== true &&
+		financialHealth.truncated !== true &&
+		(overview.totalAssignments ?? 0) === 0 &&
+		(revenue.totalBookings ?? 0) === 0 &&
+		(topTours.tours?.length ?? 0) === 0 &&
+		(tourStats.tours?.length ?? 0) === 0 &&
+		(guideStats.guides?.length ?? 0) === 0 &&
+		(dailyStats.days?.length ?? 0) === 0 &&
+		(channels.channels?.length ?? 0) === 0 &&
+		(conversions.totalAttempts ?? 0) === 0;
 	// Every analytics builder reports `truncated` when its 10k-row scan
 	// cap was hit — surface it once instead of silently showing partial
 	// totals (fleet needs-work 09-08 F76).
@@ -336,6 +377,33 @@ function AnalyticsPage() {
 							</Button>
 							<Button asChild variant="outline" size="sm">
 								<Link to="/dashboard/bookings/new">Add a booking</Link>
+							</Button>
+						</div>
+					</EmptyContent>
+				</Empty>
+			)}
+
+			{isRangeEmpty && (
+				<Empty className="border">
+					<EmptyHeader>
+						<EmptyTitle>No activity in this range</EmptyTitle>
+						<EmptyDescription>
+							Nothing in your data matched {range.startDate} → {range.endDate}.
+							Each section below will start filling in once the date range
+							overlaps a booking or assignment.
+						</EmptyDescription>
+					</EmptyHeader>
+					<EmptyContent>
+						<div className="flex flex-wrap justify-center gap-2">
+							<Button size="sm" onClick={() => setRange(lastNDays())}>
+								Use 30d
+							</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setRange(yearToDate())}
+							>
+								Use YTD
 							</Button>
 						</div>
 					</EmptyContent>
