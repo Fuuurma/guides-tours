@@ -676,10 +676,12 @@ function WeekAgenda({
 	const today = localYmd(new Date());
 
 	return (
-		// F109: operator week board — 7 equal day columns on wide screens,
-		// stacked on narrow. Each column keeps day header + empty-state
+		// F109: operator week board — 7 equal day columns from lg+ so a
+		// typical operator laptop (1024px content width with the 256px
+		// sidebar) reads as a week board, not a vertical stack. Narrow
+		// viewports stack. Each column keeps day header + empty-state
 		// actions (DESIGN.md: empty week days have Assign / New schedule).
-		<div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-7">
+		<div className="grid grid-cols-1 gap-3 lg:grid-cols-7">
 			{days.map((d) => {
 				const date = localYmd(d);
 				const items = byDate.get(date) ?? [];
