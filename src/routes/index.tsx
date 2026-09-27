@@ -121,11 +121,13 @@ export const Route = createFileRoute("/")({
 function Home() {
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 	const closeMobileMenu = () => setMobileMenuOpen(false);
+	const reduceMotion = useReducedMotion();
 	const scrollToSection = (id: string) => {
-		document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+		document
+			.getElementById(id)
+			?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
 		closeMobileMenu();
 	};
-	const reduceMotion = useReducedMotion();
 	const { scrollY } = useScroll();
 	const heroBgY = useTransform(scrollY, [0, 700], [0, reduceMotion ? 0 : 150]);
 	const heroCardY = useTransform(
