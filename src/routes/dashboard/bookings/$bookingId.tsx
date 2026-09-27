@@ -266,12 +266,14 @@ function BookingDetailPage() {
 				/>
 			)}
 
-			{/* Total leads at 1.5x weight; Deposit / Balance due / Net revenue trail. */}
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
-				<MetricCard
-					label="Total"
-					value={formatCentsCompact(b.totalAmountCents)}
-				/>
+			{/* F409: Total is a featured card — the 1.5fr track claimed
+			    hierarchy the uniform text-2xl never delivered. */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+				<MetricCard label="Total" className="p-6">
+					<p className="font-display text-4xl font-medium tracking-tight tabular-nums">
+						{formatCentsCompact(b.totalAmountCents)}
+					</p>
+				</MetricCard>
 				<MetricCard
 					label="Deposit"
 					value={formatCentsCompact(b.depositAmountCents)}

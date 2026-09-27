@@ -454,8 +454,11 @@ function AnalyticsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<div className="grid gap-4 md:grid-cols-3">
+					{/* F408: the headline money number leads at double weight —
+					    no more two equal 3-col rows. */}
+					<div className="grid gap-4 md:grid-cols-4">
 						<MetricCard
+							className="md:col-span-2"
 							label="Gross revenue"
 							value={
 								revenue ? formatCents(revenue.totalRevenueCents) : undefined
