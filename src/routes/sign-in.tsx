@@ -60,7 +60,12 @@ function SignInPage() {
 			if (invitationId) {
 				// Coming from the invite "sign in to accept" link — accept
 				// the invitation after a successful sign-in.
-				await authClient.organization.acceptInvitation({ invitationId });
+				const { error: acceptError } =
+					await authClient.organization.acceptInvitation({ invitationId });
+				if (acceptError) {
+					setServerError(acceptError.message ?? "Could not accept invitation");
+					return;
+				}
 				// Same pin as the standard path (design step 1): a first-time
 				// member signs in with no active org set — pin their (only)
 				// org so authz never falls back to "first org".
@@ -70,7 +75,12 @@ function SignInPage() {
 						organizationId: invitedOrgs[0].id,
 					});
 				}
-				await navigate({ to: "/dashboard" });
+				await navigate({
+					to:
+						invitedOrgs && invitedOrgs.length > 0
+							? "/dashboard"
+							: "/onboarding",
+				});
 				return;
 			}
 
@@ -187,7 +197,15 @@ function SignInPage() {
 						</div>
 					</div>
 
-					<GoogleSignInButton callbackURL={redirect ?? "/dashboard"} />
+					<GoogleSignInButton
+						callbackURL={
+							invitationId
+								? `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback?invitationId=${encodeURIComponent(invitationId)}${redirect ? `&redirect=${encodeURIComponent(redirect)}` : ""}`
+								: redirect
+									? `${typeof window !== "undefined" ? window.location.origin : ""}${redirect}`
+									: "/dashboard"
+						}
+					/>
 
 					<p className="pt-2 text-center text-sm text-muted-foreground">
 						No account yet?{" "}
