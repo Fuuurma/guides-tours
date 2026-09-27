@@ -316,8 +316,10 @@ function DashboardIndex() {
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
+					{/* F429: the page speaks week cadence — the h1 should too,
+					    with the today date as the subtitle. */}
 					<h1 className="font-display text-2xl font-medium tracking-tight">
-						Today
+						This week
 					</h1>
 					<p className="mt-0.5 text-sm text-muted-foreground">
 						{new Date().toLocaleDateString(undefined, {
