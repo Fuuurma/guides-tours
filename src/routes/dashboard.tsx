@@ -160,9 +160,12 @@ function DashboardLayout() {
 			{chooseOrg && inactiveOrgs.length > 0 && (
 				<div className="border-b border-border bg-[var(--sun)]/10 px-4 py-3">
 					<div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
+						{/* F442: copy matches reality — actions are NOT gated; a
+						    guarded one will error until an org is picked. */}
 						<p className="text-sm font-medium">
-							Choose which organization you're working in — actions are disabled
-							until you pick one.
+							You're currently previewing an organization by default — pick
+							yours to keep working in it (some actions will error until
+							you do).
 						</p>
 						{inactiveOrgs.map((o) => (
 							<Button
