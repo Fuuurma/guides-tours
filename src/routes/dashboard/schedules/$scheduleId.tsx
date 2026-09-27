@@ -281,16 +281,17 @@ function ScheduleDetailPage() {
 				</div>
 			}
 		>
-			{/* F119: date leads — not five equal cards */}
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr_1fr]">
-				<MetricCard label="Date" value={schedule.date} featured />
-				<MetricCard
-					label="Time"
-					value={`${schedule.startTime}–${schedule.endTime}`}
-				/>
+			{/* F431: booked/total is the operator KPI — not five equal cards */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
 				<MetricCard
 					label="Booked / Total"
 					value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`}
+					featured
+				/>
+				<MetricCard label="Date" value={schedule.date} />
+				<MetricCard
+					label="Time"
+					value={`${schedule.startTime}–${schedule.endTime}`}
 				/>
 				<MetricCard label="Seats left" value={seatsRemaining} />
 				<MetricCard label="Status" value={schedule.status}>

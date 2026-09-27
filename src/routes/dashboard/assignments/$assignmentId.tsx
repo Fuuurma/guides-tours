@@ -273,14 +273,17 @@ function AssignmentDetailPage() {
 				</>
 			}
 		>
-			{/* F119: date leads the assignment row */}
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
-				<MetricCard label="Date" value={assignment.date} featured />
+			{/* F432: guide is the featured answer — date/time already in subtitle */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr]">
+				<MetricCard
+					label="Guide"
+					value={displayName(assignment.guideId)}
+					featured
+				/>
 				<MetricCard
 					label="Time"
 					value={`${assignment.startTime}–${endTimeDisplay}`}
 				/>
-				<MetricCard label="Guide" value={displayName(assignment.guideId)} />
 				<MetricCard label="Status" value={assignment.status}>
 					<StatusBadge status={assignment.status} />
 				</MetricCard>

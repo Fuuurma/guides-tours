@@ -53,7 +53,7 @@ export function MetricCard({
 							<p
 								className={cn(
 									"font-display font-medium tracking-tight tabular-nums",
-									featured ? "text-3xl" : "text-2xl",
+									featured ? "text-4xl" : "text-2xl",
 								)}
 							>
 								{value ?? "—"}
