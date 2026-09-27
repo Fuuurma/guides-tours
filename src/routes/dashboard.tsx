@@ -158,7 +158,7 @@ function DashboardLayout() {
 	return (
 		<div className="min-h-screen bg-background">
 			{chooseOrg && inactiveOrgs.length > 0 && (
-				<div className="border-b border-[var(--line)] bg-[var(--sun)]/10 px-4 py-3">
+				<div className="border-b border-border bg-[var(--sun)]/10 px-4 py-3">
 					<div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
 						<p className="text-sm font-medium">
 							Choose which organization you're working in — actions are disabled
