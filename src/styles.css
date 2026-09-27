@@ -41,7 +41,6 @@
 		--ring: oklch(0.55 0.09 230);
 		--chart-1: oklch(0.646 0.222 41.116);
 		--chart-2: oklch(0.6 0.118 184.704);
-		--chart-3: oklch(0.52 0.11 205);
 		--chart-4: oklch(0.828 0.189 84.429);
 		--chart-5: oklch(0.769 0.188 70.08);
 		--radius: 0.625rem;
@@ -90,7 +89,6 @@
 		--ring: oklch(0.65 0.08 230);
 		--chart-1: oklch(0.7 0.19 41.116);
 		--chart-2: oklch(0.696 0.17 162.48);
-		--chart-3: oklch(0.71 0.13 205);
 		/* F382: stay on the sun/sand family like light mode — the shadcn
 		   defaults here (purple/red) recolored analytics bars off-brand
 		   and blurred the warning/danger distinction on dark surfaces. */
@@ -141,7 +139,6 @@
 	--color-ring: var(--ring);
 	--color-chart-1: var(--chart-1);
 	--color-chart-2: var(--chart-2);
-	--color-chart-3: var(--chart-3);
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
 	--color-link: var(--link);
