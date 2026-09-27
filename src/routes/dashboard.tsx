@@ -1,5 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { toast } from "sonner";
 import {
 	createFileRoute,
 	Outlet,
@@ -39,6 +41,7 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardLayout() {
 	const navigate = useNavigate();
+	const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
 	const organizationsQuery = useQuery(
 		convexQuery(api.organizations.listMyOrganizations, {}),
 	);
@@ -171,14 +174,28 @@ function DashboardLayout() {
 							<Button
 								key={o.id}
 								size="sm"
+								disabled={switchingOrgId !== null}
 								onClick={async () => {
-									const result = await authClient.organization.setActive({
-										organizationId: o.id,
-									});
-									if (!result.error) window.location.reload();
+									// F441: same contract as the sidebar switcher —
+									// no silent dead buttons on the recovery path.
+									setSwitchingOrgId(o.id);
+									try {
+										const result = await authClient.organization.setActive({
+											organizationId: o.id,
+										});
+										if (result.error) {
+											throw new Error(result.error.message);
+										}
+										window.location.reload();
+									} catch {
+										setSwitchingOrgId(null);
+										toast.error(
+											"Could not switch organization. Please try again.",
+										);
+									}
 								}}
 							>
-								{o.name}
+								{switchingOrgId === o.id ? "Switching…" : o.name}
 							</Button>
 						))}
 					</div>
