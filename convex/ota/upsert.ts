@@ -409,7 +409,17 @@ export const cancelOtaBooking = internalMutation({
 				.unique(),
 			ctx.db.get(args.integrationId),
 		]);
-		if (!existing) return null;
+		// F446: a cancel for a not-yet-ingested reservation must FAIL
+		// loudly, not ack null — returning null made webhook_handler mark
+		// the delivery "processed" and the provider stopped retrying,
+		// leaving a confirmed/absent booking with seats held forever.
+		// Throwing marks the delivery failed; the provider retries, and
+		// once the create lands the cancel applies for real.
+		if (!existing) {
+			throw new ConvexError(
+				`OTA cancel for unknown reservation ${args.reservationId} — create not ingested yet`,
+			);
+		}
 		if (!integration || existing.organizationId !== integration.organizationId) {
 			throw new ConvexError("organizationId does not match OTA integration");
 		}
