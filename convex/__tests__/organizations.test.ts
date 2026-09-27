@@ -249,10 +249,15 @@ describe("convex/organizations — activeOrganization", () => {
 			id: string;
 			name: string;
 			role: string;
+			activeOrgFallback: boolean;
 		} | null;
 
 		expect(res?.id).toBe("org_acme");
 		expect(res?.role).toBe("owner");
+		// F440: the STALE-id case must report the fallback — the banner
+		// suppression keyed on !activeOrgId hid it exactly when authz
+		// fail-closes every action.
+		expect(res?.activeOrgFallback).toBe(true);
 		expect(mockState.listOrganizationsCalls).toBe(1);
 	});
 });
