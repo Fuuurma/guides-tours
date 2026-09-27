@@ -186,29 +186,35 @@ export const listAvailableSlots = query({
 				: undefined;
 		const capacityOf = (capacityTotal: number) => ex?.capacityOverride ?? capacityTotal;
 
-		const schedules = await ctx.db
-			.query("tourSchedules")
+		// Single-doc read: the denormalized (tour, date) projection is
+		// maintained transactionally by every capacity/schedule write
+		// (DST-guides-tours-03). F344 exception overrides apply at read
+		// time on top of the projected slots.
+		const availability = await ctx.db
+			.query("tourAvailability")
 			.withIndex("by_tour_date", (q) =>
 				q.eq("tourId", args.tourId).eq("date", args.date),
 			)
-			.take(200);
+			.unique();
+		if (!availability || availability.organizationId !== organizationId) {
+			return [];
+		}
 
 		const nowMs = Date.now();
 		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
 
-		return schedules
+		return availability.slots
 			.filter((s) => {
-				if (s.organizationId !== organizationId) return false;
 				if (s.status !== "available") return false;
 				if (exceptionTime !== undefined && s.startTime !== exceptionTime) return false;
 				if (s.capacityBooked >= capacityOf(s.capacityTotal)) return false;
-				const tourTs = parseBookingTime(s.date, s.startTime);
+				const tourTs = parseBookingTime(args.date, s.startTime);
 				if (tourTs === null || tourTs <= nowMs) return false;
 				if (cutoffMs > 0 && tourTs - nowMs < cutoffMs) return false;
 				return true;
 			})
 			.map((s) => ({
-				_id: s._id,
+				_id: s.scheduleId,
 				startTime: s.startTime,
 				endTime: s.endTime,
 				capacityTotal: capacityOf(s.capacityTotal),
@@ -438,11 +444,6 @@ export const internalCreate = internalMutation({
 		let scheduleId = args.scheduleId;
 		let date = args.date;
 		let startTime = args.startTime;
-		let scheduleCapacity: {
-			capacityBooked: number;
-			capacityTotal: number;
-			status: "available" | "cancelled" | "full";
-		} | undefined;
 		if (scheduleId) {
 			const schedule = await ctx.db.get(scheduleId);
 			if (!schedule || schedule.organizationId !== args.organizationId) {
@@ -454,11 +455,6 @@ export const internalCreate = internalMutation({
 			if (schedule.status === "cancelled") {
 				throw new ConvexError("Cannot book a cancelled schedule");
 			}
-			scheduleCapacity = {
-				capacityBooked: schedule.capacityBooked,
-				capacityTotal: schedule.capacityTotal,
-				status: schedule.status,
-			};
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
@@ -476,11 +472,6 @@ export const internalCreate = internalMutation({
 					throw new ConvexError("Cannot book a cancelled schedule");
 				}
 				scheduleId = match._id;
-				scheduleCapacity = {
-					capacityBooked: match.capacityBooked,
-					capacityTotal: match.capacityTotal,
-					status: match.status,
-				};
 			}
 		}
 
@@ -636,18 +627,14 @@ export const internalCreate = internalMutation({
 			updatedAt: now,
 		});
 
-		if (scheduleId && scheduleCapacity) {
-			const newBooked = scheduleCapacity.capacityBooked + args.guests;
-			if (newBooked > scheduleCapacity.capacityTotal) {
-				throw new ConvexError("Schedule over capacity");
-			}
-			await ctx.db.patch(scheduleId, {
-				capacityBooked: newBooked,
-				status:
-					newBooked >= scheduleCapacity.capacityTotal
-						? "full"
-						: scheduleCapacity.status,
-				updatedAt: now,
+		// Claim capacity through the single incrementBooked path — it
+		// throws "Schedule over capacity" when full and updates the
+		// denormalized availability projection in this same transaction.
+		if (scheduleId) {
+			await ctx.runMutation(internal.tourSchedules.incrementBooked, {
+				organizationId: args.organizationId,
+				scheduleId,
+				guests: args.guests,
 			});
 		}
 
