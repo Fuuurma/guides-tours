@@ -61,6 +61,11 @@ export const activeOrganization = query({
 			createdAt: org.createdAt,
 			role: member?.role ?? "member",
 			memberCount: org.members.length,
+			// F436: true when this org came from the first-org fallback —
+			// the session had no valid activeOrganizationId. The UI must
+			// prompt for an explicit choice, because every guarded action
+			// fail-closes for a multi-org unpinned session.
+			activeOrgFallback: !activeOrgId,
 		};
 	},
 });

@@ -39,6 +39,10 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardLayout() {
 	const navigate = useNavigate();
+	const organizationsQuery = useQuery(
+		convexQuery(api.organizations.listMyOrganizations, {}),
+	);
+	const organizations = organizationsQuery.data ?? [];
 	const {
 		data: user,
 		isPending: userPending,
@@ -143,8 +147,40 @@ function DashboardLayout() {
 		);
 	}
 
+	// F436: a multi-org session with no valid active org silently
+	// defaulted to the first org — every guarded action fail-closes for
+	// it. Surface the choice instead of letting actions throw.
+	const chooseOrg = org?.activeOrgFallback === true;
+	const inactiveOrgs = chooseOrg
+		? (organizations ?? []).filter((o) => !o.isActive)
+		: [];
+
 	return (
 		<div className="min-h-screen bg-background">
+			{chooseOrg && inactiveOrgs.length > 0 && (
+				<div className="border-b border-[var(--line)] bg-[var(--sun)]/10 px-4 py-3">
+					<div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
+						<p className="text-sm font-medium">
+							Choose which organization you're working in — actions are
+							disabled until you pick one.
+						</p>
+						{inactiveOrgs.map((o) => (
+							<Button
+								key={o.id}
+								size="sm"
+								onClick={async () => {
+									const result = await authClient.organization.setActive({
+										organizationId: o.id,
+									});
+									if (!result.error) window.location.reload();
+								}}
+							>
+								{o.name}
+							</Button>
+						))}
+					</div>
+				</div>
+			)}
 			<AppSidebar
 				orgName={org.name}
 				userName={user.name}
