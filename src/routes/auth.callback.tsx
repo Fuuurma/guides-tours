@@ -41,11 +41,25 @@ function AuthCallback() {
 				// docs/DESIGN-authz-active-org.md): Google users were the
 				// missed path — without this they hit authz's first-org
 				// fallback on every backend query.
-				const { data: orgs } = await authClient.organization.list();
-				if (orgs && orgs.length === 1) {
-					await authClient.organization.setActive({
-						organizationId: orgs[0].id,
-					});
+				// F425: pinning is BEST-EFFORT — the token above has
+				// already been exchanged, so the session is valid. A
+				// transient list()/setActive() failure must not bounce an
+				// authenticated user back to sign-in (authz falls back to
+				// the first org unpinned).
+				let orgs: Array<{ id: string }> | undefined;
+				try {
+					const { data } = await authClient.organization.list();
+					orgs = data ?? undefined;
+					if (orgs && orgs.length === 1) {
+						await authClient.organization.setActive({
+							organizationId: orgs[0].id,
+						});
+					}
+				} catch (err) {
+					console.warn(
+						"org pinning failed; continuing without pinning",
+						err,
+					);
 				}
 				void navigate({
 					to:
