@@ -1453,8 +1453,10 @@ function WorkspacePreview() {
 						</p>
 					</div>
 				</div>
-				<span className="inline-flex items-center gap-1.5 text-[9px] text-primary-foreground/55">
-					<span className="size-1.5 rounded-full bg-chart-2" /> Live workspace
+				{/* F438: the preview is hardcoded mock — the pulsing "Live"
+				    badge read as real-time product state. */}
+				<span className="text-[9px] text-primary-foreground/55">
+					Sample workspace
 				</span>
 			</div>
 			<div className="overflow-hidden rounded-2xl bg-background">
