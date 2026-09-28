@@ -1,7 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useDeferredValue, useMemo, useState } from "react";
 import {
 	buildSparklineByTour,
@@ -88,6 +88,7 @@ function isPresetActive(
 }
 
 function AnalyticsPage() {
+	const reduceMotion = useReducedMotion();
 	const {
 		data: org,
 		isPending: orgPending,
@@ -417,7 +418,7 @@ function AnalyticsPage() {
 				    cards — eye lands on 'Total assignments' first, then
 				    naturally follows to the rest. */}
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0 }}
 				>
@@ -428,7 +429,7 @@ function AnalyticsPage() {
 					/>
 				</motion.div>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0.05 }}
 				>
@@ -439,7 +440,7 @@ function AnalyticsPage() {
 					/>
 				</motion.div>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0.1 }}
 				>
@@ -450,7 +451,7 @@ function AnalyticsPage() {
 					/>
 				</motion.div>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0.15 }}
 				>

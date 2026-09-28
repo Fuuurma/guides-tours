@@ -3,7 +3,7 @@ import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -61,6 +61,7 @@ export const Route = createFileRoute("/dashboard/ota")({
 });
 
 function OtaIntegrationsPage() {
+	const reduceMotion = useReducedMotion();
 	const {
 		data: integrations,
 		isPending,
@@ -166,7 +167,7 @@ function OtaIntegrationsPage() {
 									<motion.li
 										key={i._id}
 										className="flex items-center justify-between gap-3 rounded-lg border p-3"
-										initial={{ opacity: 0, y: 4 }}
+										initial={reduceMotion ? false : { opacity: 0, y: 4 }}
 										animate={{ opacity: 1, y: 0 }}
 										transition={{
 											duration: 0.2,
