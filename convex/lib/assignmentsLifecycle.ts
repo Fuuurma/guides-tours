@@ -125,6 +125,13 @@ const endTime =
 	schedule?.endTime ?? calculateEndTime(startTime, tour.durationHours);
 
 // Slot staffing: up to requiredGuides active guides.
+//
+// F453 (race verdict): this read-then-insert is race-safe under
+// Convex's serializable isolation — the by_tour_date index scan is a
+// range read, and a concurrent insert into that scanned range conflicts
+// with this transaction, forcing an automatic retry that re-evaluates
+// the cap against the committed rows. Two concurrent creates cannot
+// both pass this check.
 const sameDay = await ctx.db
 	.query("assignments")
 	.withIndex("by_tour_date", (q) => q.eq("tourId", tourId).eq("date", date))
