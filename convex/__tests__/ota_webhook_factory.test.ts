@@ -24,6 +24,7 @@ import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
 import { extractEventId } from "../ota/webhook_handler";
+import { BookingClient } from "../ota/booking";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -733,3 +734,29 @@ describe("extractEventId — availability.update dedup key (F55)", () => {
 
 // silence unused-import warning for internal (referenced for type info)
 void internal;
+
+describe("numeric provider ids normalize on create (F447)", () => {
+	it("booking.com create accepts a numeric id like the cancel path does", () => {
+		const result = BookingClient.normalize({
+			eventType: "RESERVATION_CREATED",
+			data: {
+				id: 12345,
+				productId: "PROD-1",
+				guest: { name: "Test Guest", email: "guest@example.com" },
+				startDate: "2026-09-01",
+				guestCount: 2,
+			},
+		})
+		expect(result?.kind).toBe("booking.created")
+		expect((result as any).reservationId).toBe("12345")
+	})
+
+	it("booking.com cancel still accepts a numeric id (parity)", () => {
+		const result = BookingClient.normalize({
+			eventType: "RESERVATION_CANCELLED",
+			data: { id: 12345 },
+		})
+		expect(result?.kind).toBe("booking.cancelled")
+		expect((result as any).reservationId).toBe("12345")
+	})
+})

@@ -234,6 +234,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function stringOrThrow(v: unknown, label: string): string {
 	if (typeof v === "string" && v.length > 0) return v;
+	// F447: numeric provider IDs normalize like stringOrUndefined does
+	// for cancels — the old strict-string reject made every create 400
+	// while the cancel parsed fine, permanently dropping the booking.
+	if (typeof v === "number" && Number.isFinite(v)) return String(v);
 	throw new Error(`Airbnb webhook: missing ${label}`);
 }
 
