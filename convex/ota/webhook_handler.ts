@@ -257,7 +257,14 @@ export function createWebhookHandler(config: WebhookConfig) {
 				// duplicate (needs-work 2026-09-11: failed dispatches
 				// were unrecoverable because retries were swallowed).
 				const s = recorded.existingStatus;
-				let dropAsDuplicate = s === "processed" || s === "skipped";
+				// F450: availability.update must NEVER dedup-terminal — the
+				// upsert is an idempotent cache write, and "skipped" means
+				// the product mapping was missing when the first attempt
+				// ran; dropping the retry dead-ends the promised
+				// post-mapping re-dispatch.
+				let dropAsDuplicate =
+					(s === "processed" || s === "skipped") &&
+					event.kind !== "availability.update";
 				if (dropAsDuplicate && event.kind === "booking.created") {
 					// F89: eventId is `booking.created:<reservationId>` — a
 					// re-emitted BOOKING_CREATED after a cancel is a
