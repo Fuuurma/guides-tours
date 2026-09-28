@@ -9,6 +9,7 @@ import {
 	internalMutation,
 } from "./_generated/server";
 import { components } from "./_generated/api";
+import { exceptionForDateHelper } from "./tourExceptionDates";
 
 
 import { internalRefs } from "./lib/internalRefs";
@@ -104,6 +105,18 @@ export const publicIsBlackout = query({
 		) {
 			return false;
 		}
+		// F376: a REMOVED exception suppresses the date server-side
+		// (listAvailableSlots returns [], internalCreate rejects) — the
+		// picker must show the blocked state instead of inviting a
+		// free-time submission that is guaranteed to be rejected and
+		// burns a rate-limit attempt.
+		const exception = await exceptionForDateHelper(
+			ctx,
+			args.tourId,
+			organizationId,
+			args.date,
+		);
+		if (exception?.exceptionType === "removed") return true;
 		return await isBlackoutHelper(ctx, args.tourId, args.date);
 	},
 });
