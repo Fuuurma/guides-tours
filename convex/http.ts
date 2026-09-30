@@ -245,16 +245,10 @@ http.route({
 					ip,
 				},
 			);
-			return bookingResponse(
-				JSON.stringify(
-					typeof result === "string"
-						? { bookingId: result, status: "confirmed" }
-						: result,
-				),
-				200,
-				request,
-				"application/json",
-			);
+			// F372: createForSlug always returns the full object
+			// (status "pending" until operator confirmation) — the
+			// bare-id-string branch was unreachable dead code.
+			return bookingResponse(JSON.stringify(result), 200, request, "application/json");
 		} catch (err) {
 			// Log full error server-side for debugging.
 			logger.error("[public-booking] Error:", err);
