@@ -542,6 +542,28 @@ export const upsertAvailabilityCache = internalMutation({
  * Resolve a webhook's `organizationId` from the integration record.
  * Cheap and shared so providers don't have to re-implement it.
  */
+/**
+ * F452: delete availability-cache rows whose expiresAt has passed. The
+ * by_expires index exists solely for this eviction — without it stale
+ * rows accumulated forever (nothing read, filtered, or evicted on
+ * expiresAt). Hourly cron; take(100) keeps each pass bounded and the
+ * interval catches up with the backlog.
+ */
+export const purgeExpiredAvailabilityCache = internalMutation({
+	args: {},
+	handler: async (ctx) => {
+		const now = Date.now();
+		const expired = await ctx.db
+			.query("otaAvailabilityCache")
+			.withIndex("by_expires", (q) => q.lt("expiresAt", now))
+			.take(100);
+		for (const row of expired) {
+			await ctx.db.delete(row._id);
+		}
+		return { deleted: expired.length, isDone: expired.length < 100 };
+	},
+});
+
 export const resolveOrganizationForIntegration = internalMutation({
 	args: { integrationId: v.id("otaIntegrations") },
 	handler: async (ctx, args) => {

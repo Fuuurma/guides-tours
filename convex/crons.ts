@@ -74,6 +74,25 @@ crons.daily(
 	purgeOldRateLimit,
 );
 
+// Hourly — evict expired OTA availability-cache rows (expiresAt is
+// written on every upsert; F452 flagged that nothing ever evicted them).
+const purgeExpiredAvailabilityCache = (internal as unknown as {
+	"ota/upsert": {
+		purgeExpiredAvailabilityCache: FunctionReference<
+			"mutation",
+			"internal",
+			Record<string, never>,
+			{ deleted: number; isDone: boolean }
+		>;
+	};
+})["ota/upsert"].purgeExpiredAvailabilityCache;
+
+crons.interval(
+	"purge_expired_availability_cache",
+	{ minutes: 60 },
+	purgeExpiredAvailabilityCache,
+);
+
 // Daily at 04:45 UTC — drop stale phone-remind cooldown rows
 // (kept 30 days; longer than the 7d cooldown so recent stamps survive).
 crons.daily(

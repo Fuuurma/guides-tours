@@ -792,3 +792,96 @@ describe("convex/ota/upsert — cancelOtaBooking org guard (F312)", () => {
 	});
 });
 
+
+describe("purgeExpiredAvailabilityCache (F452)", () => {
+	it("deletes rows past expiresAt and keeps fresh rows", async () => {
+		const t = convexTest(schema, modules)
+		const now = Date.now()
+		await t.run(async (ctx) => {
+			const organizationId = "org_purge_a"
+			const integrationId = await ctx.db.insert("otaIntegrations", {
+				organizationId,
+				provider: "viator",
+				apiKey: "enc",
+				isActive: true,
+				isSandbox: true,
+				autoSyncAvailability: false,
+				autoSyncPricing: false,
+				syncIntervalMinutes: 60,
+				settings: {},
+				createdAt: 0,
+				updatedAt: 0,
+			})
+			const tourId = await ctx.db.insert("tours", {
+				organizationId,
+				name: "Purge Tour",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 24,
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			})
+			const productId = await ctx.db.insert("otaProducts", {
+				organizationId,
+				integrationId,
+				tourId,
+				otaProductId: "PROD-PURGE",
+				syncStatus: "synced",
+				otaPhotos: [],
+				otaCurrency: "USD",
+				commissionRate: 0.2,
+				minAdvanceBookingHours: 24,
+				maxAdvanceBookingDays: 365,
+				settings: {},
+				createdAt: 0,
+				updatedAt: 0,
+			})
+			await ctx.db.insert("otaAvailabilityCache", {
+				organizationId,
+				otaProductId: productId,
+				date: "2026-09-01",
+				availableSpaces: 1,
+				totalSpaces: 10,
+				timeSlots: [],
+				cachedAt: now - 3_600_000,
+				expiresAt: now - 1_800_000, // expired
+			})
+			await ctx.db.insert("otaAvailabilityCache", {
+				organizationId,
+				otaProductId: productId,
+				date: "2026-09-02",
+				availableSpaces: 5,
+				totalSpaces: 10,
+				timeSlots: [],
+				cachedAt: now,
+				expiresAt: now + 900_000, // fresh
+			})
+		})
+
+		const result = await t.mutation(
+			internal.ota.upsert.purgeExpiredAvailabilityCache,
+			{},
+		)
+		expect(result.deleted).toBe(1)
+
+		const remaining = await t.run(async (ctx) =>
+			ctx.db.query("otaAvailabilityCache").collect(),
+		)
+		expect(remaining).toHaveLength(1)
+		expect(remaining[0]?.date).toBe("2026-09-02")
+	})
+})
