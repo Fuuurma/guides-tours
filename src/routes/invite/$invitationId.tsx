@@ -116,8 +116,8 @@ function AcceptInvitePage() {
 
 	return (
 		<AuthShell
-			title={invite ? `Join ${invite.organizationName}` : "Accept invitation"}
-			serifAccent=""
+			title={invite ? "Join" : "Accept"}
+			serifAccent={invite ? invite.organizationName : "invitation"}
 			description={
 				invite
 					? `You've been invited to join as ${invite.role}. Create your account to accept.`

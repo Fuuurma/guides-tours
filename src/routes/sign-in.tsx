@@ -99,8 +99,8 @@ function SignInPage() {
 
 	return (
 		<AuthShell
-			title="Welcome back"
-			serifAccent=""
+			title="Welcome"
+			serifAccent="back"
 			description="Sign in to staff this week's departures from one board."
 			image={AUTH_PANEL.signIn}
 		>

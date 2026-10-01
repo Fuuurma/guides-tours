@@ -134,7 +134,7 @@ export function AuthShell({
 				<div className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8">
 					<div className="w-full max-w-sm">
 						<div className="mb-7">
-							<h1 className="font-display text-3xl font-normal tracking-tight">
+							<h1 className="font-display text-balance text-3xl font-normal tracking-tight">
 								{title}{" "}
 								{serifAccent ? (
 									<span className="italic text-chart-1">{serifAccent}</span>

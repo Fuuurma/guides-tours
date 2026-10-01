@@ -66,8 +66,8 @@ function ResetPasswordPage() {
 	if (error) {
 		return (
 			<AuthShell
-				title="Reset link invalid"
-				serifAccent=""
+				title="Reset link"
+				serifAccent="invalid"
 				description="This password reset link is invalid or has expired."
 				image={AUTH_PANEL.forgot}
 			>
@@ -88,8 +88,8 @@ function ResetPasswordPage() {
 	if (success) {
 		return (
 			<AuthShell
-				title="Password updated"
-				serifAccent=""
+				title="Password"
+				serifAccent="updated"
 				description="Your password has been reset. You can now sign in."
 				image={AUTH_PANEL.forgot}
 			>
@@ -105,8 +105,8 @@ function ResetPasswordPage() {
 	if (!token) {
 		return (
 			<AuthShell
-				title="Missing reset token"
-				serifAccent=""
+				title="Missing"
+				serifAccent="reset token"
 				description="This link is missing a valid reset token."
 				image={AUTH_PANEL.forgot}
 			>
@@ -121,8 +121,8 @@ function ResetPasswordPage() {
 
 	return (
 		<AuthShell
-			title="Choose a new password"
-			serifAccent=""
+			title="Choose a new"
+			serifAccent="password"
 			description="Pick a strong password for your account."
 			image={AUTH_PANEL.forgot}
 		>
