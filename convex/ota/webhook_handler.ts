@@ -328,56 +328,68 @@ export function createWebhookHandler(config: WebhookConfig) {
 				event,
 				config.provider,
 			);
-			if (eventId) {
-				if (outcome === "unmatched_product") {
-					// F340: availability.update for an otaProductId we have no
-					// mapping for — nothing was cached. Mark skipped (not
-					// processed) with a reason so ops can see and fix the
-					// mapping; a later provider retry after the product is
-					// mapped re-dispatches through the non-processed path.
-					logger.warn(
-						`${config.logPrefix} ${eventId} dropped: no product mapping for this otaProductId`,
-					);
-					await ctx.runMutation(
-						internal.webhookDeliveries.updateDeliveryStatus,
-						{
-							organizationId: integration.organizationId,
-							source: config.provider,
-							eventId,
-							status: "skipped",
-							skipReason: "unknown otaProductId — no product mapping",
-						},
-					);
-				} else {
-					await ctx.runMutation(
-						internal.webhookDeliveries.updateDeliveryStatus,
-						{
-							organizationId: integration.organizationId,
-							source: config.provider,
-							eventId,
-							status: "processed",
-						},
-					);
-				}
-			}
+			await recordDeliveryOutcome(
+				ctx,
+				config,
+				integration.organizationId,
+				eventId,
+				outcome,
+			);
 		} catch (err) {
-			if (eventId) {
-				await ctx.runMutation(
-					internal.webhookDeliveries.updateDeliveryStatus,
-					{
-						organizationId: integration.organizationId,
-						source: config.provider,
-						eventId,
-						status: "failed",
-						errorMessage:
-							err instanceof Error ? err.message : String(err),
-					},
-				);
-			}
+			await recordDeliveryOutcome(
+				ctx,
+				config,
+				integration.organizationId,
+				eventId,
+				"failed",
+				err instanceof Error ? err.message : String(err),
+			);
 			throw err;
 		}
 
 		return new Response("ok", { status: 200 });
+	});
+}
+
+/** Record the dispatch result on the delivery row — the three shapes
+ *  (processed / skipped / failed) share the org+source+event keying.
+ *  No-op when the event carried no extractable eventId. */
+async function recordDeliveryOutcome(
+	ctx: { runMutation: ActionCtx["runMutation"] },
+	config: WebhookConfig,
+	organizationId: string,
+	eventId: string | null,
+	outcome: DispatchOutcome | "failed",
+	errorMessage?: string,
+): Promise<void> {
+	if (!eventId) return;
+	if (outcome === "unmatched_product") {
+		// F340: availability.update for an otaProductId we have no
+		// mapping for — nothing was cached. Mark skipped (not
+		// processed) with a reason so ops can see and fix the
+		// mapping; a later provider retry after the product is
+		// mapped re-dispatches through the non-processed path.
+		logger.warn(
+			`${config.logPrefix} ${eventId} dropped: no product mapping for this otaProductId`,
+		);
+		await ctx.runMutation(
+			internal.webhookDeliveries.updateDeliveryStatus,
+			{
+				organizationId,
+				source: config.provider,
+				eventId,
+				status: "skipped",
+				skipReason: "unknown otaProductId — no product mapping",
+			},
+		);
+		return;
+	}
+	await ctx.runMutation(internal.webhookDeliveries.updateDeliveryStatus, {
+		organizationId,
+		source: config.provider,
+		eventId,
+		status: outcome === "failed" ? "failed" : "processed",
+		errorMessage: outcome === "failed" ? errorMessage : undefined,
 	});
 }
 
