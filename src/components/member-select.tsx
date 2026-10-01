@@ -76,12 +76,3 @@ export function MemberSelect({
 		</Select>
 	);
 }
-
-/** Resolve a display name without leaking Better Auth IDs into operator UI. */
-export function memberDisplayName(
-	members: Array<{ userId: string; name: string }> | undefined,
-	userId: string,
-): string {
-	const hit = members?.find((m) => m.userId === userId);
-	return hit?.name ?? "Former member";
-}
