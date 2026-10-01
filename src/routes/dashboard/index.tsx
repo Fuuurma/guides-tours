@@ -16,8 +16,9 @@ import {
 	Wallet,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PublicBookingLinkBar } from "@/components/public-booking-link-bar";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +37,6 @@ import {
 	EmptyTitle,
 } from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
@@ -806,59 +806,6 @@ function AssignmentRow({
 				</Link>
 			</Button>
 		</li>
-	);
-}
-
-function PublicBookingLinkBar({ slug }: { slug: string }) {
-	// F114: SSR must render a real URL (not empty + disabled Copy).
-	// Prefer the browser origin; fall back to SITE_URL-shaped env or a
-	// stable relative path the input can still show and Copy can resolve.
-	const [url, setUrl] = useState(() =>
-		typeof window !== "undefined"
-			? `${window.location.origin}/book/${slug}`
-			: `/book/${slug}`,
-	);
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		setUrl(`${window.location.origin}/book/${slug}`);
-	}, [slug]);
-	const [copied, setCopied] = useState(false);
-
-	const handleCopy = async () => {
-		try {
-			await navigator.clipboard.writeText(url);
-			setCopied(true);
-			toast.success("Link copied");
-			setTimeout(() => setCopied(false), 2000);
-		} catch {
-			toast.error("Could not copy — please copy manually");
-		}
-	};
-
-	return (
-		<div className="flex flex-col gap-2 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
-			<div className="flex min-w-0 items-center gap-2 text-sm">
-				<CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-				<span className="shrink-0 font-medium">Direct booking link</span>
-			</div>
-			<Input
-				readOnly
-				value={url}
-				onClick={(e) => e.currentTarget.select()}
-				className="min-w-0 font-mono text-xs"
-				aria-label="Direct booking URL"
-			/>
-			<div className="flex shrink-0 gap-2">
-				<Button onClick={handleCopy} disabled={!url} size="sm">
-					{copied ? "Copied" : "Copy"}
-				</Button>
-				<Button variant="outline" asChild size="sm">
-					<Link to="/book/$slug" params={{ slug }}>
-						Open
-					</Link>
-				</Button>
-			</div>
-		</div>
 	);
 }
 
