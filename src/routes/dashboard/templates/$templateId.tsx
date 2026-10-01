@@ -25,6 +25,12 @@ function TemplateDetailPage() {
 	const instantiate = useMutation(api.tourTemplates.instantiate);
 	const [creating, setCreating] = useState(false);
 	const [instantiateErr, setInstantiateErr] = useState<string | null>(null);
+	// F405: same privilege as tours.create — members cannot mint tours.
+	const { data: activeOrg } = useQuery(
+		convexQuery(api.organizations.activeOrganization, {}),
+	);
+	const canInstantiate =
+		activeOrg?.role === "owner" || activeOrg?.role === "admin";
 	const {
 		data: template,
 		isPending,
@@ -89,10 +95,15 @@ function TemplateDetailPage() {
 							Edit
 						</Link>
 					</Button>
-					<Button onClick={() => void handleInstantiate()} disabled={creating}>
-						{creating ? <Spinner data-icon="inline-start" /> : null}
-						{creating ? "Creating tour…" : "Use template"}
-					</Button>
+					{canInstantiate ? (
+						<Button
+							onClick={() => void handleInstantiate()}
+							disabled={creating}
+						>
+							{creating ? <Spinner data-icon="inline-start" /> : null}
+							{creating ? "Creating tour…" : "Use template"}
+						</Button>
+					) : null}
 				</>
 			}
 		>

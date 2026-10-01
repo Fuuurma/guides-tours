@@ -129,6 +129,20 @@ export const internalCreate = internalMutation({
 			);
 		}
 		if (args.capacity <= 0) throw new ConvexError("Capacity must be positive");
+		// F406: same numeric/relational invariants tours.internalCreate enforces —
+		// templates are cloned into live tours, so a bad template is a bad tour.
+		if (!(args.durationHours > 0)) {
+			throw new ConvexError("durationHours must be positive");
+		}
+		const minGuests = args.minGuests ?? 1;
+		const maxGuests = args.maxGuests ?? args.capacity;
+		if (minGuests < 1) throw new ConvexError("minGuests must be at least 1");
+		if (maxGuests < minGuests) {
+			throw new ConvexError("maxGuests must be >= minGuests");
+		}
+		if (maxGuests > args.capacity) {
+			throw new ConvexError("maxGuests cannot exceed capacity");
+		}
 		const requiredGuides = Math.max(1, Math.floor(args.requiredGuides ?? 1));
 		if (requiredGuides > 10) {
 			throw new ConvexError("requiredGuides cannot exceed 10");
@@ -147,8 +161,8 @@ export const internalCreate = internalMutation({
 			inclusions: args.inclusions ?? [],
 			exclusions: args.exclusions ?? [],
 			highlights: args.highlights ?? [],
-			minGuests: args.minGuests ?? 1,
-			maxGuests: args.maxGuests ?? args.capacity,
+			minGuests,
+			maxGuests,
 			bookingCutoffHours: args.bookingCutoffHours ?? 24,
 			requiredGuides,
 			requiresVehicle: args.requiresVehicle,
@@ -311,15 +325,14 @@ export const internalUpdate = internalMutation({
 });
 
 /**
- * @internal
- * No FE caller. Useful for "clone template → new tour" workflow that
- * the templates list page doesn't have a button for yet.
- * See docs/DATA_LAYER_STATUS.md.
+ * Clone a template into a live tour. FE caller: templates/$templateId
+ * "Use template". Same privilege as tours.create (owner/admin) — a
+ * member must not mint public tours via this path (F405).
  */
 export const instantiate = mutation({
 	args: { templateId: v.id("tourTemplates") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireRole(ctx, ["owner", "admin"]);
 		const tmpl = await ctx.db.get(args.templateId);
 		if (!tmpl) throw new ConvexError("Template not found");
 		if (tmpl.organizationId !== member.organizationId) {
@@ -335,6 +348,17 @@ export const instantiate = mutation({
 					"Template's category belongs to a different organization",
 				);
 			}
+		}
+		// F406: templates created before the invariant gate can hold bad
+		// numbers; refuse to clone them into a live public tour.
+		if (!(tmpl.durationHours > 0)) {
+			throw new ConvexError("Template durationHours must be positive");
+		}
+		if (tmpl.minGuests < 1 || tmpl.maxGuests < tmpl.minGuests) {
+			throw new ConvexError("Template guest range is invalid");
+		}
+		if (tmpl.maxGuests > tmpl.capacity) {
+			throw new ConvexError("Template maxGuests cannot exceed capacity");
 		}
 		const now = Date.now();
 		const tourId: Id<"tours"> = await ctx.db.insert("tours", {
