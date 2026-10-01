@@ -134,6 +134,148 @@ function paymentIntentIdFrom(obj: StripeObject | undefined): string | null {
 	return null;
 }
 
+/** The dispatch surface the webhook event handlers need — an httpAction
+ *  ctx exposes exactly these two. */
+interface WebhookDispatchCtx {
+	runQuery: ActionCtx["runQuery"];
+	runMutation: ActionCtx["runMutation"];
+}
+
+/** payment_intent.succeeded / checkout.session.completed: resolve the
+ *  payment by intent, minting a row from booking metadata when this is
+ *  the first event carrying it, then mark succeeded. */
+async function applyPaymentSuccess(
+	ctx: WebhookDispatchCtx,
+	obj: StripeObject | undefined,
+	orgId: string,
+	eventType: string | undefined,
+): Promise<void> {
+	const piId = paymentIntentIdFrom(obj);
+	const bookingId = obj?.metadata?.bookingId;
+	const amountRaw =
+		typeof obj?.amount_total === "number"
+			? obj.amount_total
+			: typeof obj?.amount === "number"
+				? obj.amount
+				: null;
+	const currencyRaw = obj?.currency;
+
+	if (!piId) {
+		logger.info(
+			`[stripe-webhook] ${eventType} missing payment_intent (org=${orgId})`,
+		);
+		// Ack — Checkout may complete without a PI in edge cases;
+		// retrying won't help until Stripe sends a PI event.
+		return;
+	}
+	let paymentId = await ctx.runQuery(internal.payments.getPaymentByIntent, {
+		stripePaymentIntentId: piId,
+		organizationId: orgId,
+	});
+
+	if (!paymentId && bookingId && amountRaw != null && currencyRaw) {
+		paymentId = await ctx.runMutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId: bookingId as never,
+			amountCents: BigInt(amountRaw),
+			currency: currencyForDb(currencyRaw),
+			stripePaymentIntentId: piId,
+		});
+	}
+
+	if (!paymentId) {
+		logger.info(
+			`[stripe-webhook] unknown intent ${piId} (event=${eventType}, org=${orgId})`,
+		);
+		return;
+	}
+	await ctx.runMutation(internal.payments.markSucceeded, { paymentId });
+}
+
+/** payment_intent.payment_failed: resolve the payment and mark failed.
+ *  Returns a 400 Response when the event carries no intent id — the only
+ *  arm that rejects the delivery outright (Stripe stops retrying). */
+async function applyPaymentFailed(
+	ctx: WebhookDispatchCtx,
+	obj: StripeObject | undefined,
+	orgId: string,
+): Promise<Response | null> {
+	const piId = paymentIntentIdFrom(obj);
+	if (!piId) {
+		return new Response("missing intent id", { status: 400 });
+	}
+	const paymentId = await ctx.runQuery(internal.payments.getPaymentByIntent, {
+		stripePaymentIntentId: piId,
+		organizationId: orgId,
+	});
+	if (!paymentId) {
+		logger.info(
+			`[stripe-webhook] unknown/cross-org intent ${piId} (event=payment_intent.payment_failed, org=${orgId})`,
+		);
+		return null;
+	}
+	await ctx.runMutation(internal.payments.markFailed, {
+		paymentId,
+		reason: obj?.last_payment_error?.message ?? undefined,
+	});
+	return null;
+}
+
+/** charge.refunded re-sends the charge's FULL refunds list — a payload can
+ *  carry several new refunds at once. Record each (by_stripe_refund
+ *  idempotency dedups re-deliveries) and only flip payments.status when
+ *  the charge is fully refunded — partial refunds must not mislabel the
+ *  payment. */
+async function applyChargeRefund(
+	ctx: WebhookDispatchCtx,
+	obj: StripeObject | undefined,
+	orgId: string,
+): Promise<void> {
+	const piId = paymentIntentIdFrom(obj);
+	if (!piId) {
+		logger.info(
+			`[stripe-webhook] charge.refunded missing payment_intent (org=${orgId})`,
+		);
+		return;
+	}
+	const paymentId = await ctx.runQuery(internal.payments.getPaymentByIntent, {
+		stripePaymentIntentId: piId,
+		organizationId: orgId,
+	});
+	if (!paymentId) {
+		logger.info(
+			`[stripe-webhook] unknown intent ${piId} for charge.refunded (org=${orgId})`,
+		);
+		return;
+	}
+	const refundsData = obj?.refunds?.data ?? [];
+	const fullyRefunded =
+		obj?.refunded === true ||
+		(typeof obj?.amount_refunded === "number" &&
+			typeof obj?.amount === "number" &&
+			obj.amount_refunded >= obj.amount);
+	for (const r of refundsData) {
+		await ctx.runMutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded,
+			refund: {
+				stripeRefundId: r.id,
+				amountCents: BigInt(r.amount),
+				currency: currencyForDb(r.currency),
+				reason: r.reason,
+				processedAt: r.created ? r.created * 1000 : undefined,
+			},
+		});
+	}
+	if (refundsData.length === 0) {
+		await ctx.runMutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded,
+		});
+	}
+}
+
+
 /** PaymentIntent states where re-opening the SAME intent is safe
  *  (F375 checkout dedup). Terminal states (succeeded / canceled) and
  *  requires_capture are excluded — reuse those paths mint fresh. */
@@ -1058,118 +1200,12 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			eventType === "payment_intent.succeeded" ||
 			eventType === "checkout.session.completed"
 		) {
-			const piId = paymentIntentIdFrom(obj);
-			const bookingId = obj?.metadata?.bookingId;
-			const amountRaw =
-				typeof obj?.amount_total === "number"
-					? obj.amount_total
-					: typeof obj?.amount === "number"
-						? obj.amount
-						: null;
-			const currencyRaw = obj?.currency;
-
-			if (!piId) {
-				logger.info(
-					`[stripe-webhook] ${eventType} missing payment_intent (org=${orgId})`,
-				);
-				// Ack — Checkout may complete without a PI in edge cases;
-				// retrying won't help until Stripe sends a PI event.
-			} else {
-				let paymentId = await ctx.runQuery(
-					internal.payments.getPaymentByIntent,
-					{ stripePaymentIntentId: piId, organizationId: orgId },
-				);
-
-				if (!paymentId && bookingId && amountRaw != null && currencyRaw) {
-					paymentId = await ctx.runMutation(
-						internal.payments.recordFromAction,
-						{
-							organizationId: orgId,
-							bookingId: bookingId as never,
-							amountCents: BigInt(amountRaw),
-							currency: currencyForDb(currencyRaw),
-							stripePaymentIntentId: piId,
-						},
-					);
-				}
-
-				if (!paymentId) {
-					logger.info(
-						`[stripe-webhook] unknown intent ${piId} (event=${eventType}, org=${orgId})`,
-					);
-				} else {
-					await ctx.runMutation(internal.payments.markSucceeded, {
-						paymentId,
-					});
-				}
-			}
+			await applyPaymentSuccess(ctx, obj, orgId, eventType);
 		} else if (eventType === "payment_intent.payment_failed") {
-			const piId = paymentIntentIdFrom(obj);
-			if (!piId) {
-				return new Response("missing intent id", { status: 400 });
-			}
-			const paymentId = await ctx.runQuery(
-				internal.payments.getPaymentByIntent,
-				{ stripePaymentIntentId: piId, organizationId: orgId },
-			);
-			if (!paymentId) {
-				logger.info(
-					`[stripe-webhook] unknown/cross-org intent ${piId} (event=${eventType}, org=${orgId})`,
-				);
-			} else {
-				await ctx.runMutation(internal.payments.markFailed, {
-					paymentId,
-					reason: obj?.last_payment_error?.message ?? undefined,
-				});
-			}
+			const earlyResponse = await applyPaymentFailed(ctx, obj, orgId);
+			if (earlyResponse) return earlyResponse;
 		} else if (eventType === "charge.refunded") {
-			const piId = paymentIntentIdFrom(obj);
-			if (!piId) {
-				logger.info(
-					`[stripe-webhook] charge.refunded missing payment_intent (org=${orgId})`,
-				);
-			} else {
-				const paymentId = await ctx.runQuery(
-					internal.payments.getPaymentByIntent,
-					{ stripePaymentIntentId: piId, organizationId: orgId },
-				);
-				if (!paymentId) {
-					logger.info(
-						`[stripe-webhook] unknown intent ${piId} for charge.refunded (org=${orgId})`,
-					);
-				} else {
-					// charge.refunded re-sends the charge's FULL refunds list —
-					// a payload can carry several new refunds at once. Record
-					// each (by_stripe_refund idempotency dedups re-deliveries)
-					// and only flip payments.status when the charge is fully
-					// refunded — partial refunds must not mislabel the payment.
-					const refundsData = obj?.refunds?.data ?? [];
-					const fullyRefunded =
-						obj?.refunded === true ||
-						(typeof obj?.amount_refunded === "number" &&
-							typeof obj?.amount === "number" &&
-							obj.amount_refunded >= obj.amount);
-					for (const r of refundsData) {
-						await ctx.runMutation(internal.payments.markRefunded, {
-							paymentId,
-							fullyRefunded,
-							refund: {
-								stripeRefundId: r.id,
-								amountCents: BigInt(r.amount),
-								currency: currencyForDb(r.currency),
-								reason: r.reason,
-								processedAt: r.created ? r.created * 1000 : undefined,
-							},
-						});
-					}
-					if (refundsData.length === 0) {
-						await ctx.runMutation(internal.payments.markRefunded, {
-							paymentId,
-							fullyRefunded,
-						});
-					}
-				}
-			}
+			await applyChargeRefund(ctx, obj, orgId);
 		}
 
 		if (stripeEventId) {
