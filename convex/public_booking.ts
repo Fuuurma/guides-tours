@@ -226,6 +226,45 @@ export const listAvailableSlots = query({
 // SES email sending inside the same function. The HTTP handler in
 // convex/http.ts is a thin wrapper.
 
+/** Post-create checkout assembly: fetch the booking's checkout summary
+ *  and the org's Stripe secrets, then decide whether the public flow can
+ *  offer pay-now (Stripe enabled + balance outstanding + collectible
+ *  status). Returns the action's response shape. */
+async function buildCheckoutResponse(
+	ctx: { runQuery: (ref: never, args: never) => Promise<unknown> },
+	bookingId: string,
+	organizationId: string,
+) {
+	const checkout = (await ctx.runQuery(
+		internal.payments.getBookingForCheckout as never,
+		{ bookingId } as never,
+	)) as { balanceDueCents?: bigint; status?: string } | null;
+	const settings = (await ctx.runQuery(
+		internal.payments.getStripeSecrets as never,
+		{ organizationId } as never,
+	)) as {
+		stripeEnabled?: boolean;
+		stripeSecretKey?: string;
+		stripePublishableKey?: string;
+	} | null;
+	const balanceDueCents = checkout?.balanceDueCents ?? 0n;
+	const canPay =
+		Boolean(settings?.stripeEnabled && settings.stripeSecretKey) &&
+		balanceDueCents > 0n &&
+		COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
+
+	return {
+		bookingId,
+		status: "pending" as const,
+		balanceDueCents: balanceDueCents.toString(),
+		canPay,
+		stripePublishableKey:
+			canPay && settings?.stripePublishableKey
+				? settings.stripePublishableKey
+				: undefined,
+	};
+}
+
 export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 	args: {
 		slug: v.string(),
@@ -323,30 +362,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 				organizationId,
 			});
 
-			const checkout = await ctx.runQuery(
-				internal.payments.getBookingForCheckout,
-				{ bookingId },
-			);
-			const settings = await ctx.runQuery(
-				internal.payments.getStripeSecrets,
-				{ organizationId },
-			);
-			const balanceDueCents = checkout?.balanceDueCents ?? 0n;
-			const canPay =
-				Boolean(settings?.stripeEnabled && settings.stripeSecretKey) &&
-				balanceDueCents > 0n &&
-				COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
-
-			return {
-				bookingId,
-				status: "pending" as const,
-				balanceDueCents: balanceDueCents.toString(),
-				canPay,
-				stripePublishableKey:
-					canPay && settings?.stripePublishableKey
-						? settings.stripePublishableKey
-						: undefined,
-			};
+			return await buildCheckoutResponse(ctx, bookingId, organizationId);
 		} catch (err) {
 			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
