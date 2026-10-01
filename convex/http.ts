@@ -6,7 +6,11 @@ import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { logger } from "./lib/logger";
-import { isUnconfiguredDeployment, trustedOriginsForDeployment } from "./lib/siteUrl";
+import {
+	getSiteUrl,
+	isUnconfiguredDeployment,
+	trustedOriginsForDeployment,
+} from "./lib/siteUrl";
 
 const http = httpRouter();
 
@@ -305,7 +309,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 	return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-function isAllowedBookingOrigin(origin: string | null): boolean {
+export function isAllowedBookingOrigin(origin: string | null): boolean {
 	const allowed = (process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS ?? "")
 		.split(",")
 		.map((s) => s.trim())
@@ -327,7 +331,31 @@ function isAllowedBookingOrigin(origin: string | null): boolean {
 		);
 		return false;
 	}
-	return origin !== null && allowed.includes(origin);
+	if (origin !== null && allowed.includes(origin)) return true;
+	// Env-drift fallback (WORK.md "public-booking env-drift fallback"):
+	// the allowlist is a marketing-origin list and goes stale when the app
+	// origin moves (preview URL, domain change, SITE_URL rotate) while
+	// PUBLIC_BOOKING_ALLOWED_ORIGINS still lists the old host. The book
+	// page is same-app (`window.location.origin`), so accept the canonical
+	// SITE_URL origin as an implicit member and log the drift loudly —
+	// never silently widen to arbitrary origins.
+	if (origin === null) return false;
+	const site = getSiteUrl().replace(/\/$/, "");
+	let siteOrigin: string | null = null;
+	try {
+		siteOrigin = new URL(site).origin;
+	} catch {
+		siteOrigin = null;
+	}
+	if (siteOrigin && origin === siteOrigin) {
+		logger.error(
+			`[booking] origin ${origin} is not in PUBLIC_BOOKING_ALLOWED_ORIGINS ` +
+				`but matches SITE_URL — allowing same-origin booking. ` +
+				`Add it to PUBLIC_BOOKING_ALLOWED_ORIGINS to silence this drift warning.`,
+		);
+		return true;
+	}
+	return false;
 }
 
 function bookingResponse(
