@@ -523,8 +523,10 @@ function AnalyticsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					{/* F408: the headline money number leads at double weight —
-					    no more two equal 3-col rows. */}
+					{/* F408: Gross revenue is the money hero (featured text-4xl
+					    over a 2-track span); Avg booking + Cancellation rate trail.
+					    Outstanding leads the financial-health row the same way so
+					    the tier is one asymmetric grid, not "3 + divider + 3". */}
 					<div className="grid gap-4 md:grid-cols-4">
 						<MetricCard
 							className="md:col-span-2"
@@ -533,6 +535,7 @@ function AnalyticsPage() {
 								revenue ? formatCents(revenue.totalRevenueCents) : undefined
 							}
 							isPending={revenuePending}
+							featured
 						/>
 						<MetricCard
 							label="Avg booking"
@@ -547,22 +550,25 @@ function AnalyticsPage() {
 							isPending={revenuePending}
 						/>
 					</div>
-					{/* Tier 4: financial-health trio — refund rate,
-					    outstanding balance, deposit coverage. */}
-					<div className="mt-4 grid gap-4 border-t pt-4 md:grid-cols-3">
+					{/* Tier 4: financial-health — Outstanding is the second
+					    hero (money still owed); refund rate + deposit coverage
+					    are the supporting pair. */}
+					<div className="mt-4 grid gap-4 border-t pt-4 md:grid-cols-4">
 						<MetricCard
-							label="Refund rate"
-							value={
-								financialHealth ? `${financialHealth.refundRate}%` : undefined
-							}
-							isPending={!financialHealth}
-						/>
-						<MetricCard
+							className="md:col-span-2"
 							label="Outstanding"
 							value={
 								financialHealth
 									? formatCentsWhole(financialHealth.outstandingCents)
 									: undefined
+							}
+							isPending={!financialHealth}
+							featured
+						/>
+						<MetricCard
+							label="Refund rate"
+							value={
+								financialHealth ? `${financialHealth.refundRate}%` : undefined
 							}
 							isPending={!financialHealth}
 						/>
