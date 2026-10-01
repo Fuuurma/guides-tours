@@ -63,8 +63,8 @@ function SignUpPage() {
 
 	return (
 		<AuthShell
-			title="Create your account"
-			serifAccent=""
+			title="Create your"
+			serifAccent="account"
 			description="Start staffing this week's tours, crew, and departures from one board."
 			image={AUTH_PANEL.signUp}
 		>

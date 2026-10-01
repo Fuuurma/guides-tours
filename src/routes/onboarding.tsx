@@ -96,8 +96,8 @@ function OnboardingPage() {
 
 	return (
 		<AuthShell
-			title="Set up your company"
-			serifAccent=""
+			title="Set up your"
+			serifAccent="company"
 			description="Create the organization your dispatch desk will share."
 			image={AUTH_PANEL.onboard}
 		>
