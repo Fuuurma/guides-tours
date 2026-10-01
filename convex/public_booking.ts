@@ -43,6 +43,37 @@ type PublicOrganizationRecord = {
 	name?: string;
 };
 
+// Cast via FunctionReference since the generated internal type strips
+// lib/ subdirectory modules (those containing query/mutation exports).
+// Same pattern as ota/integrations. Module-level so the handler reads as
+// rate-limit → resolve → dispatch instead of casting ceremony.
+const rateLimitRefs = (internal as unknown as {
+	"lib/rate_limit": {
+		recordAttempt: FunctionReference<
+			"mutation",
+			"internal",
+			{
+				email: string;
+				slug: string;
+				organizationId: string | undefined;
+				outcome: string;
+				ip?: string;
+			},
+			{ allowed: boolean; attempts: number; ipAttempts?: number; attemptId: Id<"publicBookingAttempts"> }
+		>;
+		updateAttemptOutcome: FunctionReference<
+			"mutation",
+			"internal",
+			{
+				attemptId: Id<"publicBookingAttempts">;
+				outcome: string;
+				organizationId?: string;
+			},
+			{ updated: boolean }
+		>;
+	};
+})["lib/rate_limit"];
+
 function getPublicOrganizationId(
 	org: PublicOrganizationRecord | null,
 ): string | undefined {
@@ -215,36 +246,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		// Rate-limit check (per-email). Recorded BEFORE the slug
 		// lookup so an attacker can't burn through unknown slugs
 		// without consuming their email's quota.
-		// Cast via FunctionReference since the generated internal
-		// type strips lib/ subdirectory modules (those containing
-		// query/mutation exports). Same pattern as ota/integrations.
-		const recordAttemptRef = (internal as unknown as {
-			"lib/rate_limit": {
-				recordAttempt: FunctionReference<
-					"mutation",
-					"internal",
-					{
-						email: string;
-						slug: string;
-						organizationId: string | undefined;
-						outcome: string;
-						ip?: string;
-					},
-					{ allowed: boolean; attempts: number; ipAttempts?: number; attemptId: Id<"publicBookingAttempts"> }
-				>;
-				updateAttemptOutcome: FunctionReference<
-					"mutation",
-					"internal",
-					{
-						attemptId: Id<"publicBookingAttempts">;
-						outcome: string;
-						organizationId?: string;
-					},
-					{ updated: boolean }
-				>;
-			};
-		})["lib/rate_limit"];
-		const rateCheck = await ctx.runMutation(recordAttemptRef.recordAttempt, {
+		const rateCheck = await ctx.runMutation(rateLimitRefs.recordAttempt, {
 			email: args.customerEmail,
 			slug: args.slug,
 			organizationId: undefined,
@@ -269,7 +271,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 			const orgForRejection = await findOrg();
 			const rejectedOrgId = getPublicOrganizationId(orgForRejection);
 			if (rejectedOrgId) {
-				await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+				await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 					attemptId: rateCheck.attemptId,
 					outcome: "rejected_rate_limit",
 					organizationId: rejectedOrgId,
@@ -282,7 +284,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 
 		const org = await findOrg();
 		if (!org) {
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: "rejected_unknown_slug",
 			});
@@ -290,7 +292,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		}
 		const organizationId = getPublicOrganizationId(org);
 		if (!organizationId) {
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: "rejected_unknown_slug",
 			});
@@ -315,7 +317,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 					smsConsent: args.smsConsent,
 				},
 			);
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: "success",
 				organizationId,
@@ -346,7 +348,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 						: undefined,
 			};
 		} catch (err) {
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: classifyAttemptOutcome(err),
 				organizationId,
