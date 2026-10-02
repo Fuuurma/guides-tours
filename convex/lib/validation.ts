@@ -74,12 +74,6 @@ export const MAX_VEHICLE_NAME_LEN = 100;
 /** Max length for payment method strings (e.g. "stripe", "cash"). */
 export const MAX_PAYMENT_METHOD_LEN = 50;
 
-/** Max length for Stripe publishable keys (pk_test_/pk_live_ + ~80 chars). */
-export const MAX_STRIPE_KEY_LEN = 200;
-
-/** Max length for Stripe webhook secret (whsec_ + ~50 chars). */
-export const MAX_STRIPE_WEBHOOK_SECRET_LEN = 150;
-
 /** Deposit percentage must be between 0 and 100 inclusive. */
 export const MIN_DEPOSIT_PERCENTAGE = 0;
 export const MAX_DEPOSIT_PERCENTAGE = 100;
