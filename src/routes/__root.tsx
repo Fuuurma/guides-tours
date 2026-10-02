@@ -45,6 +45,7 @@ export const Route = createRootRouteWithContext<{
 			token,
 		};
 	},
+	component: RootComponent,
 	head: () => ({
 		meta: [
 			{ charSet: "utf-8" },
@@ -71,7 +72,6 @@ export const Route = createRootRouteWithContext<{
 			},
 		],
 	}),
-	component: RootComponent,
 });
 
 function RootComponent() {

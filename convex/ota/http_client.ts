@@ -72,14 +72,23 @@ export class OTAHttpClient {
 				signal: controller.signal,
 			});
 			const text = await response.text();
-			const body = text.length > 0 ? (JSON.parse(text) as T) : (undefined as T);
+			// Status check BEFORE parsing — an error response may carry an
+			// HTML body, and JSON.parse on it would throw a SyntaxError that
+			// masks the real HTTP status (react-doctor 10-02).
 			if (!response.ok) {
+				let errorBody: unknown;
+				try {
+					errorBody = text.length > 0 ? (JSON.parse(text) as T) : undefined;
+				} catch {
+					errorBody = text.slice(0, 200);
+				}
 				throw new HttpError(
 					`OTA ${req.method} ${url} failed: ${response.status} ${response.statusText}`,
 					response.status,
-					body,
+					errorBody,
 				);
 			}
+			const body = text.length > 0 ? (JSON.parse(text) as T) : (undefined as T);
 			return { status: response.status, body };
 		} finally {
 			clearTimeout(timeout);

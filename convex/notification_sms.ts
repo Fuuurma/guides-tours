@@ -170,6 +170,29 @@ export async function sendTwilioSms(
 		return { ok: false, error: message };
 	}
 
+	// Status check BEFORE parsing the body — an error response may not be
+	// JSON, and the parse-fail log would mask the real HTTP status
+	// (react-doctor 10-02). Twilio errors do carry a JSON payload with
+	// code/message, so parse it only as error context.
+	if (!response.ok) {
+		const errorPayload = (await response.json().catch(() => ({}))) as {
+			code?: number;
+			message?: string;
+		};
+		const error = errorPayload.message ?? `Twilio HTTP ${response.status}`;
+		await ctx.runMutation(internal.notification_sms.recordSmsMessage, {
+			organizationId: params.organizationId,
+			...(params.bookingId ? { bookingId: params.bookingId } : {}),
+			recipientPhone: params.to,
+			recipientName: params.recipientName,
+			messageText: params.body,
+			status: "failed",
+			errorCode: errorPayload.code !== undefined ? String(errorPayload.code) : undefined,
+			errorMessage: error,
+		});
+		return { ok: false, error };
+	}
+
 	const payload = (await response.json().catch((parseErr) => {
 		logger.error("[notification_sms] Failed to parse Twilio response JSON:", parseErr);
 		return {};
@@ -179,21 +202,6 @@ export async function sendTwilioSms(
 		code?: number;
 		message?: string;
 	};
-
-	if (!response.ok) {
-		const error = payload.message ?? `Twilio HTTP ${response.status}`;
-		await ctx.runMutation(internal.notification_sms.recordSmsMessage, {
-			organizationId: params.organizationId,
-			...(params.bookingId ? { bookingId: params.bookingId } : {}),
-			recipientPhone: params.to,
-			recipientName: params.recipientName,
-			messageText: params.body,
-			status: "failed",
-			errorCode: payload.code !== undefined ? String(payload.code) : undefined,
-			errorMessage: error,
-		});
-		return { ok: false, error };
-	}
 
 	await ctx.runMutation(internal.notification_sms.recordSmsMessage, {
 		organizationId: params.organizationId,
