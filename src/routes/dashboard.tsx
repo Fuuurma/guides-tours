@@ -1,13 +1,13 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { toast } from "sonner";
 import {
 	createFileRoute,
 	Outlet,
 	redirect,
 	useNavigate,
 } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import {
@@ -167,8 +167,8 @@ function DashboardLayout() {
 						    guarded one will error until an org is picked. */}
 						<p className="text-sm font-medium">
 							You're currently previewing an organization by default — pick
-							yours to keep working in it (some actions will error until
-							you do).
+							yours to keep working in it (some actions will error until you
+							do).
 						</p>
 						{inactiveOrgs.map((o) => (
 							<Button
