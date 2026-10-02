@@ -564,14 +564,3 @@ export const purgeExpiredAvailabilityCache = internalMutation({
 	},
 });
 
-export const resolveOrganizationForIntegration = internalMutation({
-	args: { integrationId: v.id("otaIntegrations") },
-	handler: async (ctx, args) => {
-		const integration = await ctx.db.get(args.integrationId);
-		if (!integration) return null;
-		return {
-			organizationId: integration.organizationId,
-			provider: integration.provider,
-		};
-	},
-});

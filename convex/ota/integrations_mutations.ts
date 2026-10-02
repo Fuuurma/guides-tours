@@ -6,10 +6,10 @@
 
 import { v, ConvexError } from "convex/values";
 import type { FunctionReference } from "convex/server";
-import { internalMutation, internalQuery, mutation } from "../_generated/server";
+import { internalMutation, mutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { requireRole } from "../lib/authz";
-import { decrypt, encrypt } from "../lib/crypto";
+import { encrypt } from "../lib/crypto";
 import { logAudit } from "../lib/audit";
 import { assertFieldWithinLimit } from "../lib/validation";
 
@@ -346,21 +346,3 @@ export const removeInternal = internalMutation({
  * reads — using a mutation for a read-only operation runs it as a
  * transaction unnecessarily and prevents reactive caching.
  */
-export const getDecrypted = internalQuery({
-	args: { integrationId: v.id("otaIntegrations") },
-	handler: async (ctx, args) => {
-		const row = await ctx.db.get(args.integrationId);
-		if (!row) return null;
-		return {
-			organizationId: row.organizationId,
-			provider: row.provider,
-			isActive: row.isActive,
-			isSandbox: row.isSandbox,
-			apiKey: await decrypt(row.apiKey),
-			apiSecret: row.apiSecret ? await decrypt(row.apiSecret) : undefined,
-			webhookSecret: row.webhookSecret
-				? await decrypt(row.webhookSecret)
-				: undefined,
-		};
-	},
-});
