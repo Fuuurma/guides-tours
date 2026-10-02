@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useTodayYmd } from "@/hooks/use-today-ymd";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	MAX_GUEST_NAMES_LEN,
@@ -119,6 +120,7 @@ export function NewBookingPage() {
 	);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
 	const daySlotsRef = useRef<ScheduleLite[]>([]);
+	const today = useTodayYmd();
 
 	const form = useForm({
 		defaultValues: {
@@ -411,7 +413,7 @@ export function NewBookingPage() {
 												id="date"
 												type="date"
 												required
-												min={new Date().toISOString().slice(0, 10)}
+												min={today}
 												value={field.state.value}
 												onBlur={field.handleBlur}
 												onChange={(e) => {

@@ -38,6 +38,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useTodayYmd } from "@/hooks/use-today-ymd";
 import { formatCentsCompact } from "@/lib/format";
 import {
 	publicBookingDefaults,
@@ -110,6 +111,7 @@ function PublicBookingPage() {
 		string | null
 	>(null);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
+	const today = useTodayYmd();
 	const createPublicCheckout = useAction(
 		api.payments_stripe_actions.createPublicHostedCheckout,
 	);
@@ -643,7 +645,7 @@ function PublicBookingPage() {
 															name={field.name}
 															type="date"
 															required
-															min={new Date().toISOString().slice(0, 10)}
+															min={today}
 															value={field.state.value}
 															onBlur={field.handleBlur}
 															onChange={(e) => {
