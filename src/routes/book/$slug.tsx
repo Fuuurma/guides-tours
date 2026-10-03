@@ -7,6 +7,7 @@ import { Check, MapPin } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { BookingHero } from "@/components/booking-hero";
 import { FormField } from "@/components/forms/form-field";
 import { StripePaymentElement } from "@/components/stripe-payment-element";
 import { Button } from "@/components/ui/button";
@@ -312,14 +313,17 @@ function PublicBookingPage() {
 	if (isPending) {
 		return (
 			<PublicBookingFrame>
-				<h1 className="mb-6 font-display text-3xl font-normal tracking-tight">
-					Book a tour
-				</h1>
-				<div className="flex flex-col gap-4">
-					<Skeleton className="h-8 w-2/3" />
-					<Skeleton className="h-4 w-full" />
-					<Skeleton className="h-32 w-full" />
-					<Skeleton className="h-10 w-full" />
+				<div
+					role="status"
+					aria-label="Loading booking page"
+					className="flex flex-col gap-4"
+				>
+					<Skeleton className="h-44 w-full rounded-2xl sm:h-56" />
+					<Skeleton className="h-4 w-28" />
+					<Skeleton className="h-9 w-2/3" />
+					<Skeleton className="h-5 w-full max-w-xl" />
+					<Skeleton className="h-24 w-full rounded-xl" />
+					<Skeleton className="h-64 w-full" />
 				</div>
 			</PublicBookingFrame>
 		);
@@ -519,16 +523,11 @@ function PublicBookingPage() {
 
 	return (
 		<PublicBookingFrame orgName={data.organizationName}>
-			<header className="mb-8">
-				<h1 className="font-display text-3xl font-normal tracking-tight">
-					Book with{" "}
-					<span className="italic text-chart-1">{data.organizationName}</span>
-				</h1>
-				<p className="mt-2 text-base text-muted-foreground">
-					Request a tour — no account required. The operator confirms before it
-					is final.
-				</p>
-			</header>
+			<BookingHero
+				organizationName={data.organizationName}
+				slug={slug}
+				tours={data.tours}
+			/>
 
 			{data.tours.length === 0 ? (
 				<Empty className="border">
