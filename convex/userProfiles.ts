@@ -11,8 +11,7 @@ import {
 } from "./_generated/server";
 import { components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { authComponent, createAuth } from "./auth";
-import { requireMembership, requireRole } from "./lib/authz";
+import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
 	buildMissingStaffPhones,
@@ -98,20 +97,8 @@ async function assertUserIsOrgMember(
 	organizationId: string,
 	userId: string,
 ): Promise<void> {
-	const { auth, headers } = await authComponent.getAuth(createAuth, ctx);
-	let members: Array<{ userId: string }> = [];
-	try {
-		const memberList = await auth.api.listMembers({
-			headers,
-			query: { organizationId },
-		});
-		members = memberList.members ?? [];
-	} catch (err) {
-		throw new ConvexError(
-			`Failed to verify organization member: ${err instanceof Error ? err.message : String(err)}`,
-		);
-	}
-	if (!members.some((m) => m.userId === userId)) {
+	const member = await findOrgMember(ctx, organizationId, userId);
+	if (!member) {
 		throw new ConvexError("User is not a member of this organization");
 	}
 }

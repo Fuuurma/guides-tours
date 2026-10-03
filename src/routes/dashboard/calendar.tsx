@@ -271,7 +271,9 @@ function CalendarPage() {
 		<div className="flex flex-col gap-6">
 			<header className="flex flex-wrap items-center justify-between gap-4">
 				<div>
-					<h1 className="text-2xl font-semibold">Calendar</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">
+						Calendar
+					</h1>
 					<p className="text-muted-foreground text-sm">
 						Who is out this week — guides, vehicles, and open gaps ·{" "}
 						<Link
@@ -501,6 +503,7 @@ function MonthGrid({
 }) {
 	const totalDays = daysInMonthLocal(year, month);
 	const firstDow = new Date(year, month, 1).getDay();
+	const trailingCount = (7 - ((firstDow + totalDays) % 7)) % 7;
 	const today = localYmd(new Date());
 
 	return (
@@ -519,9 +522,9 @@ function MonthGrid({
 				return (
 					<div
 						key={`empty-${year}-${month}-before-${pad}`}
-						className="bg-muted/20 min-h-24 p-1 flex flex-col gap-0.5"
+						className="group bg-muted/20 min-h-24 p-1 flex flex-col gap-0.5 hover:bg-muted/40 transition-colors"
 					>
-						<div className="flex items-center px-0.5">
+						<div className="flex items-center justify-between gap-1 px-0.5">
 							<Link
 								to="/dashboard/assignments/new"
 								search={{ date }}
@@ -529,6 +532,14 @@ function MonthGrid({
 								title={`New assignment on ${date}`}
 							>
 								{d.getDate()}
+							</Link>
+							<Link
+								to="/dashboard/schedules/new"
+								search={{ date }}
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
+								title={`New schedule on ${date}`}
+							>
+								+ Schedule
 							</Link>
 						</div>
 					</div>
@@ -568,7 +579,9 @@ function MonthGrid({
 											className="text-[10px] font-medium text-destructive"
 											title={`${gaps} departure(s) need staffing`}
 										>
-											{gaps}!
+											{/* text content already reads the gaps; a span
+											   can't carry aria-label without a role */}
+											{gaps} gap{gaps === 1 ? "" : "s"}
 										</span>
 									)}
 									{scheduleCount > 0 && (
@@ -605,6 +618,35 @@ function MonthGrid({
 					);
 				},
 			)}
+			{[...Array(trailingCount).keys()].map((pad) => {
+				const d = new Date(year, month + 1, pad + 1);
+				const date = localYmd(d);
+				return (
+					<div
+						key={`empty-${year}-${month}-after-${pad}`}
+						className="group bg-muted/20 min-h-24 p-1 flex flex-col gap-0.5 hover:bg-muted/40 transition-colors"
+					>
+						<div className="flex items-center justify-between gap-1 px-0.5">
+							<Link
+								to="/dashboard/assignments/new"
+								search={{ date }}
+								className="text-xs text-muted-foreground hover:underline size-6 flex items-center justify-center rounded-full"
+								title={`New assignment on ${date}`}
+							>
+								{d.getDate()}
+							</Link>
+							<Link
+								to="/dashboard/schedules/new"
+								search={{ date }}
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
+								title={`New schedule on ${date}`}
+							>
+								+ Schedule
+							</Link>
+						</div>
+					</div>
+				);
+			})}
 		</div>
 	);
 }
@@ -634,7 +676,12 @@ function WeekAgenda({
 	const today = localYmd(new Date());
 
 	return (
-		<div className="flex flex-col gap-3">
+		// F109: operator week board — 7 equal day columns from lg+ so a
+		// typical operator laptop (1024px content width with the 256px
+		// sidebar) reads as a week board, not a vertical stack. Narrow
+		// viewports stack. Each column keeps day header + empty-state
+		// actions (DESIGN.md: empty week days have Assign / New schedule).
+		<div className="grid grid-cols-1 gap-3 lg:grid-cols-7">
 			{days.map((d) => {
 				const date = localYmd(d);
 				const items = byDate.get(date) ?? [];
@@ -646,11 +693,17 @@ function WeekAgenda({
 					day: "numeric",
 				});
 				return (
-					<Card key={date} className={cn(date === today && "border-primary")}>
-						<CardHeader className="flex flex-row items-center justify-between gap-0 py-3">
+					<Card
+						key={date}
+						className={cn(
+							"flex h-full flex-col",
+							date === today && "border-primary",
+						)}
+					>
+						<CardHeader className="flex flex-col gap-2 py-3">
 							<div>
-								<CardTitle className="text-base">{label}</CardTitle>
-								<CardDescription>
+								<CardTitle className="text-sm">{label}</CardTitle>
+								<CardDescription className="text-xs">
 									{items.length} assignment{items.length === 1 ? "" : "s"}
 									{scheduleCount > 0
 										? ` · ${scheduleCount} schedule${scheduleCount === 1 ? "" : "s"}`
@@ -658,20 +711,20 @@ function WeekAgenda({
 									{gaps > 0 ? ` · ${gaps} need staffing` : ""}
 								</CardDescription>
 							</div>
-							<div className="flex gap-2">
+							<div className="flex flex-wrap gap-1">
 								{gaps > 0 && (
-									<Button asChild size="sm" variant="secondary">
+									<Button asChild size="sm" variant="secondary" className="h-7">
 										<Link to="/dashboard/staffing">Gaps</Link>
 									</Button>
 								)}
-								<Button asChild size="sm" variant="outline">
+								<Button asChild size="sm" variant="outline" className="h-7">
 									<Link to="/dashboard/assignments/new" search={{ date }}>
 										+ Assign
 									</Link>
 								</Button>
 							</div>
 						</CardHeader>
-						<CardContent className="pb-3">
+						<CardContent className="flex flex-1 flex-col pb-3">
 							{items.length === 0 ? (
 								<Empty className="min-h-0 border-dashed p-4 md:p-6">
 									<EmptyHeader>

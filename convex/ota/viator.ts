@@ -17,13 +17,13 @@
 // Source verified webhook events list:
 //   parse_webhook_event(event_type) → ("booking_created" | "booking_cancelled")
 
-import { OTAHttpClient, HttpError } from "./http_client";
+import { OTAHttpClient } from "./http_client";;
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
 const PROD_BASE_URL = "https://api.viator.com/partner/v1";
 const SANDBOX_BASE_URL = "https://api-sandbox.viator.com/partner/v1";
 
-export interface ViatorOptions {
+interface ViatorOptions {
 	credentials: DecryptedCredentials;
 	isSandbox: boolean;
 	timeoutMs?: number;
@@ -248,7 +248,11 @@ function numberOrThrow(v: unknown, label: string): number {
 }
 
 function numberOrUndefined(v: unknown): number | undefined {
-	if (typeof v === "number") return v;
+	// F410: non-finite numbers (1e999 → Infinity) must normalize to
+	// undefined like bad strings, or they sail to upsert's finite guard
+	// and land as a 500 rethrow instead of the 400 malformed-payload
+	// path.
+	if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
 	if (typeof v === "string") {
 		const n = Number(v);
 		return Number.isFinite(n) ? n : undefined;
@@ -257,4 +261,3 @@ function numberOrUndefined(v: unknown): number | undefined {
 }
 
 // Re-export so consumers don't need a second import.
-export { HttpError };

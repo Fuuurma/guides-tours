@@ -51,8 +51,8 @@ function ForgotPasswordPage() {
 	if (submitted) {
 		return (
 			<AuthShell
-				title="Check your inbox"
-				serifAccent=""
+				title="Check your"
+				serifAccent="inbox"
 				description="We've sent a password reset link if an account exists for that email."
 				image={AUTH_PANEL.forgot}
 			>
@@ -77,8 +77,8 @@ function ForgotPasswordPage() {
 
 	return (
 		<AuthShell
-			title="Reset your password"
-			serifAccent=""
+			title="Reset your"
+			serifAccent="password"
 			description="Enter your email and we'll send you a link to reset your password."
 			image={AUTH_PANEL.forgot}
 		>

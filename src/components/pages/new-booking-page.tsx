@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useTodayYmd } from "@/hooks/use-today-ymd";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	MAX_GUEST_NAMES_LEN,
@@ -119,6 +120,7 @@ export function NewBookingPage() {
 	);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
 	const daySlotsRef = useRef<ScheduleLite[]>([]);
+	const today = useTodayYmd();
 
 	const form = useForm({
 		defaultValues: {
@@ -250,7 +252,12 @@ export function NewBookingPage() {
 			s.capacityBooked < s.capacityTotal &&
 			(!date || s.date === date),
 	);
-	daySlotsRef.current = daySlots;
+	// Commit-phase assignment: render-phase ref writes are unsafe under
+	// concurrent rendering (react-doctor). The only consumer is the submit
+	// validator, which always reads post-commit.
+	useEffect(() => {
+		daySlotsRef.current = daySlots;
+	});
 
 	useEffect(() => {
 		if (!prefillSchedule) return;
@@ -303,7 +310,7 @@ export function NewBookingPage() {
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<div>
 				<PageBackLink to="/dashboard/bookings" />
-				<h1 className="mt-2 text-2xl font-semibold tracking-tight">
+				<h1 className="mt-2 font-display text-2xl font-medium tracking-tight">
 					New booking
 				</h1>
 				<p className="mt-1 text-sm text-muted-foreground">
@@ -406,7 +413,7 @@ export function NewBookingPage() {
 												id="date"
 												type="date"
 												required
-												min={new Date().toISOString().slice(0, 10)}
+												min={today}
 												value={field.state.value}
 												onBlur={field.handleBlur}
 												onChange={(e) => {

@@ -115,7 +115,7 @@ export async function verifyWebhookSignature(
 /**
  * Per-provider webhook header name.
  */
-export const WEBHOOK_HEADER = {
+const WEBHOOK_HEADER = {
 	viator: "x-viator-signature",
 	getyourguide: "x-getyourguide-signature",
 	airbnb: "x-airbnb-signature",
@@ -127,22 +127,6 @@ export const WEBHOOK_HEADER = {
 
 export type ProviderSlug = keyof typeof WEBHOOK_HEADER;
 
-/**
- * Per-provider timestamp header name. OTAs typically include this
- * as the epoch-seconds (or ms) they signed the payload, so we can
- * reject replays of old captured payloads.
- *
- * Header value: epoch milliseconds (integer string).
- */
-export const WEBHOOK_TIMESTAMP_HEADER = {
-	viator: "x-viator-timestamp",
-	getyourguide: "x-getyourguide-timestamp",
-	airbnb: "x-airbnb-timestamp",
-	tripadvisor: "x-tripadvisor-timestamp",
-	klook: "x-klook-timestamp",
-	booking: "x-booking-timestamp",
-	expedia: "x-expedia-timestamp",
-} as const;
 
 /**
  * How old a webhook timestamp can be (and how far in the future)

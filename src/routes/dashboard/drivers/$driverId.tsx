@@ -113,10 +113,12 @@ function DriverDetailPage() {
 
 	return (
 		<DetailPage title={name} subtitle="Driver" backTo="/dashboard/drivers">
+			{/* F119: status leads — 3-up, not four equal StatCards */}
 			<div className="grid gap-4 md:grid-cols-3">
 				<MetricCard
 					label="Status"
 					value={driver.isActive ? "Active" : "Inactive"}
+					featured
 				>
 					<StatusBadge status={driver.isActive ? "active" : "inactive"} />
 				</MetricCard>

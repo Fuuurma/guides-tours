@@ -76,8 +76,8 @@ function GuideDetailPage() {
 			dateTo: monthEnd,
 		}),
 	);
-	const { data: vacations } = useQuery(
-		convexQuery(api.vacationRequests.list, {}),
+	const { data: guideVacations } = useQuery(
+		convexQuery(api.vacationRequests.list, { userId }),
 	);
 
 	const upsert = useMutation(api.availabilities.upsert);
@@ -93,7 +93,7 @@ function GuideDetailPage() {
 		return map;
 	}, [availabilities]);
 
-	const guideVacations = (vacations ?? []).filter((v) => v.userId === userId);
+	const guideVacationList = guideVacations ?? [];
 
 	const year = monthCursor.getUTCFullYear();
 	const month = monthCursor.getUTCMonth();
@@ -148,8 +148,9 @@ function GuideDetailPage() {
 			subtitle={`${member.email || "No email"} · ${member.role}`}
 			backTo="/dashboard/guides"
 		>
+			{/* F119: role leads the guide row */}
 			<div className="grid gap-4 md:grid-cols-3">
-				<MetricCard label="Role" value={member.role} />
+				<MetricCard label="Role" value={member.role} featured />
 				<MetricCard label="Email" value={member.email || "—"} />
 				<MetricCard
 					label="Assignments this month"
@@ -276,11 +277,11 @@ function GuideDetailPage() {
 			</DetailSection>
 
 			<DetailSection title="Vacation requests">
-				{guideVacations.length === 0 ? (
+				{guideVacationList.length === 0 ? (
 					<p className="text-muted-foreground text-sm">No vacation requests.</p>
 				) : (
 					<ul className="flex flex-col gap-2">
-						{guideVacations.map((v) => (
+						{guideVacationList.map((v) => (
 							<li
 								key={v._id}
 								className="flex items-center justify-between gap-2"

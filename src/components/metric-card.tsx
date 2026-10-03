@@ -2,6 +2,7 @@ import type * as React from "react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 /**
  * A metric card used on dashboard detail pages and the home
@@ -12,6 +13,9 @@ import { Skeleton } from "@/components/ui/skeleton";
  *   - value:           string | number  — large text
  *   - badgeVariant:    renders a <Badge variant={...}>
  *   - children:        arbitrary ReactNode  (escape hatch)
+ *
+ * `featured` enlarges the value and is meant to sit in a wider grid
+ * track (F119 — never four equal StatCards).
  */
 export interface MetricCardProps {
 	label: string;
@@ -20,6 +24,8 @@ export interface MetricCardProps {
 	children?: React.ReactNode;
 	/** Render a subtle "—" placeholder while data loads. */
 	isPending?: boolean;
+	/** Lead metric for this row — larger type; pair with a non-equal grid. */
+	featured?: boolean;
 	className?: string;
 }
 
@@ -29,6 +35,7 @@ export function MetricCard({
 	badgeVariant,
 	children,
 	isPending,
+	featured,
 	className,
 }: MetricCardProps) {
 	return (
@@ -43,7 +50,12 @@ export function MetricCard({
 						(badgeVariant ? (
 							<Badge variant={badgeVariant}>{value ?? "—"}</Badge>
 						) : (
-							<p className="font-display text-2xl font-medium tracking-tight tabular-nums">
+							<p
+								className={cn(
+									"font-display font-medium tracking-tight tabular-nums",
+									featured ? "text-4xl" : "text-2xl",
+								)}
+							>
 								{value ?? "—"}
 							</p>
 						)))

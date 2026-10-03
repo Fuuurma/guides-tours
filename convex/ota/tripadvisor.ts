@@ -18,7 +18,7 @@ import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 const PROD_BASE_URL = "https://api.tripadvisor.com/v1";
 const SANDBOX_BASE_URL = "https://api-sandbox.tripadvisor.com/v1";
 
-export interface TripAdvisorOptions {
+interface TripAdvisorOptions {
 	credentials: DecryptedCredentials;
 	isSandbox: boolean;
 	timeoutMs?: number;

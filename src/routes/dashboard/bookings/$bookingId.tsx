@@ -209,7 +209,7 @@ function BookingDetailPage() {
 
 	return (
 		<DetailPage
-			title={`Booking ${b._id.slice(-8)}`}
+			title={b.customer?.name ?? b.tour?.name ?? "Booking"}
 			subtitle={`${b.date} at ${b.startTime} · ${b.guests} guests`}
 			backTo="/dashboard/bookings"
 			actions={
@@ -266,11 +266,14 @@ function BookingDetailPage() {
 				/>
 			)}
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<MetricCard
-					label="Total"
-					value={formatCentsCompact(b.totalAmountCents)}
-				/>
+			{/* F409: Total is a featured card — the 1.5fr track claimed
+			    hierarchy the uniform text-2xl never delivered. */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+				<MetricCard label="Total" className="p-6" featured>
+					<p className="font-display text-4xl font-medium tracking-tight tabular-nums">
+						{formatCentsCompact(b.totalAmountCents)}
+					</p>
+				</MetricCard>
 				<MetricCard
 					label="Deposit"
 					value={formatCentsCompact(b.depositAmountCents)}

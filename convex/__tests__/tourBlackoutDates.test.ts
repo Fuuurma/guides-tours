@@ -1,7 +1,12 @@
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
 import { isBlackoutHelper } from "../tourBlackoutDates";
+import {
+	registerBetterAuthMock,
+	resetMockOrgs,
+	seedMockOrg,
+} from "../../test-utils/betterAuthMock";
 import schema from "../schema";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
@@ -151,9 +156,16 @@ describe("tour blackout dates", () => {
 });
 
 describe("publicIsBlackout (active-tour gate, no auth)", () => {
+	afterEach(() => {
+		resetMockOrgs();
+	});
+
 	it("returns true for date inside range on an active tour", async () => {
 		const t = convexTest(schema, modules);
+		registerBetterAuthMock(t);
+		seedMockOrg({ id: "org_pub1", slug: "pub1" });
 		const orgId = "org_pub1";
+		const slug = "pub1";
 		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
 		await t.mutation(internal.tourBlackoutDates.internalCreate, {
 			organizationId: orgId,
@@ -163,7 +175,7 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
-			organizationId: orgId,
+			slug,
 			tourId,
 			date: "2026-12-25",
 		});
@@ -172,7 +184,10 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 
 	it("returns false for date outside range", async () => {
 		const t = convexTest(schema, modules);
+		registerBetterAuthMock(t);
+		seedMockOrg({ id: "org_pub2", slug: "pub2" });
 		const orgId = "org_pub2";
+		const slug = "pub2";
 		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
 		await t.mutation(internal.tourBlackoutDates.internalCreate, {
 			organizationId: orgId,
@@ -182,7 +197,7 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
-			organizationId: orgId,
+			slug,
 			tourId,
 			date: "2026-12-27",
 		});
@@ -191,7 +206,10 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 
 	it("returns false for inactive tour even if a blackout exists", async () => {
 		const t = convexTest(schema, modules);
+		registerBetterAuthMock(t);
+		seedMockOrg({ id: "org_pub3", slug: "pub3" });
 		const orgId = "org_pub3";
+		const slug = "pub3";
 		const tourId = await t.run(async (ctx) => {
 			const id = await seedTour(ctx, orgId);
 			await ctx.db.patch(id, { isActive: false });
@@ -205,7 +223,7 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
-			organizationId: orgId,
+			slug,
 			tourId,
 			date: "2026-12-25",
 		});
@@ -214,8 +232,10 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 
 	it("does not expose a tour blackout through another organization's page", async () => {
 		const t = convexTest(schema, modules);
+		registerBetterAuthMock(t);
+		seedMockOrg({ id: "org_pub4_owner", slug: "pub4-owner" });
+		seedMockOrg({ id: "org_pub4_other", slug: "pub4-other" });
 		const ownerOrgId = "org_pub4_owner";
-		const otherOrgId = "org_pub4_other";
 		const tourId = await t.run((ctx) => seedTour(ctx, ownerOrgId));
 		await t.mutation(internal.tourBlackoutDates.internalCreate, {
 			organizationId: ownerOrgId,
@@ -225,7 +245,7 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			endDate: "2026-12-26",
 		});
 		const result = await t.query(api.tourBlackoutDates.publicIsBlackout, {
-			organizationId: otherOrgId,
+			slug: "pub4-other",
 			tourId,
 			date: "2026-12-25",
 		});

@@ -79,11 +79,9 @@ export function AuthShell({
 							</span>
 						</Link>
 
-						<h2 className="mt-14 max-w-md text-pretty text-4xl leading-[1.05] font-semibold tracking-[-0.05em]">
+						<h2 className="mt-14 max-w-md font-display text-pretty text-4xl leading-[1.05] font-normal tracking-[-0.02em]">
 							The calm behind every{" "}
-							<span className="font-display font-normal italic tracking-normal text-chart-1">
-								great tour.
-							</span>
+							<span className="italic text-chart-1">great tour.</span>
 						</h2>
 						<p className="mt-5 max-w-sm text-base leading-7 text-primary-foreground/70">
 							Run tours, bookings, schedules, and your whole team from one
@@ -136,12 +134,10 @@ export function AuthShell({
 				<div className="flex flex-1 items-center justify-center px-5 py-10 sm:px-8">
 					<div className="w-full max-w-sm">
 						<div className="mb-7">
-							<h1 className="text-3xl font-semibold tracking-[-0.05em]">
+							<h1 className="font-display text-balance text-3xl font-normal tracking-tight">
 								{title}{" "}
 								{serifAccent ? (
-									<span className="font-display font-normal italic tracking-normal text-chart-1">
-										{serifAccent}
-									</span>
+									<span className="italic text-chart-1">{serifAccent}</span>
 								) : null}
 							</h1>
 							{description ? (

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction } from "convex/react";
 import { Check, MapPin } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FormField } from "@/components/forms/form-field";
@@ -39,6 +39,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useTodayYmd } from "@/hooks/use-today-ymd";
 import { formatCentsCompact } from "@/lib/format";
 import {
 	publicBookingDefaults,
@@ -76,13 +77,12 @@ interface PublicTour {
 
 function PublicBookingPage() {
 	const { slug } = Route.useParams();
+	const reduceMotion = useReducedMotion();
 	const { data, isPending, error } = useQuery(
 		convexQuery(api.public_booking.getOrgAndToursBySlug, { slug }),
 	);
-	const publicOrganizationId = data?.organizationId;
-
+	// F371: the public surface speaks slug, never the internal tenant key.
 	const [blackoutCheck, setBlackoutCheck] = useState<{
-		organizationId: string;
 		tourId: Id<"tours">;
 		date: string;
 	} | null>(null);
@@ -91,7 +91,7 @@ function PublicBookingPage() {
 			api.tourBlackoutDates.publicIsBlackout,
 			blackoutCheck
 				? {
-						organizationId: blackoutCheck.organizationId,
+						slug,
 						tourId: blackoutCheck.tourId,
 						date: blackoutCheck.date,
 					}
@@ -113,6 +113,7 @@ function PublicBookingPage() {
 		string | null
 	>(null);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
+	const today = useTodayYmd();
 	const createPublicCheckout = useAction(
 		api.payments_stripe_actions.createPublicHostedCheckout,
 	);
@@ -301,21 +302,21 @@ function PublicBookingPage() {
 
 	useEffect(() => {
 		if (tourId && date) {
-			if (publicOrganizationId) {
-				setBlackoutCheck({
-					organizationId: publicOrganizationId,
-					tourId: tourId as Id<"tours">,
-					date,
-				});
-			}
+			setBlackoutCheck({
+				tourId: tourId as Id<"tours">,
+				date,
+			});
 		} else {
 			setBlackoutCheck(null);
 		}
-	}, [tourId, date, publicOrganizationId]);
+	}, [tourId, date]);
 
 	if (isPending) {
 		return (
 			<PublicBookingFrame>
+				<h1 className="mb-6 font-display text-3xl font-normal tracking-tight">
+					Book a tour
+				</h1>
 				<div className="flex flex-col gap-4">
 					<Skeleton className="h-8 w-2/3" />
 					<Skeleton className="h-4 w-full" />
@@ -329,6 +330,9 @@ function PublicBookingPage() {
 	if (error) {
 		return (
 			<PublicBookingFrame>
+				<h1 className="mb-6 font-display text-3xl font-normal tracking-tight">
+					Book a tour
+				</h1>
 				<Empty className="border">
 					<EmptyHeader>
 						<EmptyTitle>Could not load this page</EmptyTitle>
@@ -342,6 +346,9 @@ function PublicBookingPage() {
 	if (!data) {
 		return (
 			<PublicBookingFrame>
+				<h1 className="mb-6 font-display text-3xl font-normal tracking-tight">
+					Book a tour
+				</h1>
 				<Empty className="border">
 					<EmptyHeader>
 						<EmptyTitle>Booking page not found</EmptyTitle>
@@ -361,16 +368,16 @@ function PublicBookingPage() {
 		return (
 			<PublicBookingFrame orgName={data.organizationName}>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.3, ease: "easeOut" }}
 				>
 					<Card>
 						<CardHeader className="items-center text-center">
 							<span className="mb-2 grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
-								<Check />
+								<Check aria-hidden="true" />
 							</span>
-							<h2 className="text-2xl font-semibold tracking-tight">
+							<h2 className="font-display text-2xl font-normal tracking-tight">
 								Booking request received
 							</h2>
 							<CardDescription>
@@ -515,11 +522,9 @@ function PublicBookingPage() {
 	return (
 		<PublicBookingFrame orgName={data.organizationName}>
 			<header className="mb-8">
-				<h1 className="text-3xl font-semibold tracking-[-0.05em]">
+				<h1 className="font-display text-3xl font-normal tracking-tight">
 					Book with{" "}
-					<span className="font-display font-normal italic tracking-normal text-chart-1">
-						{data.organizationName}
-					</span>
+					<span className="italic text-chart-1">{data.organizationName}</span>
 				</h1>
 				<p className="mt-2 text-base text-muted-foreground">
 					Request a tour — no account required. The operator confirms before it
@@ -542,7 +547,7 @@ function PublicBookingPage() {
 				</Empty>
 			) : (
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
@@ -609,7 +614,7 @@ function PublicBookingPage() {
 															name={field.name}
 															type="date"
 															required
-															min={new Date().toISOString().slice(0, 10)}
+															min={today}
 															value={field.state.value}
 															onBlur={field.handleBlur}
 															onChange={(e) => {

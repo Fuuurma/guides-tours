@@ -281,15 +281,17 @@ function ScheduleDetailPage() {
 				</div>
 			}
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+			{/* F431: booked/total is the operator KPI — not five equal cards */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+				<MetricCard
+					label="Booked / Total"
+					value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`}
+					featured
+				/>
 				<MetricCard label="Date" value={schedule.date} />
 				<MetricCard
 					label="Time"
 					value={`${schedule.startTime}–${schedule.endTime}`}
-				/>
-				<MetricCard
-					label="Booked / Total"
-					value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`}
 				/>
 				<MetricCard label="Seats left" value={seatsRemaining} />
 				<MetricCard label="Status" value={schedule.status}>
@@ -373,7 +375,9 @@ function ScheduleDetailPage() {
 				title="Capacity"
 				description={`${utilization}% of seats are booked`}
 			>
-				<p className="text-3xl font-semibold">{utilization}%</p>
+				<p className="font-display text-3xl font-medium tracking-tight tabular-nums">
+					{utilization}%
+				</p>
 				<p className="text-muted-foreground text-sm">
 					{seatsRemaining > 0
 						? `${seatsRemaining} seat${seatsRemaining === 1 ? "" : "s"} remaining`

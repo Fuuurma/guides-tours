@@ -42,6 +42,8 @@ describe("tour exception dates", () => {
 			tourId,
 			date: "2026-12-25",
 			exceptionType: "added",
+			startTime: "10:00",
+			endTime: "13:00",
 			reason: "Christmas special",
 		});
 		expect(id).toBeDefined();
@@ -77,7 +79,39 @@ describe("tour exception dates", () => {
 				startTime: "11:00",
 				endTime: "09:00",
 			}),
-		).rejects.toThrow(/on or after/);
+		).rejects.toThrow(/after startTime/);
+	});
+
+	it("create: MODIFIED rejects endTime === startTime (zero-duration wedge, F345)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ex3b";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await expect(
+			t.mutation(internal.tourExceptionDates.internalCreate, {
+				organizationId: orgId,
+				userId: "user-1",
+				tourId,
+				date: "2026-07-04",
+				exceptionType: "modified",
+				startTime: "09:00",
+				endTime: "09:00",
+			}),
+		).rejects.toThrow(/after startTime/);
+	});
+
+	it("create: ADDED requires startTime + endTime (F345)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ex3c";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await expect(
+			t.mutation(internal.tourExceptionDates.internalCreate, {
+				organizationId: orgId,
+				userId: "user-1",
+				tourId,
+				date: "2026-07-04",
+				exceptionType: "added",
+			}),
+		).rejects.toThrow(/require startTime/);
 	});
 
 	it("create: REMOVED exception with no times", async () => {
@@ -137,7 +171,30 @@ describe("tour exception dates", () => {
 				exceptionId: id,
 				endTime: "08:00",
 			}),
-		).rejects.toThrow(/on or after/);
+		).rejects.toThrow(/after startTime/);
+	});
+
+	it("update: rejects merged endTime === startTime (F345)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ex6b";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const id = await t.mutation(internal.tourExceptionDates.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			date: "2026-07-04",
+			exceptionType: "modified",
+			startTime: "09:00",
+			endTime: "11:00",
+		});
+		await expect(
+			t.mutation(internal.tourExceptionDates.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				exceptionId: id,
+				endTime: "09:00",
+			}),
+		).rejects.toThrow(/after startTime/);
 	});
 
 	it("remove: deletes exception", async () => {

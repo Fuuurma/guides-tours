@@ -19,81 +19,92 @@
 @layer base {
 	:root {
 		--background: oklch(0.945 0.018 85);
-		--foreground: oklch(0.22 0.03 230);
+		--foreground: oklch(0.22 0.02 85);
 		--card: oklch(0.99 0.008 85);
-		--card-foreground: oklch(0.22 0.03 230);
+		--card-foreground: oklch(0.22 0.02 85);
 		--popover: oklch(0.99 0.008 85);
-		--popover-foreground: oklch(0.22 0.03 230);
+		--popover-foreground: oklch(0.22 0.02 85);
 		--primary: oklch(0.38 0.08 230);
 		--primary-foreground: oklch(0.98 0.01 85);
 		--secondary: oklch(0.94 0.02 85);
-		--secondary-foreground: oklch(0.22 0.03 230);
+		--secondary-foreground: oklch(0.22 0.02 85);
 		--muted: oklch(0.94 0.02 85);
 		--muted-foreground: oklch(0.45 0.03 230);
 		--accent: oklch(0.94 0.02 85);
-		--accent-foreground: oklch(0.22 0.03 230);
+		--accent-foreground: oklch(0.22 0.02 85);
 		--destructive: oklch(0.577 0.245 27.325);
 		--success: oklch(0.52 0.1 175);
 		--warning: oklch(0.6 0.15 75);
-		--destructive-foreground: oklch(0.577 0.245 27.325);
+		--destructive-foreground: oklch(0.98 0.01 27);
 		--border: oklch(0.88 0.02 85);
 		--input: oklch(0.88 0.02 85);
-		--ring: oklch(0.704 0.04 256.788);
+		--ring: oklch(0.55 0.09 230);
 		--chart-1: oklch(0.646 0.222 41.116);
 		--chart-2: oklch(0.6 0.118 184.704);
-		--chart-3: oklch(0.52 0.11 205);
 		--chart-4: oklch(0.828 0.189 84.429);
 		--chart-5: oklch(0.769 0.188 70.08);
 		--radius: 0.625rem;
 		--sidebar: oklch(0.91 0.025 85);
-		--sidebar-foreground: oklch(0.22 0.03 230);
+		--sidebar-foreground: oklch(0.22 0.02 85);
 		--sidebar-primary: oklch(0.38 0.08 230);
 		--sidebar-primary-foreground: oklch(0.98 0.01 85);
 		--sidebar-accent: oklch(0.94 0.02 85);
-		--sidebar-accent-foreground: oklch(0.22 0.03 230);
+		--sidebar-accent-foreground: oklch(0.22 0.02 85);
 		--sidebar-border: oklch(0.865 0.025 85);
-		--sidebar-ring: oklch(0.704 0.04 256.788);
-		--link: oklch(0.546 0.215 262.881);
+		--sidebar-ring: oklch(0.55 0.09 230);
+		--link: oklch(0.52 0.12 185);
 		--star: oklch(0.795 0.184 86.047);
+		--sun: oklch(0.828 0.189 84.429);
 	}
 
 	.dark {
-		--background: oklch(0.129 0.042 264.695);
-		--foreground: oklch(0.984 0.003 247.858);
-		--card: oklch(0.14 0.04 259.21);
-		--card-foreground: oklch(0.984 0.003 247.858);
-		--popover: oklch(0.14 0.04 259.21);
-		--popover-foreground: oklch(0.984 0.003 247.858);
-		--primary: oklch(0.929 0.013 255.508);
-		--primary-foreground: oklch(0.208 0.042 265.755);
-		--secondary: oklch(0.279 0.041 260.031);
-		--secondary-foreground: oklch(0.984 0.003 247.858);
-		--muted: oklch(0.279 0.041 260.031);
-		--muted-foreground: oklch(0.704 0.04 256.788);
-		--accent: oklch(0.279 0.041 260.031);
-		--accent-foreground: oklch(0.984 0.003 247.858);
+		/* F313 follow-up: the dark surfaces are already hue 85 (sand)
+		   but the chroma 0.03 was so low it read as neutral slate —
+		   bumped to 0.04 to match --secondary/--muted/--accent so the
+		   toggle keeps the sand character instead of dropping it. */
+		/* F430: the three surfaces sat within 0.02 lightness of each
+		   other — chrome/content/cards washed into one band. Sidebar
+		   drops to 0.21 so the shell reads as structure behind the
+		   content plane (spread >= 0.04). */
+		--background: oklch(0.24 0.04 85);
+		--foreground: oklch(0.96 0.012 85);
+		--card: oklch(0.29 0.04 85);
+		--card-foreground: oklch(0.96 0.012 85);
+		--popover: oklch(0.28 0.04 85);
+		--popover-foreground: oklch(0.96 0.012 85);
+		--primary: oklch(0.72 0.09 230);
+		--primary-foreground: oklch(0.22 0.04 230);
+		--secondary: oklch(0.32 0.04 85);
+		--secondary-foreground: oklch(0.96 0.012 85);
+		--muted: oklch(0.32 0.04 85);
+		--muted-foreground: oklch(0.74 0.03 85);
+		--accent: oklch(0.32 0.04 85);
+		--accent-foreground: oklch(0.96 0.012 85);
 		--destructive: oklch(0.704 0.191 22.216);
 		--success: oklch(0.75 0.11 175);
 		--warning: oklch(0.82 0.16 85);
 		--destructive-foreground: oklch(0.984 0.003 247.858);
 		--border: oklch(1 0 0 / 10%);
 		--input: oklch(1 0 0 / 15%);
-		--ring: oklch(0.551 0.027 264.364);
-		--chart-1: oklch(0.488 0.243 264.376);
+		--ring: oklch(0.65 0.08 230);
+		--chart-1: oklch(0.7 0.19 41.116);
 		--chart-2: oklch(0.696 0.17 162.48);
-		--chart-3: oklch(0.71 0.13 205);
-		--chart-4: oklch(0.627 0.265 303.9);
-		--chart-5: oklch(0.645 0.246 16.439);
-		--sidebar: oklch(0.208 0.042 265.755);
-		--sidebar-foreground: oklch(0.984 0.003 247.858);
-		--sidebar-primary: oklch(0.488 0.243 264.376);
-		--sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-		--sidebar-accent: oklch(0.279 0.041 260.031);
-		--sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+		/* F382: stay on the sun/sand family like light mode — the shadcn
+		   defaults here (purple/red) recolored analytics bars off-brand
+		   and blurred the warning/danger distinction on dark surfaces. */
+		--chart-4: oklch(0.828 0.189 84.429);
+		--chart-5: oklch(0.769 0.188 70.08);
+		--sidebar: oklch(0.21 0.04 85);
+		--sidebar-foreground: oklch(0.96 0.012 85);
+		--sidebar-primary: oklch(0.72 0.09 230);
+		--sidebar-primary-foreground: oklch(0.22 0.04 230);
+		--sidebar-accent: oklch(0.32 0.04 85);
+		--sidebar-accent-foreground: oklch(0.96 0.012 85);
 		--sidebar-border: oklch(1 0 0 / 10%);
-		--sidebar-ring: oklch(0.551 0.027 264.364);
-		--link: oklch(0.707 0.165 254.624);
+		--sidebar-ring: oklch(0.65 0.08 230);
+		--link: oklch(0.78 0.12 185);
 		--star: oklch(0.821 0.169 84.929);
+		--sun: oklch(0.85 0.16 88);
 	}
 }
 
@@ -128,11 +139,11 @@
 	--color-ring: var(--ring);
 	--color-chart-1: var(--chart-1);
 	--color-chart-2: var(--chart-2);
-	--color-chart-3: var(--chart-3);
 	--color-chart-4: var(--chart-4);
 	--color-chart-5: var(--chart-5);
 	--color-link: var(--link);
 	--color-star: var(--star);
+	--color-sun: var(--sun);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
@@ -187,6 +198,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+	*,
+	::before,
+	::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+
 	.animate-marquee {
 		animation: none;
 	}

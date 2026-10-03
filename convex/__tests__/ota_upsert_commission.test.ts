@@ -295,4 +295,593 @@ describe("convex/ota/upsert — commission math", () => {
 		expect(row?.commissionAmountCents).toBeUndefined();
 		expect(row?.netRevenueCents).toBe(10000n);
 	});
+
+	it("clamps explicit commissionCents above paidCents (F397 — no negative net)", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cm_g";
+		await t.run(async (ctx) => {
+			await seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-7", 0);
+		});
+		const integrationId = (await t.run(async (ctx) =>
+			(await ctx.db.query("otaIntegrations").first())!._id,
+		)) as Id<"otaIntegrations">;
+		const { id } = (await t.mutation(
+			internal.ota.upsert.upsertOtaBooking,
+			{
+				integrationId,
+				organizationId,
+				provider: "viator",
+				event: {
+					kind: "booking.created" as const,
+					reservationId: "RES-7",
+					customerName: "Gina",
+					customerEmail: "gina@example.com",
+					tourDate: "2026-08-21",
+					guests: 1,
+					totalPaidCents: 5000n,
+					currency: "USD",
+					// Explicit commission exceeds the paid amount.
+					commissionCents: 8000n,
+					rawPayload: {},
+				},
+				rawData: {},
+			},
+		)) as { id: Id<"otaBookings">; created: boolean };
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.commissionAmountCents).toBe(5000n);
+		expect(row?.netRevenueCents).toBe(0n);
+	});
+
+	it("clamps non-positive/fractional guests to a positive integer (F361)", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cm_h";
+		await t.run(async (ctx) => {
+			await seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-8", 0);
+		});
+		const integrationId = (await t.run(async (ctx) =>
+			(await ctx.db.query("otaIntegrations").first())!._id,
+		)) as Id<"otaIntegrations">;
+		const { id } = (await t.mutation(
+			internal.ota.upsert.upsertOtaBooking,
+			{
+				integrationId,
+				organizationId,
+				provider: "viator",
+				event: {
+					kind: "booking.created" as const,
+					reservationId: "RES-8",
+					customerName: "Hank",
+					customerEmail: "hank@example.com",
+					tourDate: "2026-08-22",
+					guests: -3.5,
+					currency: "USD",
+					rawPayload: {},
+				},
+				rawData: {},
+			},
+		)) as { id: Id<"otaBookings">; created: boolean };
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.otaGuests).toBe(1);
+	});
 });
+
+describe("convex/ota/upsert — upsertAvailabilityCache product mapping (F340)", () => {
+	it("returns null and writes nothing for an unmapped otaProductId", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_av_unmapped";
+		const { integrationId } = await t.run(async (ctx) =>
+			seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-KNOWN", 0.2),
+		);
+		const result = await t.mutation(
+			internal.ota.upsert.upsertAvailabilityCache,
+			{
+				integrationId,
+				event: {
+					kind: "availability.update",
+					productId: "PROD-UNKNOWN",
+					date: "2026-10-01",
+					availableSpaces: 5,
+					totalSpaces: 10,
+					rawPayload: { seats: 5 },
+				},
+			},
+		);
+		expect(result).toBeNull();
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("otaAvailabilityCache").collect(),
+		);
+		expect(rows).toHaveLength(0);
+	});
+
+	it("writes the cache row for a mapped otaProductId", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_av_mapped";
+		const { integrationId } = await t.run(async (ctx) =>
+			seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-KNOWN", 0.2),
+		);
+		const result = await t.mutation(
+			internal.ota.upsert.upsertAvailabilityCache,
+			{
+				integrationId,
+				event: {
+					kind: "availability.update",
+					productId: "PROD-KNOWN",
+					date: "2026-10-01",
+					availableSpaces: 5,
+					totalSpaces: 10,
+					rawPayload: { seats: 5 },
+				},
+			},
+		);
+		expect(result).not.toBeNull();
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("otaAvailabilityCache").collect(),
+		);
+		expect(rows).toHaveLength(1);
+		expect(rows[0].availableSpaces).toBe(5);
+	});
+});
+
+describe("convex/ota/upsert — schedule capacity link (F331)", () => {
+	const makeEvent = (over: Record<string, unknown> = {}) => ({
+		kind: "booking.created" as const,
+		reservationId: "RES-CAP-1",
+		customerName: "Cap",
+		customerEmail: "cap@example.com",
+		productId: "PROD-CAP",
+		tourDate: "2026-08-20",
+		tourTime: "09:00",
+		guests: 3,
+		currency: "USD",
+		rawPayload: {},
+		...over,
+	});
+
+	it("consumes schedule capacity for a matched product+departure", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_a";
+		let integrationId!: Id<"otaIntegrations">;
+		let scheduleId!: Id<"tourSchedules">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			scheduleId = await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 5,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		const { id } = (await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			event: makeEvent(),
+			rawData: {},
+		})) as { id: Id<"otaBookings">; created: boolean };
+
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.scheduleId).toBe(scheduleId);
+		const schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+	});
+
+	it("flips to full at capacity and releases seats on cancel", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_b";
+		let integrationId!: Id<"otaIntegrations">;
+		let scheduleId!: Id<"tourSchedules">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			scheduleId = await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 3,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			event: makeEvent(),
+			rawData: {},
+		});
+		let schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+		expect(schedule?.status).toBe("full");
+
+		await t.mutation(internal.ota.upsert.cancelOtaBooking, {
+			integrationId,
+			reservationId: "RES-CAP-1",
+			rawData: {},
+		});
+		schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(0);
+		expect(schedule?.status).toBe("available");
+	});
+
+	it("re-confirm after cancel re-adds capacity once", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_c";
+		let integrationId!: Id<"otaIntegrations">;
+		let scheduleId!: Id<"tourSchedules">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			scheduleId = await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 10,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		const call = () =>
+			t.mutation(internal.ota.upsert.upsertOtaBooking, {
+				integrationId,
+				organizationId,
+				provider: "viator",
+				event: makeEvent(),
+				rawData: {},
+			});
+		await call();
+		await t.mutation(internal.ota.upsert.cancelOtaBooking, {
+			integrationId,
+			reservationId: "RES-CAP-1",
+			rawData: {},
+		});
+		await call();
+		let schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+
+		// A duplicate confirmed upsert must not double-count.
+		await call();
+		schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(3);
+	});
+
+	it("leaves scheduleId unset when same-day departures are ambiguous", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_d";
+		let integrationId!: Id<"otaIntegrations">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			for (const startTime of ["09:00", "14:00"]) {
+				await ctx.db.insert("tourSchedules", {
+					organizationId,
+					tourId: seeded.tourId,
+					date: "2026-08-20",
+					startTime,
+					endTime: "11:00",
+					capacityTotal: 10,
+					capacityBooked: 0,
+					status: "available",
+					notes: "",
+					createdAt: 0,
+					updatedAt: 0,
+				});
+			}
+		});
+
+		const { id } = (await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			// tourTime matches neither departure's startTime.
+			event: makeEvent({ tourTime: "18:00" }),
+			rawData: {},
+		})) as { id: Id<"otaBookings">; created: boolean };
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.scheduleId).toBeUndefined();
+		const booked = await t.run(async (ctx) =>
+			(await ctx.db.query("tourSchedules").collect()).map(
+				(s) => s.capacityBooked,
+			),
+		);
+		expect(booked).toEqual([0, 0]);
+	});
+
+	it("re-upsert guest delta still moves capacity when resolve misses (F396)", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_e";
+		let integrationId!: Id<"otaIntegrations">;
+		let scheduleId!: Id<"tourSchedules">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			scheduleId = await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 10,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		// First upsert links + books 3 seats.
+		await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			event: makeEvent(),
+			rawData: {},
+		});
+
+		// Second upsert: same reservation, guests 3→5, but a second
+		// same-day departure appears so resolve becomes ambiguous and
+		// returns null. The row keeps the prior scheduleId; capacity
+		// must still correct by +2 (F396).
+		await t.run(async (ctx) => {
+			const seeded = (await ctx.db.query("tours").first())!;
+			await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded._id,
+				date: "2026-08-20",
+				startTime: "14:00",
+				endTime: "16:00",
+				capacityTotal: 10,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		const { id } = (await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			event: makeEvent({ guests: 5, tourTime: "18:00" }),
+			rawData: {},
+		})) as { id: Id<"otaBookings">; created: boolean };
+
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(row?.scheduleId).toBe(scheduleId);
+		expect(row?.otaGuests).toBe(5);
+		const schedule = (await t.run(async (ctx) => ctx.db.get(scheduleId))) as any;
+		expect(schedule?.capacityBooked).toBe(5);
+	});
+
+	it("preserves confirmedAt on plain re-dispatch (F360)", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_cap_f";
+		let integrationId!: Id<"otaIntegrations">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				organizationId,
+				"PROD-CAP",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			await ctx.db.insert("tourSchedules", {
+				organizationId,
+				tourId: seeded.tourId,
+				date: "2026-08-20",
+				startTime: "09:00",
+				endTime: "11:00",
+				capacityTotal: 10,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		const call = () =>
+			t.mutation(internal.ota.upsert.upsertOtaBooking, {
+				integrationId,
+				organizationId,
+				provider: "viator",
+				event: makeEvent(),
+				rawData: {},
+			});
+		const { id } = (await call()) as { id: Id<"otaBookings"> };
+		const first = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		await call();
+		const second = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		expect(second?.confirmedAt).toBe(first?.confirmedAt);
+	});
+});
+
+describe("convex/ota/upsert — cancelOtaBooking org guard (F312)", () => {
+	it("throws when the booking row's organizationId does not match the integration's", async () => {
+		const t = convexTest(schema, modules);
+		let integrationId!: Id<"otaIntegrations">;
+		await t.run(async (ctx) => {
+			const seeded = await seedOtaProductLookup(
+				ctx as TestCtx,
+				"org_xt_a",
+				"PROD-XT",
+				0.2,
+			);
+			integrationId = seeded.integrationId;
+			// A row whose stored organizationId diverges from the
+			// integration's — the shape a forged/mismatched pair takes.
+			await ctx.db.insert("otaBookings", {
+				organizationId: "org_xt_b",
+				integrationId,
+				otaReservationId: "RES-XT",
+				otaCustomerData: { guests: 2 },
+				otaGuests: 2,
+				otaCurrency: "USD",
+				status: "confirmed",
+				rawOtaData: {},
+				receivedAt: 0,
+			});
+		});
+
+		await expect(
+			t.mutation(internal.ota.upsert.cancelOtaBooking, {
+				integrationId,
+				reservationId: "RES-XT",
+				rawData: {},
+			}),
+		).rejects.toThrow(/does not match OTA integration/);
+
+		// The foreign row is untouched.
+		const row = await t.run(async (ctx) =>
+			ctx.db
+				.query("otaBookings")
+				.withIndex("by_integration_reservation", (q) =>
+					q
+						.eq("integrationId", integrationId)
+						.eq("otaReservationId", "RES-XT"),
+				)
+				.unique(),
+		);
+		expect(row?.status).toBe("confirmed");
+	});
+});
+
+
+describe("purgeExpiredAvailabilityCache (F452)", () => {
+	it("deletes rows past expiresAt and keeps fresh rows", async () => {
+		const t = convexTest(schema, modules)
+		const now = Date.now()
+		await t.run(async (ctx) => {
+			const organizationId = "org_purge_a"
+			const integrationId = await ctx.db.insert("otaIntegrations", {
+				organizationId,
+				provider: "viator",
+				apiKey: "enc",
+				isActive: true,
+				isSandbox: true,
+				autoSyncAvailability: false,
+				autoSyncPricing: false,
+				syncIntervalMinutes: 60,
+				settings: {},
+				createdAt: 0,
+				updatedAt: 0,
+			})
+			const tourId = await ctx.db.insert("tours", {
+				organizationId,
+				name: "Purge Tour",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 24,
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			})
+			const productId = await ctx.db.insert("otaProducts", {
+				organizationId,
+				integrationId,
+				tourId,
+				otaProductId: "PROD-PURGE",
+				syncStatus: "synced",
+				otaPhotos: [],
+				otaCurrency: "USD",
+				commissionRate: 0.2,
+				minAdvanceBookingHours: 24,
+				maxAdvanceBookingDays: 365,
+				settings: {},
+				createdAt: 0,
+				updatedAt: 0,
+			})
+			await ctx.db.insert("otaAvailabilityCache", {
+				organizationId,
+				otaProductId: productId,
+				date: "2026-09-01",
+				availableSpaces: 1,
+				totalSpaces: 10,
+				timeSlots: [],
+				cachedAt: now - 3_600_000,
+				expiresAt: now - 1_800_000, // expired
+			})
+			await ctx.db.insert("otaAvailabilityCache", {
+				organizationId,
+				otaProductId: productId,
+				date: "2026-09-02",
+				availableSpaces: 5,
+				totalSpaces: 10,
+				timeSlots: [],
+				cachedAt: now,
+				expiresAt: now + 900_000, // fresh
+			})
+		})
+
+		const result = await t.mutation(
+			internal.ota.upsert.purgeExpiredAvailabilityCache,
+			{},
+		)
+		expect(result.deleted).toBe(1)
+
+		const remaining = await t.run(async (ctx) =>
+			ctx.db.query("otaAvailabilityCache").collect(),
+		)
+		expect(remaining).toHaveLength(1)
+		expect(remaining[0]?.date).toBe("2026-09-02")
+	})
+})

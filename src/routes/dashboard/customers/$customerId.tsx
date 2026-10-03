@@ -118,8 +118,13 @@ function CustomerDetailPage() {
 				</>
 			}
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<MetricCard label="Total visits" value={c.totalVisits.toString()} />
+			{/* F119: visits lead — asymmetric row */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+				<MetricCard
+					label="Total visits"
+					value={c.totalVisits.toString()}
+					featured
+				/>
 				<MetricCard
 					label="Total revenue"
 					value={formatCentsCompact(c.totalRevenueCents)}

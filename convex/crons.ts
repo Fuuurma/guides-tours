@@ -45,6 +45,15 @@ crons.interval(
 	internal.notifications.processPendingNotifications,
 );
 
+// Every 5 minutes — expire pending bookings that were never
+// confirmed (hold > 15m). Releases their held capacity through
+// the same atomic decrementBooked path as a manual cancel.
+crons.interval(
+	"expire_stale_pending_bookings",
+	{ minutes: 5 },
+	internal.bookings.expireStalePending,
+);
+
 // Daily at 03:00 UTC — archive stale assignments.
 // We pick a low-traffic hour so the cleanup doesn't fight active
 // reads/writes. Adjust if your peak load is in UTC.
@@ -72,6 +81,25 @@ crons.daily(
 	"cleanup_old_public_booking_attempts",
 	{ hourUTC: 4, minuteUTC: 30 },
 	purgeOldRateLimit,
+);
+
+// Hourly — evict expired OTA availability-cache rows (expiresAt is
+// written on every upsert; F452 flagged that nothing ever evicted them).
+const purgeExpiredAvailabilityCache = (internal as unknown as {
+	"ota/upsert": {
+		purgeExpiredAvailabilityCache: FunctionReference<
+			"mutation",
+			"internal",
+			Record<string, never>,
+			{ deleted: number; isDone: boolean }
+		>;
+	};
+})["ota/upsert"].purgeExpiredAvailabilityCache;
+
+crons.interval(
+	"purge_expired_availability_cache",
+	{ minutes: 60 },
+	purgeExpiredAvailabilityCache,
 );
 
 // Daily at 04:45 UTC — drop stale phone-remind cooldown rows

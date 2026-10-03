@@ -12,6 +12,7 @@
 			"**/.vscode/**/*",
 			"**/index.html",
 			"**/vite.config.ts",
+			"**/biome.json",
 			"!**/src/routeTree.gen.ts",
 			"!**/src/styles.css"
 		]
@@ -20,11 +21,20 @@
 		"enabled": true,
 		"indentStyle": "tab"
 	},
-	"assist": { "actions": { "source": { "organizeImports": "on" } } },
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	},
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"preset": "recommended"
+			"preset": "recommended",
+			"suspicious": {
+				"noEmptyBlockStatements": "warn"
+			}
 		}
 	},
 	"javascript": {

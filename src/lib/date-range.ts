@@ -27,14 +27,6 @@ export function lastNDays(n = 30): DateRange {
 }
 
 /**
- * Alias using `from`/`to` keys (used by bookings, assignments, schedules).
- */
-export function defaultDateRange(): { from: string; to: string } {
-	const { startDate, endDate } = lastNDays();
-	return { from: startDate, to: endDate };
-}
-
-/**
  * Return today and the next N-1 days as local calendar dates.
  * Operator lists (schedules, assignments, bookings) are
  * future-focused — a "last 30 days" window hides the week they

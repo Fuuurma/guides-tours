@@ -21,6 +21,86 @@ const createRef = internalRefs.tours.internalCreate;
 const updateRef = internalRefs.tours.internalUpdate;
 const removeRef = internalRefs.tours.internalRemove;
 
+/** SECURITY (defense in depth): an optional reference field must belong
+ *  to the caller's org — a malicious client could submit a foreign ID.
+ *  Shared by categoryId and templateId validation. */
+async function assertRefInOrg(
+	ctx: { db: { get: (id: never) => Promise<unknown> } },
+	id: unknown,
+	label: string,
+	organizationId: string,
+): Promise<void> {
+	const row = (await ctx.db.get(id as never)) as
+		| { organizationId?: string }
+		| null;
+	if (!row) throw new ConvexError(`${label} not found`);
+	if (row.organizationId !== organizationId) {
+		throw new ConvexError(
+			`Forbidden: ${label.toLowerCase()} belongs to a different organization`,
+		);
+	}
+}
+
+/** Pure update validation: free-text caps, numeric floors, and the
+ *  cross-field ladder minGuests <= maxGuests <= capacity (using merged
+ *  values so partial updates validate correctly). */
+function validateTourUpdateFields(
+	args: Record<string, unknown> & {
+		name?: string;
+		description?: string;
+		languages?: string[];
+		requiredGuides?: number;
+		capacity?: number;
+		durationHours?: number;
+		minGuests?: number;
+		maxGuests?: number;
+	},
+	tour: { minGuests: number; maxGuests: number; capacity: number },
+): void {
+	if (args.name !== undefined && args.name.length > MAX_NAME_LEN) {
+		throw new ConvexError(
+			`Name is too long (max ${MAX_NAME_LEN} characters)`,
+		);
+	}
+	if (args.description !== undefined) {
+		assertFieldWithinLimit(
+			"description",
+			args.description,
+			MAX_DESCRIPTION_LEN,
+		);
+	}
+	if (args.languages !== undefined) {
+		for (const lang of args.languages) {
+			assertFieldWithinLimit("language", lang, 10);
+		}
+	}
+	if (args.requiredGuides !== undefined) {
+		const n = Math.floor(args.requiredGuides);
+		if (n < 1 || n > 10) {
+			throw new ConvexError("requiredGuides must be between 1 and 10");
+		}
+	}
+	// Numeric field validation (defense in depth — mirrors create).
+	if (args.capacity !== undefined && args.capacity <= 0) {
+		throw new ConvexError("Capacity must be positive");
+	}
+	if (args.durationHours !== undefined && args.durationHours <= 0) {
+		throw new ConvexError("Duration must be positive");
+	}
+	if (args.minGuests !== undefined && args.minGuests < 1) {
+		throw new ConvexError("minGuests must be at least 1");
+	}
+	const mergedMin = args.minGuests ?? tour.minGuests;
+	const mergedMax = args.maxGuests ?? tour.maxGuests;
+	const mergedCap = args.capacity ?? tour.capacity;
+	if (mergedMax < mergedMin) {
+		throw new ConvexError("maxGuests cannot be less than minGuests");
+	}
+	if (mergedMax > mergedCap) {
+		throw new ConvexError("maxGuests cannot exceed capacity");
+	}
+}
+
 // ----- Queries -----
 
 /** List tours for the caller's active organization. */
@@ -338,71 +418,19 @@ export const internalUpdate = internalMutation({
 				`Forbidden: tour belongs to a different organization`,
 			);
 		}
-		// SECURITY: validate categoryId belongs to this org (defense
-		// in depth — a malicious client could submit a foreign ID).
+		// SECURITY: validate optional reference fields belong to this org
+		// (defense in depth — a malicious client could submit a foreign
+		// ID).
 		if (args.categoryId !== undefined) {
-			const cat = await ctx.db.get(args.categoryId);
-			if (!cat) throw new ConvexError("Category not found");
-			if ((cat as { organizationId: string }).organizationId !== args.organizationId) {
-				throw new ConvexError("Forbidden: category belongs to a different organization");
-			}
+			await assertRefInOrg(ctx, args.categoryId, "Category", args.organizationId);
 		}
-		// SECURITY: validate templateId belongs to this org (same
-		// defense-in-depth rationale as categoryId).
 		if (args.templateId !== undefined) {
-			const tpl = await ctx.db.get(args.templateId);
-			if (!tpl) throw new ConvexError("Template not found");
-			if ((tpl as { organizationId: string }).organizationId !== args.organizationId) {
-				throw new ConvexError("Forbidden: template belongs to a different organization");
-			}
+			await assertRefInOrg(ctx, args.templateId, "Template", args.organizationId);
 		}
 
-		// Length validation on free-text fields (same caps as create).
-		if (args.name !== undefined && args.name.length > MAX_NAME_LEN) {
-			throw new ConvexError(
-				`Name is too long (max ${MAX_NAME_LEN} characters)`,
-			);
-		}
-		if (args.description !== undefined) {
-			assertFieldWithinLimit(
-				"description",
-				args.description,
-				MAX_DESCRIPTION_LEN,
-			);
-		}
-		if (args.languages !== undefined) {
-			for (const lang of args.languages) {
-				assertFieldWithinLimit("language", lang, 10);
-			}
-		}
-		if (args.requiredGuides !== undefined) {
-			const n = Math.floor(args.requiredGuides);
-			if (n < 1 || n > 10) {
-				throw new ConvexError("requiredGuides must be between 1 and 10");
-			}
-		}
-		// Numeric field validation (defense in depth — mirrors create).
-		if (args.capacity !== undefined && args.capacity <= 0) {
-			throw new ConvexError("Capacity must be positive");
-		}
-		if (args.durationHours !== undefined && args.durationHours <= 0) {
-			throw new ConvexError("Duration must be positive");
-		}
-		if (args.minGuests !== undefined && args.minGuests < 1) {
-			throw new ConvexError("minGuests must be at least 1");
-		}
-		// Cross-field: minGuests <= maxGuests <= capacity. Use the
-		// merged values (existing or new) so partial updates validate
-		// correctly.
-		const mergedMin = args.minGuests ?? tour.minGuests;
-		const mergedMax = args.maxGuests ?? tour.maxGuests;
-		const mergedCap = args.capacity ?? tour.capacity;
-		if (mergedMax < mergedMin) {
-			throw new ConvexError("maxGuests cannot be less than minGuests");
-		}
-		if (mergedMax > mergedCap) {
-			throw new ConvexError("maxGuests cannot exceed capacity");
-		}
+		// Length validation on free-text fields (same caps as create),
+		// numeric floors, and the cross-field ladder.
+		validateTourUpdateFields(args, tour);
 
 		const now = Date.now();
 		const { tourId, organizationId, userId, ...rest } = args;

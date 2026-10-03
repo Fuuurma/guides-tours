@@ -134,6 +134,243 @@ function paymentIntentIdFrom(obj: StripeObject | undefined): string | null {
 	return null;
 }
 
+/** The dispatch surface the webhook event handlers need — an httpAction
+ *  ctx exposes exactly these two. */
+interface WebhookDispatchCtx {
+	runQuery: ActionCtx["runQuery"];
+	runMutation: ActionCtx["runMutation"];
+}
+
+/** payment_intent.succeeded / checkout.session.completed: resolve the
+ *  payment by intent, minting a row from booking metadata when this is
+ *  the first event carrying it, then mark succeeded. */
+async function applyPaymentSuccess(
+	ctx: WebhookDispatchCtx,
+	obj: StripeObject | undefined,
+	orgId: string,
+	eventType: string | undefined,
+): Promise<void> {
+	const piId = paymentIntentIdFrom(obj);
+	const bookingId = obj?.metadata?.bookingId;
+	const amountRaw =
+		typeof obj?.amount_total === "number"
+			? obj.amount_total
+			: typeof obj?.amount === "number"
+				? obj.amount
+				: null;
+	const currencyRaw = obj?.currency;
+
+	if (!piId) {
+		logger.info(
+			`[stripe-webhook] ${eventType} missing payment_intent (org=${orgId})`,
+		);
+		// Ack — Checkout may complete without a PI in edge cases;
+		// retrying won't help until Stripe sends a PI event.
+		return;
+	}
+	let paymentId = await ctx.runQuery(internal.payments.getPaymentByIntent, {
+		stripePaymentIntentId: piId,
+		organizationId: orgId,
+	});
+
+	if (!paymentId && bookingId && amountRaw != null && currencyRaw) {
+		paymentId = await ctx.runMutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId: bookingId as never,
+			amountCents: BigInt(amountRaw),
+			currency: currencyForDb(currencyRaw),
+			stripePaymentIntentId: piId,
+		});
+	}
+
+	if (!paymentId) {
+		logger.info(
+			`[stripe-webhook] unknown intent ${piId} (event=${eventType}, org=${orgId})`,
+		);
+		return;
+	}
+	await ctx.runMutation(internal.payments.markSucceeded, { paymentId });
+}
+
+/** payment_intent.payment_failed: resolve the payment and mark failed.
+ *  Returns a 400 Response when the event carries no intent id — the only
+ *  arm that rejects the delivery outright (Stripe stops retrying). */
+async function applyPaymentFailed(
+	ctx: WebhookDispatchCtx,
+	obj: StripeObject | undefined,
+	orgId: string,
+): Promise<Response | null> {
+	const piId = paymentIntentIdFrom(obj);
+	if (!piId) {
+		return new Response("missing intent id", { status: 400 });
+	}
+	const paymentId = await ctx.runQuery(internal.payments.getPaymentByIntent, {
+		stripePaymentIntentId: piId,
+		organizationId: orgId,
+	});
+	if (!paymentId) {
+		logger.info(
+			`[stripe-webhook] unknown/cross-org intent ${piId} (event=payment_intent.payment_failed, org=${orgId})`,
+		);
+		return null;
+	}
+	await ctx.runMutation(internal.payments.markFailed, {
+		paymentId,
+		reason: obj?.last_payment_error?.message ?? undefined,
+	});
+	return null;
+}
+
+/** charge.refunded re-sends the charge's FULL refunds list — a payload can
+ *  carry several new refunds at once. Record each (by_stripe_refund
+ *  idempotency dedups re-deliveries) and only flip payments.status when
+ *  the charge is fully refunded — partial refunds must not mislabel the
+ *  payment. */
+async function applyChargeRefund(
+	ctx: WebhookDispatchCtx,
+	obj: StripeObject | undefined,
+	orgId: string,
+): Promise<void> {
+	const piId = paymentIntentIdFrom(obj);
+	if (!piId) {
+		logger.info(
+			`[stripe-webhook] charge.refunded missing payment_intent (org=${orgId})`,
+		);
+		return;
+	}
+	const paymentId = await ctx.runQuery(internal.payments.getPaymentByIntent, {
+		stripePaymentIntentId: piId,
+		organizationId: orgId,
+	});
+	if (!paymentId) {
+		logger.info(
+			`[stripe-webhook] unknown intent ${piId} for charge.refunded (org=${orgId})`,
+		);
+		return;
+	}
+	const refundsData = obj?.refunds?.data ?? [];
+	const fullyRefunded =
+		obj?.refunded === true ||
+		(typeof obj?.amount_refunded === "number" &&
+			typeof obj?.amount === "number" &&
+			obj.amount_refunded >= obj.amount);
+	for (const r of refundsData) {
+		await ctx.runMutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded,
+			refund: {
+				stripeRefundId: r.id,
+				amountCents: BigInt(r.amount),
+				currency: currencyForDb(r.currency),
+				reason: r.reason,
+				processedAt: r.created ? r.created * 1000 : undefined,
+			},
+		});
+	}
+	if (refundsData.length === 0) {
+		await ctx.runMutation(internal.payments.markRefunded, {
+			paymentId,
+			fullyRefunded,
+		});
+	}
+}
+
+
+/** PaymentIntent states where re-opening the SAME intent is safe
+ *  (F375 checkout dedup). Terminal states (succeeded / canceled) and
+ *  requires_capture are excluded — reuse those paths mint fresh. */
+const PI_REUSABLE_STATUSES = new Set([
+	"requires_payment_method",
+	"requires_confirmation",
+	"requires_action",
+	"processing",
+]);
+
+type StripePaymentIntent = StripeObject & {
+	id?: string;
+	status?: string;
+	client_secret?: string;
+};
+
+/** Fetch a PaymentIntent from Stripe. Null on any failure — the caller
+ *  falls back to minting fresh, so a transient Stripe hiccup must not
+ *  break checkout. */
+async function retrievePaymentIntent(
+	stripeSecret: string,
+	piId: string,
+): Promise<StripePaymentIntent | null> {
+	if (!piId.startsWith("pi_") || piId.length > 200) return null;
+	try {
+		const res = await fetch(
+			`${STRIPE_API_BASE}/payment_intents/${encodeURIComponent(piId)}`,
+			{ headers: { Authorization: `Bearer ${stripeSecret}` } },
+		);
+		if (!res.ok) return null;
+		const pi = (await res.json()) as StripePaymentIntent;
+		return pi.id ? pi : null;
+	} catch {
+		return null;
+	}
+}
+
+/** True when a stored intent can be re-opened for a new checkout
+ *  session: same amount + currency as the current balance (a stale
+ *  intent for a changed price must not be reused) and still in a
+ *  reusable Stripe state. */
+function intentMatchesBalance(
+	pi: StripePaymentIntent,
+	balanceCents: bigint,
+	currencyDb: string,
+): boolean {
+	return (
+		pi.status !== undefined &&
+		PI_REUSABLE_STATUSES.has(pi.status) &&
+		pi.amount === Number(balanceCents) &&
+		(pi.currency ?? "").toUpperCase() === currencyDb
+	);
+}
+
+/** Per-email sliding-window gate on the unauthenticated payment
+ *  actions (F375). Shares the publicBookingAttempts machinery with
+ *  booking submissions — a legit guest spends ~1 booking attempt +
+ *  1-2 payment attempts, well inside the 5/15min cap, while spray is
+ *  bounded. slug records the payment target for audit. */
+async function rateLimitPublicPayment(
+	ctx: ActionCtx,
+	email: string,
+	bookingId: string,
+): Promise<void> {
+	const rl = await ctx.runMutation(internal.lib.rate_limit.recordAttempt, {
+		email,
+		slug: `payment:${bookingId}`,
+		outcome: "pending",
+	});
+	if (!rl.allowed) {
+		throw new ConvexError(
+			"Too many payment attempts — please try again in a few minutes",
+		);
+	}
+}
+
+/** Look up a still-open intent for this booking and verify it against
+ *  the Stripe API + current balance. Returns null whenever anything
+ *  doesn't line up — callers mint fresh. */
+async function findReusableIntent(
+	ctx: ActionCtx,
+	stripeSecret: string,
+	bookingId: string,
+	balanceCents: bigint,
+	currencyDb: string,
+): Promise<StripePaymentIntent | null> {
+	const open = await ctx.runQuery(internal.payments.getOpenIntentForBooking, {
+		bookingId: bookingId as import("./_generated/dataModel").Id<"bookings">,
+	});
+	if (!open) return null;
+	const pi = await retrievePaymentIntent(stripeSecret, open.stripePaymentIntentId);
+	if (!pi || !intentMatchesBalance(pi, balanceCents, currencyDb)) return null;
+	return pi;
+}
+
 async function assertBookingCheckoutAllowed(
 	ctx: ActionCtx,
 	bookingId: string,
@@ -222,6 +459,26 @@ export const createCheckoutSession = action({
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
 
+		// F378: staff retries/double-clicks must reuse the booking's open
+		// intent, not stack fresh pending rows (same dedup as the public
+		// siblings). Partial collections reuse only an exact-amount intent.
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			args.amountCents,
+			currencyDb,
+		);
+		if (reusable?.client_secret && reusable.id) {
+			return {
+				stripePaymentIntentId: reusable.id,
+				clientSecret: reusable.client_secret,
+				amountCents: args.amountCents,
+				currency: currencyDb,
+				publishableKey: settings.stripePublishableKey,
+			};
+		}
+
 		const params = new URLSearchParams();
 		params.append("amount", args.amountCents.toString());
 		params.append("currency", currencyStripe);
@@ -299,6 +556,7 @@ export const createPublicPaymentIntent = action({
 	}> => {
 		const email = normalizeEmail(args.customerEmail);
 		if (!email) throw new ConvexError("Invalid email address");
+		await rateLimitPublicPayment(ctx, email, args.bookingId);
 
 		const booking = await ctx.runQuery(
 			internal.payments.getBookingForCheckout,
@@ -329,6 +587,27 @@ export const createPublicPaymentIntent = action({
 		const stripeSecret = await decrypt(settings.stripeSecretKey);
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
+
+		// F375 dedup: re-open the booking's existing pending intent when
+		// it is still usable instead of minting a fresh one per call —
+		// abandoned sessions left unlimited pending rows and a guest
+		// completing two of them got double-charged.
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			balance,
+			currencyDb,
+		);
+		if (reusable?.client_secret && reusable.id) {
+			return {
+				stripePaymentIntentId: reusable.id,
+				clientSecret: reusable.client_secret,
+				amountCents: balance,
+				currency: currencyDb,
+				publishableKey: settings.stripePublishableKey,
+			};
+		}
 
 		const params = new URLSearchParams();
 		params.append("amount", balance.toString());
@@ -432,16 +711,31 @@ export const createHostedCheckout = action({
 			`/dashboard/bookings/${args.bookingId}`,
 		);
 
-		const params = new URLSearchParams();
-		params.append("mode", "payment");
-		params.append("success_url", `${siteUrl}${successPath}`);
-		params.append("cancel_url", `${siteUrl}${cancelPath}`);
-		params.append("line_items[0][quantity]", "1");
-		params.append("line_items[0][price_data][currency]", currencyStripe);
-		params.append(
-			"line_items[0][price_data][unit_amount]",
-			amountCents.toString(),
+		// F378: attach the booking's open intent so staff retries capture
+		// one PI. Hosted reuse needs requires_payment_method (unconfirmed).
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			amountCents,
+			currencyDb,
 		);
+		const reusedPiId =
+			reusable?.id && reusable.status === "requires_payment_method"
+				? reusable.id
+				: null;
+
+		const buildSessionParams = (withReusedPi: boolean) => {
+			const params = new URLSearchParams();
+			params.append("mode", "payment");
+			params.append("success_url", `${siteUrl}${successPath}`);
+			params.append("cancel_url", `${siteUrl}${cancelPath}`);
+			params.append("line_items[0][quantity]", "1");
+			params.append("line_items[0][price_data][currency]", currencyStripe);
+			params.append(
+				"line_items[0][price_data][unit_amount]",
+				amountCents.toString(),
+			);
 		params.append(
 			"line_items[0][price_data][product_data][name]",
 			`Booking ${args.bookingId}`,
@@ -459,18 +753,36 @@ export const createHostedCheckout = action({
 		// Expand so we can record a pending row when Stripe already
 		// allocated a PaymentIntent at session create.
 		params.append("expand[]", "payment_intent");
-		if (booking.customerEmail) {
-			params.append("customer_email", booking.customerEmail);
-		}
+			if (booking.customerEmail) {
+				params.append("customer_email", booking.customerEmail);
+			}
+			if (withReusedPi && reusedPiId) {
+				params.append("payment_intent", reusedPiId);
+			}
+			return params;
+		};
 
-		const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${stripeSecret}`,
-				"Content-Type": "application/x-www-form-urlencoded",
-			},
-			body: params.toString(),
-		});
+		const createSession = async (withReusedPi: boolean) => {
+			const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${stripeSecret}`,
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: buildSessionParams(withReusedPi).toString(),
+			});
+			return res;
+		};
+
+		let res = await createSession(reusedPiId !== null);
+		if (!res.ok && reusedPiId) {
+			// Stripe refused the reused intent — fall back to a fresh
+			// session rather than fail the payment (same as public path).
+			logger.warn(
+				`payment_intent reuse rejected for booking ${args.bookingId}, minting fresh`,
+			);
+			res = await createSession(false);
+		}
 		if (!res.ok) {
 			const errText = await res.text();
 			throw new ConvexError(
@@ -522,6 +834,7 @@ export const createPublicHostedCheckout = action({
 	): Promise<{ url: string; sessionId: string }> => {
 		const email = normalizeEmail(args.customerEmail);
 		if (!email) throw new ConvexError("Invalid email address");
+		await rateLimitPublicPayment(ctx, email, args.bookingId);
 
 		const booking = await ctx.runQuery(
 			internal.payments.getBookingForCheckout,
@@ -550,6 +863,23 @@ export const createPublicHostedCheckout = action({
 		const currencyDb = currencyForDb(settings.defaultCurrency);
 		const currencyStripe = currencyForStripe(currencyDb);
 
+		// F375 dedup: attach the booking's existing pending intent to the
+		// new session (Checkout accepts an unconfirmed intent via the
+		// payment_intent parameter) so completing two sessions still
+		// captures one PaymentIntent — the double-charge path is dead.
+		// Hosted reuse needs requires_payment_method (unconfirmed).
+		const reusable = await findReusableIntent(
+			ctx,
+			stripeSecret,
+			args.bookingId,
+			balance,
+			currencyDb,
+		);
+		const reusedPiId =
+			reusable?.id && reusable.status === "requires_payment_method"
+				? reusable.id
+				: null;
+
 		const siteUrl = checkoutSiteOrigin();
 		const successPath = checkoutReturnPath(
 			args.successPath,
@@ -560,41 +890,61 @@ export const createPublicHostedCheckout = action({
 			`/book/paid?bookingId=${args.bookingId}&cancelled=1`,
 		);
 
-		const params = new URLSearchParams();
-		params.append("mode", "payment");
-		params.append("success_url", `${siteUrl}${successPath}`);
-		params.append("cancel_url", `${siteUrl}${cancelPath}`);
-		params.append("line_items[0][quantity]", "1");
-		params.append("line_items[0][price_data][currency]", currencyStripe);
-		params.append(
-			"line_items[0][price_data][unit_amount]",
-			balance.toString(),
-		);
-		params.append(
-			"line_items[0][price_data][product_data][name]",
-			`Tour booking ${args.bookingId}`,
-		);
-		params.append("metadata[bookingId]", args.bookingId);
-		params.append("metadata[organizationId]", booking.organizationId);
-		params.append(
-			"payment_intent_data[metadata][bookingId]",
-			args.bookingId,
-		);
-		params.append(
-			"payment_intent_data[metadata][organizationId]",
-			booking.organizationId,
-		);
-		params.append("expand[]", "payment_intent");
-		params.append("customer_email", email);
+		const buildSessionParams = (withReusedPi: boolean) => {
+			const params = new URLSearchParams();
+			params.append("mode", "payment");
+			params.append("success_url", `${siteUrl}${successPath}`);
+			params.append("cancel_url", `${siteUrl}${cancelPath}`);
+			params.append("line_items[0][quantity]", "1");
+			params.append("line_items[0][price_data][currency]", currencyStripe);
+			params.append(
+				"line_items[0][price_data][unit_amount]",
+				balance.toString(),
+			);
+			params.append(
+				"line_items[0][price_data][product_data][name]",
+				`Tour booking ${args.bookingId}`,
+			);
+			params.append("metadata[bookingId]", args.bookingId);
+			params.append("metadata[organizationId]", booking.organizationId);
+			params.append(
+				"payment_intent_data[metadata][bookingId]",
+				args.bookingId,
+			);
+			params.append(
+				"payment_intent_data[metadata][organizationId]",
+				booking.organizationId,
+			);
+			params.append("expand[]", "payment_intent");
+			params.append("customer_email", email);
+			if (withReusedPi && reusedPiId) {
+				params.append("payment_intent", reusedPiId);
+			}
+			return params;
+		};
 
-		const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${stripeSecret}`,
-				"Content-Type": "application/x-www-form-urlencoded",
-			},
-			body: params.toString(),
-		});
+		const createSession = async (withReusedPi: boolean) => {
+			const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${stripeSecret}`,
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: buildSessionParams(withReusedPi).toString(),
+			});
+			return res;
+		};
+
+		let res = await createSession(reusedPiId !== null);
+		if (!res.ok && reusedPiId) {
+			// Stripe refused the reused intent (state moved, method types
+			// drifted) — fall back to a fresh session rather than fail the
+			// guest's payment. The stale row goes terminal via the webhook.
+			logger.warn(
+				`payment_intent reuse rejected for booking ${args.bookingId}, minting fresh`,
+			);
+			res = await createSession(false);
+		}
 		if (!res.ok) {
 			const errText = await res.text();
 			throw new ConvexError(
@@ -654,7 +1004,7 @@ export const refundViaStripe = action({
 				`Only succeeded payments can be refunded (was ${payment.status})`,
 			);
 		}
-		if (!payment.stripePaymentIntentId.startsWith("pi_")) {
+		if (!payment.stripePaymentIntentId?.startsWith("pi_")) {
 			throw new ConvexError("Payment has no Stripe PaymentIntent to refund");
 		}
 
@@ -815,24 +1165,35 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 
 	const stripeEventId = parsed.id;
 	if (stripeEventId) {
-		const recorded = await ctx.runMutation(
-			internal.webhookDeliveries.recordDelivery,
-			{
-				organizationId: orgId,
-				source: "stripe",
-				eventId: stripeEventId,
-				eventType: eventType ?? "unknown",
-				ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
-				userAgent: request.headers.get("user-agent") ?? undefined,
-				payload: parsed,
-			},
-		);
-		if (recorded.isDuplicate) {
+		// Idempotency gate (stripeEvents table): the check + insert run
+		// in one mutation — a single transaction — so concurrent
+		// deliveries can't both pass. "processed" rows and fresh
+		// in-flight claims are duplicates; "failed"/stale claims are
+		// reclaimed so Stripe retries re-drive delivery instead of
+		// being dropped (fleet DST-guides-tours-02; covers the F445
+		// rule — only a processed duplicate is acked-and-done).
+		const claimResult = await ctx.runMutation(internal.stripeEvents.claim, {
+			organizationId: orgId,
+			eventId: stripeEventId,
+			eventType: eventType ?? "unknown",
+		});
+		if (claimResult === "duplicate") {
 			logger.info(
 				`[stripe-webhook] duplicate event ${stripeEventId} for org ${orgId}`,
 			);
 			return new Response("ok (duplicate)", { status: 200 });
 		}
+		// Audit log (webhookDeliveries) — retained for admin
+		// visibility; dedupe gating lives in stripeEvents.
+		await ctx.runMutation(internal.webhookDeliveries.recordDelivery, {
+			organizationId: orgId,
+			source: "stripe",
+			eventId: stripeEventId,
+			eventType: eventType ?? "unknown",
+			ipAddress: request.headers.get("x-forwarded-for") ?? undefined,
+			userAgent: request.headers.get("user-agent") ?? undefined,
+			payload: parsed,
+		});
 	}
 
 	try {
@@ -840,121 +1201,20 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			eventType === "payment_intent.succeeded" ||
 			eventType === "checkout.session.completed"
 		) {
-			const piId = paymentIntentIdFrom(obj);
-			const bookingId = obj?.metadata?.bookingId;
-			const amountRaw =
-				typeof obj?.amount_total === "number"
-					? obj.amount_total
-					: typeof obj?.amount === "number"
-						? obj.amount
-						: null;
-			const currencyRaw = obj?.currency;
-
-			if (!piId) {
-				logger.info(
-					`[stripe-webhook] ${eventType} missing payment_intent (org=${orgId})`,
-				);
-				// Ack — Checkout may complete without a PI in edge cases;
-				// retrying won't help until Stripe sends a PI event.
-			} else {
-				let paymentId = await ctx.runQuery(
-					internal.payments.getPaymentByIntent,
-					{ stripePaymentIntentId: piId, organizationId: orgId },
-				);
-
-				if (!paymentId && bookingId && amountRaw != null && currencyRaw) {
-					paymentId = await ctx.runMutation(
-						internal.payments.recordFromAction,
-						{
-							organizationId: orgId,
-							bookingId: bookingId as never,
-							amountCents: BigInt(amountRaw),
-							currency: currencyForDb(currencyRaw),
-							stripePaymentIntentId: piId,
-						},
-					);
-				}
-
-				if (!paymentId) {
-					logger.info(
-						`[stripe-webhook] unknown intent ${piId} (event=${eventType}, org=${orgId})`,
-					);
-				} else {
-					await ctx.runMutation(internal.payments.markSucceeded, {
-						paymentId,
-					});
-				}
-			}
+			await applyPaymentSuccess(ctx, obj, orgId, eventType);
 		} else if (eventType === "payment_intent.payment_failed") {
-			const piId = paymentIntentIdFrom(obj);
-			if (!piId) {
-				return new Response("missing intent id", { status: 400 });
-			}
-			const paymentId = await ctx.runQuery(
-				internal.payments.getPaymentByIntent,
-				{ stripePaymentIntentId: piId, organizationId: orgId },
-			);
-			if (!paymentId) {
-				logger.info(
-					`[stripe-webhook] unknown/cross-org intent ${piId} (event=${eventType}, org=${orgId})`,
-				);
-			} else {
-				await ctx.runMutation(internal.payments.markFailed, {
-					paymentId,
-					reason: obj?.last_payment_error?.message ?? undefined,
-				});
-			}
+			const earlyResponse = await applyPaymentFailed(ctx, obj, orgId);
+			if (earlyResponse) return earlyResponse;
 		} else if (eventType === "charge.refunded") {
-			const piId = paymentIntentIdFrom(obj);
-			if (!piId) {
-				logger.info(
-					`[stripe-webhook] charge.refunded missing payment_intent (org=${orgId})`,
-				);
-			} else {
-				const paymentId = await ctx.runQuery(
-					internal.payments.getPaymentByIntent,
-					{ stripePaymentIntentId: piId, organizationId: orgId },
-				);
-				if (!paymentId) {
-					logger.info(
-						`[stripe-webhook] unknown intent ${piId} for charge.refunded (org=${orgId})`,
-					);
-				} else {
-					// charge.refunded re-sends the charge's FULL refunds list —
-					// a payload can carry several new refunds at once. Record
-					// each (by_stripe_refund idempotency dedups re-deliveries)
-					// and only flip payments.status when the charge is fully
-					// refunded — partial refunds must not mislabel the payment.
-					const refundsData = obj?.refunds?.data ?? [];
-					const fullyRefunded =
-						obj?.refunded === true ||
-						(typeof obj?.amount_refunded === "number" &&
-							typeof obj?.amount === "number" &&
-							obj.amount_refunded >= obj.amount);
-					for (const r of refundsData) {
-						await ctx.runMutation(internal.payments.markRefunded, {
-							paymentId,
-							fullyRefunded,
-							refund: {
-								stripeRefundId: r.id,
-								amountCents: BigInt(r.amount),
-								currency: currencyForDb(r.currency),
-								reason: r.reason,
-								processedAt: r.created ? r.created * 1000 : undefined,
-							},
-						});
-					}
-					if (refundsData.length === 0) {
-						await ctx.runMutation(internal.payments.markRefunded, {
-							paymentId,
-							fullyRefunded,
-						});
-					}
-				}
-			}
+			await applyChargeRefund(ctx, obj, orgId);
 		}
 
 		if (stripeEventId) {
+			await ctx.runMutation(internal.stripeEvents.settle, {
+				organizationId: orgId,
+				eventId: stripeEventId,
+				status: "processed",
+			});
 			await ctx.runMutation(
 				internal.webhookDeliveries.updateDeliveryStatus,
 				{
@@ -967,6 +1227,14 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		}
 	} catch (err) {
 		if (stripeEventId) {
+			// "failed" leaves the claim reclaimable — the next Stripe
+			// retry re-drives delivery rather than deduping away.
+			await ctx.runMutation(internal.stripeEvents.settle, {
+				organizationId: orgId,
+				eventId: stripeEventId,
+				status: "failed",
+				errorMessage: err instanceof Error ? err.message : String(err),
+			});
 			await ctx.runMutation(
 				internal.webhookDeliveries.updateDeliveryStatus,
 				{

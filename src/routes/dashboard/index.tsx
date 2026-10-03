@@ -15,9 +15,10 @@ import {
 	Users,
 	Wallet,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { PublicBookingLinkBar } from "@/components/public-booking-link-bar";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +37,6 @@ import {
 	EmptyTitle,
 } from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
@@ -51,15 +51,24 @@ export const Route = createFileRoute("/dashboard/")({
 });
 
 function DashboardIndex() {
+	const reduceMotion = useReducedMotion();
 	const today = localYmd();
 	const weekTo = localYmd(addDaysLocal(new Date(), 6));
 	const { data: org } = useQuery(
 		convexQuery(api.organizations.activeOrganization, {}),
 	);
-	const { data: bookings, error: bookingsError } = useQuery(
+	const {
+		data: bookings,
+		error: bookingsError,
+		isPending: bookingsPending,
+	} = useQuery(
 		convexQuery(api.bookings.list, { dateFrom: today, dateTo: today }),
 	);
-	const { data: pendingBookingPage, error: pendingBookingsError } = useQuery(
+	const {
+		data: pendingBookingPage,
+		error: pendingBookingsError,
+		isPending: pendingBookingsPending,
+	} = useQuery(
 		convexQuery(api.bookings.list, {
 			status: "pending",
 			sortBy: "createdAt",
@@ -73,9 +82,11 @@ function DashboardIndex() {
 	const { data: customers, error: customersError } = useQuery(
 		convexQuery(api.customers.list, {}),
 	);
-	const { data: tours, error: toursError } = useQuery(
-		convexQuery(api.tours.list, {}),
-	);
+	const {
+		data: tours,
+		error: toursError,
+		isPending: toursPending,
+	} = useQuery(convexQuery(api.tours.list, {}));
 	const { data: staffingGaps, error: staffingError } = useQuery(
 		convexQuery(api.assignments.staffingGaps, {
 			dateFrom: today,
@@ -152,7 +163,10 @@ function DashboardIndex() {
 	const topGaps = gaps.slice(0, 5);
 	const missing = missingPhones ?? [];
 	const topMissing = missing.slice(0, 5);
+	const isFirstRunLoading =
+		toursPending || bookingsPending || pendingBookingsPending;
 	const isFirstRun =
+		!isFirstRunLoading &&
 		totalTours === 0 &&
 		todaysBookings.length === 0 &&
 		pendingBookings.length === 0;
@@ -298,12 +312,14 @@ function DashboardIndex() {
 			)}
 			<header className="flex flex-wrap items-start justify-between gap-4">
 				<motion.div
-					initial={{ opacity: 0, y: 4 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 4 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, ease: "easeOut" }}
 				>
+					{/* F429: the page speaks week cadence — the h1 should too,
+					    with the today date as the subtitle. */}
 					<h1 className="font-display text-2xl font-medium tracking-tight">
-						Today
+						This week
 					</h1>
 					<p className="mt-0.5 text-sm text-muted-foreground">
 						{new Date().toLocaleDateString(undefined, {
@@ -327,7 +343,19 @@ function DashboardIndex() {
 				</div>
 			</header>
 
-			{isFirstRun ? (
+			{isFirstRunLoading ? (
+				<div
+					className="flex flex-col gap-4"
+					role="status"
+					aria-label="Loading dashboard"
+				>
+					<Skeleton className="h-32 w-full" />
+					<div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+						<Skeleton className="h-28 w-full" />
+						<Skeleton className="h-28 w-full" />
+					</div>
+				</div>
+			) : isFirstRun ? (
 				<Empty className="border">
 					<EmptyHeader>
 						<EmptyMedia variant="icon">
@@ -719,7 +747,9 @@ function LinkedMetric({
 			<p className="text-sm text-muted-foreground">{label}</p>
 			<p
 				className={cn(
-					"mt-2 font-semibold tracking-tight tabular-nums",
+					// Mirror PulseMetric's numeric through-line (F235) — the two
+					// components share the dashboard home row.
+					"mt-2 font-display font-medium tracking-tight tabular-nums",
 					featured ? "text-4xl" : "text-2xl",
 				)}
 			>
@@ -776,51 +806,6 @@ function AssignmentRow({
 				</Link>
 			</Button>
 		</li>
-	);
-}
-
-function PublicBookingLinkBar({ slug }: { slug: string }) {
-	const url =
-		typeof window !== "undefined"
-			? `${window.location.origin}/book/${slug}`
-			: "";
-	const [copied, setCopied] = useState(false);
-
-	const handleCopy = async () => {
-		try {
-			await navigator.clipboard.writeText(url);
-			setCopied(true);
-			toast.success("Link copied");
-			setTimeout(() => setCopied(false), 2000);
-		} catch {
-			toast.error("Could not copy — please copy manually");
-		}
-	};
-
-	return (
-		<div className="flex flex-col gap-2 rounded-xl border bg-card p-4 sm:flex-row sm:items-center">
-			<div className="flex min-w-0 items-center gap-2 text-sm">
-				<CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-				<span className="shrink-0 font-medium">Direct booking link</span>
-			</div>
-			<Input
-				readOnly
-				value={url}
-				onClick={(e) => e.currentTarget.select()}
-				className="min-w-0 font-mono text-xs"
-				aria-label="Direct booking URL"
-			/>
-			<div className="flex shrink-0 gap-2">
-				<Button onClick={handleCopy} disabled={!url} size="sm">
-					{copied ? "Copied" : "Copy"}
-				</Button>
-				<Button variant="outline" asChild size="sm">
-					<Link to="/book/$slug" params={{ slug }}>
-						Open
-					</Link>
-				</Button>
-			</div>
-		</div>
 	);
 }
 
@@ -883,7 +868,7 @@ function WeeklyPulseRow({
 					<Skeleton className="h-3 w-56" />
 				)}
 			</header>
-			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				<PulseMetric
 					label="Revenue"
 					value={pulse ? formatCentsWhole(pulse.revenueCents) : undefined}
@@ -902,6 +887,7 @@ function WeeklyPulseRow({
 					}
 					icon={Wallet}
 					href="/dashboard/analytics"
+					featured
 				/>
 				<PulseMetric
 					label="Bookings"
@@ -947,19 +933,21 @@ function WeeklyPulseRow({
 					delta={
 						deltas
 							? {
-									// For cancellation rate, "up is bad" — invert the
-									// direction so the arrow color matches the operator's
-									// intent (red up arrow = worse).
+									// For cancellation rate, "up is bad": the arrow
+									// points the way the DATA moved (up = rate rose)
+									// and the tone carries the judgement via
+									// deltaTone="invert" (red up arrow = worse).
 									value: `${deltas.cancelDelta >= 0 ? "+" : ""}${deltas.cancelDelta.toFixed(1)}pp`,
 									direction:
 										deltas.cancelDelta > 0
-											? "down"
+											? "up"
 											: deltas.cancelDelta < 0
-												? "up"
+												? "down"
 												: "flat",
 								}
 							: null
 					}
+					deltaTone="invert"
 					icon={Sparkles}
 					href="/dashboard/analytics"
 				/>
@@ -974,17 +962,29 @@ function PulseMetric({
 	delta,
 	icon: Icon,
 	href,
+	featured = false,
+	deltaTone = "auto",
 }: {
 	label: string;
 	value: string | number | undefined;
 	delta: { value: string; direction: "up" | "down" | "flat" } | null;
 	icon: typeof Wallet;
 	href: string;
+	featured?: boolean;
+	/** "auto": up is good (success). "invert": up is bad (destructive) —
+	 *  for inverse metrics like cancellation rate. The arrow still points
+	 *  the way the DATA moved; only the tone inverts. */
+	deltaTone?: "auto" | "invert";
 }) {
+	const upTone = deltaTone === "invert" ? "text-destructive" : "text-success";
+	const downTone = deltaTone === "invert" ? "text-success" : "text-destructive";
 	return (
 		<Link
 			to={href}
-			className="group block rounded-xl border bg-card p-5 transition-colors hover:border-chart-1/50 hover:bg-chart-4/5"
+			className={cn(
+				"group block rounded-xl border bg-card transition-colors hover:border-chart-1",
+				featured ? "p-6" : "p-5",
+			)}
 		>
 			<div className="flex items-start justify-between gap-3">
 				<p className="text-sm text-muted-foreground">{label}</p>
@@ -994,16 +994,21 @@ function PulseMetric({
 					aria-hidden="true"
 				/>
 			</div>
-			<p className="mt-2 font-display text-3xl font-medium tracking-tight tabular-nums">
+			<p
+				className={cn(
+					"mt-2 font-display font-medium tracking-tight tabular-nums",
+					featured ? "text-4xl" : "text-3xl",
+				)}
+			>
 				{value ?? "—"}
 			</p>
 			{delta ? (
 				<div className="mt-2 flex items-center gap-1.5 text-xs">
 					{delta.direction === "up" ? (
-						<TrendingUp className="size-3.5 text-success" aria-hidden="true" />
+						<TrendingUp className={`size-3.5 ${upTone}`} aria-hidden="true" />
 					) : delta.direction === "down" ? (
 						<TrendingDown
-							className="size-3.5 text-destructive"
+							className={`size-3.5 ${downTone}`}
 							aria-hidden="true"
 						/>
 					) : (
@@ -1015,8 +1020,8 @@ function PulseMetric({
 					<span
 						className={cn(
 							"tabular-nums",
-							delta.direction === "up" && "text-success",
-							delta.direction === "down" && "text-destructive",
+							delta.direction === "up" && upTone,
+							delta.direction === "down" && downTone,
 							delta.direction === "flat" && "text-muted-foreground",
 						)}
 					>

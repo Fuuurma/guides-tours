@@ -104,8 +104,9 @@ function VacationDetailPage() {
 			subtitle={displayName(vacation.userId)}
 			backTo="/dashboard/vacations"
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<MetricCard label="Start" value={vacation.startDate} />
+			{/* F119: date range is a pair, not four equal StatCards */}
+			<div className="grid gap-4 md:grid-cols-2">
+				<MetricCard label="Start" value={vacation.startDate} featured />
 				<MetricCard label="End" value={vacation.endDate} />
 				<MetricCard label="Days" value={dayCount.toString()} />
 				<MetricCard label="Status" value={vacation.status}>

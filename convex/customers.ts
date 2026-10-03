@@ -73,29 +73,32 @@ export const list = query({
 		const sortOrder = args.sortOrder ?? "desc";
 		const order = sortOrder === "asc" ? "asc" : "desc";
 
-		// Pick the most selective index when vipOnly is set — the
+		// Pick the most selective index for the VIP filter — the
 		// by_org_vip compound index leads with (org, vipStatus) so the
-		// server can skip non-VIP customers entirely instead of
+		// server can skip the other VIP class entirely instead of
 		// fetching every customer and filtering in JS.
+		// F364: vipOnly is tri-state (true / false / unset). `false`
+		// must mean "regular only" — truthiness treated it as "all".
 		// Bound the scan: a single page is at most 100, but the JS
 		// filter needs every matching row. Cap at 5000 — the FE
 		// paginates, so this is fine for reasonable org sizes.
 		const MAX_SCAN = 5000;
-		const all = await (args.vipOnly
-			? ctx.db
-					.query("customers")
-					.withIndex("by_org_vip", (q) =>
-						q
-							.eq("organizationId", member.organizationId)
-							.eq("vipStatus", true),
-					)
-					.take(MAX_SCAN)
-			: ctx.db
-					.query("customers")
-					.withIndex("by_org", (q) =>
-						q.eq("organizationId", member.organizationId),
-					)
-					.take(MAX_SCAN));
+		const all =
+			args.vipOnly === true || args.vipOnly === false
+				? await ctx.db
+						.query("customers")
+						.withIndex("by_org_vip", (q) =>
+							q
+								.eq("organizationId", member.organizationId)
+								.eq("vipStatus", args.vipOnly as boolean),
+						)
+						.take(MAX_SCAN)
+				: await ctx.db
+						.query("customers")
+						.withIndex("by_org", (q) =>
+							q.eq("organizationId", member.organizationId),
+						)
+						.take(MAX_SCAN);
 
 		let filtered = all;
 		if (args.search) {
@@ -347,10 +350,12 @@ export const create = mutation({
 			resourceType: "customer",
 			resourceId: customerId,
 			oldValues: {},
+			// PII: match update/remove — never store email/name/phone in
+			// the insert-only audit log (F366). After a hard delete the
+			// created-row would otherwise retain the customer forever.
 			newValues: {
-				email: args.email,
-				name: args.name,
 				source: args.source ?? "",
+				vipStatus: args.vipStatus ?? false,
 			},
 		});
 
@@ -463,10 +468,16 @@ export const update = mutation({
 			patch[field] = incoming;
 		}
 
-		// Consent dates follow consent flag.
-		if (patch.smsConsent === true) patch.smsConsentDate = now;
+		// Consent dates follow consent flag — only on a false→true
+		// transition (F365). Re-stamping `now` on every unrelated edit
+		// that re-sends `true` would falsify "when they consented".
+		if (patch.smsConsent === true && !customer.smsConsent) {
+			patch.smsConsentDate = now;
+		}
 		if (patch.smsConsent === false) patch.smsConsentDate = undefined;
-		if (patch.emailConsent === true) patch.emailConsentDate = now;
+		if (patch.emailConsent === true && !customer.emailConsent) {
+			patch.emailConsentDate = now;
+		}
 		if (patch.emailConsent === false) patch.emailConsentDate = undefined;
 
 		patch.updatedAt = now;

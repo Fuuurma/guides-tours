@@ -25,6 +25,12 @@ function TemplateDetailPage() {
 	const instantiate = useMutation(api.tourTemplates.instantiate);
 	const [creating, setCreating] = useState(false);
 	const [instantiateErr, setInstantiateErr] = useState<string | null>(null);
+	// F405: same privilege as tours.create — members cannot mint tours.
+	const { data: activeOrg } = useQuery(
+		convexQuery(api.organizations.activeOrganization, {}),
+	);
+	const canInstantiate =
+		activeOrg?.role === "owner" || activeOrg?.role === "admin";
 	const {
 		data: template,
 		isPending,
@@ -89,19 +95,26 @@ function TemplateDetailPage() {
 							Edit
 						</Link>
 					</Button>
-					<Button onClick={() => void handleInstantiate()} disabled={creating}>
-						{creating ? <Spinner data-icon="inline-start" /> : null}
-						{creating ? "Creating tour…" : "Use template"}
-					</Button>
+					{canInstantiate ? (
+						<Button
+							onClick={() => void handleInstantiate()}
+							disabled={creating}
+						>
+							{creating ? <Spinner data-icon="inline-start" /> : null}
+							{creating ? "Creating tour…" : "Use template"}
+						</Button>
+					) : null}
 				</>
 			}
 		>
 			{instantiateErr ? <ErrorBanner message={instantiateErr} /> : null}
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			{/* F119: capacity leads the template row */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				<MetricCard
 					label="Capacity"
 					value={`${template.maxGuests}/${template.capacity}`}
+					featured
 				/>
 				<MetricCard label="Languages" value={template.languages.join(", ")} />
 				<MetricCard

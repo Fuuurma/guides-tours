@@ -17,6 +17,7 @@ import {
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { syncTourAvailability } from "./lib/availabilityProjection";
 import { assertFieldWithinLimit } from "./lib/validation";
 import type { Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
@@ -233,6 +234,13 @@ export const internalCreate = internalMutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		// Keep the denormalized (tour, date) projection in sync inside
+		// this same transaction.
+		await syncTourAvailability(ctx, {
+			organizationId: args.organizationId,
+			tourId: args.tourId,
+			date: args.date,
+		});
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
@@ -343,6 +351,16 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		if (nextDate !== existing.date || nextStart !== existing.startTime) {
+			// F346: bookings freeze their own date/startTime copies at
+			// insert — rescheduling a departure with bookings desyncs
+			// every linked booking and its reminders without touching
+			// capacity or notifying guests. Same gate as cancel/remove:
+			// the operator must cancel the bookings first.
+			if (existing.capacityBooked > 0) {
+				throw new ConvexError(
+					`Cannot reschedule a departure with ${existing.capacityBooked} booked guest(s); cancel their bookings first`,
+				);
+			}
 			await assertScheduleSlotFree(ctx, {
 				tourId: existing.tourId,
 				date: nextDate,
@@ -377,6 +395,21 @@ export const internalUpdate = internalMutation({
 			}
 		}
 		await ctx.db.patch(args.scheduleId, patch);
+		// Sync the projection for the slot's (possibly new) date — and
+		// the old date too when the schedule moved days, so its stale
+		// slot disappears from that day's doc.
+		await syncTourAvailability(ctx, {
+			organizationId: args.organizationId,
+			tourId: existing.tourId,
+			date: nextDate,
+		});
+		if (nextDate !== existing.date) {
+			await syncTourAvailability(ctx, {
+				organizationId: args.organizationId,
+				tourId: existing.tourId,
+				date: existing.date,
+			});
+		}
 		// Log old values for every changed field (mirrors
 		// tours.internalUpdate's pattern), not just date+status.
 		const oldValues: Record<string, unknown> = {};
@@ -430,6 +463,14 @@ export const incrementBooked = internalMutation({
 			status: newStatus,
 			updatedAt: Date.now(),
 		});
+		// The projection must move with the capacity claim — same
+		// transaction, or the public page could sell a seat that no
+		// longer exists.
+		await syncTourAvailability(ctx, {
+			organizationId: args.organizationId,
+			tourId: existing.tourId,
+			date: existing.date,
+		});
 		return args.scheduleId;
 	},
 });
@@ -476,6 +517,11 @@ export const decrementBooked = internalMutation({
 			status: newStatus,
 			updatedAt: Date.now(),
 		});
+		await syncTourAvailability(ctx, {
+			organizationId: args.organizationId,
+			tourId: existing.tourId,
+			date: existing.date,
+		});
 		return args.scheduleId;
 	},
 });
@@ -507,6 +553,11 @@ export const internalRemove = internalMutation({
 			throw new ConvexError("Cannot delete schedule with existing bookings");
 		}
 		await ctx.db.delete(args.scheduleId);
+		await syncTourAvailability(ctx, {
+			organizationId: args.organizationId,
+			tourId: existing.tourId,
+			date: existing.date,
+		});
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
@@ -524,5 +575,39 @@ export const internalRemove = internalMutation({
 			newValues: {},
 		});
 		return args.scheduleId;
+	},
+});
+
+/**
+ * One-time backfill: rebuild the tourAvailability projection for
+ * schedules that predate it. Run via `npx convex run` after deploy —
+ * `internal.tourSchedules.backfillAvailability` with an optional
+ * organizationId. New writes never need this; every mutation above
+ * syncs its own (tour, date) docs transactionally.
+ */
+export const backfillAvailability = internalMutation({
+	args: { organizationId: v.optional(v.string()) },
+	handler: async (ctx, args) => {
+		const schedules = args.organizationId
+			? await ctx.db
+					.query("tourSchedules")
+					.withIndex("by_org", (q) =>
+						q.eq("organizationId", args.organizationId!),
+					)
+					.take(5000)
+			: await ctx.db.query("tourSchedules").take(5000);
+		const keys = new Set<string>();
+		for (const s of schedules) {
+			keys.add(`${s.organizationId}|${s.tourId}|${s.date}`);
+		}
+		for (const key of keys) {
+			const [organizationId, tourId, date] = key.split("|") as [
+				string,
+				Id<"tours">,
+				string,
+			];
+			await syncTourAvailability(ctx, { organizationId, tourId, date });
+		}
+		return { scanned: schedules.length, synced: keys.size };
 	},
 });

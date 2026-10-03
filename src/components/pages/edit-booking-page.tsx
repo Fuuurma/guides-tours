@@ -103,7 +103,7 @@ export function EditBookingPage({ bookingId }: EditBookingPageProps) {
 		return (
 			<div className="mx-auto flex max-w-2xl flex-col gap-4">
 				<PageBackLink to={`/dashboard/bookings/${bookingId}`} />
-				<h1 className="text-2xl font-semibold tracking-tight">
+				<h1 className="font-display text-2xl font-medium tracking-tight">
 					Cannot edit booking
 				</h1>
 				<p className="text-sm text-muted-foreground">
@@ -258,7 +258,7 @@ function EditBookingForm({
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<div>
 				<PageBackLink to={`/dashboard/bookings/${bookingId}`} />
-				<h1 className="mt-2 text-2xl font-semibold tracking-tight">
+				<h1 className="mt-2 font-display text-2xl font-medium tracking-tight">
 					Edit booking
 				</h1>
 				<p className="mt-1 text-sm text-muted-foreground">

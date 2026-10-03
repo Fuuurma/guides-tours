@@ -6,6 +6,8 @@ import {
 	redirect,
 	useNavigate,
 } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,6 +41,11 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardLayout() {
 	const navigate = useNavigate();
+	const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
+	const organizationsQuery = useQuery(
+		convexQuery(api.organizations.listMyOrganizations, {}),
+	);
+	const organizations = organizationsQuery.data ?? [];
 	const {
 		data: user,
 		isPending: userPending,
@@ -143,8 +150,57 @@ function DashboardLayout() {
 		);
 	}
 
+	// F436: a multi-org session with no valid active org silently
+	// defaulted to the first org — every guarded action fail-closes for
+	// it. Surface the choice instead of letting actions throw.
+	const chooseOrg = org?.activeOrgFallback === true;
+	const inactiveOrgs = chooseOrg
+		? (organizations ?? []).filter((o) => !o.isActive)
+		: [];
+
 	return (
-		<div className="min-h-screen bg-muted/20">
+		<div className="min-h-screen bg-background">
+			{chooseOrg && inactiveOrgs.length > 0 && (
+				<div className="border-b border-border bg-[var(--sun)]/10 px-4 py-3">
+					<div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
+						{/* F442: copy matches reality — actions are NOT gated; a
+						    guarded one will error until an org is picked. */}
+						<p className="text-sm font-medium">
+							You're currently previewing an organization by default — pick
+							yours to keep working in it (some actions will error until you
+							do).
+						</p>
+						{inactiveOrgs.map((o) => (
+							<Button
+								key={o.id}
+								size="sm"
+								disabled={switchingOrgId !== null}
+								onClick={async () => {
+									// F441: same contract as the sidebar switcher —
+									// no silent dead buttons on the recovery path.
+									setSwitchingOrgId(o.id);
+									try {
+										const result = await authClient.organization.setActive({
+											organizationId: o.id,
+										});
+										if (result.error) {
+											throw new Error(result.error.message);
+										}
+										window.location.reload();
+									} catch {
+										setSwitchingOrgId(null);
+										toast.error(
+											"Could not switch organization. Please try again.",
+										);
+									}
+								}}
+							>
+								{switchingOrgId === o.id ? "Switching…" : o.name}
+							</Button>
+						))}
+					</div>
+				</div>
+			)}
 			<AppSidebar
 				orgName={org.name}
 				userName={user.name}

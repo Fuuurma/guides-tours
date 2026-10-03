@@ -26,17 +26,53 @@ import type { Id } from "./_generated/dataModel";
 import { parseBookingTime } from "./lib/time";
 import { logAudit } from "./lib/audit";
 import { isBlackoutHelper } from "./tourBlackoutDates";
+import { exceptionForDateHelper } from "./tourExceptionDates";
 import {
 	assertValidCustomerInput,
 	normalizeEmail,
 } from "./lib/validation";
 
-const COLLECTIBLE_PUBLIC = new Set(["confirmed", "checked_in"]);
+// Aligned with COLLECTIBLE_STATUSES in payments_stripe_actions.ts: public
+// bookings are inserted as "pending" and are immediately collectible —
+// the response gate must include "pending" or the entire pay-now UI is
+// dead code while the server action still accepts the charge.
+const COLLECTIBLE_PUBLIC = new Set(["pending", "confirmed", "checked_in"]);
 type PublicOrganizationRecord = {
 	id?: string;
 	_id?: string;
 	name?: string;
 };
+
+// Cast via FunctionReference since the generated internal type strips
+// lib/ subdirectory modules (those containing query/mutation exports).
+// Same pattern as ota/integrations. Module-level so the handler reads as
+// rate-limit → resolve → dispatch instead of casting ceremony.
+const rateLimitRefs = (internal as unknown as {
+	"lib/rate_limit": {
+		recordAttempt: FunctionReference<
+			"mutation",
+			"internal",
+			{
+				email: string;
+				slug: string;
+				organizationId: string | undefined;
+				outcome: string;
+				ip?: string;
+			},
+			{ allowed: boolean; attempts: number; ipAttempts?: number; attemptId: Id<"publicBookingAttempts"> }
+		>;
+		updateAttemptOutcome: FunctionReference<
+			"mutation",
+			"internal",
+			{
+				attemptId: Id<"publicBookingAttempts">;
+				outcome: string;
+				organizationId?: string;
+			},
+			{ updated: boolean }
+		>;
+	};
+})["lib/rate_limit"];
 
 function getPublicOrganizationId(
 	org: PublicOrganizationRecord | null,
@@ -118,8 +154,9 @@ export const getOrgAndToursBySlug = query({
 			}),
 		);
 
+		// F371: organizationId stays server-side — the slug is the only
+		// tenant handle the public surface needs.
 		return {
-			organizationId,
 			organizationName: org?.name ?? "Tour operator",
 			tours: withCovers,
 		};
@@ -155,33 +192,78 @@ export const listAvailableSlots = query({
 		const blackedOut = await isBlackoutHelper(ctx, args.tourId, args.date);
 		if (blackedOut) return [];
 
-		const schedules = await ctx.db
-			.query("tourSchedules")
+		// F344: exception dates enforce live like blackouts — generate is
+		// additive-only and never retracts already-materialized rows, so
+		// without this a "removed" date stays bookable and a "modified"
+		// exception with a new startTime sells a second slot that splits
+		// capacity against the materialized original.
+		const ex = await exceptionForDateHelper(ctx, args.tourId, organizationId, args.date);
+		if (ex?.exceptionType === "removed") return [];
+		const exceptionTime =
+			ex?.exceptionType === "modified" || ex?.exceptionType === "added"
+				? ex.startTime
+				: undefined;
+		const capacityOf = (capacityTotal: number) => ex?.capacityOverride ?? capacityTotal;
+
+		// Single-doc read: the denormalized (tour, date) projection is
+		// maintained transactionally by every capacity/schedule write
+		// (DST-guides-tours-03). F344 exception overrides apply at read
+		// time on top of the projected slots.
+		const availability = await ctx.db
+			.query("tourAvailability")
 			.withIndex("by_tour_date", (q) =>
 				q.eq("tourId", args.tourId).eq("date", args.date),
 			)
-			.take(200);
+			.unique();
+		if (availability && availability.organizationId !== organizationId) {
+			return [];
+		}
+
+		// Fallback: rows written outside the mutation layer (test seeds,
+		// imports, docs not yet covered by backfillAvailability) never
+		// produced a projection doc — scan the materialized schedules
+		// rather than reporting the date as unbookable.
+		const slots = availability
+			? availability.slots
+			: (
+					await ctx.db
+						.query("tourSchedules")
+						.withIndex("by_tour_date", (q) =>
+							q.eq("tourId", args.tourId).eq("date", args.date),
+						)
+						.take(200)
+				)
+					.filter((s) => s.organizationId === organizationId)
+					.map((s) => ({
+						scheduleId: s._id,
+						startTime: s.startTime,
+						endTime: s.endTime,
+						capacityTotal: s.capacityTotal,
+						capacityBooked: s.capacityBooked,
+						seatsLeft: s.capacityTotal - s.capacityBooked,
+						status: s.status,
+					}));
 
 		const nowMs = Date.now();
 		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
 
-		return schedules
+		return slots
 			.filter((s) => {
-				if (s.organizationId !== organizationId) return false;
 				if (s.status !== "available") return false;
-				if (s.capacityBooked >= s.capacityTotal) return false;
-				const tourTs = parseBookingTime(s.date, s.startTime);
+				if (exceptionTime !== undefined && s.startTime !== exceptionTime) return false;
+				if (s.capacityBooked >= capacityOf(s.capacityTotal)) return false;
+				const tourTs = parseBookingTime(args.date, s.startTime);
 				if (tourTs === null || tourTs <= nowMs) return false;
 				if (cutoffMs > 0 && tourTs - nowMs < cutoffMs) return false;
 				return true;
 			})
 			.map((s) => ({
-				_id: s._id,
+				_id: s.scheduleId,
 				startTime: s.startTime,
 				endTime: s.endTime,
-				capacityTotal: s.capacityTotal,
+				capacityTotal: capacityOf(s.capacityTotal),
 				capacityBooked: s.capacityBooked,
-				seatsLeft: s.capacityTotal - s.capacityBooked,
+				seatsLeft: capacityOf(s.capacityTotal) - s.capacityBooked,
 			}))
 			.sort((a, b) => a.startTime.localeCompare(b.startTime));
 	},
@@ -193,6 +275,45 @@ export const listAvailableSlots = query({
 // component's exposed adapter query, and so future phases can add
 // SES email sending inside the same function. The HTTP handler in
 // convex/http.ts is a thin wrapper.
+
+/** Post-create checkout assembly: fetch the booking's checkout summary
+ *  and the org's Stripe secrets, then decide whether the public flow can
+ *  offer pay-now (Stripe enabled + balance outstanding + collectible
+ *  status). Returns the action's response shape. */
+async function buildCheckoutResponse(
+	ctx: { runQuery: (ref: never, args: never) => Promise<unknown> },
+	bookingId: string,
+	organizationId: string,
+) {
+	const checkout = (await ctx.runQuery(
+		internal.payments.getBookingForCheckout as never,
+		{ bookingId } as never,
+	)) as { balanceDueCents?: bigint; status?: string } | null;
+	const settings = (await ctx.runQuery(
+		internal.payments.getPublicStripeAvailability as never,
+		{ organizationId } as never,
+	)) as {
+		stripeEnabled?: boolean;
+		hasStripeSecret?: boolean;
+		stripePublishableKey?: string;
+	} | null;
+	const balanceDueCents = checkout?.balanceDueCents ?? 0n;
+	const canPay =
+		Boolean(settings?.stripeEnabled && settings.hasStripeSecret) &&
+		balanceDueCents > 0n &&
+		COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
+
+	return {
+		bookingId,
+		status: "pending" as const,
+		balanceDueCents: balanceDueCents.toString(),
+		canPay,
+		stripePublishableKey:
+			canPay && settings?.stripePublishableKey
+				? settings.stripePublishableKey
+				: undefined,
+	};
+}
 
 export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 	args: {
@@ -214,36 +335,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		// Rate-limit check (per-email). Recorded BEFORE the slug
 		// lookup so an attacker can't burn through unknown slugs
 		// without consuming their email's quota.
-		// Cast via FunctionReference since the generated internal
-		// type strips lib/ subdirectory modules (those containing
-		// query/mutation exports). Same pattern as ota/integrations.
-		const recordAttemptRef = (internal as unknown as {
-			"lib/rate_limit": {
-				recordAttempt: FunctionReference<
-					"mutation",
-					"internal",
-					{
-						email: string;
-						slug: string;
-						organizationId: string | undefined;
-						outcome: string;
-						ip?: string;
-					},
-					{ allowed: boolean; attempts: number; ipAttempts?: number; attemptId: Id<"publicBookingAttempts"> }
-				>;
-				updateAttemptOutcome: FunctionReference<
-					"mutation",
-					"internal",
-					{
-						attemptId: Id<"publicBookingAttempts">;
-						outcome: string;
-						organizationId?: string;
-					},
-					{ updated: boolean }
-				>;
-			};
-		})["lib/rate_limit"];
-		const rateCheck = await ctx.runMutation(recordAttemptRef.recordAttempt, {
+		const rateCheck = await ctx.runMutation(rateLimitRefs.recordAttempt, {
 			email: args.customerEmail,
 			slug: args.slug,
 			organizationId: undefined,
@@ -268,7 +360,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 			const orgForRejection = await findOrg();
 			const rejectedOrgId = getPublicOrganizationId(orgForRejection);
 			if (rejectedOrgId) {
-				await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+				await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 					attemptId: rateCheck.attemptId,
 					outcome: "rejected_rate_limit",
 					organizationId: rejectedOrgId,
@@ -281,7 +373,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 
 		const org = await findOrg();
 		if (!org) {
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: "rejected_unknown_slug",
 			});
@@ -289,7 +381,7 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		}
 		const organizationId = getPublicOrganizationId(org);
 		if (!organizationId) {
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: "rejected_unknown_slug",
 			});
@@ -314,38 +406,15 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 					smsConsent: args.smsConsent,
 				},
 			);
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: "success",
 				organizationId,
 			});
 
-			const checkout = await ctx.runQuery(
-				internal.payments.getBookingForCheckout,
-				{ bookingId },
-			);
-			const settings = await ctx.runQuery(
-				internal.payments.getStripeSecrets,
-				{ organizationId },
-			);
-			const balanceDueCents = checkout?.balanceDueCents ?? 0n;
-			const canPay =
-				Boolean(settings?.stripeEnabled && settings.stripeSecretKey) &&
-				balanceDueCents > 0n &&
-				COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
-
-			return {
-				bookingId,
-				status: "pending" as const,
-				balanceDueCents: balanceDueCents.toString(),
-				canPay,
-				stripePublishableKey:
-					canPay && settings?.stripePublishableKey
-						? settings.stripePublishableKey
-						: undefined,
-			};
+			return await buildCheckoutResponse(ctx, bookingId, organizationId);
 		} catch (err) {
-			await ctx.runMutation(recordAttemptRef.updateAttemptOutcome, {
+			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
 				attemptId: rateCheck.attemptId,
 				outcome: classifyAttemptOutcome(err),
 				organizationId,
@@ -405,8 +474,8 @@ export const internalCreate = internalMutation({
 		if (!tour.isActive) {
 			throw new ConvexError("Tour is not active");
 		}
-		if (args.guests <= 0) {
-			throw new ConvexError("guests must be > 0");
+		if (args.guests <= 0 || !Number.isInteger(args.guests)) {
+			throw new ConvexError("guests must be a positive integer");
 		}
 		if (tour.maxGuests && args.guests > tour.maxGuests) {
 			throw new ConvexError(
@@ -475,6 +544,34 @@ export const internalCreate = internalMutation({
 			throw new ConvexError(
 				"This date is not available for booking. Please pick another date.",
 			);
+		}
+
+		// F344: exception dates enforce live like blackouts — a "removed"
+		// exception must not stay bookable, and a "modified"/"added"
+		// exception with an explicit startTime makes only that slot valid
+		// (a re-generated exception row otherwise splits capacity against
+		// the materialized original). capacityOverride caps the sellable
+		// seats on the attached schedule.
+		const ex = await exceptionForDateHelper(ctx, args.tourId, args.organizationId, date);
+		if (ex?.exceptionType === "removed") {
+			throw new ConvexError(
+				"This date is not available for booking. Please pick another date.",
+			);
+		}
+		if (
+			(ex?.exceptionType === "modified" || ex?.exceptionType === "added") &&
+			ex.startTime !== undefined &&
+			startTime !== ex.startTime
+		) {
+			throw new ConvexError(
+				"This time slot is not available for booking. Please pick another time.",
+			);
+		}
+		if (scheduleId && ex?.capacityOverride !== undefined) {
+			const attached = await ctx.db.get(scheduleId);
+			if (attached && attached.capacityBooked + args.guests > ex.capacityOverride) {
+				throw new ConvexError("Not enough seats left for this tour slot");
+			}
 		}
 
 		const emailConsent = args.emailConsent === true;
@@ -574,30 +671,45 @@ export const internalCreate = internalMutation({
 			updatedAt: now,
 		});
 
+		// Claim capacity through the single incrementBooked path — it
+		// throws "Schedule over capacity" when full and updates the
+		// denormalized availability projection in this same transaction.
 		if (scheduleId) {
-			try {
-				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked,
-					{
-						organizationId: args.organizationId,
-						scheduleId,
-						guests: args.guests,
-					},
-				);
-			} catch (err) {
-				// Compensating action: if incrementBooked fails (e.g.,
-				// over capacity, schedule cancelled between check and
-				// increment), cancel the orphaned booking so we don't
-				// leave a "pending" row that will never be confirmed.
-				await ctx.runMutation(
-					internal.bookings.internalCancel,
-					{
-						bookingId,
-						reason: "capacity_exceeded",
-					},
-				);
-				throw err;
-			}
+			await ctx.runMutation(internal.tourSchedules.incrementBooked, {
+				organizationId: args.organizationId,
+				scheduleId,
+				guests: args.guests,
+			});
+		}
+
+		if (totalAmountCents > 0n) {
+			const paymentSettings = await ctx.db
+				.query("paymentSettings")
+				.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+				.unique();
+			const paymentId = await ctx.db.insert("payments", {
+				organizationId: args.organizationId,
+				bookingId,
+				amountCents: totalAmountCents,
+				currency: paymentSettings?.defaultCurrency ?? tour.currency.toUpperCase(),
+				status: "pending",
+				provider: "stripe",
+				createdAt: now,
+				updatedAt: now,
+			});
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: "anonymous",
+				action: "payment.intent_requested_public",
+				resourceType: "payment",
+				resourceId: paymentId,
+				oldValues: {},
+				newValues: {
+					bookingId,
+					amountCents: totalAmountCents.toString(),
+					stripePaymentIntentId: null,
+				},
+			});
 		}
 
 		await logAudit(ctx, {

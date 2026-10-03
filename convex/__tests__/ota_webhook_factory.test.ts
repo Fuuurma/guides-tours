@@ -24,6 +24,7 @@ import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
 import { extractEventId } from "../ota/webhook_handler";
+import { BookingClient } from "../ota/booking";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -136,6 +137,23 @@ describe("createWebhookHandler — shared factory contract", () => {
 		// mount would fall through the router as 404.
 		expect(res.status).toBe(400);
 		expect(await res.text()).toBe("missing signature");
+	});
+
+	it("rejects an oversized body with 413 before any signature work (F341)", async () => {
+		const t = convexTest(schema, modules);
+		// > 64 KB of body on the unauthenticated route — the cap must
+		// fire before integration lookup, HMAC, or payload storage.
+		const body = JSON.stringify({ pad: "x".repeat(70 * 1024) });
+		const res = await t.fetch(WEBHOOK_PATH, {
+			method: "POST",
+			body,
+			headers: {
+				"x-viator-signature": "deadbeef",
+				"x-viator-timestamp": String(Date.now()),
+			},
+		});
+		expect(res.status).toBe(413);
+		expect(await res.text()).toBe("payload too large");
 	});
 
 	it("rejects missing integrationId query param with 400", async () => {
@@ -637,6 +655,44 @@ describe("createWebhookHandler — shared factory contract", () => {
 		const reconfirmed = (await bookingRow()) as any;
 		expect(reconfirmed?.status).toBe("confirmed");
 		expect(reconfirmed?.cancelledAt).toBeUndefined();
+
+		// F332: the converse hole — a second cancel after the re-confirm
+		// hits the same `booking.cancelled:<id>` dedup key but the row is
+		// confirmed again, so it's a new cancellation, not a retry.
+		const recancel = await post(cancelBody);
+		expect(await recancel.text()).toBe("ok");
+		const recancelled = (await bookingRow()) as any;
+		expect(recancelled?.status).toBe("cancelled");
+		expect(recancelled?.cancelledAt).toBeDefined();
+	});
+
+	it("a true duplicate cancel on a still-cancelled booking is dropped (F332)", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", secret),
+		);
+
+		const post = async (body: string) => {
+			const sig = await hmacHex("test-secret", body);
+			return t.fetch(`${WEBHOOK_PATH}?integrationId=${integrationId}`, {
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			});
+		};
+
+		expect((await post(JSON.stringify(VIATOR_BOOKING_PAYLOAD))).status).toBe(200);
+		expect((await post(JSON.stringify(VIATOR_CANCEL_PAYLOAD))).status).toBe(200);
+
+		// Provider retry of the same cancel — booking still cancelled —
+		// is a true duplicate and stays acked, not re-dispatched.
+		const dup = await post(JSON.stringify(VIATOR_CANCEL_PAYLOAD));
+		expect(await dup.text()).toBe("ok (duplicate)");
 	});
 });
 
@@ -678,3 +734,29 @@ describe("extractEventId — availability.update dedup key (F55)", () => {
 
 // silence unused-import warning for internal (referenced for type info)
 void internal;
+
+describe("numeric provider ids normalize on create (F447)", () => {
+	it("booking.com create accepts a numeric id like the cancel path does", () => {
+		const result = BookingClient.normalize({
+			eventType: "RESERVATION_CREATED",
+			data: {
+				id: 12345,
+				productId: "PROD-1",
+				guest: { name: "Test Guest", email: "guest@example.com" },
+				startDate: "2026-09-01",
+				guestCount: 2,
+			},
+		})
+		expect(result?.kind).toBe("booking.created")
+		expect((result as any).reservationId).toBe("12345")
+	})
+
+	it("booking.com cancel still accepts a numeric id (parity)", () => {
+		const result = BookingClient.normalize({
+			eventType: "RESERVATION_CANCELLED",
+			data: { id: 12345 },
+		})
+		expect(result?.kind).toBe("booking.cancelled")
+		expect((result as any).reservationId).toBe("12345")
+	})
+})

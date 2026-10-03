@@ -61,6 +61,13 @@ export const activeOrganization = query({
 			createdAt: org.createdAt,
 			role: member?.role ?? "member",
 			memberCount: org.members.length,
+			// F436/F440: true when this org came from the first-org
+			// fallback — the session's activeOrganizationId was absent OR
+			// stale (set but unresolvable; selectedOrganizationId was
+			// reassigned above). Keyed on the resolved-vs-declared
+			// comparison, not on absence, so the banner also shows in the
+			// stale-id case where authz fail-closes every action.
+			activeOrgFallback: selectedOrganizationId !== activeOrgId,
 		};
 	},
 });

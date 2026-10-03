@@ -47,7 +47,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 const NONE = "__none__";
 
-export type TourFormValues = {
+type TourFormValues = {
 	name: string;
 	description: string;
 	tourType: string;
@@ -273,7 +273,9 @@ export function TourForm({
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
 			<div>
 				<PageBackLink to={backTo} />
-				<h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
+				<h1 className="mt-2 font-display text-2xl font-medium tracking-tight">
+					{title}
+				</h1>
 				<p className="mt-1 text-sm text-muted-foreground">{description}</p>
 			</div>
 			<Card>

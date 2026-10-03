@@ -86,8 +86,13 @@ function VehicleDetailPage() {
 				</Button>
 			}
 		>
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-				<MetricCard label="Capacity" value={`${vehicle.capacity} guests`} />
+			{/* F119: capacity leads — asymmetric, not four equal StatCards */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+				<MetricCard
+					label="Capacity"
+					value={`${vehicle.capacity} guests`}
+					featured
+				/>
 				<MetricCard
 					label="Status"
 					value={vehicle.status}

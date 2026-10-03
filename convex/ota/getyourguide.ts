@@ -18,7 +18,7 @@ import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 const PROD_BASE_URL = "https://api.getyourguide.com/v1";
 const SANDBOX_BASE_URL = "https://api-sandbox.getyourguide.com/v1";
 
-export interface GetYourGuideOptions {
+interface GetYourGuideOptions {
 	credentials: DecryptedCredentials;
 	isSandbox: boolean;
 	timeoutMs?: number;
@@ -202,6 +202,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function stringOrThrow(v: unknown, label: string): string {
 	if (typeof v === "string" && v.length > 0) return v;
+	// F447: numeric provider IDs normalize like stringOrUndefined does
+	// for cancels — the old strict-string reject made every create 400
+	// while the cancel parsed fine, permanently dropping the booking.
+	if (typeof v === "number" && Number.isFinite(v)) return String(v);
 	throw new Error(`GetYourGuide webhook: missing ${label}`);
 }
 

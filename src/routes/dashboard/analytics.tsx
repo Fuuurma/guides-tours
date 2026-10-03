@@ -1,7 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useDeferredValue, useMemo, useState } from "react";
 import {
 	buildSparklineByTour,
@@ -21,6 +21,13 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import {
+	Empty,
+	EmptyContent,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyTitle,
+} from "@/components/ui/empty";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
@@ -81,6 +88,7 @@ function isPresetActive(
 }
 
 function AnalyticsPage() {
+	const reduceMotion = useReducedMotion();
 	const {
 		data: org,
 		isPending: orgPending,
@@ -184,6 +192,58 @@ function AnalyticsPage() {
 		}));
 	}, [topTours, sparklineByTour]);
 	const { displayName } = useOrgMembers(["guide", "owner", "admin"]);
+	// New org with zero data: overview + revenue report nothing at
+	// all. Show one guided empty state with next steps instead of a
+	// wall of zeros and per-section muted text.
+	const isNewOrgEmpty =
+		!overviewPending &&
+		!revenuePending &&
+		overview !== undefined &&
+		revenue !== undefined &&
+		(overview.totalTours ?? 0) === 0 &&
+		(overview.totalAssignments ?? 0) === 0 &&
+		(revenue.totalBookings ?? 0) === 0;
+	// Existing org whose SELECTED date window has no activity
+	// (e.g. operator types a future range, or picks a slack window
+	// between seasons). Each section's "No X in this window"
+	// muted text already fires individually — this surfaces one
+	// guided page-level state with a wider-window CTA on top of
+	// that, so the operator isn't staring at nine near-empty
+	// sections wondering which preset will fill them.
+	//
+	// Excludes `isNewOrgEmpty` (brand-new org needs "create your
+	// first tour", not "widen the window") and any `truncated`
+	// builder (a partial read is not a true empty).
+	const isRangeEmpty =
+		!isNewOrgEmpty &&
+		!overviewPending &&
+		!revenuePending &&
+		overview !== undefined &&
+		revenue !== undefined &&
+		topTours !== undefined &&
+		tourStats !== undefined &&
+		guideStats !== undefined &&
+		dailyStats !== undefined &&
+		channels !== undefined &&
+		conversions !== undefined &&
+		financialHealth !== undefined &&
+		overview.truncated !== true &&
+		revenue.truncated !== true &&
+		topTours.truncated !== true &&
+		tourStats.truncated !== true &&
+		guideStats.truncated !== true &&
+		dailyStats.truncated !== true &&
+		channels.truncated !== true &&
+		conversions.truncated !== true &&
+		financialHealth.truncated !== true &&
+		(overview.totalAssignments ?? 0) === 0 &&
+		(revenue.totalBookings ?? 0) === 0 &&
+		(topTours.tours?.length ?? 0) === 0 &&
+		(tourStats.tours?.length ?? 0) === 0 &&
+		(guideStats.guides?.length ?? 0) === 0 &&
+		(dailyStats.days?.length ?? 0) === 0 &&
+		(channels.channels?.length ?? 0) === 0 &&
+		(conversions.totalAttempts ?? 0) === 0;
 	// Every analytics builder reports `truncated` when its 10k-row scan
 	// cap was hit — surface it once instead of silently showing partial
 	// totals (fleet needs-work 09-08 F76).
@@ -203,7 +263,9 @@ function AnalyticsPage() {
 	if (orgError || overviewError || revenueError) {
 		return (
 			<div className="flex flex-col gap-4">
-				<h1 className="text-2xl font-semibold">Analytics</h1>
+				<h1 className="font-display text-2xl font-medium tracking-tight">
+					Analytics
+				</h1>
 				<ErrorBanner
 					message="Failed to load analytics"
 					hint={
@@ -237,7 +299,9 @@ function AnalyticsPage() {
 		<div className="flex flex-col gap-6">
 			<header className="flex flex-wrap items-end justify-between gap-4">
 				<div>
-					<h1 className="text-2xl font-semibold">Analytics</h1>
+					<h1 className="font-display text-2xl font-medium tracking-tight">
+						Analytics
+					</h1>
 					<p className="text-muted-foreground text-sm">
 						{range.startDate} → {range.endDate}
 					</p>
@@ -292,19 +356,69 @@ function AnalyticsPage() {
 			</header>
 
 			{anyTruncated && (
-				<p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 text-xs dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+				<p className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-warning text-xs">
 					Some figures only cover the first 10,000 matching rows in this window.
 					Narrow the date range for exact totals.
 				</p>
 			)}
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+			{isNewOrgEmpty && (
+				<Empty className="border">
+					<EmptyHeader>
+						<EmptyTitle>No analytics yet</EmptyTitle>
+						<EmptyDescription>
+							Charts and totals appear here once you have tours, schedules, and
+							bookings. Create your first tour to get started.
+						</EmptyDescription>
+					</EmptyHeader>
+					<EmptyContent>
+						<div className="flex flex-wrap justify-center gap-2">
+							<Button asChild size="sm">
+								<Link to="/dashboard/tours/new">Create your first tour</Link>
+							</Button>
+							<Button asChild variant="outline" size="sm">
+								<Link to="/dashboard/bookings/new">Add a booking</Link>
+							</Button>
+						</div>
+					</EmptyContent>
+				</Empty>
+			)}
+
+			{isRangeEmpty && (
+				<Empty className="border">
+					<EmptyHeader>
+						<EmptyTitle>No activity in this range</EmptyTitle>
+						<EmptyDescription>
+							Nothing in your data matched {range.startDate} → {range.endDate}.
+							Each section below will start filling in once the date range
+							overlaps a booking or assignment.
+						</EmptyDescription>
+					</EmptyHeader>
+					<EmptyContent>
+						<div className="flex flex-wrap justify-center gap-2">
+							<Button size="sm" onClick={() => setRange(lastNDays())}>
+								Use 30d
+							</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => setRange(yearToDate())}
+							>
+								Use YTD
+							</Button>
+						</div>
+					</EmptyContent>
+				</Empty>
+			)}
+
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 				{/* Stagger each stat card in 50ms after the previous so the
 				    analytics page feels responsive when the data loads.
-				    Eye lands on 'Total bookings' first, then naturally
-				    follows to the rest. */}
+				    Lead metric spans wider so the row is not four equal
+				    cards — eye lands on 'Total assignments' first, then
+				    naturally follows to the rest. */}
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0 }}
 				>
@@ -315,7 +429,7 @@ function AnalyticsPage() {
 					/>
 				</motion.div>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0.05 }}
 				>
@@ -326,7 +440,7 @@ function AnalyticsPage() {
 					/>
 				</motion.div>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0.1 }}
 				>
@@ -337,7 +451,7 @@ function AnalyticsPage() {
 					/>
 				</motion.div>
 				<motion.div
-					initial={{ opacity: 0, y: 6 }}
+					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
 					animate={{ opacity: 1, y: 0 }}
 					transition={{ duration: 0.25, delay: 0.15 }}
 				>
@@ -366,13 +480,13 @@ function AnalyticsPage() {
 						<>
 							<div>
 								<p className="text-muted-foreground text-xs">Tours</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.totalTours ?? "—"}
 								</p>
 							</div>
 							<div>
 								<p className="text-muted-foreground text-xs">Guides</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.totalGuides ?? "—"}
 								</p>
 							</div>
@@ -380,7 +494,7 @@ function AnalyticsPage() {
 								<p className="text-muted-foreground text-xs">
 									Upcoming (7 days)
 								</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.upcomingThisWeek ?? "—"}
 								</p>
 							</div>
@@ -388,7 +502,7 @@ function AnalyticsPage() {
 								<p className="text-muted-foreground text-xs">
 									Pending vacations
 								</p>
-								<p className="text-lg font-medium tabular-nums">
+								<p className="font-display text-lg font-medium tabular-nums">
 									{overview?.pendingVacations ?? "—"}
 								</p>
 							</div>
@@ -409,13 +523,19 @@ function AnalyticsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<div className="grid gap-4 md:grid-cols-3">
+					{/* F408: Gross revenue is the money hero (featured text-4xl
+					    over a 2-track span); Avg booking + Cancellation rate trail.
+					    Outstanding leads the financial-health row the same way so
+					    the tier is one asymmetric grid, not "3 + divider + 3". */}
+					<div className="grid gap-4 md:grid-cols-4">
 						<MetricCard
+							className="md:col-span-2"
 							label="Gross revenue"
 							value={
 								revenue ? formatCents(revenue.totalRevenueCents) : undefined
 							}
 							isPending={revenuePending}
+							featured
 						/>
 						<MetricCard
 							label="Avg booking"
@@ -430,22 +550,25 @@ function AnalyticsPage() {
 							isPending={revenuePending}
 						/>
 					</div>
-					{/* Tier 4: financial-health trio — refund rate,
-					    outstanding balance, deposit coverage. */}
-					<div className="mt-4 grid gap-4 border-t pt-4 md:grid-cols-3">
+					{/* Tier 4: financial-health — Outstanding is the second
+					    hero (money still owed); refund rate + deposit coverage
+					    are the supporting pair. */}
+					<div className="mt-4 grid gap-4 border-t pt-4 md:grid-cols-4">
 						<MetricCard
-							label="Refund rate"
-							value={
-								financialHealth ? `${financialHealth.refundRate}%` : undefined
-							}
-							isPending={!financialHealth}
-						/>
-						<MetricCard
+							className="md:col-span-2"
 							label="Outstanding"
 							value={
 								financialHealth
 									? formatCentsWhole(financialHealth.outstandingCents)
 									: undefined
+							}
+							isPending={!financialHealth}
+							featured
+						/>
+						<MetricCard
+							label="Refund rate"
+							value={
+								financialHealth ? `${financialHealth.refundRate}%` : undefined
 							}
 							isPending={!financialHealth}
 						/>
@@ -478,8 +601,11 @@ function AnalyticsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<div className="grid gap-4 md:grid-cols-4">
+					{/* F377: the conversion KPI leads at double weight; the
+					   reject buckets trail as a 3-col tail. */}
+					<div className="grid gap-4 md:grid-cols-5">
 						<MetricCard
+							className="md:col-span-2"
 							label="Success rate"
 							value={conversions ? `${conversions.successRate}%` : undefined}
 							isPending={!conversions}

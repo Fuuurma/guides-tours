@@ -54,6 +54,42 @@ export const list = query({
 	},
 });
 
+/**
+ * F344: exceptions are authoritative like blackouts — the public booking
+ * paths consult this helper so already-materialized schedules honor them
+ * live (generate is additive-only and never retracts):
+ *   - "removed" suppresses every schedule on that date;
+ *   - "modified"/"added" with an explicit startTime makes ONLY that slot
+ *     bookable (a re-generated exception row at another time splits
+ *     capacity against the materialized original otherwise);
+ *   - capacityOverride caps the effective capacity.
+ * Loose ctx mirrors isBlackoutHelper in tourBlackoutDates.ts.
+ */
+export async function exceptionForDateHelper(
+	ctx: { db: { query: Function } },
+	tourId: string,
+	organizationId: string,
+	date: string,
+): Promise<{
+	exceptionType: string;
+	startTime?: string;
+	endTime?: string;
+	capacityOverride?: number;
+} | null> {
+	// biome-ignore lint/suspicious/noExplicitAny: helper accepts loose ctx
+	const ex = await ctx.db
+		.query("tourExceptionDates")
+		.withIndex("by_tour_date", (q: any) =>
+			q.eq("tourId", tourId).eq("date", date),
+		)
+		// biome-ignore lint/suspicious/noExplicitAny: helper accepts loose ctx
+		.filter((q: any) => q.eq(q.field("organizationId"), organizationId))
+		.first();
+	return ex ?? null;
+}
+
+type Function = (...args: any[]) => any;
+
 export const get = query({
 	args: { exceptionId: v.id("tourExceptionDates") },
 	handler: async (ctx, args) => {
@@ -111,12 +147,18 @@ export const internalCreate = internalMutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		if (args.exceptionType === "modified") {
+		// F345: strict endTime > startTime for every timed type — a
+		// zero-duration exception materializes a schedule row that is
+		// publicly bookable but can never be updated (internalUpdate
+		// re-validates the merged times before the status guard) nor
+		// removed once booked. The prior `<` check admitted exactly the
+		// equality wedge; "added" validated nothing at all.
+		if (args.exceptionType === "modified" || args.exceptionType === "added") {
 			if (!args.startTime || !args.endTime) {
-				throw new ConvexError("modified exceptions require startTime and endTime");
+				throw new ConvexError(`${args.exceptionType} exceptions require startTime and endTime`);
 			}
-			if (args.endTime < args.startTime) {
-				throw new ConvexError("endTime must be on or after startTime");
+			if (args.endTime <= args.startTime) {
+				throw new ConvexError("endTime must be after startTime");
 			}
 		}
 		if (args.capacityOverride !== undefined && args.capacityOverride <= 0) {
@@ -212,8 +254,10 @@ export const internalUpdate = internalMutation({
 		}
 		const nextStart = args.startTime ?? existing.startTime;
 		const nextEnd = args.endTime ?? existing.endTime;
-		if (nextStart && nextEnd && nextEnd < nextStart) {
-			throw new ConvexError("endTime must be on or after startTime");
+		// F345: `<=` — zero-duration rows are uncancellable wedges (same
+		// invariant internalCreate enforces).
+		if (nextStart && nextEnd && nextEnd <= nextStart) {
+			throw new ConvexError("endTime must be after startTime");
 		}
 		// capacityOverride must be positive (mirrors internalCreate).
 		if (args.capacityOverride !== undefined && args.capacityOverride <= 0) {

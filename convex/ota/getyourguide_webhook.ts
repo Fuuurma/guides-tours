@@ -1,6 +1,6 @@
 // GetYourGuide webhook handler.
 //
-// Receives POST /api/ota/webhooks/getYourGuide, verifies the HMAC-SHA256
+// Receives POST /api/ota/webhooks/getyourguide, verifies the HMAC-SHA256
 // signature, normalizes the payload, and calls the shared upsert
 // mutations. On any failure, returns a 4xx so GetYourGuide retries.
 

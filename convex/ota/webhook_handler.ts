@@ -83,6 +83,15 @@ export function createWebhookHandler(config: WebhookConfig) {
 
 		const timestampHeader = request.headers.get(config.timestampHeader);
 		const rawBody = await request.text();
+		// F341: unauthenticated route — cap the body before JSON.parse,
+		// HMAC, and recordDelivery's rawPayload storage. Measure real
+		// bytes (UTF-16 length lies for multibyte payloads — same F51
+		// contract as the public booking path). 64 KB is generous for a
+		// provider event while still bounding memory per request.
+		const MAX_BODY_BYTES = 64 * 1024;
+		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
+			return new Response("payload too large", { status: 413 });
+		}
 
 		const url = new URL(request.url);
 		const integrationId = url.searchParams.get("integrationId");
@@ -248,7 +257,14 @@ export function createWebhookHandler(config: WebhookConfig) {
 				// duplicate (needs-work 2026-09-11: failed dispatches
 				// were unrecoverable because retries were swallowed).
 				const s = recorded.existingStatus;
-				let dropAsDuplicate = s === "processed" || s === "skipped";
+				// F450: availability.update must NEVER dedup-terminal — the
+				// upsert is an idempotent cache write, and "skipped" means
+				// the product mapping was missing when the first attempt
+				// ran; dropping the retry dead-ends the promised
+				// post-mapping re-dispatch.
+				let dropAsDuplicate =
+					(s === "processed" || s === "skipped") &&
+					event.kind !== "availability.update";
 				if (dropAsDuplicate && event.kind === "booking.created") {
 					// F89: eventId is `booking.created:<reservationId>` — a
 					// re-emitted BOOKING_CREATED after a cancel is a
@@ -269,6 +285,27 @@ export function createWebhookHandler(config: WebhookConfig) {
 						);
 					}
 				}
+				if (dropAsDuplicate && event.kind === "booking.cancelled") {
+					// F332: mirror of the F89 re-confirmation check —
+					// eventId is `booking.cancelled:<reservationId>`, so a
+					// cancel re-emitted after a re-confirm dedups against
+					// the earlier cancel and gets swallowed while the row
+					// stays confirmed forever. Only a still-cancelled
+					// booking makes this a true retry.
+					const bookingStatus = await ctx.runQuery(
+						internal.ota.upsert.getOtaBookingStatus,
+						{
+							integrationId: integrationId as Id<"otaIntegrations">,
+							reservationId: event.reservationId,
+						},
+					);
+					if (bookingStatus !== "cancelled") {
+						dropAsDuplicate = false;
+						logger.info(
+							`${config.logPrefix} re-cancellation ${eventId} on integration ${integrationId} (booking is ${bookingStatus ?? "missing"})`,
+						);
+					}
+				}
 				if (dropAsDuplicate) {
 					logger.info(
 						`${config.logPrefix} duplicate event ${eventId} on integration ${integrationId}`,
@@ -284,42 +321,75 @@ export function createWebhookHandler(config: WebhookConfig) {
 		}
 
 		try {
-			await dispatchEvent(
+			const outcome = await dispatchEvent(
 				ctx,
 				integrationId,
 				integration.organizationId,
 				event,
 				config.provider,
 			);
-			if (eventId) {
-				await ctx.runMutation(
-					internal.webhookDeliveries.updateDeliveryStatus,
-					{
-						organizationId: integration.organizationId,
-						source: config.provider,
-						eventId,
-						status: "processed",
-					},
-				);
-			}
+			await recordDeliveryOutcome(
+				ctx,
+				config,
+				integration.organizationId,
+				eventId,
+				outcome,
+			);
 		} catch (err) {
-			if (eventId) {
-				await ctx.runMutation(
-					internal.webhookDeliveries.updateDeliveryStatus,
-					{
-						organizationId: integration.organizationId,
-						source: config.provider,
-						eventId,
-						status: "failed",
-						errorMessage:
-							err instanceof Error ? err.message : String(err),
-					},
-				);
-			}
+			await recordDeliveryOutcome(
+				ctx,
+				config,
+				integration.organizationId,
+				eventId,
+				"failed",
+				err instanceof Error ? err.message : String(err),
+			);
 			throw err;
 		}
 
 		return new Response("ok", { status: 200 });
+	});
+}
+
+/** Record the dispatch result on the delivery row — the three shapes
+ *  (processed / skipped / failed) share the org+source+event keying.
+ *  No-op when the event carried no extractable eventId. */
+async function recordDeliveryOutcome(
+	ctx: { runMutation: ActionCtx["runMutation"] },
+	config: WebhookConfig,
+	organizationId: string,
+	eventId: string | null,
+	outcome: DispatchOutcome | "failed",
+	errorMessage?: string,
+): Promise<void> {
+	if (!eventId) return;
+	if (outcome === "unmatched_product") {
+		// F340: availability.update for an otaProductId we have no
+		// mapping for — nothing was cached. Mark skipped (not
+		// processed) with a reason so ops can see and fix the
+		// mapping; a later provider retry after the product is
+		// mapped re-dispatches through the non-processed path.
+		logger.warn(
+			`${config.logPrefix} ${eventId} dropped: no product mapping for this otaProductId`,
+		);
+		await ctx.runMutation(
+			internal.webhookDeliveries.updateDeliveryStatus,
+			{
+				organizationId,
+				source: config.provider,
+				eventId,
+				status: "skipped",
+				skipReason: "unknown otaProductId — no product mapping",
+			},
+		);
+		return;
+	}
+	await ctx.runMutation(internal.webhookDeliveries.updateDeliveryStatus, {
+		organizationId,
+		source: config.provider,
+		eventId,
+		status: outcome === "failed" ? "failed" : "processed",
+		errorMessage: outcome === "failed" ? errorMessage : undefined,
 	});
 }
 
@@ -345,13 +415,18 @@ export function extractEventId(event: NormalizedProviderEvent): string | null {
 	return null;
 }
 
+/** F340: outcome the caller needs for honest audit — "unmatched_product"
+ * means the event referenced an otaProductId we have no mapping for, so
+ * nothing was cached. The delivery must not be marked "processed". */
+type DispatchOutcome = "processed" | "unmatched_product";
+
 async function dispatchEvent(
 	ctx: ActionCtx,
 	integrationId: string,
 	organizationId: string,
 	event: NormalizedProviderEvent,
 	provider: string,
-): Promise<void> {
+): Promise<DispatchOutcome> {
 	if (event.kind === "booking.created") {
 		await ctx.runMutation(internal.ota.upsert.upsertOtaBooking, {
 			integrationId: integrationId as Id<"otaIntegrations">,
@@ -360,7 +435,7 @@ async function dispatchEvent(
 			event,
 			rawData: event.rawPayload,
 		});
-		return;
+		return "processed";
 	}
 	if (event.kind === "booking.cancelled") {
 		await ctx.runMutation(internal.ota.upsert.cancelOtaBooking, {
@@ -368,12 +443,17 @@ async function dispatchEvent(
 			reservationId: event.reservationId,
 			rawData: event.rawPayload,
 		});
-		return;
+		return "processed";
 	}
 	if (event.kind === "availability.update") {
-		await ctx.runMutation(internal.ota.upsert.upsertAvailabilityCache, {
-			integrationId: integrationId as Id<"otaIntegrations">,
-			event,
-		});
+		const result = await ctx.runMutation(
+			internal.ota.upsert.upsertAvailabilityCache,
+			{
+				integrationId: integrationId as Id<"otaIntegrations">,
+				event,
+			},
+		);
+		return result === null ? "unmatched_product" : "processed";
 	}
+	return "processed";
 }

@@ -8,13 +8,7 @@ if (!convexUrl || !convexSiteUrl) {
 	);
 }
 
-export const {
-	handler,
-	getToken,
-	fetchAuthQuery,
-	fetchAuthMutation,
-	fetchAuthAction,
-} = convexBetterAuthReactStart({
+export const { handler, getToken } = convexBetterAuthReactStart({
 	convexUrl,
 	convexSiteUrl,
 });

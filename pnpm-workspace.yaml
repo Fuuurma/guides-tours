@@ -1,0 +1,2 @@
+# Supply-chain: ignore versions younger than 24h (blocks just-published malicious releases)
+minimumReleaseAge: 1440

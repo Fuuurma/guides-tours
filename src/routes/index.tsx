@@ -121,11 +121,13 @@ export const Route = createFileRoute("/")({
 function Home() {
 	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 	const closeMobileMenu = () => setMobileMenuOpen(false);
+	const reduceMotion = useReducedMotion();
 	const scrollToSection = (id: string) => {
-		document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+		document
+			.getElementById(id)
+			?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
 		closeMobileMenu();
 	};
-	const reduceMotion = useReducedMotion();
 	const { scrollY } = useScroll();
 	const heroBgY = useTransform(scrollY, [0, 700], [0, reduceMotion ? 0 : 150]);
 	const heroCardY = useTransform(
@@ -298,8 +300,8 @@ function Home() {
 								<span>Tour operations, without the chaos</span>
 							</Badge>
 						</motion.div>
-						<h1 className="mt-7 max-w-2xl text-pretty text-5xl leading-[0.98] font-semibold tracking-[-0.055em] sm:text-6xl lg:text-[5.15rem]">
-							<span className="block overflow-hidden pb-1">
+						<h1 className="mt-7 max-w-2xl font-display text-pretty text-5xl leading-[0.98] font-normal tracking-[-0.02em] sm:text-6xl lg:text-[5.15rem]">
+							<span className="block overflow-hidden pb-[0.18em] -mb-[0.18em]">
 								<motion.span
 									className="block"
 									initial={{ y: "110%" }}
@@ -313,7 +315,7 @@ function Home() {
 									Run the day.
 								</motion.span>
 							</span>
-							<span className="block overflow-hidden pb-2">
+							<span className="block overflow-hidden pb-[0.18em] -mb-[0.18em]">
 								<motion.span
 									className="block"
 									initial={{ y: "110%" }}
@@ -392,16 +394,18 @@ function Home() {
 					</p>
 					<ProviderMarquee />
 					<div className="mx-auto mt-10 grid max-w-3xl grid-cols-3 divide-x">
-						<TrustMetric value={7} label="OTA channels into one board" />
-						<TrustMetric value={1} label="workspace for the dispatch desk" />
-						<div className="flex flex-col items-center gap-1 px-3 text-center first:pl-0 last:pr-0">
-							<p className="text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">
-								Today
-							</p>
-							<p className="max-w-32 text-xs text-muted-foreground sm:text-sm">
-								departures, gaps, and assignments
-							</p>
-						</div>
+						<TrustMetric
+							value={ALL_PROVIDERS.length}
+							label="OTA channels into one board"
+						/>
+						<TrustMetric
+							valueText="Every departure"
+							label="tour, guide, driver & vehicle together"
+						/>
+						<TrustMetric
+							valueText="One board"
+							label="the whole week at a glance"
+						/>
 					</div>
 				</div>
 			</section>
@@ -674,7 +678,7 @@ function Home() {
 							>
 								Sample workspace
 							</Badge>
-							<h2 className="mt-5 text-pretty text-4xl leading-tight font-semibold tracking-[-0.05em] sm:text-5xl">
+							<h2 className="mt-5 font-display text-pretty text-4xl leading-tight font-normal tracking-[-0.02em] sm:text-5xl">
 								A workspace your whole team can read in{" "}
 								<span className="font-display font-normal italic text-chart-1">
 									seconds.
@@ -818,7 +822,7 @@ function Home() {
 						<Badge className="border-chart-1/30 bg-chart-1/15 text-chart-1">
 							Ready when you are
 						</Badge>
-						<h2 className="mt-5 text-pretty text-4xl leading-tight font-semibold tracking-[-0.05em] sm:text-5xl">
+						<h2 className="mt-5 font-display text-pretty text-4xl leading-tight font-normal tracking-[-0.02em] sm:text-5xl">
 							Your next great season starts with a{" "}
 							<span className="font-display font-normal italic text-chart-1">
 								clearer day.
@@ -1145,19 +1149,21 @@ function CountUp({ to, suffix = "" }: { to: number; suffix?: string }) {
 	return <span ref={ref}>0{suffix}</span>;
 }
 
-function TrustMetric({
-	value,
-	label,
-	suffix = "",
-}: {
-	value: number;
-	label: string;
-	suffix?: string;
-}) {
+type TrustMetricProps = { label: string } & (
+	| { value: number; suffix?: string; valueText?: never }
+	| { valueText: string; value?: never; suffix?: never }
+);
+
+function TrustMetric(props: TrustMetricProps) {
+	const { label } = props;
 	return (
 		<div className="flex flex-col items-center gap-1 px-3 text-center first:pl-0 last:pr-0">
-			<p className="text-2xl font-semibold tracking-[-0.04em] tabular-nums sm:text-3xl">
-				<CountUp to={value} suffix={suffix} />
+			<p className="font-display text-2xl font-medium tracking-[-0.04em] tabular-nums sm:text-3xl">
+				{props.valueText !== undefined ? (
+					props.valueText
+				) : (
+					<CountUp to={props.value} suffix={props.suffix} />
+				)}
 			</p>
 			<p className="max-w-32 text-xs text-muted-foreground sm:text-sm">
 				{label}
@@ -1195,7 +1201,7 @@ function SectionIntro({
 			</p>
 			<h2
 				className={cn(
-					"mt-4 text-pretty text-4xl leading-tight font-semibold tracking-[-0.05em] sm:text-5xl",
+					"mt-4 font-display text-pretty text-4xl leading-tight font-normal tracking-[-0.02em] sm:text-5xl",
 					invert && "text-primary-foreground",
 				)}
 			>
@@ -1230,7 +1236,7 @@ function FeatureCard({
 }) {
 	const toneClasses = {
 		ocean: "bg-chart-2/10 text-chart-2",
-		sun: "bg-chart-4/15 text-chart-4",
+		sun: "bg-sun/15 text-sun",
 		coral: "bg-chart-1/10 text-chart-1",
 	} as const;
 
@@ -1449,8 +1455,10 @@ function WorkspacePreview() {
 						</p>
 					</div>
 				</div>
-				<span className="inline-flex items-center gap-1.5 text-[9px] text-primary-foreground/55">
-					<span className="size-1.5 rounded-full bg-chart-2" /> Live workspace
+				{/* F438: the preview is hardcoded mock — the pulsing "Live"
+				    badge read as real-time product state. */}
+				<span className="text-[9px] text-primary-foreground/55">
+					Sample workspace
 				</span>
 			</div>
 			<div className="overflow-hidden rounded-2xl bg-background">
@@ -1516,11 +1524,7 @@ function WorkspacePreview() {
 								time="11:00"
 								color="bg-chart-2"
 							/>
-							<ScheduleLine
-								title="Wine Country"
-								time="15:30"
-								color="bg-chart-4"
-							/>
+							<ScheduleLine title="Wine Country" time="15:30" color="bg-sun" />
 						</div>
 					</div>
 				</div>

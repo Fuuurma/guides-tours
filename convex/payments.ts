@@ -494,7 +494,7 @@ export const refund = mutation({
 				`Only succeeded payments can be refunded (was ${p.status})`,
 			);
 		}
-		if (p.stripePaymentIntentId.startsWith("pi_")) {
+		if (p.stripePaymentIntentId?.startsWith("pi_")) {
 			throw new ConvexError(
 				"Use Stripe refund (refundViaStripe) for payments with a PaymentIntent",
 			);
@@ -758,6 +758,24 @@ export const getStripeSecrets = internalQuery({
 	},
 });
 
+export const getPublicStripeAvailability = internalQuery({
+	args: { organizationId: v.string() },
+	handler: async (ctx, args) => {
+		const s = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) =>
+				q.eq("organizationId", args.organizationId),
+			)
+			.unique();
+		if (!s) return null;
+		return {
+			stripeEnabled: s.stripeEnabled,
+			hasStripeSecret: Boolean(s.stripeSecretKey),
+			stripePublishableKey: s.stripePublishableKey,
+		};
+	},
+});
+
 /** Internal: load the booking (with orgId) for Stripe checkout. */
 export const getBookingForCheckout = internalQuery({
 	args: { bookingId: v.id("bookings") },
@@ -773,6 +791,44 @@ export const getBookingForCheckout = internalQuery({
 			customerId: b.customerId,
 			customerEmail: customer?.email,
 		};
+	},
+});
+
+/** How long a pending payment row's intent stays reusable for
+ *  checkout dedup. Past this, callers mint fresh (the stale row goes
+ *  terminal via the webhook/expiry path). */
+export const PI_REUSE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Internal: newest reusable pending intent for one booking.
+ * Public checkout dedup (F375): every createPublicPaymentIntent /
+ * createPublicHostedCheckout call used to mint a fresh Stripe
+ * PaymentIntent + pending row — abandoned sessions piled up, and a
+ * guest completing two of them was double-charged. Callers re-open
+ * this intent when it is still usable instead. Bounded walk over the
+ * by_booking index (newest first, take(8)); only rows inside the
+ * reuse window qualify.
+ */
+export const getOpenIntentForBooking = internalQuery({
+	args: { bookingId: v.id("bookings") },
+	handler: async (ctx, args) => {
+		const cutoff = Date.now() - PI_REUSE_WINDOW_MS;
+		const rows = await ctx.db
+			.query("payments")
+			.withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
+			.order("desc")
+			.take(8);
+		for (const p of rows) {
+			if (p.status !== "pending") continue;
+			if (!p.stripePaymentIntentId?.startsWith("pi_")) continue;
+			if (p.createdAt < cutoff) return null;
+			return {
+				stripePaymentIntentId: p.stripePaymentIntentId,
+				amountCents: p.amountCents,
+				currency: p.currency,
+			};
+		}
+		return null;
 	},
 });
 
@@ -892,6 +948,46 @@ export const recordFromAction = internalMutation({
 			return existing._id;
 		}
 		const now = Date.now();
+		const pendingPublicPayment = await ctx.db
+			.query("payments")
+			.withIndex("by_org_booking_created", (q) =>
+				q
+					.eq("organizationId", args.organizationId)
+					.eq("bookingId", args.bookingId),
+			)
+			.order("desc")
+			.take(100)
+			.then((rows) =>
+				rows.find(
+					(row) =>
+						row.status === "pending" &&
+						row.provider === "stripe" &&
+						row.stripePaymentIntentId === undefined,
+				),
+			);
+		if (pendingPublicPayment) {
+			await ctx.db.patch(pendingPublicPayment._id, {
+				amountCents: args.amountCents,
+				currency: args.currency,
+				stripePaymentIntentId: args.stripePaymentIntentId,
+				updatedAt: now,
+			});
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: "internal",
+				action: "payment.intent_attached",
+				resourceType: "payment",
+				resourceId: pendingPublicPayment._id,
+				oldValues: { stripePaymentIntentId: null },
+				newValues: {
+					amountCents: args.amountCents.toString(),
+					currency: args.currency,
+					bookingId: args.bookingId,
+					stripePaymentIntentId: args.stripePaymentIntentId,
+				},
+			});
+			return pendingPublicPayment._id;
+		}
 		const paymentId = await ctx.db.insert("payments", {
 			organizationId: args.organizationId,
 			bookingId: args.bookingId,

@@ -598,3 +598,105 @@ describe("vacationRequests.create — on behalf of staff", () => {
 	});
 });
 
+
+describe("vacationRequests — assignment-conflict gate (F347/F348)", () => {
+	const ORG = "org_conflict";
+
+	const seedConflictFixture = async (t: ReturnType<typeof convexTest>) =>
+		t.run(async (ctx) => {
+			const { seedTour, seedAssignment, seedDriver } = await import(
+				"./helpers"
+			);
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			// Guide-side conflict: user "guide_1" is scheduled 2026-07-15.
+			await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				date: "2026-07-15",
+			});
+			// Driver-side conflict: user "drv_1" is staffed as a driver
+			// on 2026-07-16 (a guide-only scan misses this row).
+			const driverId = await seedDriver(ctx, {
+				orgId: ORG,
+				userId: "drv_1",
+			});
+			await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_2",
+				driverId,
+				date: "2026-07-16",
+			});
+		});
+
+	it("internalCreate(approved) rejects leave overlapping a guide assignment", async () => {
+		const t = convexTest(schema, modules);
+		await seedConflictFixture(t);
+		await expect(
+			t.mutation(internal.vacationRequests.internalCreate, {
+				organizationId: ORG,
+				userId: "guide_1",
+				startDate: "2026-07-14",
+				endDate: "2026-07-16",
+				status: "approved",
+				reviewedBy: "admin_1",
+			}),
+		).rejects.toThrow(/VACATION_ASSIGNMENT_CONFLICT/);
+	});
+
+	it("internalCreate(approved) rejects leave overlapping a DRIVER assignment", async () => {
+		const t = convexTest(schema, modules);
+		await seedConflictFixture(t);
+		await expect(
+			t.mutation(internal.vacationRequests.internalCreate, {
+				organizationId: ORG,
+				userId: "drv_1",
+				startDate: "2026-07-14",
+				endDate: "2026-07-16",
+				status: "approved",
+				reviewedBy: "admin_1",
+			}),
+		).rejects.toThrow(/VACATION_ASSIGNMENT_CONFLICT/);
+	});
+
+	it("internalCreate(approved, force) records the leave anyway", async () => {
+		const t = convexTest(schema, modules);
+		await seedConflictFixture(t);
+		const id = await t.mutation(internal.vacationRequests.internalCreate, {
+			organizationId: ORG,
+			userId: "guide_1",
+			startDate: "2026-07-14",
+			endDate: "2026-07-16",
+			status: "approved",
+			reviewedBy: "admin_1",
+			force: true,
+		});
+		const vr = await t.run(async (ctx) => ctx.db.get(id));
+		expect(vr?.status).toBe("approved");
+	});
+
+	it("internalApprove rejects approving leave over a DRIVER assignment", async () => {
+		const t = convexTest(schema, modules);
+		await seedConflictFixture(t);
+		const requestId = await t.run(async (ctx) =>
+			ctx.db.insert("vacationRequests", {
+				organizationId: ORG,
+				userId: "drv_1",
+				startDate: "2026-07-14",
+				endDate: "2026-07-16",
+				reason: "",
+				status: "pending",
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		await expect(
+			t.mutation(internal.vacationRequests.internalApprove, {
+				organizationId: ORG,
+				userId: "admin_1",
+				requestId,
+			}),
+		).rejects.toThrow(/VACATION_ASSIGNMENT_CONFLICT/);
+	});
+});

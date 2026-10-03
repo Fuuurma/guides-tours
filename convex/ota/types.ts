@@ -7,6 +7,15 @@
 //   - booking.cancelled → mark otaBookings row cancelled + cancel our booking
 //   - availability.update → push new availability to otaAvailabilityCache
 //
+// F264 adjudication (2026-09-25): no provider normalizer currently
+// emits availability.update — every push-side availability payload
+// normalizes to null and is acked "ignored". The pipeline below is
+// kept as deliberate forward-compat scaffolding: dedup (F55), the
+// unmatched-product skip (F340), and the upsert itself are all tested
+// and ready the moment a provider adapter maps an availability event.
+// Wiring an actual producer is a per-provider feature, not a defect —
+// this comment is the explicit record that the path is unfed by design.
+//
 // The webhook handlers per provider normalize their payload into one
 // of these normalized events before calling the generic upsert.
 
