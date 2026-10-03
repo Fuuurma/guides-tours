@@ -88,21 +88,40 @@ export const getOrgAndToursBySlug = query({
 			)
 			.take(200);
 
+		// Primary cover per tour for the public picker. Tours are already
+		// org-scoped + active above, so the image inherits that scope —
+		// no cross-tenant leak. Null when the operator has no primary.
+		const withCovers = await Promise.all(
+			tours.map(async (t) => {
+				const primary = await ctx.db
+					.query("tourImages")
+					.withIndex("by_tour_primary", (q) =>
+						q.eq("tourId", t._id).eq("isPrimary", true),
+					)
+					.first();
+				return {
+					_id: t._id,
+					name: t.name,
+					description: t.description,
+					tourType: t.tourType,
+					durationHours: t.durationHours,
+					capacity: t.capacity,
+					maxGuests: t.maxGuests,
+					currency: t.currency,
+					basePriceCents: t.basePriceCents,
+					languages: t.languages,
+					primaryImageUrl: primary
+						? await ctx.storage.getUrl(primary.storageId)
+						: null,
+					primaryImageAlt: primary?.altText ?? null,
+				};
+			}),
+		);
+
 		return {
 			organizationId,
 			organizationName: org?.name ?? "Tour operator",
-			tours: tours.map((t) => ({
-				_id: t._id,
-				name: t.name,
-				description: t.description,
-				tourType: t.tourType,
-				durationHours: t.durationHours,
-				capacity: t.capacity,
-				maxGuests: t.maxGuests,
-				currency: t.currency,
-				basePriceCents: t.basePriceCents,
-				languages: t.languages,
-			})),
+			tours: withCovers,
 		};
 	},
 });

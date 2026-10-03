@@ -9,6 +9,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FormField } from "@/components/forms/form-field";
 import { StripePaymentElement } from "@/components/stripe-payment-element";
+import { TourOption } from "@/components/tour-option";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -44,7 +45,6 @@ import {
 	publicBookingSchema,
 } from "@/lib/public-booking-form";
 import {
-	cn,
 	getErrorMessage,
 	getSafeDisplayMessage,
 	isStripeCheckoutUrl,
@@ -70,6 +70,8 @@ interface PublicTour {
 	maxGuests: number;
 	currency: string;
 	basePriceCents: bigint | number | undefined;
+	primaryImageUrl: string | null;
+	primaryImageAlt: string | null;
 }
 
 function PublicBookingPage() {
@@ -568,51 +570,18 @@ function PublicBookingPage() {
 														</p>
 													)}
 													{data.tours.map((t: PublicTour) => (
-														<label
+														<TourOption
 															key={t._id}
-															htmlFor={`tour-${t._id}`}
-															className={cn(
-																"block cursor-pointer rounded-lg border p-4 transition-colors",
-																field.state.value === t._id
-																	? "border-primary bg-accent"
-																	: "hover:bg-muted/40",
-															)}
-														>
-															<div className="flex items-start gap-3">
-																<input
-																	id={`tour-${t._id}`}
-																	type="radio"
-																	name={field.name}
-																	value={t._id}
-																	checked={field.state.value === t._id}
-																	onBlur={field.handleBlur}
-																	onChange={() => {
-																		field.handleChange(t._id);
-																		form.setFieldValue("scheduleId", "");
-																		form.setFieldValue("startTime", "");
-																	}}
-																	className="mt-1"
-																/>
-																<div className="flex-1">
-																	<p className="font-medium">{t.name}</p>
-																	<p className="text-sm text-muted-foreground">
-																		{t.durationHours}h · up to {t.maxGuests}{" "}
-																		guests
-																		{t.basePriceCents !== undefined
-																			? ` · ${formatPrice(
-																					Number(t.basePriceCents) / 100,
-																					t.currency,
-																				)} pp`
-																			: ""}
-																	</p>
-																	{t.description && (
-																		<p className="mt-2 text-sm">
-																			{t.description}
-																		</p>
-																	)}
-																</div>
-															</div>
-														</label>
+															tour={t}
+															fieldName={field.name}
+															checked={field.state.value === t._id}
+															onBlur={field.handleBlur}
+															onSelect={() => {
+																field.handleChange(t._id);
+																form.setFieldValue("scheduleId", "");
+																form.setFieldValue("startTime", "");
+															}}
+														/>
 													))}
 												</>
 											)}
@@ -946,11 +915,4 @@ function PublicBookingFrame({
 			</div>
 		</main>
 	);
-}
-
-function formatPrice(value: number, currency: string): string {
-	return new Intl.NumberFormat("en-US", {
-		style: "currency",
-		currency: currency || "USD",
-	}).format(value);
 }
