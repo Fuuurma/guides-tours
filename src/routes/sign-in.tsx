@@ -197,13 +197,14 @@ function SignInPage() {
 						</div>
 					</div>
 
+					{/* Relative callback: GoogleSignInButton composes the absolute
+					    origin at click time, so render never branches on `window`
+					    (react-doctor no-hydration-branch-on-browser-global). */}
 					<GoogleSignInButton
 						callbackURL={
 							invitationId
-								? `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback?invitationId=${encodeURIComponent(invitationId)}${redirect ? `&redirect=${encodeURIComponent(redirect)}` : ""}`
-								: redirect
-									? `${typeof window !== "undefined" ? window.location.origin : ""}${redirect}`
-									: "/dashboard"
+								? `/auth/callback?invitationId=${encodeURIComponent(invitationId)}${redirect ? `&redirect=${encodeURIComponent(redirect)}` : ""}`
+								: (redirect ?? "/dashboard")
 						}
 					/>
 
