@@ -856,7 +856,7 @@ function WeeklyPulseRow({
 		>
 			<header className="flex items-baseline justify-between gap-3">
 				<h2 className="font-display text-xl font-medium tracking-tight">
-					This week
+					Momentum
 				</h2>
 				{pulse ? (
 					<p className="font-mono text-xs text-muted-foreground">

@@ -23,4 +23,6 @@ tsconfig.tsbuildinfo
 .cursor/
 .mimocode/
 .opencode/
+
+# repowise index cache (tooling artifact)
 .repowise/
