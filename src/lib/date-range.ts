@@ -37,3 +37,17 @@ export function upcomingDateRange(n = 30): { from: string; to: string } {
 	const end = addDaysLocal(start, n - 1);
 	return { from: localYmd(start), to: localYmd(end) };
 }
+
+/**
+ * Jan 1 (UTC) through today. Uses UTC throughout so the "Jan 1"
+ * boundary is in the same timezone as the rest of the date math —
+ * a user west of UTC would otherwise see the previous Dec 31.
+ */
+export function yearToDate(): DateRange {
+	const end = new Date();
+	const start = new Date(Date.UTC(end.getUTCFullYear(), 0, 1));
+	return {
+		startDate: start.toISOString().slice(0, 10),
+		endDate: end.toISOString().slice(0, 10),
+	};
+}
