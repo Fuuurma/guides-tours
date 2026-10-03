@@ -120,7 +120,16 @@ function mockQueries({
 	const bareArgsSeen: unknown[] = [];
 	mocks.useQuery.mockImplementation(
 		(options: { ref?: unknown; args?: unknown }) => {
-			const args = options?.args as Record<string, unknown> | undefined;
+			const rawArgs: unknown = options?.args;
+			if (rawArgs === "skip") {
+				// A skipped query resolves to nothing — never feed the
+				// bare-args fallback here: an array (even []) is truthy, and
+				// the prefill effect's !prefillSchedule guard would run
+				// String(undefined.id) and write the literal "undefined"
+				// into scheduleId (F563).
+				return { data: undefined, isPending: true };
+			}
+			const args = rawArgs as Record<string, unknown> | undefined;
 			if (args && typeof args === "object" && "onlyActive" in args) {
 				return { data: tours, isPending: false };
 			}
@@ -297,21 +306,19 @@ describe("StaffDepartureForm validation", () => {
 		await waitFor(() => {
 			expect(staffDeparture).toHaveBeenCalledTimes(1);
 		});
-		// scheduleId is deliberately NOT pinned here: the payload carries
-		// the literal string "undefined" (LEDGER F563) — traced separately.
-		expect(staffDeparture).toHaveBeenCalledWith(
-			expect.objectContaining({
-				tourId: "tour-1",
-				date: "2026-06-24",
-				startTime: "10:00",
-				endTime: "13:00",
-				capacityTotal: 12,
-				notes: undefined,
-				publish: true,
-				guideId: undefined,
-				vehicleId: undefined,
-			}),
-		);
+		expect(staffDeparture).toHaveBeenCalledWith({
+			tourId: "tour-1",
+			date: "2026-06-24",
+			startTime: "10:00",
+			endTime: "13:00",
+			capacityTotal: 12,
+			notes: undefined,
+			publish: true,
+			guideId: undefined,
+			vehicleId: undefined,
+			driverId: undefined,
+			scheduleId: undefined,
+		});
 		await waitFor(() => {
 			expect(mocks.toastSuccess).toHaveBeenCalledWith("Schedule created");
 			expect(mocks.navigate).toHaveBeenCalledWith({
