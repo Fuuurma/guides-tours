@@ -20,6 +20,7 @@
 
 import { v, ConvexError } from "convex/values";
 import { internalAction, internalMutation, query } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
@@ -262,17 +263,17 @@ export const listAvailableSlots = query({
  *  offer pay-now (Stripe enabled + balance outstanding + collectible
  *  status). Returns the action's response shape. */
 async function buildCheckoutResponse(
-	ctx: { runQuery: (ref: never, args: never) => Promise<unknown> },
-	bookingId: string,
+	ctx: ActionCtx,
+	bookingId: Id<"bookings">,
 	organizationId: string,
 ) {
 	const checkout = (await ctx.runQuery(
-		internal.payments.getBookingForCheckout as never,
-		{ bookingId } as never,
+		internal.payments.getBookingForCheckout,
+		{ bookingId },
 	)) as { balanceDueCents?: bigint; status?: string } | null;
 	const settings = (await ctx.runQuery(
-		internal.payments.getPublicStripeAvailability as never,
-		{ organizationId } as never,
+		internal.payments.getPublicStripeAvailability,
+		{ organizationId },
 	)) as {
 		stripeEnabled?: boolean;
 		hasStripeSecret?: boolean;
