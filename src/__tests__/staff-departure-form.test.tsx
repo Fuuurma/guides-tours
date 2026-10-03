@@ -18,9 +18,15 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // jsdom lacks ResizeObserver; the ui primitives observe their containers.
 class ResizeObserverStub {
-	observe() {}
-	unobserve() {}
-	disconnect() {}
+	observe() {
+		/* jsdom stub — no-op */
+	}
+	unobserve() {
+		/* jsdom stub — no-op */
+	}
+	disconnect() {
+		/* jsdom stub — no-op */
+	}
 }
 beforeAll(() => {
 	window.ResizeObserver =
@@ -71,8 +77,8 @@ vi.mock("sonner", () => ({
 	toast: { success: mocks.toastSuccess, error: mocks.toastError },
 }));
 
-import { StaffDepartureForm } from "../components/pages/staff-departure-form";
 import { api } from "../../convex/_generated/api";
+import { StaffDepartureForm } from "../components/pages/staff-departure-form";
 
 const TOUR = {
 	_id: "tour-1",
@@ -88,7 +94,11 @@ function mockQueries({
 	tours = [TOUR],
 	vehicles = [],
 	drivers = [],
-}: { tours?: unknown[]; vehicles?: unknown[]; drivers?: unknown[] } = {}) {
+}: {
+	tours?: unknown[];
+	vehicles?: unknown[];
+	drivers?: unknown[];
+} = {}) {
 	mocks.useQuery.mockImplementation((options: { ref?: unknown }) => {
 		switch (options?.ref) {
 			case api.tours.list:
@@ -121,9 +131,9 @@ describe("StaffDepartureForm validation", () => {
 		renderForm({ intent: "publish" });
 		// jsdom does not synthesize submit events from submit-button clicks —
 		// drive the form's submit directly.
-		const formEl = screen.getByRole("button", { name: "Create schedule" }).closest(
-			"form",
-		) as HTMLFormElement;
+		const formEl = screen
+			.getByRole("button", { name: "Create schedule" })
+			.closest("form") as HTMLFormElement;
 		fireEvent.submit(formEl);
 		await waitFor(() => {
 			expect(mocks.toastError).toHaveBeenCalledWith(
@@ -155,7 +165,9 @@ describe("StaffDepartureForm validation", () => {
 		const formEl = screen
 			.getByRole("button", { name: "Create schedule" })
 			.closest("form") as HTMLFormElement;
-		formEl.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		formEl.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await waitFor(() => {
 			expect(mocks.toastError).toHaveBeenCalledWith(
 				"Please fix the highlighted fields",
@@ -175,7 +187,9 @@ describe("StaffDepartureForm validation", () => {
 		const assignForm = screen
 			.getByRole("button", { name: "Create assignment" })
 			.closest("form") as HTMLFormElement;
-		assignForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+		assignForm.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
 		await waitFor(() => {
 			expect(mocks.toastError).toHaveBeenCalledWith(
 				"Please fix the highlighted fields",
