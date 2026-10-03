@@ -29,20 +29,59 @@ export function getErrorMessage(err: unknown): string {
  * errors (network failures, internal errors) get a generic message
  * to avoid leaking backend implementation details.
  */
+/**
+ * Case-insensitive markers of operational/infra error text that must never
+ * reach the UI: Convex request IDs, plan-limit notices, network failures,
+ * and JS engine TypeErrors. ConvexError messages are authored by us and
+ * safe to show — but infra failures arrive as plain Errors and used to
+ * sail straight through (public booking page rendered request IDs and
+ * support emails verbatim).
+ */
+const OPERATIONAL_MARKERS = [
+	"internal server error",
+	"validator error",
+	"request id",
+	"called by client",
+	"support@",
+	"convex.dev",
+	"convex q(",
+	"exceeded the free plan",
+	"deployments have been disabled",
+	"failed to fetch",
+	"networkerror",
+	"load failed",
+	"unexpected token",
+	"is not a function",
+	"cannot read propert",
+	"cannot read ",
+	"undefined is not",
+	"null is not",
+];
+
+/** Authored messages are short; anything longer is infra spew until proven otherwise. */
+const MAX_DISPLAY_MESSAGE_LENGTH = 160;
+
+/**
+ * Return a user-safe error message for display in error banners.
+ * ConvexError messages are authored by us and safe to show. Other
+ * errors (network failures, internal errors) get a generic message
+ * to avoid leaking backend implementation details. Redacted originals
+ * go to console.error so support can still diagnose from the log.
+ */
 export function getSafeDisplayMessage(err: unknown): string {
+	const fallback = "Something went wrong. Please try again.";
 	if (err instanceof Error) {
 		const msg = err.message;
-		// ConvexError messages are our own thrown strings — safe to show.
-		// They typically contain user-facing messages like "Tour not found".
-		if (
-			msg &&
-			!msg.includes("Internal Server Error") &&
-			!msg.includes("Validator error")
-		) {
-			return msg;
+		if (msg) {
+			const lower = msg.toLowerCase();
+			const operational =
+				msg.length > MAX_DISPLAY_MESSAGE_LENGTH ||
+				OPERATIONAL_MARKERS.some((marker) => lower.includes(marker));
+			if (!operational) return msg;
+			console.error("[ui-error] redacted operational message:", msg);
 		}
 	}
-	return "Something went wrong. Please try again.";
+	return fallback;
 }
 
 /**

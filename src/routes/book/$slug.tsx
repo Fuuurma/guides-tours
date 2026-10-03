@@ -3,7 +3,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction } from "convex/react";
-import { Check, MapPin } from "lucide-react";
+import { Check, MapPin, RotateCcw } from "lucide-react";
 import { domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Empty,
+	EmptyContent,
 	EmptyDescription,
 	EmptyHeader,
 	EmptyMedia,
@@ -342,6 +343,15 @@ function PublicBookingPage() {
 						<EmptyTitle>Could not load this page</EmptyTitle>
 						<EmptyDescription>{getSafeDisplayMessage(error)}</EmptyDescription>
 					</EmptyHeader>
+					<EmptyContent>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={() => window.location.reload()}
+						>
+							<RotateCcw data-icon="inline-start" /> Try again
+						</Button>
+					</EmptyContent>
 				</Empty>
 			</PublicBookingFrame>
 		);
