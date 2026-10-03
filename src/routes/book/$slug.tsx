@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useAction } from "convex/react";
 import { Check, MapPin } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FormField } from "@/components/forms/form-field";
@@ -367,87 +367,131 @@ function PublicBookingPage() {
 	if (confirmation) {
 		return (
 			<PublicBookingFrame orgName={data.organizationName}>
-				<motion.div
-					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.3, ease: "easeOut" }}
-				>
-					<Card>
-						<CardHeader className="items-center text-center">
-							<span className="mb-2 grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
-								<Check aria-hidden="true" />
-							</span>
-							<h2 className="font-display text-2xl font-normal tracking-tight">
-								Booking request received
-							</h2>
-							<CardDescription>
-								Thank you for requesting a tour with {data.organizationName}.
-								The operator will confirm this request before it is final.
-								{confirmation.emailConsent
-									? ` We'll email ${confirmation.email} when the operator confirms.`
-									: " Save your reference below — email updates were not opted in."}
-							</CardDescription>
-						</CardHeader>
-						<CardContent className="flex flex-col gap-4">
-							<p className="text-center text-sm">
-								Reference:{" "}
-								<span className="font-mono text-xs">
-									{confirmation.bookingId}
+				<LazyMotion features={domAnimation}>
+					<m.div
+						initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.3, ease: "easeOut" }}
+					>
+						<Card>
+							<CardHeader className="items-center text-center">
+								<span className="mb-2 grid size-12 place-items-center rounded-full bg-primary/10 text-primary">
+									<Check aria-hidden="true" />
 								</span>
-							</p>
-							{confirmation.canPay &&
-								Number(confirmation.balanceDueCents) > 0 && (
-									<div className="flex flex-col gap-3 rounded-md border p-3">
-										<p className="text-sm font-medium">
-											Balance due:{" "}
-											{formatCentsCompact(BigInt(confirmation.balanceDueCents))}
-										</p>
-										{elementsClientSecret &&
-										confirmation.stripePublishableKey ? (
-											<StripePaymentElement
-												publishableKey={confirmation.stripePublishableKey}
-												clientSecret={elementsClientSecret}
-												returnUrl={
-													typeof window !== "undefined"
-														? `${window.location.origin}/book/${slug}?paid=1`
-														: `/book/${slug}?paid=1`
-												}
-												amountLabel={formatCentsCompact(
+								<h2 className="font-display text-2xl font-normal tracking-tight">
+									Booking request received
+								</h2>
+								<CardDescription>
+									Thank you for requesting a tour with {data.organizationName}.
+									The operator will confirm this request before it is final.
+									{confirmation.emailConsent
+										? ` We'll email ${confirmation.email} when the operator confirms.`
+										: " Save your reference below — email updates were not opted in."}
+								</CardDescription>
+							</CardHeader>
+							<CardContent className="flex flex-col gap-4">
+								<p className="text-center text-sm">
+									Reference:{" "}
+									<span className="font-mono text-xs">
+										{confirmation.bookingId}
+									</span>
+								</p>
+								{confirmation.canPay &&
+									Number(confirmation.balanceDueCents) > 0 && (
+										<div className="flex flex-col gap-3 rounded-md border p-3">
+											<p className="text-sm font-medium">
+												Balance due:{" "}
+												{formatCentsCompact(
 													BigInt(confirmation.balanceDueCents),
 												)}
-												onPaid={() => {
-													toast.success(
-														"Payment submitted — you’ll get a confirmation shortly",
-													);
-													setElementsClientSecret(null);
-												}}
-												onCancel={() => setElementsClientSecret(null)}
-											/>
-										) : (
-											<>
-												<p className="text-xs text-muted-foreground">
-													Pay securely with Stripe — on this page or via hosted
-													Checkout.
-												</p>
-												<div className="flex flex-col gap-2 sm:flex-row">
-													{confirmation.stripePublishableKey ? (
+											</p>
+											{elementsClientSecret &&
+											confirmation.stripePublishableKey ? (
+												<StripePaymentElement
+													publishableKey={confirmation.stripePublishableKey}
+													clientSecret={elementsClientSecret}
+													returnUrl={
+														typeof window !== "undefined"
+															? `${window.location.origin}/book/${slug}?paid=1`
+															: `/book/${slug}?paid=1`
+													}
+													amountLabel={formatCentsCompact(
+														BigInt(confirmation.balanceDueCents),
+													)}
+													onPaid={() => {
+														toast.success(
+															"Payment submitted — you’ll get a confirmation shortly",
+														);
+														setElementsClientSecret(null);
+													}}
+													onCancel={() => setElementsClientSecret(null)}
+												/>
+											) : (
+												<>
+													<p className="text-xs text-muted-foreground">
+														Pay securely with Stripe — on this page or via
+														hosted Checkout.
+													</p>
+													<div className="flex flex-col gap-2 sm:flex-row">
+														{confirmation.stripePublishableKey ? (
+															<Button
+																className="w-full"
+																disabled={paying}
+																onClick={async () => {
+																	setPaying(true);
+																	try {
+																		const result =
+																			await createPublicPaymentIntent({
+																				bookingId:
+																					confirmation.bookingId as Id<"bookings">,
+																				customerEmail:
+																					confirmation.email.toLowerCase(),
+																			});
+																		setElementsClientSecret(
+																			result.clientSecret,
+																		);
+																	} catch (err) {
+																		toast.error(getErrorMessage(err));
+																	} finally {
+																		setPaying(false);
+																	}
+																}}
+															>
+																{paying ? (
+																	<Spinner data-icon="inline-start" />
+																) : null}
+																{paying ? "Preparing…" : "Pay on this page"}
+															</Button>
+														) : null}
 														<Button
 															className="w-full"
+															variant={
+																confirmation.stripePublishableKey
+																	? "outline"
+																	: "default"
+															}
 															disabled={paying}
 															onClick={async () => {
 																setPaying(true);
 																try {
-																	const result =
-																		await createPublicPaymentIntent({
-																			bookingId:
-																				confirmation.bookingId as Id<"bookings">,
-																			customerEmail:
-																				confirmation.email.toLowerCase(),
-																		});
-																	setElementsClientSecret(result.clientSecret);
+																	const { url } = await createPublicCheckout({
+																		bookingId:
+																			confirmation.bookingId as Id<"bookings">,
+																		customerEmail:
+																			confirmation.email.toLowerCase(),
+																		successPath: `/book/${slug}?paid=1`,
+																		cancelPath: `/book/${slug}?pay_cancelled=1`,
+																	});
+																	if (!isStripeCheckoutUrl(url)) {
+																		toast.error(
+																			"Invalid checkout URL received",
+																		);
+																		setPaying(false);
+																		return;
+																	}
+																	window.location.href = url;
 																} catch (err) {
 																	toast.error(getErrorMessage(err));
-																} finally {
 																	setPaying(false);
 																}
 															}}
@@ -455,66 +499,30 @@ function PublicBookingPage() {
 															{paying ? (
 																<Spinner data-icon="inline-start" />
 															) : null}
-															{paying ? "Preparing…" : "Pay on this page"}
+															{paying ? "Opening checkout…" : "Stripe Checkout"}
 														</Button>
-													) : null}
-													<Button
-														className="w-full"
-														variant={
-															confirmation.stripePublishableKey
-																? "outline"
-																: "default"
-														}
-														disabled={paying}
-														onClick={async () => {
-															setPaying(true);
-															try {
-																const { url } = await createPublicCheckout({
-																	bookingId:
-																		confirmation.bookingId as Id<"bookings">,
-																	customerEmail:
-																		confirmation.email.toLowerCase(),
-																	successPath: `/book/${slug}?paid=1`,
-																	cancelPath: `/book/${slug}?pay_cancelled=1`,
-																});
-																if (!isStripeCheckoutUrl(url)) {
-																	toast.error("Invalid checkout URL received");
-																	setPaying(false);
-																	return;
-																}
-																window.location.href = url;
-															} catch (err) {
-																toast.error(getErrorMessage(err));
-																setPaying(false);
-															}
-														}}
-													>
-														{paying ? (
-															<Spinner data-icon="inline-start" />
-														) : null}
-														{paying ? "Opening checkout…" : "Stripe Checkout"}
-													</Button>
-												</div>
-											</>
-										)}
-									</div>
-								)}
-							<Button
-								variant="outline"
-								className="w-full"
-								onClick={() => {
-									setConfirmation(null);
-									setElementsClientSecret(null);
-									setSubmitErr(null);
-									setBlackoutCheck(null);
-									form.reset();
-								}}
-							>
-								Book another
-							</Button>
-						</CardContent>
-					</Card>
-				</motion.div>
+													</div>
+												</>
+											)}
+										</div>
+									)}
+								<Button
+									variant="outline"
+									className="w-full"
+									onClick={() => {
+										setConfirmation(null);
+										setElementsClientSecret(null);
+										setSubmitErr(null);
+										setBlackoutCheck(null);
+										form.reset();
+									}}
+								>
+									Book another
+								</Button>
+							</CardContent>
+						</Card>
+					</m.div>
+				</LazyMotion>
 			</PublicBookingFrame>
 		);
 	}
@@ -546,335 +554,341 @@ function PublicBookingPage() {
 					</EmptyHeader>
 				</Empty>
 			) : (
-				<motion.div
-					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.25, ease: "easeOut" }}
-				>
-					<form
-						onSubmit={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							void form.handleSubmit();
-						}}
+				<LazyMotion features={domAnimation}>
+					<m.div
+						initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, ease: "easeOut" }}
 					>
-						<Card>
-							<CardContent className="flex flex-col gap-8 pt-6">
-								<FieldGroup className="gap-8">
-									<section className="flex flex-col gap-3">
-										<h2 className="text-sm font-medium">Tour</h2>
-										<form.Field name="tourId">
-											{(field) => (
-												<>
-													{field.state.meta.errors.length > 0 && (
-														<p
-															role="alert"
-															className="text-sm text-destructive"
-														>
-															{String(field.state.meta.errors[0])}
-														</p>
-													)}
-													{data.tours.map((t: PublicTour) => (
-														<TourOption
-															key={t._id}
-															tour={t}
-															fieldName={field.name}
-															checked={field.state.value === t._id}
-															onBlur={field.handleBlur}
-															onSelect={() => {
-																field.handleChange(t._id);
-																form.setFieldValue("scheduleId", "");
-																form.setFieldValue("startTime", "");
-															}}
-														/>
-													))}
-												</>
-											)}
-										</form.Field>
-									</section>
-
-									<Separator />
-
-									<section className="flex flex-col gap-4">
-										<h2 className="text-sm font-medium">Date and time</h2>
-										<div className="grid gap-4 sm:grid-cols-2">
-											<form.Field name="date">
+						<form
+							onSubmit={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								void form.handleSubmit();
+							}}
+						>
+							<Card>
+								<CardContent className="flex flex-col gap-8 pt-6">
+									<FieldGroup className="gap-8">
+										<section className="flex flex-col gap-3">
+											<h2 className="text-sm font-medium">Tour</h2>
+											<form.Field name="tourId">
 												{(field) => (
-													<FormField
-														field={field}
-														label="Date *"
-														hint={
-															isBlackedOut
-																? "This date is not available — the operator has blocked bookings on this day."
-																: undefined
-														}
-													>
-														<Input
-															id={field.name}
-															name={field.name}
-															type="date"
-															required
-															min={today}
-															value={field.state.value}
-															onBlur={field.handleBlur}
-															onChange={(e) => {
-																field.handleChange(e.target.value);
-																form.setFieldValue("scheduleId", "");
-																form.setFieldValue("startTime", "");
-															}}
-															aria-invalid={
-																field.state.meta.errors.length > 0 ||
-																Boolean(isBlackedOut)
-															}
-														/>
-													</FormField>
+													<>
+														{field.state.meta.errors.length > 0 && (
+															<p
+																role="alert"
+																className="text-sm text-destructive"
+															>
+																{String(field.state.meta.errors[0])}
+															</p>
+														)}
+														{data.tours.map((t: PublicTour) => (
+															<TourOption
+																key={t._id}
+																tour={t}
+																fieldName={field.name}
+																checked={field.state.value === t._id}
+																onBlur={field.handleBlur}
+																onSelect={() => {
+																	field.handleChange(t._id);
+																	form.setFieldValue("scheduleId", "");
+																	form.setFieldValue("startTime", "");
+																}}
+															/>
+														))}
+													</>
 												)}
 											</form.Field>
+										</section>
 
-											<form.Field name="startTime">
-												{(field) => (
-													<Field
-														data-invalid={field.state.meta.errors.length > 0}
-													>
-														<FieldLabel htmlFor="time">Start time *</FieldLabel>
-														{slotsLoading ? (
-															<p className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-																<Spinner />
-																Loading available times…
-															</p>
-														) : hasPublishedSlots ? (
-															<select
-																id="time"
-																required
-																className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-																value={scheduleId}
-																onBlur={field.handleBlur}
-																onChange={(e) => {
-																	const id = e.target.value;
-																	form.setFieldValue("scheduleId", id);
-																	const slot = availableSlots?.find(
-																		(s) => s._id === id,
-																	);
-																	field.handleChange(slot?.startTime ?? "");
-																}}
-																aria-invalid={
-																	field.state.meta.errors.length > 0
-																}
-															>
-																<option value="">Select a time…</option>
-																{(availableSlots ?? []).map((s) => (
-																	<option key={s._id} value={s._id}>
-																		{s.startTime}
-																		{s.endTime ? `–${s.endTime}` : ""} ·{" "}
-																		{s.seatsLeft} left
-																	</option>
-																))}
-															</select>
-														) : (
+										<Separator />
+
+										<section className="flex flex-col gap-4">
+											<h2 className="text-sm font-medium">Date and time</h2>
+											<div className="grid gap-4 sm:grid-cols-2">
+												<form.Field name="date">
+													{(field) => (
+														<FormField
+															field={field}
+															label="Date *"
+															hint={
+																isBlackedOut
+																	? "This date is not available — the operator has blocked bookings on this day."
+																	: undefined
+															}
+														>
 															<Input
-																id="time"
-																type="time"
+																id={field.name}
+																name={field.name}
+																type="date"
 																required
+																min={today}
 																value={field.state.value}
 																onBlur={field.handleBlur}
 																onChange={(e) => {
 																	field.handleChange(e.target.value);
 																	form.setFieldValue("scheduleId", "");
+																	form.setFieldValue("startTime", "");
 																}}
-																disabled={Boolean(isBlackedOut) || !slotReady}
+																aria-invalid={
+																	field.state.meta.errors.length > 0 ||
+																	Boolean(isBlackedOut)
+																}
 															/>
-														)}
-														{slotsLoaded &&
-															!hasPublishedSlots &&
-															!isBlackedOut && (
-																<FieldDescription>
-																	No published times for this date — enter a
-																	preferred start time.
-																</FieldDescription>
+														</FormField>
+													)}
+												</form.Field>
+
+												<form.Field name="startTime">
+													{(field) => (
+														<Field
+															data-invalid={field.state.meta.errors.length > 0}
+														>
+															<FieldLabel htmlFor="time">
+																Start time *
+															</FieldLabel>
+															{slotsLoading ? (
+																<p className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+																	<Spinner />
+																	Loading available times…
+																</p>
+															) : hasPublishedSlots ? (
+																<select
+																	id="time"
+																	required
+																	className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+																	value={scheduleId}
+																	onBlur={field.handleBlur}
+																	onChange={(e) => {
+																		const id = e.target.value;
+																		form.setFieldValue("scheduleId", id);
+																		const slot = availableSlots?.find(
+																			(s) => s._id === id,
+																		);
+																		field.handleChange(slot?.startTime ?? "");
+																	}}
+																	aria-invalid={
+																		field.state.meta.errors.length > 0
+																	}
+																>
+																	<option value="">Select a time…</option>
+																	{(availableSlots ?? []).map((s) => (
+																		<option key={s._id} value={s._id}>
+																			{s.startTime}
+																			{s.endTime ? `–${s.endTime}` : ""} ·{" "}
+																			{s.seatsLeft} left
+																		</option>
+																	))}
+																</select>
+															) : (
+																<Input
+																	id="time"
+																	type="time"
+																	required
+																	value={field.state.value}
+																	onBlur={field.handleBlur}
+																	onChange={(e) => {
+																		field.handleChange(e.target.value);
+																		form.setFieldValue("scheduleId", "");
+																	}}
+																	disabled={Boolean(isBlackedOut) || !slotReady}
+																/>
 															)}
-														<FieldError
-															errors={field.state.meta.errors.map((err) => ({
-																message: String(err),
-															}))}
-														/>
-													</Field>
-												)}
-											</form.Field>
-										</div>
+															{slotsLoaded &&
+																!hasPublishedSlots &&
+																!isBlackedOut && (
+																	<FieldDescription>
+																		No published times for this date — enter a
+																		preferred start time.
+																	</FieldDescription>
+																)}
+															<FieldError
+																errors={field.state.meta.errors.map((err) => ({
+																	message: String(err),
+																}))}
+															/>
+														</Field>
+													)}
+												</form.Field>
+											</div>
 
-										<form.Field name="guests">
-											{(field) => (
-												<FormField
-													field={field}
-													label="Guests *"
-													hint={
-														selectedTour
-															? `Max ${selectedTour.maxGuests} guests`
-															: undefined
-													}
-													inputProps={{
-														type: "number",
-														min: 1,
-														max: selectedTour?.maxGuests ?? 20,
-														required: true,
-													}}
-												/>
-											)}
-										</form.Field>
-									</section>
-
-									<Separator />
-
-									<section className="flex flex-col gap-4">
-										<h2 className="text-sm font-medium">Your details</h2>
-										<form.Field name="name">
-											{(field) => (
-												<FormField
-													field={field}
-													label="Full name *"
-													inputProps={{
-														required: true,
-														maxLength: MAX_NAME_LEN,
-														autoComplete: "name",
-													}}
-												/>
-											)}
-										</form.Field>
-										<form.Field name="email">
-											{(field) => (
-												<FormField
-													field={field}
-													label="Email *"
-													inputProps={{
-														type: "email",
-														required: true,
-														maxLength: MAX_EMAIL_LEN,
-														autoComplete: "email",
-													}}
-												/>
-											)}
-										</form.Field>
-										<form.Field name="phone">
-											{(field) => (
-												<FormField
-													field={field}
-													label="Phone (optional)"
-													inputProps={{
-														type: "tel",
-														maxLength: MAX_PHONE_LEN,
-														autoComplete: "tel",
-													}}
-												/>
-											)}
-										</form.Field>
-										<form.Field name="notes">
-											{(field) => (
-												<FormField
-													field={field}
-													label="Special requests (optional)"
-												>
-													<Textarea
-														id={field.name}
-														name={field.name}
-														value={field.state.value}
-														onBlur={field.handleBlur}
-														onChange={(e) => field.handleChange(e.target.value)}
-														rows={3}
-														maxLength={MAX_NOTES_LEN}
-														placeholder="Allergies, accessibility needs, etc."
-														aria-invalid={field.state.meta.errors.length > 0}
+											<form.Field name="guests">
+												{(field) => (
+													<FormField
+														field={field}
+														label="Guests *"
+														hint={
+															selectedTour
+																? `Max ${selectedTour.maxGuests} guests`
+																: undefined
+														}
+														inputProps={{
+															type: "number",
+															min: 1,
+															max: selectedTour?.maxGuests ?? 20,
+															required: true,
+														}}
 													/>
-													<p className="text-right text-xs text-muted-foreground">
-														{field.state.value.length} / {MAX_NOTES_LEN}
-													</p>
-												</FormField>
-											)}
-										</form.Field>
+												)}
+											</form.Field>
+										</section>
 
-										<div className="flex flex-col gap-3 rounded-md border p-3">
-											<form.Field name="emailConsent">
+										<Separator />
+
+										<section className="flex flex-col gap-4">
+											<h2 className="text-sm font-medium">Your details</h2>
+											<form.Field name="name">
 												{(field) => (
-													<label
-														htmlFor="emailConsent"
-														className="flex items-start gap-2 text-sm"
-													>
-														<Checkbox
-															id="emailConsent"
-															checked={field.state.value}
-															onCheckedChange={(checked) =>
-																field.handleChange(checked === true)
-															}
-															className="mt-1"
-														/>
-														<span>
-															Email me booking updates and reminders
-															<span className="block text-xs text-muted-foreground">
-																Recommended so we can send your confirmation.
-															</span>
-														</span>
-													</label>
+													<FormField
+														field={field}
+														label="Full name *"
+														inputProps={{
+															required: true,
+															maxLength: MAX_NAME_LEN,
+															autoComplete: "name",
+														}}
+													/>
 												)}
 											</form.Field>
-											<form.Field name="smsConsent">
+											<form.Field name="email">
 												{(field) => (
-													<label
-														htmlFor="smsConsent"
-														className="flex items-start gap-2 text-sm"
-													>
-														<Checkbox
-															id="smsConsent"
-															checked={field.state.value}
-															onCheckedChange={(checked) =>
-																field.handleChange(checked === true)
-															}
-															className="mt-1"
-														/>
-														<span>
-															Text me reminders (optional)
-															<span className="block text-xs text-muted-foreground">
-																Only if you provide a phone number.
-															</span>
-														</span>
-													</label>
+													<FormField
+														field={field}
+														label="Email *"
+														inputProps={{
+															type: "email",
+															required: true,
+															maxLength: MAX_EMAIL_LEN,
+															autoComplete: "email",
+														}}
+													/>
 												)}
 											</form.Field>
-										</div>
-									</section>
-								</FieldGroup>
-							</CardContent>
-							<CardFooter className="flex flex-col gap-3">
-								{submitErr && <ErrorBanner message={submitErr} />}
-								<form.Subscribe
-									selector={(s) => [s.canSubmit, s.isSubmitting] as const}
-								>
-									{([canSubmit, isSubmitting]) => (
-										<Button
-											type="submit"
-											disabled={!canSubmit || isSubmitting || slotsLoading}
-											className="w-full"
-										>
-											{isSubmitting || slotsLoading ? (
-												<Spinner data-icon="inline-start" />
-											) : null}
-											{isSubmitting
-												? "Booking…"
-												: slotsLoading
-													? "Loading times…"
-													: "Request booking"}
-										</Button>
-									)}
-								</form.Subscribe>
-								<p className="text-center text-xs text-muted-foreground">
-									By requesting you agree to the operator&apos;s cancellation
-									policy.
-									{emailConsent
-										? " We'll email you when the operator confirms."
-										: " You opted out of email updates."}
-								</p>
-							</CardFooter>
-						</Card>
-					</form>
-				</motion.div>
+											<form.Field name="phone">
+												{(field) => (
+													<FormField
+														field={field}
+														label="Phone (optional)"
+														inputProps={{
+															type: "tel",
+															maxLength: MAX_PHONE_LEN,
+															autoComplete: "tel",
+														}}
+													/>
+												)}
+											</form.Field>
+											<form.Field name="notes">
+												{(field) => (
+													<FormField
+														field={field}
+														label="Special requests (optional)"
+													>
+														<Textarea
+															id={field.name}
+															name={field.name}
+															value={field.state.value}
+															onBlur={field.handleBlur}
+															onChange={(e) =>
+																field.handleChange(e.target.value)
+															}
+															rows={3}
+															maxLength={MAX_NOTES_LEN}
+															placeholder="Allergies, accessibility needs, etc."
+															aria-invalid={field.state.meta.errors.length > 0}
+														/>
+														<p className="text-right text-xs text-muted-foreground">
+															{field.state.value.length} / {MAX_NOTES_LEN}
+														</p>
+													</FormField>
+												)}
+											</form.Field>
+
+											<div className="flex flex-col gap-3 rounded-md border p-3">
+												<form.Field name="emailConsent">
+													{(field) => (
+														<label
+															htmlFor="emailConsent"
+															className="flex items-start gap-2 text-sm"
+														>
+															<Checkbox
+																id="emailConsent"
+																checked={field.state.value}
+																onCheckedChange={(checked) =>
+																	field.handleChange(checked === true)
+																}
+																className="mt-1"
+															/>
+															<span>
+																Email me booking updates and reminders
+																<span className="block text-xs text-muted-foreground">
+																	Recommended so we can send your confirmation.
+																</span>
+															</span>
+														</label>
+													)}
+												</form.Field>
+												<form.Field name="smsConsent">
+													{(field) => (
+														<label
+															htmlFor="smsConsent"
+															className="flex items-start gap-2 text-sm"
+														>
+															<Checkbox
+																id="smsConsent"
+																checked={field.state.value}
+																onCheckedChange={(checked) =>
+																	field.handleChange(checked === true)
+																}
+																className="mt-1"
+															/>
+															<span>
+																Text me reminders (optional)
+																<span className="block text-xs text-muted-foreground">
+																	Only if you provide a phone number.
+																</span>
+															</span>
+														</label>
+													)}
+												</form.Field>
+											</div>
+										</section>
+									</FieldGroup>
+								</CardContent>
+								<CardFooter className="flex flex-col gap-3">
+									{submitErr && <ErrorBanner message={submitErr} />}
+									<form.Subscribe
+										selector={(s) => [s.canSubmit, s.isSubmitting] as const}
+									>
+										{([canSubmit, isSubmitting]) => (
+											<Button
+												type="submit"
+												disabled={!canSubmit || isSubmitting || slotsLoading}
+												className="w-full"
+											>
+												{isSubmitting || slotsLoading ? (
+													<Spinner data-icon="inline-start" />
+												) : null}
+												{isSubmitting
+													? "Booking…"
+													: slotsLoading
+														? "Loading times…"
+														: "Request booking"}
+											</Button>
+										)}
+									</form.Subscribe>
+									<p className="text-center text-xs text-muted-foreground">
+										By requesting you agree to the operator&apos;s cancellation
+										policy.
+										{emailConsent
+											? " We'll email you when the operator confirms."
+											: " You opted out of email updates."}
+									</p>
+								</CardFooter>
+							</Card>
+						</form>
+					</m.div>
+				</LazyMotion>
 			)}
 		</PublicBookingFrame>
 	);

@@ -1,7 +1,7 @@
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { motion, useReducedMotion } from "motion/react";
+import { domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
 import { useDeferredValue, useMemo, useState } from "react";
 import {
 	buildSparklineByTour,
@@ -411,61 +411,63 @@ function AnalyticsPage() {
 				</Empty>
 			)}
 
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
-				{/* Stagger each stat card in 50ms after the previous so the
+			<LazyMotion features={domAnimation}>
+				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+					{/* Stagger each stat card in 50ms after the previous so the
 				    analytics page feels responsive when the data loads.
 				    Lead metric spans wider so the row is not four equal
 				    cards — eye lands on 'Total assignments' first, then
 				    naturally follows to the rest. */}
-				<motion.div
-					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.25, delay: 0 }}
-				>
-					<MetricCard
-						label="Total assignments"
-						value={overview?.totalAssignments}
-						isPending={overviewPending}
-					/>
-				</motion.div>
-				<motion.div
-					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.25, delay: 0.05 }}
-				>
-					<MetricCard
-						label="Completed"
-						value={overview?.completedAssignments}
-						isPending={overviewPending}
-					/>
-				</motion.div>
-				<motion.div
-					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.25, delay: 0.1 }}
-				>
-					<MetricCard
-						label="Cancelled"
-						value={overview?.cancelledAssignments}
-						isPending={overviewPending}
-					/>
-				</motion.div>
-				<motion.div
-					initial={reduceMotion ? false : { opacity: 0, y: 6 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ duration: 0.25, delay: 0.15 }}
-				>
-					<MetricCard
-						label="Completion rate"
-						value={
-							overview?.completionRate !== undefined
-								? `${overview.completionRate}%`
-								: undefined
-						}
-						isPending={overviewPending}
-					/>
-				</motion.div>
-			</div>
+					<m.div
+						initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0 }}
+					>
+						<MetricCard
+							label="Total assignments"
+							value={overview?.totalAssignments}
+							isPending={overviewPending}
+						/>
+					</m.div>
+					<m.div
+						initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0.05 }}
+					>
+						<MetricCard
+							label="Completed"
+							value={overview?.completedAssignments}
+							isPending={overviewPending}
+						/>
+					</m.div>
+					<m.div
+						initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0.1 }}
+					>
+						<MetricCard
+							label="Cancelled"
+							value={overview?.cancelledAssignments}
+							isPending={overviewPending}
+						/>
+					</m.div>
+					<m.div
+						initial={reduceMotion ? false : { opacity: 0, y: 6 }}
+						animate={{ opacity: 1, y: 0 }}
+						transition={{ duration: 0.25, delay: 0.15 }}
+					>
+						<MetricCard
+							label="Completion rate"
+							value={
+								overview?.completionRate !== undefined
+									? `${overview.completionRate}%`
+									: undefined
+							}
+							isPending={overviewPending}
+						/>
+					</m.div>
+				</div>
+			</LazyMotion>
 
 			<Card>
 				<CardContent className="grid grid-cols-2 gap-4 py-4 md:grid-cols-4">
