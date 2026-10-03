@@ -600,16 +600,21 @@ function PublicBookingPage() {
 																/>
 																<div className="flex-1">
 																	<p className="font-medium">{t.name}</p>
-																	<p className="text-sm text-muted-foreground">
+																	<p className="text-sm text-muted-foreground tabular-nums">
 																		{t.durationHours}h · up to {t.maxGuests}{" "}
 																		guests
-																		{t.basePriceCents !== undefined
-																			? ` · ${formatPrice(
-																					Number(t.basePriceCents) / 100,
-																					t.currency,
-																				)} pp`
-																			: ""}
 																	</p>
+																	{t.basePriceCents !== undefined && (
+																		<p className="mt-1 text-sm font-semibold tabular-nums">
+																			{formatPrice(
+																				Number(t.basePriceCents) / 100,
+																				t.currency,
+																			)}{" "}
+																			<span className="font-normal text-muted-foreground">
+																				per person
+																			</span>
+																		</p>
+																	)}
 																	{t.description && (
 																		<p className="mt-2 text-sm">
 																			{t.description}
