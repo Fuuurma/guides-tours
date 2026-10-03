@@ -31,6 +31,10 @@ class ResizeObserverStub {
 beforeAll(() => {
 	window.ResizeObserver =
 		ResizeObserverStub as unknown as typeof ResizeObserver;
+	// Radix Select touches scroll/pointer-capture APIs jsdom lacks.
+	window.HTMLElement.prototype.scrollIntoView = () => {};
+	window.HTMLElement.prototype.hasPointerCapture = () => false;
+	window.HTMLElement.prototype.releasePointerCapture = () => {};
 });
 
 const mocks = vi.hoisted(() => ({
@@ -111,11 +115,13 @@ function mockQueries({
 	vehicles = [],
 	drivers = [],
 	conflicts = [],
+	members = [],
 }: {
 	tours?: unknown[];
 	vehicles?: unknown[];
 	drivers?: unknown[];
 	conflicts?: unknown[];
+	members?: unknown[];
 } = {}) {
 	const bareArgsSeen: unknown[] = [];
 	mocks.useQuery.mockImplementation(
@@ -143,7 +149,7 @@ function mockQueries({
 				return { data: conflicts, isPending: false };
 			}
 			if (args && typeof args === "object" && "roles" in args) {
-				return { data: [], isPending: false };
+				return { data: members, isPending: false };
 			}
 			const idx = bareArgsSeen.indexOf(options?.ref);
 			if (idx === -1) {
@@ -275,12 +281,51 @@ describe("StaffDepartureForm validation", () => {
 		expect(mocks.staffDeparture).not.toHaveBeenCalled();
 	});
 
-	it.skip("assign with a conflicting booking shows the conflict banner and does not submit", () => {
-		// Reachable only with a non-empty guideId, which is a Radix
-		// MemberSelect fed by organizations.listMembers — jsdom cannot drive
-		// the select, and without a guide the guide check fails before the
-		// conflicts gate runs. Needs a Select-driving test utility (seed
-		// listMembers + keyboard-drive the trigger) before this pin can run.
+	it("assign with a conflicting booking shows the conflict banner and does not submit", async () => {
+		mockQueries({
+			conflicts: [
+				{
+					conflictType: "guide",
+					assignmentId: "a-9",
+					tourName: "Sunset walk",
+					message: "Ana García is already booked 10:00–13:00",
+				},
+			],
+			members: [{ userId: "mem-1", name: "Ana García", role: "guide" }],
+		});
+		renderForm({
+			intent: "assign",
+			preselectedTourId: "tour-1",
+		});
+		// Pick the guide through the Radix MemberSelect — keyboard events
+		// are the jsdom-safe way in (ArrowDown opens + highlights, Enter
+		// selects the highlighted option).
+		const guideTrigger = screen.getByRole("combobox", { name: /Guide/ });
+		fireEvent.keyDown(guideTrigger, { key: "ArrowDown" });
+		const guideOption = await screen.findByRole("option", {
+			name: /Ana García/,
+		});
+		fireEvent.click(guideOption);
+		fireEvent.change(screen.getByLabelText("Date *"), {
+			target: { value: "2026-06-24" },
+		});
+		fireEvent.change(screen.getByLabelText("Start time *"), {
+			target: { value: "10:00" },
+		});
+		const assignForm = screen
+			.getByRole("button", { name: "Create assignment" })
+			.closest("form") as HTMLFormElement;
+		assignForm.dispatchEvent(
+			new Event("submit", { bubbles: true, cancelable: true }),
+		);
+		await waitFor(() => {
+			expect(
+				screen.getByText(
+					/Scheduling conflicts detected: Ana García is already booked/,
+				),
+			).toBeTruthy();
+		});
+		expect(mocks.staffDeparture).not.toHaveBeenCalled();
 	});
 
 	it("publish happy path submits the exact departure payload and navigates to the schedule", async () => {
