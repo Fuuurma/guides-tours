@@ -820,7 +820,7 @@ export const getOpenIntentForBooking = internalQuery({
 			.take(8);
 		for (const p of rows) {
 			if (p.status !== "pending") continue;
-			if (!p.stripePaymentIntentId.startsWith("pi_")) continue;
+			if (!p.stripePaymentIntentId?.startsWith("pi_")) continue;
 			if (p.createdAt < cutoff) return null;
 			return {
 				stripePaymentIntentId: p.stripePaymentIntentId,

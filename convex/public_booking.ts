@@ -196,14 +196,39 @@ export const listAvailableSlots = query({
 				q.eq("tourId", args.tourId).eq("date", args.date),
 			)
 			.unique();
-		if (!availability || availability.organizationId !== organizationId) {
+		if (availability && availability.organizationId !== organizationId) {
 			return [];
 		}
+
+		// Fallback: rows written outside the mutation layer (test seeds,
+		// imports, docs not yet covered by backfillAvailability) never
+		// produced a projection doc — scan the materialized schedules
+		// rather than reporting the date as unbookable.
+		const slots = availability
+			? availability.slots
+			: (
+					await ctx.db
+						.query("tourSchedules")
+						.withIndex("by_tour_date", (q) =>
+							q.eq("tourId", args.tourId).eq("date", args.date),
+						)
+						.take(200)
+				)
+					.filter((s) => s.organizationId === organizationId)
+					.map((s) => ({
+						scheduleId: s._id,
+						startTime: s.startTime,
+						endTime: s.endTime,
+						capacityTotal: s.capacityTotal,
+						capacityBooked: s.capacityBooked,
+						seatsLeft: s.capacityTotal - s.capacityBooked,
+						status: s.status,
+					}));
 
 		const nowMs = Date.now();
 		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
 
-		return availability.slots
+		return slots
 			.filter((s) => {
 				if (s.status !== "available") return false;
 				if (exceptionTime !== undefined && s.startTime !== exceptionTime) return false;
