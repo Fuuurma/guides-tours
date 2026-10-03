@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
 
@@ -13,14 +14,17 @@ export const Route = createFileRoute("/auth/callback")({
 			!search.redirect.startsWith("//")
 				? search.redirect
 				: undefined,
+		invitationId:
+			typeof search.invitationId === "string" ? search.invitationId : undefined,
 	}),
 	component: AuthCallback,
 });
 
 function AuthCallback() {
-	const { ott, redirect } = Route.useSearch();
+	const { ott, redirect, invitationId } = Route.useSearch();
 	const navigate = useNavigate();
 	const processed = useRef(false);
+	const [inviteError, setInviteError] = useState<string | null>(null);
 
 	useEffect(() => {
 		if (processed.current || !ott) return;
@@ -36,6 +40,21 @@ function AuthCallback() {
 				if (!res.ok) {
 					void navigate({ to: "/sign-in" });
 					return;
+				}
+				if (invitationId) {
+					// OAuth sign-in from an invite link — accept before
+					// routing, and surface failures instead of dropping
+					// the user on a page they have no org for.
+					const { error: acceptError } =
+						await authClient.organization.acceptInvitation({
+							invitationId,
+						});
+					if (acceptError) {
+						setInviteError(
+							acceptError.message ?? "Could not accept invitation",
+						);
+						return;
+					}
 				}
 				// Org pinning parity with sign-in (design step 1,
 				// docs/DESIGN-authz-active-org.md): Google users were the
@@ -76,7 +95,23 @@ function AuthCallback() {
 			.catch(() => {
 				void navigate({ to: "/sign-in" });
 			});
-	}, [ott, redirect, navigate]);
+	}, [ott, redirect, invitationId, navigate]);
+
+	if (inviteError) {
+		return (
+			<div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6">
+				<div className="w-full max-w-sm" role="alert">
+					<ErrorBanner message={inviteError} />
+				</div>
+				<a
+					href={`/invite/${invitationId}`}
+					className="font-medium text-foreground text-sm underline"
+				>
+					Back to invitation
+				</a>
+			</div>
+		);
+	}
 
 	return (
 		<div

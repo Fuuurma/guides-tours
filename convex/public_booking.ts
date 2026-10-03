@@ -186,29 +186,60 @@ export const listAvailableSlots = query({
 				: undefined;
 		const capacityOf = (capacityTotal: number) => ex?.capacityOverride ?? capacityTotal;
 
-		const schedules = await ctx.db
-			.query("tourSchedules")
+		// Single-doc read: the denormalized (tour, date) projection is
+		// maintained transactionally by every capacity/schedule write
+		// (DST-guides-tours-03). F344 exception overrides apply at read
+		// time on top of the projected slots.
+		const availability = await ctx.db
+			.query("tourAvailability")
 			.withIndex("by_tour_date", (q) =>
 				q.eq("tourId", args.tourId).eq("date", args.date),
 			)
-			.take(200);
+			.unique();
+		if (availability && availability.organizationId !== organizationId) {
+			return [];
+		}
+
+		// Fallback: rows written outside the mutation layer (test seeds,
+		// imports, docs not yet covered by backfillAvailability) never
+		// produced a projection doc — scan the materialized schedules
+		// rather than reporting the date as unbookable.
+		const slots = availability
+			? availability.slots
+			: (
+					await ctx.db
+						.query("tourSchedules")
+						.withIndex("by_tour_date", (q) =>
+							q.eq("tourId", args.tourId).eq("date", args.date),
+						)
+						.take(200)
+				)
+					.filter((s) => s.organizationId === organizationId)
+					.map((s) => ({
+						scheduleId: s._id,
+						startTime: s.startTime,
+						endTime: s.endTime,
+						capacityTotal: s.capacityTotal,
+						capacityBooked: s.capacityBooked,
+						seatsLeft: s.capacityTotal - s.capacityBooked,
+						status: s.status,
+					}));
 
 		const nowMs = Date.now();
 		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
 
-		return schedules
+		return slots
 			.filter((s) => {
-				if (s.organizationId !== organizationId) return false;
 				if (s.status !== "available") return false;
 				if (exceptionTime !== undefined && s.startTime !== exceptionTime) return false;
 				if (s.capacityBooked >= capacityOf(s.capacityTotal)) return false;
-				const tourTs = parseBookingTime(s.date, s.startTime);
+				const tourTs = parseBookingTime(args.date, s.startTime);
 				if (tourTs === null || tourTs <= nowMs) return false;
 				if (cutoffMs > 0 && tourTs - nowMs < cutoffMs) return false;
 				return true;
 			})
 			.map((s) => ({
-				_id: s._id,
+				_id: s.scheduleId,
 				startTime: s.startTime,
 				endTime: s.endTime,
 				capacityTotal: capacityOf(s.capacityTotal),
@@ -240,16 +271,16 @@ async function buildCheckoutResponse(
 		{ bookingId } as never,
 	)) as { balanceDueCents?: bigint; status?: string } | null;
 	const settings = (await ctx.runQuery(
-		internal.payments.getStripeSecrets as never,
+		internal.payments.getPublicStripeAvailability as never,
 		{ organizationId } as never,
 	)) as {
 		stripeEnabled?: boolean;
-		stripeSecretKey?: string;
+		hasStripeSecret?: boolean;
 		stripePublishableKey?: string;
 	} | null;
 	const balanceDueCents = checkout?.balanceDueCents ?? 0n;
 	const canPay =
-		Boolean(settings?.stripeEnabled && settings.stripeSecretKey) &&
+		Boolean(settings?.stripeEnabled && settings.hasStripeSecret) &&
 		balanceDueCents > 0n &&
 		COLLECTIBLE_PUBLIC.has(checkout?.status ?? "");
 
@@ -424,8 +455,8 @@ export const internalCreate = internalMutation({
 		if (!tour.isActive) {
 			throw new ConvexError("Tour is not active");
 		}
-		if (args.guests <= 0) {
-			throw new ConvexError("guests must be > 0");
+		if (args.guests <= 0 || !Number.isInteger(args.guests)) {
+			throw new ConvexError("guests must be a positive integer");
 		}
 		if (tour.maxGuests && args.guests > tour.maxGuests) {
 			throw new ConvexError(
@@ -621,30 +652,45 @@ export const internalCreate = internalMutation({
 			updatedAt: now,
 		});
 
+		// Claim capacity through the single incrementBooked path — it
+		// throws "Schedule over capacity" when full and updates the
+		// denormalized availability projection in this same transaction.
 		if (scheduleId) {
-			try {
-				await ctx.runMutation(
-					internal.tourSchedules.incrementBooked,
-					{
-						organizationId: args.organizationId,
-						scheduleId,
-						guests: args.guests,
-					},
-				);
-			} catch (err) {
-				// Compensating action: if incrementBooked fails (e.g.,
-				// over capacity, schedule cancelled between check and
-				// increment), cancel the orphaned booking so we don't
-				// leave a "pending" row that will never be confirmed.
-				await ctx.runMutation(
-					internal.bookings.internalCancel,
-					{
-						bookingId,
-						reason: "capacity_exceeded",
-					},
-				);
-				throw err;
-			}
+			await ctx.runMutation(internal.tourSchedules.incrementBooked, {
+				organizationId: args.organizationId,
+				scheduleId,
+				guests: args.guests,
+			});
+		}
+
+		if (totalAmountCents > 0n) {
+			const paymentSettings = await ctx.db
+				.query("paymentSettings")
+				.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+				.unique();
+			const paymentId = await ctx.db.insert("payments", {
+				organizationId: args.organizationId,
+				bookingId,
+				amountCents: totalAmountCents,
+				currency: paymentSettings?.defaultCurrency ?? tour.currency.toUpperCase(),
+				status: "pending",
+				provider: "stripe",
+				createdAt: now,
+				updatedAt: now,
+			});
+			await logAudit(ctx, {
+				organizationId: args.organizationId,
+				userId: "anonymous",
+				action: "payment.intent_requested_public",
+				resourceType: "payment",
+				resourceId: paymentId,
+				oldValues: {},
+				newValues: {
+					bookingId,
+					amountCents: totalAmountCents.toString(),
+					stripePaymentIntentId: null,
+				},
+			});
 		}
 
 		await logAudit(ctx, {

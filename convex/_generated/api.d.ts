@@ -75,6 +75,7 @@ import type * as phoneReminders from "../phoneReminders.js";
 import type * as public_booking from "../public_booking.js";
 import type * as scheduledNotifications from "../scheduledNotifications.js";
 import type * as staffingDigest from "../staffingDigest.js";
+import type * as stripeEvents from "../stripeEvents.js";
 import type * as tourAnalytics from "../tourAnalytics.js";
 import type * as tourBlackoutDates from "../tourBlackoutDates.js";
 import type * as tourCategories from "../tourCategories.js";
@@ -163,6 +164,7 @@ declare const fullApi: ApiFromModules<{
   public_booking: typeof public_booking;
   scheduledNotifications: typeof scheduledNotifications;
   staffingDigest: typeof staffingDigest;
+  stripeEvents: typeof stripeEvents;
   tourAnalytics: typeof tourAnalytics;
   tourBlackoutDates: typeof tourBlackoutDates;
   tourCategories: typeof tourCategories;

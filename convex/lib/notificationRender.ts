@@ -75,6 +75,12 @@ export function fallbackPlainText(
 			return `Hi ${vars.customerName}, your ${vars.tourName} tour starts in 2 hours (${vars.date} ${vars.startTime}). See you soon!`;
 		case "post_tour_review":
 			return `Hi ${vars.customerName}, thanks for joining our ${vars.tourName} tour on ${vars.date}. We'd love a quick review.`;
+		case "booking_cancellation":
+			return `Hi ${vars.customerName}, your booking for ${vars.tourName} on ${vars.date} at ${vars.startTime} has been cancelled.`;
+		case "booking_expired":
+			return `Hi ${vars.customerName}, your booking request for ${vars.tourName} on ${vars.date} at ${vars.startTime} wasn't confirmed in time and has expired. The seats have been released — please book again if you'd still like to join.`;
+		case "booking_no_show":
+			return `Hi ${vars.customerName}, you were marked as a no-show for your ${vars.tourName} tour on ${vars.date} at ${vars.startTime}. If this is a mistake, please contact us.`;
 		default:
 			return `Hi ${vars.customerName}, you have an update about your tour on ${vars.date}.`;
 	}
@@ -90,6 +96,12 @@ export function fallbackSubject(templateType: string): string {
 			return "Your tour starts in 2 hours";
 		case "post_tour_review":
 			return "How was your tour?";
+		case "booking_cancellation":
+			return "Booking cancelled";
+		case "booking_expired":
+			return "Booking expired";
+		case "booking_no_show":
+			return "Missed tour";
 		default:
 			return "Tour update";
 	}
