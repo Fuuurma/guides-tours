@@ -101,6 +101,8 @@ export interface SeedBookingOptions {
 	status?: "pending" | "confirmed" | "checked_in" | "completed" | "cancelled";
 	totalAmountCents?: bigint;
 	depositAmountCents?: bigint;
+	balanceDueCents?: bigint;
+	netRevenueCents?: bigint;
 	source?: string;
 }
 
@@ -123,10 +125,11 @@ export async function seedBooking(
 		status: opts.status ?? "confirmed",
 		depositAmountCents,
 		totalAmountCents,
-		balanceDueCents: totalAmountCents - depositAmountCents,
+		balanceDueCents:
+			opts.balanceDueCents ?? totalAmountCents - depositAmountCents,
 		paymentMethod: "",
 		checkedInBy: "",
-		netRevenueCents: totalAmountCents,
+		netRevenueCents: opts.netRevenueCents ?? totalAmountCents,
 		source: opts.source ?? "direct",
 		reviewComment: "",
 		createdAt: 0,

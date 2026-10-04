@@ -2,131 +2,32 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import {
+	seedAssignment,
+	seedBooking,
+	seedCustomer,
+	seedTour,
+} from "./helpers";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
-
-async function seedTour(
-	ctx: any,
-	orgId: string,
-	name = "Walking Tour",
-) {
-	return await ctx.db.insert("tours", {
-		organizationId: orgId,
-		name,
-		description: "",
-		durationHours: 2,
-		isActive: true,
-		recurrenceType: "none" as const,
-		recurrenceDaysOfWeek: [],
-		capacity: 20,
-		bufferMinutes: 15,
-		minGuests: 1,
-		maxGuests: 20,
-		bookingCutoffHours: 24,
-		tourType: "walking",
-		languages: ["en"],
-		requiredGuides: 1,
-		inclusions: [],
-		exclusions: [],
-		highlights: [],
-		currency: "USD",
-		createdAt: 0,
-		updatedAt: 0,
-	});
-}
-
-async function seedCustomer(ctx: any, orgId: string) {
-	return await ctx.db.insert("customers", {
-		organizationId: orgId,
-		name: "Test Customer",
-		email: "test@example.com",
-		phone: "+1555000000",
-		notes: "",
-		smsConsent: false,
-		emailConsent: false,
-		preferredLanguage: "en",
-		tags: [],
-		source: "direct",
-		sourceDetails: "",
-		specialRequirements: "",
-		vipStatus: false,
-		loyaltyPoints: 0,
-		totalVisits: 0,
-		totalRevenueCents: 0n,
-		createdAt: 0,
-		updatedAt: 0,
-	});
-}
-
-async function seedBooking(
-	ctx: any,
-	orgId: string,
-	tourId: any,
-	customerId: any,
-	overrides: Record<string, any> = {},
-) {
-	return await ctx.db.insert("bookings", {
-		organizationId: orgId,
-		tourId,
-		customerId,
-		date: "2026-07-15",
-		startTime: "09:00",
-		guests: 2,
-		guestNames: "",
-		languageRequired: "en",
-		notes: "",
-		status: "confirmed",
-		depositAmountCents: 0n,
-		totalAmountCents: 5000n,
-		balanceDueCents: 0n,
-		paymentMethod: "",
-		checkedInBy: "",
-		netRevenueCents: 5000n,
-		source: "direct",
-		reviewComment: "",
-		createdAt: 0,
-		updatedAt: 0,
-		...overrides,
-	});
-}
-
-async function seedAssignment(
-	ctx: any,
-	orgId: string,
-	tourId: any,
-	overrides: Record<string, any> = {},
-) {
-	return await ctx.db.insert("assignments", {
-		organizationId: orgId,
-		tourId,
-		guideId: "guide-1",
-		date: "2026-07-15",
-		startTime: "09:00",
-		endTime: "11:00",
-		status: "scheduled",
-		createdAt: 0,
-		updatedAt: 0,
-		...overrides,
-	});
-}
 
 describe("analytics", () => {
 	it("getOverview: returns correct counts", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a1";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		await t.run((ctx: any) => seedAssignment(ctx, orgId, tourId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		await t.run((ctx: any) => seedAssignment(ctx, { orgId, tourId: tourId, guideId: "guide-1" }));
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, {
+			seedAssignment(ctx, { orgId, tourId: tourId, guideId: "guide-1",
 				status: "completed",
 				date: "2026-07-16",
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, {
+			seedAssignment(ctx, { orgId, tourId: tourId, guideId: "guide-1",
 				status: "cancelled",
 				date: "2026-07-17",
-			}),
+			 }),
 		);
 
 		const overview = await t.query(
@@ -147,23 +48,23 @@ describe("analytics", () => {
 	it("getOverview: upcomingThisWeek counts future assignments outside the window", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_upcoming";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
 		const day = (offset: number) =>
 			new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
 		// Scheduled 3 days out: beyond every dashboard preset's
 		// endDate (all end today) but inside the 7-day card window.
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, {
+			seedAssignment(ctx, { orgId, tourId: tourId, guideId: "guide-1",
 				status: "scheduled",
 				date: day(3),
-			}),
+			 }),
 		);
 		// Cancelled future assignment: must NOT count.
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, {
+			seedAssignment(ctx, { orgId, tourId: tourId, guideId: "guide-1",
 				status: "cancelled",
 				date: day(4),
-			}),
+			 }),
 		);
 
 		const overview = await t.query(
@@ -180,14 +81,14 @@ describe("analytics", () => {
 	it("getTourStats: groups by tour", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a2";
-		const t1 = await t.run((ctx: any) => seedTour(ctx, orgId, "Tour A"));
-		const t2 = await t.run((ctx: any) => seedTour(ctx, orgId, "Tour B"));
-		await t.run((ctx: any) => seedAssignment(ctx, orgId, t1));
+		const t1 = await t.run((ctx: any) => seedTour(ctx, { orgId, name: "Tour A", capacity: 20, maxGuests: 20 }));
+		const t2 = await t.run((ctx: any) => seedTour(ctx, { orgId, name: "Tour B", capacity: 20, maxGuests: 20 }));
+		await t.run((ctx: any) => seedAssignment(ctx, { orgId, tourId: t1, guideId: "guide-1" }));
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, t1, { date: "2026-07-16" }),
+			seedAssignment(ctx, { orgId, tourId: t1, guideId: "guide-1", date: "2026-07-16"  }),
 		);
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, t2, { date: "2026-07-17" }),
+			seedAssignment(ctx, { orgId, tourId: t2, guideId: "guide-1", date: "2026-07-17"  }),
 		);
 
 		const stats = await t.query(
@@ -209,34 +110,33 @@ describe("analytics", () => {
 	it("getForTour: bookings + assignments for one tour", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a2b";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId, "Solo"));
-		const other = await t.run((ctx: any) => seedTour(ctx, orgId, "Other"));
-		const customerId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, name: "Solo", capacity: 20, maxGuests: 20 }));
+		const other = await t.run((ctx: any) => seedTour(ctx, { orgId, name: "Other", capacity: 20, maxGuests: 20 }));
+		const customerId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, customerId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: customerId,
 				guests: 4,
 				totalAmountCents: 10000n,
-				netRevenueCents: 10000n,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, customerId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: customerId,
 				date: "2026-07-16",
 				status: "cancelled",
 				guests: 2,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, other, customerId, {
+			seedBooking(ctx, { orgId, tourId: other, customerId: customerId,
 				date: "2026-07-17",
 				guests: 8,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, { status: "completed" }),
+			seedAssignment(ctx, { orgId, tourId: tourId, guideId: "guide-1", status: "completed"  }),
 		);
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, other, { date: "2026-07-17" }),
+			seedAssignment(ctx, { orgId, tourId: other, guideId: "guide-1", date: "2026-07-17"  }),
 		);
 
 		const stats = await t.query(internal.analytics.getForTourInternal, {
@@ -276,13 +176,13 @@ describe("analytics", () => {
 	it("getRevenueSummary: sums revenue and guests", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a4";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, { guests: 4, totalAmountCents: 10000n, netRevenueCents: 10000n }),
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId, guests: 4, totalAmountCents: 10000n, netRevenueCents: 10000n  }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, { guests: 2, totalAmountCents: 5000n, netRevenueCents: 5000n }),
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId, guests: 2, totalAmountCents: 5000n, netRevenueCents: 5000n  }),
 		);
 
 		const summary = await t.query(
@@ -303,16 +203,16 @@ describe("analytics", () => {
 	it("getBookingSources: groups by source", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_a5";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, { source: "viator" }),
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId, source: "viator"  }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, { source: "viator" }),
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId, source: "viator"  }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, { source: "direct" }),
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId, source: "direct"  }),
 		);
 
 		const result = await t.query(
@@ -334,30 +234,30 @@ describe("analytics", () => {
 	it("getTopTours: ranks by revenue and respects limit", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_top_tours";
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 		const tourA = await t.run((ctx: any) =>
-			seedTour(ctx, orgId, "Premium Tour"),
+			seedTour(ctx, { orgId, name: "Premium Tour", capacity: 20, maxGuests: 20 }),
 		);
 		const tourB = await t.run((ctx: any) =>
-			seedTour(ctx, orgId, "Budget Tour"),
+			seedTour(ctx, { orgId, name: "Budget Tour", capacity: 20, maxGuests: 20 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourA, custId, {
+			seedBooking(ctx, { orgId, tourId: tourA, customerId: custId,
 				totalAmountCents: 50000n,
 				date: "2026-07-10",
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourA, custId, {
+			seedBooking(ctx, { orgId, tourId: tourA, customerId: custId,
 				totalAmountCents: 50000n,
 				date: "2026-07-11",
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourB, custId, {
+			seedBooking(ctx, { orgId, tourId: tourB, customerId: custId,
 				totalAmountCents: 20000n,
 				date: "2026-07-12",
-			}),
+			 }),
 		);
 
 		const top = await t.query(internal.analytics.getTopToursInternal, {
@@ -389,24 +289,24 @@ describe("analytics", () => {
 	it("getGuideStats: groups by guide and counts statuses", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_guide_stats";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, { guideId: "guide_1" }),
+			seedAssignment(ctx, { orgId, tourId: tourId,  guideId: "guide_1"  }),
 		);
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, {
+			seedAssignment(ctx, { orgId, tourId: tourId, 
 				guideId: "guide_1",
 				status: "completed",
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, {
+			seedAssignment(ctx, { orgId, tourId: tourId, 
 				guideId: "guide_1",
 				status: "cancelled",
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedAssignment(ctx, orgId, tourId, { guideId: "guide_2" }),
+			seedAssignment(ctx, { orgId, tourId: tourId,  guideId: "guide_2"  }),
 		);
 
 		const stats = await t.query(
@@ -433,13 +333,13 @@ describe("analytics", () => {
 		const t = convexTest(schema, modules);
 		const orgA = "org_iso_a";
 		const orgB = "org_iso_b";
-		const tourIdA = await t.run((ctx: any) => seedTour(ctx, orgA));
-		const tourIdB = await t.run((ctx: any) => seedTour(ctx, orgB));
-		await t.run((ctx: any) => seedAssignment(ctx, orgA, tourIdA));
-		await t.run((ctx: any) => seedAssignment(ctx, orgA, tourIdA, { date: "2026-07-16" }));
-		await t.run((ctx: any) => seedAssignment(ctx, orgB, tourIdB));
-		await t.run((ctx: any) => seedAssignment(ctx, orgB, tourIdB, { date: "2026-07-17" }));
-		await t.run((ctx: any) => seedAssignment(ctx, orgB, tourIdB, { date: "2026-07-18" }));
+		const tourIdA = await t.run((ctx: any) => seedTour(ctx, { orgId: orgA, capacity: 20, maxGuests: 20 }));
+		const tourIdB = await t.run((ctx: any) => seedTour(ctx, { orgId: orgB, capacity: 20, maxGuests: 20 }));
+		await t.run((ctx: any) => seedAssignment(ctx, { orgId: orgA, tourId: tourIdA, guideId: "guide-1" }));
+		await t.run((ctx: any) => seedAssignment(ctx, { orgId: orgA, tourId: tourIdA, guideId: "guide-1", date: "2026-07-16"  }));
+		await t.run((ctx: any) => seedAssignment(ctx, { orgId: orgB, tourId: tourIdB, guideId: "guide-1" }));
+		await t.run((ctx: any) => seedAssignment(ctx, { orgId: orgB, tourId: tourIdB, guideId: "guide-1", date: "2026-07-17"  }));
+		await t.run((ctx: any) => seedAssignment(ctx, { orgId: orgB, tourId: tourIdB, guideId: "guide-1", date: "2026-07-18"  }));
 
 		const aOverview = await t.query(
 			internal.analytics.getOverviewInternal,
@@ -467,46 +367,46 @@ describe("analytics", () => {
 	it("getWeeklyPulse: returns current + previous window side by side", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pulse";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 
 		// Last week (Aug 2–8): 2 bookings, $200
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-02",
 				totalAmountCents: 10000n,
 				guests: 2,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-05",
 				totalAmountCents: 10000n,
 				guests: 3,
-			}),
+			 }),
 		);
 		// This week (Aug 9–15): 3 bookings, $300 + 1 cancelled
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-09",
 				totalAmountCents: 10000n,
 				guests: 4,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-11",
 				totalAmountCents: 10000n,
 				guests: 2,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-13",
 				totalAmountCents: 10000n,
 				guests: 5,
 				status: "cancelled",
-			}),
+			 }),
 		);
 
 		const pulse = await t.query(
@@ -588,53 +488,53 @@ describe("analytics", () => {
 	it("getChannelRevenue: aggregates revenue per source sorted by revenue", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_channels";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 
 		// viator: 2 bookings, $300, 5 guests
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-01",
 				source: "viator",
 				totalAmountCents: 15000n,
 				guests: 2,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-02",
 				source: "viator",
 				totalAmountCents: 15000n,
 				guests: 3,
-			}),
+			 }),
 		);
 		// direct: 1 booking, $100, 2 guests
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-03",
 				source: "direct",
 				totalAmountCents: 10000n,
 				guests: 2,
-			}),
+			 }),
 		);
 		// getyourguide: 1 booking, $400, 4 guests (highest revenue)
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-04",
 				source: "getyourguide",
 				totalAmountCents: 40000n,
 				guests: 4,
-			}),
+			 }),
 		);
 		// cancelled viator — must be excluded
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-05",
 				source: "viator",
 				totalAmountCents: 99999n,
 				guests: 10,
 				status: "cancelled",
-			}),
+			 }),
 		);
 
 		const channels = await t.query(
@@ -679,26 +579,26 @@ describe("analytics", () => {
 		const t = convexTest(schema, modules);
 		const orgA = "org_chan_iso_a";
 		const orgB = "org_chan_iso_b";
-		const tourA = await t.run((ctx: any) => seedTour(ctx, orgA));
-		const tourB = await t.run((ctx: any) => seedTour(ctx, orgB));
-		const custA = await t.run((ctx: any) => seedCustomer(ctx, orgA));
-		const custB = await t.run((ctx: any) => seedCustomer(ctx, orgB));
+		const tourA = await t.run((ctx: any) => seedTour(ctx, { orgId: orgA, capacity: 20, maxGuests: 20 }));
+		const tourB = await t.run((ctx: any) => seedTour(ctx, { orgId: orgB, capacity: 20, maxGuests: 20 }));
+		const custA = await t.run((ctx: any) => seedCustomer(ctx, { orgId: orgA }));
+		const custB = await t.run((ctx: any) => seedCustomer(ctx, { orgId: orgB }));
 
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgA, tourA, custA, {
+			seedBooking(ctx, { orgId: orgA, tourId: tourA, customerId: custA,
 				date: "2026-08-01",
 				source: "viator",
 				totalAmountCents: 10000n,
 				guests: 1,
-			}),
+			 }),
 		);
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgB, tourB, custB, {
+			seedBooking(ctx, { orgId: orgB, tourId: tourB, customerId: custB,
 				date: "2026-08-01",
 				source: "direct",
 				totalAmountCents: 99999n,
 				guests: 10,
-			}),
+			 }),
 		);
 
 		const aChannels = await t.query(
@@ -719,15 +619,15 @@ describe("analytics", () => {
 	it("getFinancialHealth: computes refund rate from payments vs refunds", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_fin";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 		const bookingId = await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-01",
 				totalAmountCents: 100000n,
 				balanceDueCents: 0n,
 				depositAmountCents: 100000n,
-			}),
+			 }),
 		);
 		// Seed a succeeded payment + a succeeded refund for that booking
 		const paymentId = await t.run(async (ctx: any) => {
@@ -785,15 +685,15 @@ describe("analytics", () => {
 	it("getFinancialHealth: refunds outside the window are excluded", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_fin_window";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 		const bookingId = await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-01",
 				totalAmountCents: 100000n,
 				balanceDueCents: 0n,
 				depositAmountCents: 100000n,
-			}),
+			 }),
 		);
 		await t.run(async (ctx: any) => {
 			const id = await ctx.db.insert("payments", {
@@ -854,29 +754,29 @@ describe("analytics", () => {
 	it("getFinancialHealth: outstanding balance aggregates across active bookings", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_out";
-		const tourId = await t.run((ctx: any) => seedTour(ctx, orgId));
-		const custId = await t.run((ctx: any) => seedCustomer(ctx, orgId));
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
 
 		// 3 confirmed bookings, $50 outstanding each
 		for (let i = 0; i < 3; i++) {
 			await t.run((ctx: any) =>
-				seedBooking(ctx, orgId, tourId, custId, {
+				seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 					date: "2026-08-01",
 					totalAmountCents: 10000n,
 					balanceDueCents: 5000n,
 					depositAmountCents: 5000n,
-				}),
+				 }),
 			);
 		}
 		// 1 cancelled booking — must NOT count
 		await t.run((ctx: any) =>
-			seedBooking(ctx, orgId, tourId, custId, {
+			seedBooking(ctx, { orgId, tourId: tourId, customerId: custId,
 				date: "2026-08-02",
 				totalAmountCents: 10000n,
 				balanceDueCents: 99999n,
 				depositAmountCents: 0n,
 				status: "cancelled",
-			}),
+			 }),
 		);
 
 		const fh = await t.query(
