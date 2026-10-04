@@ -24,57 +24,9 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import { seedBooking, seedCustomer, seedTour } from "./helpers";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
-
-async function seedTour(ctx: any, orgId: string) {
-	return await ctx.db.insert("tours", {
-		organizationId: orgId,
-		name: "Old Town Walk",
-		description: "",
-		durationHours: 2,
-		isActive: true,
-		recurrenceType: "none",
-		recurrenceDaysOfWeek: [],
-		capacity: 10,
-		bufferMinutes: 15,
-		minGuests: 1,
-		maxGuests: 10,
-		bookingCutoffHours: 24,
-		tourType: "walking",
-		languages: ["en"],
-		requiredGuides: 1,
-		inclusions: [],
-		exclusions: [],
-		highlights: [],
-		currency: "USD",
-		createdAt: 0,
-		updatedAt: 0,
-	});
-}
-
-async function seedCustomer(ctx: any, orgId: string, email: string) {
-	return await ctx.db.insert("customers", {
-		organizationId: orgId,
-		name: "Alice Visitor",
-		email,
-		phone: "",
-		notes: "",
-		smsConsent: false,
-		emailConsent: false,
-		preferredLanguage: "en",
-		tags: [],
-		source: "direct",
-		sourceDetails: "",
-		specialRequirements: "",
-		vipStatus: false,
-		loyaltyPoints: 0,
-		totalVisits: 0,
-		totalRevenueCents: 0n,
-		createdAt: 0,
-		updatedAt: 0,
-	});
-}
 
 async function seedTemplate(
 	ctx: any,
@@ -102,47 +54,13 @@ async function seedTemplate(
 	});
 }
 
-async function seedBooking(
-	ctx: any,
-	orgId: string,
-	tourId: any,
-	customerId: any,
-) {
-	return await ctx.db.insert("bookings", {
-		organizationId: orgId,
-		tourId,
-		customerId,
-		date: "2026-12-31",
-		startTime: "10:00",
-		guests: 2,
-		guestNames: "",
-		languageRequired: "en",
-		notes: "",
-		status: "confirmed",
-		depositAmountCents: 0n,
-		totalAmountCents: 10000n,
-		balanceDueCents: 10000n,
-		paymentMethod: "",
-		checkedInBy: "",
-		netRevenueCents: 10000n,
-		source: "public_booking",
-		reviewComment: "",
-		createdAt: 0,
-		updatedAt: 0,
-	});
-}
-
 describe("immediate booking-confirmation dispatch", () => {
 	it("returns template=null when no active template exists", async () => {
 		const t = convexTest(schema, modules);
 		const { bookingId } = await t.run(async (ctx) => {
-			const tourId = await seedTour(ctx, "org_imm_a");
-			const customerId = await seedCustomer(
-				ctx,
-				"org_imm_a",
-				"alice@a.com",
-			);
-			const bookingId = await seedBooking(ctx, "org_imm_a", tourId, customerId);
+			const tourId = await seedTour(ctx, { orgId: "org_imm_a", name: "Old Town Walk" });
+			const customerId = await seedCustomer(ctx, { orgId: "org_imm_a", email: "alice@a.com", name: "Alice Visitor" });
+			const bookingId = await seedBooking(ctx, { orgId: "org_imm_a", tourId: tourId, customerId, date: "2026-12-31", startTime: "10:00", status: "confirmed", totalAmountCents: 10000n, netRevenueCents: 10000n, source: "public_booking" });
 			return { bookingId };
 		});
 		const result = await t.query(
@@ -159,14 +77,10 @@ describe("immediate booking-confirmation dispatch", () => {
 	it("returns template=null when template is inactive", async () => {
 		const t = convexTest(schema, modules);
 		const { bookingId } = await t.run(async (ctx) => {
-			const tourId = await seedTour(ctx, "org_imm_b");
-			const customerId = await seedCustomer(
-				ctx,
-				"org_imm_b",
-				"alice@b.com",
-			);
+			const tourId = await seedTour(ctx, { orgId: "org_imm_b", name: "Old Town Walk" });
+			const customerId = await seedCustomer(ctx, { orgId: "org_imm_b", email: "alice@b.com", name: "Alice Visitor" });
 			await seedTemplate(ctx, "org_imm_b", false); // inactive
-			const bookingId = await seedBooking(ctx, "org_imm_b", tourId, customerId);
+			const bookingId = await seedBooking(ctx, { orgId: "org_imm_b", tourId: tourId, customerId, date: "2026-12-31", startTime: "10:00", status: "confirmed", totalAmountCents: 10000n, netRevenueCents: 10000n, source: "public_booking" });
 			return { bookingId };
 		});
 		const result = await t.query(
@@ -180,14 +94,10 @@ describe("immediate booking-confirmation dispatch", () => {
 	it("returns shape { template, booking, customer } with correct fields", async () => {
 		const t = convexTest(schema, modules);
 		const { bookingId } = await t.run(async (ctx) => {
-			const tourId = await seedTour(ctx, "org_imm_c");
-			const customerId = await seedCustomer(
-				ctx,
-				"org_imm_c",
-				"alice@c.com",
-			);
+			const tourId = await seedTour(ctx, { orgId: "org_imm_c", name: "Old Town Walk" });
+			const customerId = await seedCustomer(ctx, { orgId: "org_imm_c", email: "alice@c.com", name: "Alice Visitor" });
 			await seedTemplate(ctx, "org_imm_c");
-			const bookingId = await seedBooking(ctx, "org_imm_c", tourId, customerId);
+			const bookingId = await seedBooking(ctx, { orgId: "org_imm_c", tourId: tourId, customerId, date: "2026-12-31", startTime: "10:00", status: "confirmed", totalAmountCents: 10000n, netRevenueCents: 10000n, source: "public_booking" });
 			return { bookingId };
 		});
 		const result = (await t.query(
@@ -210,9 +120,9 @@ describe("immediate booking-confirmation dispatch", () => {
 		// Insert a booking then delete it — ensures we use a valid Id
 		// shape (the validator rejects malformed ones before handler).
 		const deletedId = await t.run(async (ctx) => {
-			const tourId = await seedTour(ctx, "org_imm_x");
-			const customerId = await seedCustomer(ctx, "org_imm_x", "x@x.com");
-			const id = await seedBooking(ctx, "org_imm_x", tourId, customerId);
+			const tourId = await seedTour(ctx, { orgId: "org_imm_x", name: "Old Town Walk" });
+			const customerId = await seedCustomer(ctx, { orgId: "org_imm_x", email: "x@x.com", name: "Alice Visitor" });
+			const id = await seedBooking(ctx, { orgId: "org_imm_x", tourId: tourId, customerId, date: "2026-12-31", startTime: "10:00", status: "confirmed", totalAmountCents: 10000n, netRevenueCents: 10000n, source: "public_booking" });
 			await ctx.db.delete(id);
 			return id;
 		});
@@ -226,13 +136,9 @@ describe("immediate booking-confirmation dispatch", () => {
 	it("recordImmediateDispatchResult writes success audit log", async () => {
 		const t = convexTest(schema, modules);
 		const { bookingId } = await t.run(async (ctx) => {
-			const tourId = await seedTour(ctx, "org_imm_d");
-			const customerId = await seedCustomer(
-				ctx,
-				"org_imm_d",
-				"alice@d.com",
-			);
-			const bookingId = await seedBooking(ctx, "org_imm_d", tourId, customerId);
+			const tourId = await seedTour(ctx, { orgId: "org_imm_d", name: "Old Town Walk" });
+			const customerId = await seedCustomer(ctx, { orgId: "org_imm_d", email: "alice@d.com", name: "Alice Visitor" });
+			const bookingId = await seedBooking(ctx, { orgId: "org_imm_d", tourId: tourId, customerId, date: "2026-12-31", startTime: "10:00", status: "confirmed", totalAmountCents: 10000n, netRevenueCents: 10000n, source: "public_booking" });
 			return { bookingId };
 		});
 		await t.mutation(internal.notifications.recordImmediateDispatchResult, {
@@ -259,13 +165,9 @@ describe("immediate booking-confirmation dispatch", () => {
 	it("recordImmediateDispatchResult writes failure audit log with error", async () => {
 		const t = convexTest(schema, modules);
 		const { bookingId } = await t.run(async (ctx) => {
-			const tourId = await seedTour(ctx, "org_imm_e");
-			const customerId = await seedCustomer(
-				ctx,
-				"org_imm_e",
-				"alice@e.com",
-			);
-			const bookingId = await seedBooking(ctx, "org_imm_e", tourId, customerId);
+			const tourId = await seedTour(ctx, { orgId: "org_imm_e", name: "Old Town Walk" });
+			const customerId = await seedCustomer(ctx, { orgId: "org_imm_e", email: "alice@e.com", name: "Alice Visitor" });
+			const bookingId = await seedBooking(ctx, { orgId: "org_imm_e", tourId: tourId, customerId, date: "2026-12-31", startTime: "10:00", status: "confirmed", totalAmountCents: 10000n, netRevenueCents: 10000n, source: "public_booking" });
 			return { bookingId };
 		});
 		await t.mutation(internal.notifications.recordImmediateDispatchResult, {
