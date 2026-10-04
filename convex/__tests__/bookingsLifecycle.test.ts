@@ -10,10 +10,20 @@
 // performConfirm are the next batch.)
 
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import schema from "../schema";
-import { seedBooking, seedCustomer, seedSchedule, seedTour } from "./helpers";
-import { performCancel, performComplete } from "../lib/bookingsLifecycle";
+import {
+	seedBooking,
+	seedCustomer,
+	seedException,
+	seedSchedule,
+	seedTour,
+} from "./helpers";
+import {
+	performCancel,
+	performComplete,
+	performExpire,
+} from "../lib/bookingsLifecycle";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -493,6 +503,436 @@ describe("bookingsLifecycle.performConfirm + findTargetSchedule", () => {
 					scheduleId: ids.schedule,
 				}),
 			).rejects.toThrow("Schedule does not belong to the booking's tour");
+		});
+	});
+});
+
+describe("bookingsLifecycle.performUpdate — guest-count invariants (F-new-booking-update-invariants)", () => {
+	async function seedLinked(
+		t: ReturnType<typeof convexTest>,
+		opts: {
+			guests?: number;
+			capTotal?: number;
+			booked?: number;
+			maxGuests?: number;
+			date?: string;
+			startTime?: string;
+		} = {},
+	) {
+		return t.run(async (ctx) => {
+			const guests = opts.guests ?? 2;
+			const tourId = await seedTour(ctx, {
+				orgId: ORG,
+				maxGuests: opts.maxGuests,
+			});
+			const customerId = await seedCustomer(ctx, { orgId: ORG });
+			const scheduleId = await seedSchedule(ctx, {
+				orgId: ORG,
+				tourId,
+				date: opts.date,
+				startTime: opts.startTime,
+				capacityTotal: opts.capTotal ?? 10,
+				capacityBooked: opts.booked ?? guests,
+			});
+			const bookingId = await seedBooking(ctx, {
+				orgId: ORG,
+				tourId,
+				customerId,
+				status: "confirmed",
+				guests,
+				date: opts.date,
+				startTime: opts.startTime,
+			});
+			await ctx.db.patch(bookingId, { scheduleId });
+			const booking = (await ctx.db.get(bookingId))!;
+			return { tourId, customerId, scheduleId, bookingId, booking };
+		});
+	}
+
+	it("rejects zero guests without touching counters", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedLinked(t);
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					guests: 0,
+				}),
+			).rejects.toThrow("positive integer");
+			expect((await ctx.db.get(w.bookingId))!.guests).toBe(2);
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+		});
+	});
+
+	it("rejects negative guests", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedLinked(t);
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					guests: -1,
+				}),
+			).rejects.toThrow("positive integer");
+			expect((await ctx.db.get(w.bookingId))!.guests).toBe(2);
+		});
+	});
+
+	it("rejects fractional guests", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedLinked(t);
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					guests: 2.5,
+				}),
+			).rejects.toThrow("positive integer");
+			expect((await ctx.db.get(w.bookingId))!.guests).toBe(2);
+		});
+	});
+
+	it("rejects guests above the tour maximum (create parity)", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedLinked(t, {
+			maxGuests: 15,
+			capTotal: 50,
+			booked: 2,
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					guests: 16,
+				}),
+			).rejects.toThrow("Guest count exceeds tour maximum of 15");
+			expect((await ctx.db.get(w.bookingId))!.guests).toBe(2);
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+		});
+	});
+
+	it("allows an increase within capacity with net accounting", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedLinked(t, { capTotal: 10, booked: 2 });
+		await t.run(async (ctx) => {
+			await performUpdate(ctx, w.booking, ORG, "user_1", {
+				bookingId: w.bookingId,
+				guests: 4,
+			});
+			expect((await ctx.db.get(w.bookingId))!.guests).toBe(4);
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(4);
+		});
+	});
+
+	it("rejects a same-schedule increase beyond capacity", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedLinked(t, { capTotal: 3, booked: 2 });
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					guests: 4,
+				}),
+			).rejects.toThrow();
+			expect((await ctx.db.get(w.bookingId))!.guests).toBe(2);
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+		});
+	});
+});
+
+describe("bookingsLifecycle.performUpdate — live slot parity on reschedule (F-new-booking-update-invariants)", () => {
+	const TARGET = { date: "2027-04-11", startTime: "10:00" };
+
+	async function seedMovable(
+		t: ReturnType<typeof convexTest>,
+		opts: { guests?: number; capTotal?: number; status?: "confirmed" } = {},
+	) {
+		return t.run(async (ctx) => {
+			const guests = opts.guests ?? 2;
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const customerId = await seedCustomer(ctx, { orgId: ORG });
+			const scheduleId = await seedSchedule(ctx, {
+				orgId: ORG,
+				tourId,
+				capacityTotal: opts.capTotal ?? 10,
+				capacityBooked: guests,
+			});
+			const bookingId = await seedBooking(ctx, {
+				orgId: ORG,
+				tourId,
+				customerId,
+				status: "confirmed",
+				guests,
+			});
+			await ctx.db.patch(bookingId, { scheduleId });
+			const booking = (await ctx.db.get(bookingId))!;
+			return { tourId, customerId, scheduleId, bookingId, booking };
+		});
+	}
+
+	it("rejects a move onto a removed exception date", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedMovable(t);
+		await t.run(async (ctx) => {
+			await seedException(ctx, {
+				orgId: ORG,
+				tourId: w.tourId,
+				date: TARGET.date,
+				exceptionType: "removed",
+			});
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					date: TARGET.date,
+					startTime: TARGET.startTime,
+				}),
+			).rejects.toThrow("not available");
+			expect((await ctx.db.get(w.bookingId))!.date).toBe(w.booking.date);
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+		});
+	});
+
+	it("rejects a move onto a suppressed slot (modified startTime)", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedMovable(t);
+		await t.run(async (ctx) => {
+			await seedException(ctx, {
+				orgId: ORG,
+				tourId: w.tourId,
+				date: TARGET.date,
+				exceptionType: "modified",
+				startTime: "14:00",
+			});
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					date: TARGET.date,
+					startTime: TARGET.startTime,
+				}),
+			).rejects.toThrow("not available");
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+		});
+	});
+
+	it("rejects a move beyond the target capacityOverride", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedMovable(t);
+		const targetId = await t.run(async (ctx) => {
+			await seedException(ctx, {
+				orgId: ORG,
+				tourId: w.tourId,
+				date: TARGET.date,
+				exceptionType: "modified",
+				capacityOverride: 5,
+			});
+			return seedSchedule(ctx, {
+				orgId: ORG,
+				tourId: w.tourId,
+				date: TARGET.date,
+				startTime: TARGET.startTime,
+				capacityTotal: 10,
+				capacityBooked: 4,
+			});
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					scheduleId: targetId,
+				}),
+			).rejects.toThrow("Not enough seats");
+			// Atomic: the old schedule keeps its seats when the move fails.
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+			expect((await ctx.db.get(targetId))!.capacityBooked).toBe(4);
+			expect((await ctx.db.get(w.bookingId))!.scheduleId).toBe(w.scheduleId);
+		});
+	});
+
+	it("allows an increase within the override when self seats cover", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedLinkedOverride(t);
+		await t.run(async (ctx) => {
+			await performUpdate(ctx, w.booking, ORG, "user_1", {
+				bookingId: w.bookingId,
+				guests: 6,
+			});
+			expect((await ctx.db.get(w.bookingId))!.guests).toBe(6);
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(8);
+		});
+
+		async function seedLinkedOverride(t: ReturnType<typeof convexTest>) {
+			return t.run(async (ctx) => {
+				const tourId = await seedTour(ctx, { orgId: ORG });
+				const customerId = await seedCustomer(ctx, { orgId: ORG });
+				const scheduleId = await seedSchedule(ctx, {
+					orgId: ORG,
+					tourId,
+					capacityTotal: 10,
+					capacityBooked: 6,
+				});
+				const schedule = (await ctx.db.get(scheduleId))!;
+				await seedException(ctx, {
+					orgId: ORG,
+					tourId,
+					date: schedule.date,
+					exceptionType: "modified",
+					capacityOverride: 8,
+				});
+				const bookingId = await seedBooking(ctx, {
+					orgId: ORG,
+					tourId,
+					customerId,
+					status: "confirmed",
+					guests: 4,
+				});
+				await ctx.db.patch(bookingId, { scheduleId });
+				const booking = (await ctx.db.get(bookingId))!;
+				return { tourId, customerId, scheduleId, bookingId, booking };
+			});
+		}
+	});
+
+	it("rejects a move onto a cancelled schedule without touching the old counter", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedMovable(t);
+		const targetId = await t.run(async (ctx) => {
+			const id = await seedSchedule(ctx, {
+				orgId: ORG,
+				tourId: w.tourId,
+				date: TARGET.date,
+				startTime: TARGET.startTime,
+				capacityTotal: 10,
+				capacityBooked: 0,
+			});
+			await ctx.db.patch(id, { status: "cancelled" });
+			return id;
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					scheduleId: targetId,
+				}),
+			).rejects.toThrow("cancelled");
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+			expect((await ctx.db.get(w.bookingId))!.scheduleId).toBe(w.scheduleId);
+		});
+	});
+
+	it("failed moves are atomic: a full target leaves the old schedule untouched", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedMovable(t);
+		const targetId = await t.run(async (ctx) =>
+			seedSchedule(ctx, {
+				orgId: ORG,
+				tourId: w.tourId,
+				date: TARGET.date,
+				startTime: TARGET.startTime,
+				capacityTotal: 3,
+				capacityBooked: 3,
+			}),
+		);
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, w.booking, ORG, "user_1", {
+					bookingId: w.bookingId,
+					scheduleId: targetId,
+				}),
+			).rejects.toThrow();
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(2);
+			expect((await ctx.db.get(targetId))!.capacityBooked).toBe(3);
+			expect((await ctx.db.get(w.bookingId))!.scheduleId).toBe(w.scheduleId);
+		});
+	});
+});
+
+describe("bookingsLifecycle.releaseBookingCapacity — only claimed capacity (F-new-unlinked-booking-capacity-release)", () => {
+	// The booking stays UNLINKED (free-time request, no scheduleId):
+	// the date fallback finds the same-slot schedule, and the guard
+	// decides by creation order.
+	async function seedUnlinked(
+		t: ReturnType<typeof convexTest>,
+		status: "confirmed" | "pending",
+		order: "schedule-later" | "schedule-earlier",
+	) {
+		vi.useFakeTimers();
+		try {
+			const world = await t.run(async (ctx) => {
+				const tourId = await seedTour(ctx, { orgId: ORG });
+				const customerId = await seedCustomer(ctx, { orgId: ORG });
+				return { tourId, customerId };
+			});
+			const seedBookingRow = () =>
+				t.run(async (ctx) =>
+					seedBooking(ctx, {
+						orgId: ORG,
+						tourId: world.tourId,
+						customerId: world.customerId,
+						status,
+						guests: 2,
+					}),
+				);
+			const seedScheduleRow = (booked: number) =>
+				t.run(async (ctx) =>
+					seedSchedule(ctx, {
+						orgId: ORG,
+						tourId: world.tourId,
+						capacityTotal: 10,
+						capacityBooked: booked,
+					}),
+				);
+			let bookingId;
+			let scheduleId;
+			if (order === "schedule-later") {
+				vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+				bookingId = await seedBookingRow();
+				vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+				scheduleId = await seedScheduleRow(3);
+			} else {
+				vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+				scheduleId = await seedScheduleRow(2);
+				vi.setSystemTime(new Date("2026-06-01T00:00:00Z"));
+				bookingId = await seedBookingRow();
+			}
+			const booking = await t.run(
+				async (ctx) => (await ctx.db.get(bookingId))!,
+			);
+			return { ...world, bookingId, scheduleId, booking };
+		} finally {
+			vi.useRealTimers();
+		}
+	}
+
+	it("cancel of an unlinked booking leaves a later same-slot schedule untouched", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedUnlinked(t, "confirmed", "schedule-later");
+		await t.run(async (ctx) => {
+			await performCancel(ctx, w.booking, undefined, "user_1");
+			expect((await ctx.db.get(w.bookingId))!.status).toBe("cancelled");
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(3);
+		});
+	});
+
+	it("cancel of an unlinked booking still restores an earlier schedule (legacy compat)", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedUnlinked(t, "confirmed", "schedule-earlier");
+		await t.run(async (ctx) => {
+			await performCancel(ctx, w.booking, undefined, "user_1");
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(0);
+		});
+	});
+
+	it("expiry of an unlinked booking leaves a later same-slot schedule untouched", async () => {
+		const t = convexTest(schema, modules);
+		const w = await seedUnlinked(t, "pending", "schedule-later");
+		await t.run(async (ctx) => {
+			await performExpire(ctx, w.booking, "user_1");
+			expect((await ctx.db.get(w.bookingId))!.status).toBe("expired");
+			expect((await ctx.db.get(w.scheduleId))!.capacityBooked).toBe(3);
 		});
 	});
 });

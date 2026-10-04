@@ -23,6 +23,7 @@ import {
 	assertFieldWithinLimit,
 } from "./validation";
 import { isBlackoutHelper } from "../tourBlackoutDates";
+import { exceptionForDateHelper } from "../tourExceptionDates";
 
 // Booking lifecycle states (mirrors the schema union).
 // pending → confirmed | cancelled | expired
@@ -170,8 +171,11 @@ export async function performUpdate(
 		throw new ConvexError("Cannot reschedule a checked-in booking");
 	}
 
-	const tour = rescheduleRequested ? await ctx.db.get(booking.tourId) : null;
-	if (rescheduleRequested && !tour) {
+	// The tour is needed for the reschedule cutoff and for the
+	// guest-count ceiling (create parity) on any guest change.
+	const needsTour = rescheduleRequested || args.guests !== undefined;
+	const tour = needsTour ? await ctx.db.get(booking.tourId) : null;
+	if (needsTour && !tour) {
 		throw new ConvexError("Tour not found");
 	}
 	const targetDate = rescheduleRequested
@@ -195,6 +199,29 @@ export async function performUpdate(
 	const nextStartTime = targetSchedule?.startTime ?? targetStartTime;
 	const nextGuests = args.guests ?? booking.guests;
 
+	// Guest-count invariants (create parity): validated before any
+	// counter moves so a bad count can never strand a decrement.
+	if (args.guests !== undefined) {
+		if (!Number.isInteger(nextGuests) || nextGuests <= 0) {
+			throw new ConvexError("guests must be a positive integer");
+		}
+		if (tour?.maxGuests && nextGuests > tour.maxGuests) {
+			throw new ConvexError(
+				`Guest count exceeds tour maximum of ${tour.maxGuests}`,
+			);
+		}
+	}
+
+	// Live-slot parity (public F344): exceptions bind updates as well
+	// as creates. Looked up once — the reschedule checks below and
+	// the capacityOverride precheck share it.
+	const slotDate = targetSchedule?.date ?? (rescheduleRequested ? targetDate : null);
+	const slotException = slotDate
+		? await exceptionForDateHelper(ctx, booking.tourId, organizationId, slotDate)
+		: null;
+	const slotExceptionType = slotException?.exceptionType;
+	const slotExceptionStart = slotException?.startTime;
+
 	if (rescheduleRequested) {
 		const tourTs = parseBookingTime(nextDate, nextStartTime);
 		if (tourTs === null || tourTs <= Date.now()) {
@@ -209,6 +236,20 @@ export async function performUpdate(
 		if (await isBlackoutHelper(ctx, booking.tourId, nextDate)) {
 			throw new ConvexError(
 				"This date is not available for booking. Please pick another date.",
+			);
+		}
+		if (slotExceptionType === "removed") {
+			throw new ConvexError(
+				"This date is not available for booking. Please pick another date.",
+			);
+		}
+		if (
+			(slotExceptionType === "modified" || slotExceptionType === "added") &&
+			slotExceptionStart !== undefined &&
+			nextStartTime !== slotExceptionStart
+		) {
+			throw new ConvexError(
+				"This time slot is not available for booking. Please pick another time.",
 			);
 		}
 	}
@@ -260,6 +301,36 @@ export async function performUpdate(
 
 	const oldScheduleId = booking.scheduleId;
 	const nextScheduleId = targetSchedule?._id;
+
+	// Atomic capacity precheck: validate the target BEFORE any counter
+	// moves, so a failed move cannot strand the old schedule
+	// decremented (previously the increment guard threw after the
+	// decrement had already mutated). Self seats are excluded — the
+	// booking's current seats on the target are its own to reuse — and
+	// a capacityOverride caps below capacityTotal (public F344 parity).
+	// Only enforced when the update adds load, so lowering an override
+	// below current bookings never blocks note-only edits. A cancelled
+	// target is rejected here rather than mid-move: incrementBooked
+	// already refuses it, so this only converts a partial failure into
+	// a clean one.
+	const addsLoad =
+		nextGuests > booking.guests || nextScheduleId !== oldScheduleId;
+	if (targetSchedule && addsLoad) {
+		if (targetSchedule.status === "cancelled") {
+			throw new ConvexError("Cannot book cancelled schedule");
+		}
+		const selfSeats =
+			targetSchedule._id === oldScheduleId ? booking.guests : 0;
+		const projected = targetSchedule.capacityBooked - selfSeats + nextGuests;
+		if (projected > targetSchedule.capacityTotal) {
+			throw new ConvexError("Schedule over capacity");
+		}
+		const override = slotException?.capacityOverride;
+		if (override !== undefined && projected > override) {
+			throw new ConvexError("Not enough seats left for this tour slot");
+		}
+	}
+
 	if (oldScheduleId === nextScheduleId) {
 		const delta = nextGuests - booking.guests;
 		if (delta > 0 && nextScheduleId) {
@@ -377,6 +448,7 @@ export async function releaseBookingCapacity(
 	ctx: MutationCtx,
 	booking: {
 		_id: Id<"bookings">;
+		_creationTime: number;
 		organizationId: string;
 		tourId: Id<"tours">;
 		scheduleId?: Id<"tourSchedules">;
@@ -399,6 +471,23 @@ export async function releaseBookingCapacity(
 				),
 			)
 			.first();
+		// F-new-unlinked-booking-capacity-release: an unlinked booking
+		// (free-time request) never incremented any counter — every
+		// increment path pairs with a scheduleId on the booking — so a
+		// schedule created AFTER the booking cannot hold its seats and
+		// must not be decremented. Legacy compatibility: a schedule
+		// that already existed when the booking was made keeps the old
+		// restore behavior; ties fail open toward release.
+		if (schedule && schedule._creationTime > booking._creationTime) {
+			logger.warn(
+				"[bookingsLifecycle] skip capacity release: schedule postdates unlinked booking",
+				{
+					bookingId: booking._id,
+					scheduleId: schedule._id,
+				},
+			);
+			return;
+		}
 		scheduleId = schedule?._id;
 	}
 	if (scheduleId) {
@@ -465,6 +554,7 @@ export async function performCancel(
 	ctx: MutationCtx,
 	booking: {
 		_id: Id<"bookings">;
+		_creationTime: number;
 		organizationId: string;
 		customerId: Id<"customers">;
 		tourId: Id<"tours">;
@@ -652,6 +742,7 @@ export async function performExpire(
 	ctx: MutationCtx,
 	booking: {
 		_id: Id<"bookings">;
+		_creationTime: number;
 		organizationId: string;
 		customerId: Id<"customers">;
 		tourId: Id<"tours">;
