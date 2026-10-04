@@ -32,27 +32,13 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { useOrgMembers } from "@/hooks/use-org-members";
-import { type DateRange, lastNDays } from "@/lib/date-range";
+import { type DateRange, lastNDays, yearToDate } from "@/lib/date-range";
 import { formatCents, formatCentsWhole } from "@/lib/format";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
 	component: AnalyticsPage,
 });
-
-function yearToDate(): DateRange {
-	// Use UTC throughout so the "Jan 1" boundary is in the same
-	// timezone as the rest of the date math. Otherwise, a user in a
-	// timezone west of UTC would see "2025-12-31" as their YTD start
-	// (because `new Date(2026, 0, 1)` is local-time midnight, which
-	// is the previous day in UTC).
-	const end = new Date();
-	const start = new Date(Date.UTC(end.getUTCFullYear(), 0, 1));
-	return {
-		startDate: start.toISOString().slice(0, 10),
-		endDate: end.toISOString().slice(0, 10),
-	};
-}
 
 type Preset = {
 	label: string;
