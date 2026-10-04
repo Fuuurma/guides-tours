@@ -33,7 +33,7 @@ export function getSiteUrl(): string {
 		}
 		return "http://127.0.0.1:3020";
 	}
-	if (url.startsWith("http://") && !url.includes("127.0.0.1") && !url.includes("localhost")) {
+	if (url.startsWith("http://") && !isLoopbackSiteUrl(url)) {
 		logger.warn(
 			`[siteUrl] SITE_URL is HTTP (${url}). Set it to an HTTPS URL in production.`,
 		);
@@ -63,11 +63,22 @@ export function dashboardUrl(path: string, query?: Record<string, string>): stri
  * runtime — SITE_URL-fallback policy decision, fleet 2026-09-13). */
 export function isUnconfiguredDeployment(): boolean {
 	const siteUrl = process.env.CONVEX_SITE_URL?.trim() ?? "";
-	return (
-		siteUrl === "" ||
-		siteUrl.includes("127.0.0.1") ||
-		siteUrl.includes("localhost")
-	);
+	return siteUrl === "" || isLoopbackSiteUrl(siteUrl);
+}
+
+/** True when the value parses as a URL whose hostname is exactly a
+ * loopback host (localhost or 127.0.0.1). Substring matching is wrong
+ * here: "https://tours-localhost.example.com" contains "localhost" but
+ * is a production host — it must keep email verification and fail the
+ * public-booking origin gate closed. Unparsable values return false
+ * (fail closed), never local. */
+export function isLoopbackSiteUrl(value: string): boolean {
+	try {
+		const hostname = new URL(value.trim()).hostname;
+		return hostname === "localhost" || hostname === "127.0.0.1";
+	} catch {
+		return false;
+	}
 }
 
 /** trustedOrigins for auth route registration (SITE_URL policy, fleet

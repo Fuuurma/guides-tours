@@ -125,6 +125,29 @@ describe("convex/http — public booking security hardening", () => {
 				}
 			}
 		});
+
+		it("stays fail-closed when CONVEX_SITE_URL merely contains a loopback substring", async () => {
+			// A production hostname containing "localhost" must not pass
+			// as an unconfigured (local-dev) deployment — the empty
+			// allowlist gate stays fail-closed.
+			process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS = "";
+			const originalSiteUrl = process.env.CONVEX_SITE_URL;
+			process.env.CONVEX_SITE_URL =
+				"https://my-localhost-app.convex.site";
+			try {
+				const t = convexTest(schema, modules);
+				const res = await post(t, "any-slug", VALID_PAYLOAD, {
+					origin: "https://tours.example.com",
+				});
+				expect(res.status).toBe(403);
+			} finally {
+				if (originalSiteUrl === undefined) {
+					delete process.env.CONVEX_SITE_URL;
+				} else {
+					process.env.CONVEX_SITE_URL = originalSiteUrl;
+				}
+			}
+		});
 	});
 
 	describe("slug format validation", () => {

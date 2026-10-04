@@ -10,7 +10,7 @@ import authConfig from "./auth.config";
 import { ac, roles } from "./authz";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { sendInvitationEmail } from "./lib/inviteEmail";
-import { getSiteUrl } from "./lib/siteUrl";
+import { getSiteUrl, isLoopbackSiteUrl } from "./lib/siteUrl";
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
 	components.betterAuth,
@@ -60,9 +60,9 @@ const plugins = [
 function isLocalDev(): boolean {
 	const siteUrl = process.env.SITE_URL;
 	if (!siteUrl) return false;
-	return (
-		siteUrl.includes("127.0.0.1") || siteUrl.includes("localhost")
-	);
+	// Parse the hostname — a production host merely containing
+	// "localhost"/"127.0.0.1" as a substring must keep verification.
+	return isLoopbackSiteUrl(siteUrl);
 }
 
 function googleSocialProviders():

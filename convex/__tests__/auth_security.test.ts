@@ -21,6 +21,7 @@ import { api } from "../_generated/api";
 import schema from "../schema";
 import { createAuthOptions } from "../auth";
 import {
+	isLoopbackSiteUrl,
 	isUnconfiguredDeployment,
 	trustedOriginsForDeployment,
 } from "../lib/siteUrl";
@@ -74,6 +75,22 @@ describe("auth security configuration", () => {
 		const devOptions = createAuthOptions({} as any);
 		expect(devOptions.emailAndPassword?.requireEmailVerification).toBe(false);
 	});
+
+	it.each([
+		"https://tours-localhost.example.com",
+		"https://localhost.evil.example.com",
+		"https://app127.0.0.1.example.com",
+		"https://example.com/localhost",
+	])(
+		"misleading production hostname %s keeps email verification",
+		(siteUrl) => {
+			process.env.SITE_URL = siteUrl;
+			const prodOptions = createAuthOptions({} as any);
+			expect(prodOptions.emailAndPassword?.requireEmailVerification).toBe(
+				true,
+			);
+		},
+	);
 
 	it("requireEmailVerificationOnInvitation is true in the organization plugin", () => {
 		// The organization plugin is the first plugin in the tuple.
@@ -143,6 +160,38 @@ describe("isUnconfiguredDeployment", () => {
 		process.env.CONVEX_SITE_URL = "https://guides-tours.fuurma.tech";
 		expect(isUnconfiguredDeployment()).toBe(false);
 	});
+
+	it.each([
+		"https://my-localhost-app.convex.site",
+		"https://localhost.evil.convex.site",
+		"https://app127.0.0.1.convex.site",
+		"not a url",
+	])("treats misleading CONVEX_SITE_URL %s as configured", (siteUrl) => {
+		process.env.CONVEX_SITE_URL = siteUrl;
+		expect(isUnconfiguredDeployment()).toBe(false);
+	});
+});
+
+describe("isLoopbackSiteUrl", () => {
+	it.each([
+		"http://localhost:3020",
+		"http://127.0.0.1:3020",
+		"  http://localhost:3020  ",
+	])("recognizes exact loopback host %s", (value) => {
+		expect(isLoopbackSiteUrl(value)).toBe(true);
+	});
+
+	it.each([
+		"https://tours-localhost.example.com",
+		"https://localhost.evil.example.com",
+		"https://app127.0.0.1.example.com",
+		"https://example.com/127.0.0.1",
+		"https://guides-tours.fuurma.tech",
+		"not a url",
+		"",
+	])("rejects non-loopback value %s", (value) => {
+		expect(isLoopbackSiteUrl(value)).toBe(false);
+	});
 });
 
 describe("trustedOriginsForDeployment (SITE_URL policy)", () => {
@@ -169,6 +218,21 @@ describe("trustedOriginsForDeployment (SITE_URL policy)", () => {
 				const origins = trustedOriginsForDeployment();
 				expect(origins).not.toContain("http://127.0.0.1:3020");
 				expect(origins).toContain("https://guides-tours.fuurma.tech");
+			},
+		);
+	});
+
+	it("misleading CONVEX_SITE_URL hostname trusts NO localhost anchor", () => {
+		withEnv(
+			{
+				CONVEX_SITE_URL: "https://my-localhost-app.convex.site",
+			},
+			() => {
+				const origins = trustedOriginsForDeployment();
+				expect(origins).not.toContain("http://127.0.0.1:3020");
+				expect(origins).toContain(
+					"https://my-localhost-app.convex.site",
+				);
 			},
 		);
 	});
