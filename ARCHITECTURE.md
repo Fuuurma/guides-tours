@@ -32,5 +32,11 @@ flowchart TD
 - convex/ota — provider integrations: webhook_handler, upsert, integrations_mutations
 - convex/notifications* · phoneReminders · scheduledNotifications · crons.ts — dispatch, SMS, reminder crons
 - convex/auth.ts · betterAuth/ · auth.config.ts · authz.ts — Better Auth + fail-closed org authorization
+- convex/public_booking.ts — unauthenticated public booking endpoint
+- convex/organizations.ts — org membership queries
+- convex/analytics · tourAnalytics — overview/revenue stats + pre-computed per-tour cache
+- convex/ops — operator one-shot: publish departure + assign crew
+- convex/staffingDigest · availabilityReminders — crew digests and availability nudges
+- convex/stripeEvents.ts — Stripe webhook idempotency gate
 - convex/lib — validation, crypto, assignmentsLifecycle shared seams
 - convex/http.ts — webhook surface (Stripe, OTA) with signature verification
