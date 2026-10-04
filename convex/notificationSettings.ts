@@ -102,6 +102,83 @@ export const upsert = mutation({
 	},
 });
 
+// ----- Patch assembly (data-driven so new fields are one list entry) -----
+
+/** Fields copied verbatim when present: [argsKey, patchKey]. Only
+ *  twilioAuthToken is renamed (args.encryptedAuthToken). */
+const PASSTHROUGH_FIELDS: ReadonlyArray<readonly [string, string]> = [
+	["twilioEnabled", "twilioEnabled"],
+	["twilioAccountSid", "twilioAccountSid"],
+	["encryptedAuthToken", "twilioAuthToken"],
+	["twilioPhoneNumber", "twilioPhoneNumber"],
+	["whatsappEnabled", "whatsappEnabled"],
+	["whatsappBusinessAccountId", "whatsappBusinessAccountId"],
+	["whatsappPhoneNumberId", "whatsappPhoneNumberId"],
+	["emailEnabled", "emailEnabled"],
+	["emailFromName", "emailFromName"],
+	["emailFromEmail", "emailFromEmail"],
+	["useCompanyDefaults", "useCompanyDefaults"],
+	["requireSmsConsent", "requireSmsConsent"],
+	["requireEmailConsent", "requireEmailConsent"],
+	["maxRetries", "maxRetries"],
+	["retryDelayMinutes", "retryDelayMinutes"],
+	["staffingDigestEnabled", "staffingDigestEnabled"],
+	["availabilityReminderEnabled", "availabilityReminderEnabled"],
+	["assignmentNotifyEnabled", "assignmentNotifyEnabled"],
+	["phoneRemindWithDigest", "phoneRemindWithDigest"],
+];
+
+/** Empty string clears the field; otherwise the value stored as-is. */
+const CLEAR_IF_BLANK_FIELDS = ["twilioMessagingServiceSid"] as const;
+
+/** Empty string clears the field; otherwise the trimmed value. */
+const TRIM_OR_CLEAR_FIELDS = [
+	"staffingDigestEmail",
+	"staffingDigestPhone",
+] as const;
+
+/** Integer fields bounded to 1..14 (ConvexError outside). */
+const BOUNDED_INT_FIELDS = [
+	"staffingDigestDaysAhead",
+	"availabilityReminderDaysAhead",
+] as const;
+
+function buildNotificationPatch(
+	args: Record<string, unknown>,
+): Record<string, unknown> {
+	const patch: Record<string, unknown> = {};
+	for (const [argsKey, patchKey] of PASSTHROUGH_FIELDS) {
+		if (args[argsKey] !== undefined) patch[patchKey] = args[argsKey];
+	}
+	for (const key of CLEAR_IF_BLANK_FIELDS) {
+		const value = args[key];
+		if (value !== undefined) {
+			patch[key] =
+				typeof value === "string" && value.trim() === "" ? undefined : value;
+		}
+	}
+	for (const key of TRIM_OR_CLEAR_FIELDS) {
+		const value = args[key];
+		if (value !== undefined) {
+			patch[key] =
+				typeof value === "string" && value.trim() === ""
+					? undefined
+					: (value as string).trim();
+		}
+	}
+	for (const key of BOUNDED_INT_FIELDS) {
+		const value = args[key];
+		if (value !== undefined) {
+			const n = Math.floor(value as number);
+			if (n < 1 || n > 14) {
+				throw new ConvexError(`${key} must be between 1 and 14`);
+			}
+			patch[key] = n;
+		}
+	}
+	return patch;
+}
+
 export const internalUpsert = internalMutation({
 	args: {
 		organizationId: v.string(),
@@ -139,75 +216,10 @@ export const internalUpsert = internalMutation({
 			.first();
 		const now = Date.now();
 
-		const patch: Record<string, unknown> = { updatedAt: now };
-		if (args.twilioEnabled !== undefined) patch.twilioEnabled = args.twilioEnabled;
-		if (args.twilioAccountSid !== undefined)
-			patch.twilioAccountSid = args.twilioAccountSid;
-		if (args.encryptedAuthToken !== undefined)
-			patch.twilioAuthToken = args.encryptedAuthToken;
-		if (args.twilioPhoneNumber !== undefined)
-			patch.twilioPhoneNumber = args.twilioPhoneNumber;
-		if (args.twilioMessagingServiceSid !== undefined) {
-			// Allow clearing: empty string → unset the field.
-			patch.twilioMessagingServiceSid =
-				args.twilioMessagingServiceSid.trim() === ""
-					? undefined
-					: args.twilioMessagingServiceSid;
-		}
-		if (args.whatsappEnabled !== undefined)
-			patch.whatsappEnabled = args.whatsappEnabled;
-		if (args.whatsappBusinessAccountId !== undefined)
-			patch.whatsappBusinessAccountId = args.whatsappBusinessAccountId;
-		if (args.whatsappPhoneNumberId !== undefined)
-			patch.whatsappPhoneNumberId = args.whatsappPhoneNumberId;
-		if (args.emailEnabled !== undefined) patch.emailEnabled = args.emailEnabled;
-		if (args.emailFromName !== undefined) patch.emailFromName = args.emailFromName;
-		if (args.emailFromEmail !== undefined) patch.emailFromEmail = args.emailFromEmail;
-		if (args.useCompanyDefaults !== undefined)
-			patch.useCompanyDefaults = args.useCompanyDefaults;
-		if (args.requireSmsConsent !== undefined)
-			patch.requireSmsConsent = args.requireSmsConsent;
-		if (args.requireEmailConsent !== undefined)
-			patch.requireEmailConsent = args.requireEmailConsent;
-		if (args.maxRetries !== undefined) patch.maxRetries = args.maxRetries;
-		if (args.retryDelayMinutes !== undefined)
-			patch.retryDelayMinutes = args.retryDelayMinutes;
-		if (args.staffingDigestEnabled !== undefined)
-			patch.staffingDigestEnabled = args.staffingDigestEnabled;
-		if (args.staffingDigestEmail !== undefined) {
-			patch.staffingDigestEmail =
-				args.staffingDigestEmail.trim() === ""
-					? undefined
-					: args.staffingDigestEmail.trim();
-		}
-		if (args.staffingDigestPhone !== undefined) {
-			patch.staffingDigestPhone =
-				args.staffingDigestPhone.trim() === ""
-					? undefined
-					: args.staffingDigestPhone.trim();
-		}
-		if (args.staffingDigestDaysAhead !== undefined) {
-			const n = Math.floor(args.staffingDigestDaysAhead);
-			if (n < 1 || n > 14) {
-				throw new ConvexError("staffingDigestDaysAhead must be between 1 and 14");
-			}
-			patch.staffingDigestDaysAhead = n;
-		}
-		if (args.availabilityReminderEnabled !== undefined)
-			patch.availabilityReminderEnabled = args.availabilityReminderEnabled;
-		if (args.availabilityReminderDaysAhead !== undefined) {
-			const n = Math.floor(args.availabilityReminderDaysAhead);
-			if (n < 1 || n > 14) {
-				throw new ConvexError(
-					"availabilityReminderDaysAhead must be between 1 and 14",
-				);
-			}
-			patch.availabilityReminderDaysAhead = n;
-		}
-		if (args.assignmentNotifyEnabled !== undefined)
-			patch.assignmentNotifyEnabled = args.assignmentNotifyEnabled;
-		if (args.phoneRemindWithDigest !== undefined)
-			patch.phoneRemindWithDigest = args.phoneRemindWithDigest;
+		const patch: Record<string, unknown> = {
+			updatedAt: now,
+			...buildNotificationPatch(args),
+		};
 
 		if (existing) {
 			await ctx.db.patch(existing._id, patch);

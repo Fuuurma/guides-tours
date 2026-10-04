@@ -1,15 +1,26 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  # Opt-in only. This workflow used to fire on every push to main and every
+  # pull request, which is how the account's free Actions minutes were gone
+  # within days: it had never once produced a signal, because every run was
+  # rejected up front ("recent account payments have failed"). Nothing is
+  # validated by a run that never starts.
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to run against"
+        required: true
+        default: main
+        type: string
 
 jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: pnpm/action-setup@v4
         with:
           version: 10.30.2

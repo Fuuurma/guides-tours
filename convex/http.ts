@@ -40,9 +40,12 @@ authComponent.registerRoutesLazy(http, createAuth, {
 registerOtaRoutes(http);
 
 // Stripe webhook — POST /api/payments/stripe/webhook. Verifies the
-// signature against the org's stored webhook secret, then dispatches
-// payment_intent.succeeded / payment_intent.payment_failed /
-// charge.refunded to the payments table.
+// signature against the org's stored webhook secret
+// (paymentSettings.stripeWebhookSecret — scoped per org), then claims
+// the event in stripeEvents (transactional per-org dedupe: processed
+// events are skipped, failed/stale claims are retried) before
+// dispatching payment_intent.succeeded / payment_intent.payment_failed
+// / charge.refunded to the payments table.
 http.route({
 	path: "/api/payments/stripe/webhook",
 	method: "POST",

@@ -216,6 +216,39 @@ export default defineSchema({
 		.index("by_org_date", ["organizationId", "date"])
 		.index("by_org_status_date", ["organizationId", "status", "date"]),
 
+	// Denormalized availability projection — ONE doc per (tour, date)
+	// mirroring that day's tourSchedules slots. Rewritten inside the
+	// SAME mutation as every tourSchedules write (create/update/remove,
+	// incrementBooked/decrementBooked, seasonal generate) — never a
+	// scheduler; an out-of-sync projection is the bug this table exists
+	// to prevent. The public booking page reads this single doc via
+	// by_tour_date instead of scanning tourSchedules.
+	// Pattern: availability projection (denormalized), restaurant-
+	// calendar capacity — system-design-primer.
+	tourAvailability: defineTable({
+		organizationId: orgId,
+		tourId: v.id("tours"),
+		date: v.string(),
+		slots: v.array(
+			v.object({
+				scheduleId: v.id("tourSchedules"),
+				startTime: v.string(),
+				endTime: v.string(),
+				capacityTotal: v.number(),
+				capacityBooked: v.number(),
+				seatsLeft: v.number(),
+				status: v.union(
+					v.literal("available"),
+					v.literal("full"),
+					v.literal("cancelled"),
+				),
+			}),
+		),
+		updatedAt: v.number(),
+	})
+		.index("by_tour_date", ["tourId", "date"])
+		.index("by_org_date", ["organizationId", "date"]),
+
 	tourBlackoutDates: defineTable({
 		organizationId: orgId,
 		tourId: v.id("tours"),
@@ -464,12 +497,21 @@ export default defineSchema({
 		languageRequired: v.string(),
 		notes: v.string(),
 		// PENDING | CONFIRMED | CHECKED_IN | COMPLETED | CANCELLED
+		//   | EXPIRED | NO_SHOW
+		// Transitions: pending → confirmed | cancelled | expired
+		//              confirmed → checked_in | cancelled | no_show
+		//              checked_in → completed | cancelled
+		// `expired` is set by the stale-pending cron (>15m unconfirmed)
+		// and releases capacity via the same decrementBooked path as
+		// cancel. `no_show` is terminal — the seat was consumed.
 		status: v.union(
 			v.literal("pending"),
 			v.literal("confirmed"),
 			v.literal("checked_in"),
 			v.literal("completed"),
 			v.literal("cancelled"),
+			v.literal("expired"),
+			v.literal("no_show"),
 		),
 		// Cents-only (drop DecimalField dollars from source)
 		depositAmountCents: v.int64(),
@@ -494,6 +536,9 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_org_date", ["organizationId", "date"])
 		.index("by_org_status", ["organizationId", "status"])
+		// Cron scan: stale pending bookings across all orgs
+		// (status = "pending" AND createdAt < cutoff).
+		.index("by_status_created", ["status", "createdAt"])
 		.index("by_customer_date", ["customerId", "date"])
 		.index("by_tour_date", ["tourId", "date"])
 		.index("by_schedule", ["scheduleId"])
@@ -728,6 +773,38 @@ export default defineSchema({
 			"receivedAt",
 		]),
 
+	// Stripe event dedupe — the idempotency gate for
+	// /api/payments/stripe/webhook. Distinct from webhookDeliveries
+	// (the audit log): this table answers "has this org already
+	// processed evt_X?" atomically. `claim` inserts transactionally;
+	// a "processed" row is a hard duplicate, while "failed" or stale
+	// "processing" rows are reclaimed so Stripe retries can re-drive
+	// delivery instead of being dropped (fleet DST-guides-tours-02).
+	stripeEvents: defineTable({
+		organizationId: orgId,
+		// Stripe event id (evt_*)
+		eventId: v.string(),
+		// payment_intent.succeeded | payment_intent.payment_failed |
+		// checkout.session.completed | charge.refunded | ...
+		eventType: v.string(),
+		// processing | processed | failed
+		status: v.union(
+			v.literal("processing"),
+			v.literal("processed"),
+			v.literal("failed"),
+		),
+		attemptCount: v.number(),
+		errorMessage: v.optional(v.string()),
+		receivedAt: v.number(),
+		processedAt: v.optional(v.number()),
+	})
+		.index("by_org", ["organizationId"])
+		// Dedupe is per-org: the webhook endpoint is shared and event
+		// ids are only unique per Stripe account — org A processing
+		// evt_1 must not suppress org B's copy (same rule as
+		// webhookDeliveries F14).
+		.index("by_org_event", ["organizationId", "eventId"]),
+
 	// ----- Payments -----
 
 	// Stripe PaymentIntent tracking + raw payment records.
@@ -741,7 +818,7 @@ export default defineSchema({
 		// PENDING | SUCCEEDED | FAILED | REFUNDED | CANCELLED
 		status: v.string(),
 		provider: v.string(),
-		stripePaymentIntentId: v.string(),
+		stripePaymentIntentId: v.optional(v.string()),
 		processedAt: v.optional(v.number()),
 		createdAt: v.number(),
 		updatedAt: v.number(),

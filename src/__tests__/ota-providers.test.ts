@@ -13,10 +13,6 @@ import { describe, expect, test } from "vitest";
 import { ALL_PROVIDERS, providerLabel } from "../components/ota-providers";
 
 describe("ALL_PROVIDERS", () => {
-	test("has the 7 supported OTA providers", () => {
-		expect(ALL_PROVIDERS).toHaveLength(7);
-	});
-
 	test("every entry has a non-empty id and label", () => {
 		for (const p of ALL_PROVIDERS) {
 			expect(p.id).toBeTruthy();

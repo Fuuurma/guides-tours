@@ -335,3 +335,14 @@ export const removeInternal = internalMutation({
 		return args.integrationId;
 	},
 });
+
+/**
+ * Internal helper: read an integration with decrypted secrets.
+ * Used by OTA client code (e.g. ViatorClient) so callers don't have
+ * to deal with the decrypt dance. Tenant-scope is enforced at
+ * the caller.
+ *
+ * Registered as internalQuery (not internalMutation) because it only
+ * reads — using a mutation for a read-only operation runs it as a
+ * transaction unnecessarily and prevents reactive caching.
+ */

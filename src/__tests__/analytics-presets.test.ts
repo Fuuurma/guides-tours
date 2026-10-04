@@ -1,98 +1,73 @@
-// Tests for analytics page date-range helpers.
+// Tests for the analytics date-range helpers in src/lib/date-range.ts.
 //
-// These functions power the "7d / 30d / 90d / YTD" preset buttons on
-// /dashboard/analytics. They used to be defined inline in the page
-// component; we extracted them so the preset dates can be re-computed
-// on every render (so "7d" is always "7 days ago from now", not from
-// when the JS bundle first loaded).
-//
-// Tests pin the date math so a refactor doesn't silently break the
-// presets.
+// Replaces the previous version, which re-implemented lastNDays and
+// yearToDate inside this file and tested the copies — the suite could not
+// fail when production drifted, and its "now" parameter did not exist on
+// the real signatures. These tests call the production functions with the
+// system clock faked so the window math is still deterministic.
 
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { lastNDays, upcomingDateRange, yearToDate } from "@/lib/date-range";
 
-function isoDate(d: Date): string {
-	return d.toISOString().slice(0, 10);
-}
+beforeEach(() => {
+	vi.useFakeTimers();
+	vi.setSystemTime(new Date(2026, 5, 29, 12, 0, 0)); // Jun 29 2026, local
+});
 
-function lastNDays(
-	n: number,
-	now: Date = new Date(),
-): {
-	startDate: string;
-	endDate: string;
-} {
-	const end = now;
-	const start = new Date(end.getTime() - n * 86_400_000);
-	return { startDate: isoDate(start), endDate: isoDate(end) };
-}
+afterEach(() => {
+	vi.useRealTimers();
+});
 
-function yearToDate(now: Date = new Date()): {
-	startDate: string;
-	endDate: string;
-} {
-	// Use UTC throughout (matches the fixed source).
-	const end = now;
-	const start = new Date(Date.UTC(end.getUTCFullYear(), 0, 1));
-	return { startDate: isoDate(start), endDate: isoDate(end) };
-}
-
-describe("analytics — lastNDays", () => {
+describe("lastNDays", () => {
 	test("7 days produces a 7-day window ending today", () => {
-		const now = new Date("2026-06-29T12:00:00Z");
-		const r = lastNDays(7, now);
+		const r = lastNDays(7);
 		expect(r.endDate).toBe("2026-06-29");
-		expect(r.startDate).toBe("2026-06-22");
+		expect(r.startDate).toBe("2026-06-23");
 	});
 
 	test("90 days produces a 90-day window ending today", () => {
-		const now = new Date("2026-06-29T12:00:00Z");
-		const r = lastNDays(90, now);
+		const r = lastNDays(90);
 		expect(r.endDate).toBe("2026-06-29");
-		expect(r.startDate).toBe("2026-03-31");
+		expect(r.startDate).toBe("2026-04-01");
 	});
 
-	test("end date is always today, not module-load time", () => {
-		// Calling lastNDays at two different "now"s should give two
-		// different end dates. This is the regression we're guarding
-		// against — the old module-level PRESETS had a frozen "now".
-		const day1 = new Date("2026-06-01T12:00:00Z");
-		const day2 = new Date("2026-06-15T12:00:00Z");
-		expect(lastNDays(7, day1).endDate).toBe("2026-06-01");
-		expect(lastNDays(7, day2).endDate).toBe("2026-06-15");
+	test("end date follows the clock, not module-load time", () => {
+		// The pre-extraction module-level PRESETS had a frozen "now".
+		// Advancing the clock between calls must move the window.
+		const first = lastNDays(7);
+		vi.setSystemTime(new Date(2026, 6, 15, 12, 0, 0));
+		const second = lastNDays(7);
+		expect(first.endDate).toBe("2026-06-29");
+		expect(second.endDate).toBe("2026-07-15");
+	});
+
+	test("lastNDays(30) range is 30 days long (inclusive)", () => {
+		const r = lastNDays(30);
+		const diffDays =
+			(Date.parse(r.endDate) - Date.parse(r.startDate)) / 86_400_000;
+		expect(diffDays).toBe(29);
 	});
 });
 
-describe("analytics — yearToDate", () => {
-	test("starts on Jan 1 of current year", () => {
-		const now = new Date("2026-06-29T12:00:00Z");
-		const r = yearToDate(now);
+describe("yearToDate", () => {
+	test("starts on Jan 1 of the current year, ends today", () => {
+		const r = yearToDate();
 		expect(r.startDate).toBe("2026-01-01");
 		expect(r.endDate).toBe("2026-06-29");
 	});
 
 	test("works on Jan 1 itself (single-day window)", () => {
-		const now = new Date("2026-01-01T12:00:00Z");
-		const r = yearToDate(now);
+		vi.setSystemTime(new Date(Date.UTC(2026, 0, 1, 12, 0, 0)));
+		const r = yearToDate();
 		expect(r.startDate).toBe("2026-01-01");
 		expect(r.endDate).toBe("2026-01-01");
 	});
 });
 
-describe("analytics — preset equality", () => {
-	test("two lastNDays calls with same n and now produce identical ranges", () => {
-		const now = new Date("2026-06-29T12:00:00Z");
-		const a = lastNDays(30, now);
-		const b = lastNDays(30, now);
-		expect(a).toEqual(b);
-	});
-
-	test("lastNDays(30) range is 30 days long (inclusive)", () => {
-		const now = new Date("2026-06-29T12:00:00Z");
-		const r = lastNDays(30, now);
-		const start = Date.parse(r.startDate);
-		const end = Date.parse(r.endDate);
-		const diffDays = (end - start) / 86_400_000;
-		expect(diffDays).toBe(30);
+describe("upcomingDateRange", () => {
+	test("starts today and covers n days forward", () => {
+		const r = upcomingDateRange(7);
+		expect(r.from).toBe("2026-06-29");
+		expect(r.to).toBe("2026-07-05");
 	});
 });
