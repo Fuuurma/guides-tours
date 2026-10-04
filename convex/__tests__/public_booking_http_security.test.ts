@@ -104,27 +104,33 @@ describe("convex/http — public booking security hardening", () => {
 			expect(res.status).not.toBe(403);
 		});
 
-		it("rejects requests when allowlist is empty string on a production deployment", async () => {
-			// A set-but-empty allowlist parses to zero origins — same as
-			// unset. On a real deployment (non-local CONVEX_SITE_URL) that
-			// must fail closed, not silently open the endpoint.
-			process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS = "";
-			const originalSiteUrl = process.env.CONVEX_SITE_URL;
-			process.env.CONVEX_SITE_URL = "https://prod-deployment.convex.site";
-			try {
-				const t = convexTest(schema, modules);
-				const res = await post(t, "any-slug", VALID_PAYLOAD, {
-					origin: "https://tours.example.com",
-				});
-				expect(res.status).toBe(403);
-			} finally {
-				if (originalSiteUrl === undefined) {
-					delete process.env.CONVEX_SITE_URL;
-				} else {
-					process.env.CONVEX_SITE_URL = originalSiteUrl;
+		it.each([
+			"https://prod-deployment.convex.site",
+			"https://localhost.attacker.example",
+		])(
+			"rejects an empty allowlist on configured deployment %s",
+			async (siteUrl) => {
+				// A set-but-empty allowlist parses to zero origins — same as
+				// unset. A configured hostname must fail closed even when its
+				// text contains "localhost"; it must not open the endpoint.
+				process.env.PUBLIC_BOOKING_ALLOWED_ORIGINS = "";
+				const originalSiteUrl = process.env.CONVEX_SITE_URL;
+				process.env.CONVEX_SITE_URL = siteUrl;
+				try {
+					const t = convexTest(schema, modules);
+					const res = await post(t, "any-slug", VALID_PAYLOAD, {
+						origin: "https://tours.example.com",
+					});
+					expect(res.status).toBe(403);
+				} finally {
+					if (originalSiteUrl === undefined) {
+						delete process.env.CONVEX_SITE_URL;
+					} else {
+						process.env.CONVEX_SITE_URL = originalSiteUrl;
+					}
 				}
-			}
-		});
+			},
+		);
 	});
 
 	describe("slug format validation", () => {

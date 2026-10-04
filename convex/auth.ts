@@ -10,7 +10,7 @@ import authConfig from "./auth.config";
 import { ac, roles } from "./authz";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { sendInvitationEmail } from "./lib/inviteEmail";
-import { getSiteUrl } from "./lib/siteUrl";
+import { getSiteUrl, isLoopbackUrl } from "./lib/siteUrl";
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
 	components.betterAuth,
@@ -50,19 +50,16 @@ const plugins = [
 // fallback + once-per-isolate logger.error on configured deployments);
 // auth.ts deliberately uses it rather than a second private copy.
 
-// Local dev detection — mirrors restaurant-calendar, but only when
-// SITE_URL is explicitly set to a local URL. Missing SITE_URL must not
-// silently inherit getSiteUrl()'s localhost fallback, because that would
-// disable email verification on a misconfigured production deployment.
+// Local dev detection only accepts an explicit loopback URL. Missing SITE_URL
+// must not silently inherit getSiteUrl()'s localhost fallback, because that
+// would disable email verification on a misconfigured production deployment.
 // In production the site URL is the deployed domain, so verification is
 // required — this preserves the pre-registration-attack protection from
 // audit fix #112 (GHSA-FMH4-WCC4-5JM3).
 function isLocalDev(): boolean {
 	const siteUrl = process.env.SITE_URL;
 	if (!siteUrl) return false;
-	return (
-		siteUrl.includes("127.0.0.1") || siteUrl.includes("localhost")
-	);
+	return isLoopbackUrl(siteUrl);
 }
 
 function googleSocialProviders():

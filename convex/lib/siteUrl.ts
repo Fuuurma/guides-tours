@@ -8,6 +8,24 @@
  * every HTTP route and can break `convex push` codegen.) */
 import { logger } from "./logger";
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/** True only for absolute HTTP(S) URLs at localhost, 127.0.0.1, or ::1. */
+export function isLoopbackUrl(value: string | undefined | null): boolean {
+	const url = value?.trim();
+	if (!url) return false;
+	try {
+		const { hostname, protocol } = new URL(url);
+		return (
+			(protocol === "http:" || protocol === "https:") &&
+			LOOPBACK_HOSTS.has(hostname.toLowerCase())
+		);
+	} catch {
+		// Invalid or relative deployment URLs must keep production safeguards.
+		return false;
+	}
+}
+
 // Warn once per isolate, not per call — reminder/digest jobs call this
 // per org row and would spam logs otherwise (F93).
 let warnedMissingSiteUrl = false;
@@ -33,7 +51,7 @@ export function getSiteUrl(): string {
 		}
 		return "http://127.0.0.1:3020";
 	}
-	if (url.startsWith("http://") && !url.includes("127.0.0.1") && !url.includes("localhost")) {
+	if (url.startsWith("http://") && !isLoopbackUrl(url)) {
 		logger.warn(
 			`[siteUrl] SITE_URL is HTTP (${url}). Set it to an HTTPS URL in production.`,
 		);
@@ -63,11 +81,7 @@ export function dashboardUrl(path: string, query?: Record<string, string>): stri
  * runtime — SITE_URL-fallback policy decision, fleet 2026-09-13). */
 export function isUnconfiguredDeployment(): boolean {
 	const siteUrl = process.env.CONVEX_SITE_URL?.trim() ?? "";
-	return (
-		siteUrl === "" ||
-		siteUrl.includes("127.0.0.1") ||
-		siteUrl.includes("localhost")
-	);
+	return siteUrl === "" || isLoopbackUrl(siteUrl);
 }
 
 /** trustedOrigins for auth route registration (SITE_URL policy, fleet

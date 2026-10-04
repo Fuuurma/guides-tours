@@ -8,10 +8,9 @@
 //   - isGoogleEnabled query returns a boolean
 //   - getCurrentUser returns null when not authenticated
 //
-// Note: requireEmailVerification is env-aware — true when SITE_URL is a
-// deployed domain, false when it's a localhost/127.0.0.1 dev URL (mirrors
-// restaurant-calendar). These tests set SITE_URL to a production-looking
-// URL to pin the secure default.
+// Note: requireEmailVerification is env-aware — it is disabled only for an
+// explicit SITE_URL loopback URL. These tests pin both that local path and
+// production-looking URLs that merely contain loopback text.
 
 process.env.ENCRYPTION_KEY ??= "a".repeat(64);
 
@@ -27,11 +26,12 @@ import {
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
-// These tests mutate deployment env vars (SITE_URL, GOOGLE_*). Without
+// These tests mutate deployment env vars (SITE_URL, CONVEX_SITE_URL, GOOGLE_*). Without
 // a restore, the last-writer value leaks into later cases and any file
 // sharing the worker — snapshot and restore around each test (F132).
 const ENV_KEYS = [
 	"SITE_URL",
+	"CONVEX_SITE_URL",
 	"GOOGLE_CLIENT_ID",
 	"GOOGLE_CLIENT_SECRET",
 ] as const;
@@ -69,11 +69,35 @@ describe("auth security configuration", () => {
 		).toBe(true);
 	});
 
-	it("requireEmailVerification is false in local dev (unblocks onboarding)", () => {
-		process.env.SITE_URL = "http://127.0.0.1:3020";
-		const devOptions = createAuthOptions({} as any);
-		expect(devOptions.emailAndPassword?.requireEmailVerification).toBe(false);
-	});
+	it.each([
+		"http://127.0.0.1:3020",
+		"http://localhost:3020",
+		"http://[::1]:3020",
+	])(
+		"requireEmailVerification is false for an explicit loopback URL: %s",
+		(siteUrl) => {
+			process.env.SITE_URL = siteUrl;
+			const devOptions = createAuthOptions({} as any);
+			expect(
+				devOptions.emailAndPassword?.requireEmailVerification,
+			).toBe(false);
+		},
+	);
+
+	it.each([
+		["hostname", "https://localhost.attacker.example"],
+		["path", "https://guides-tours.fuurma.tech/localhost"],
+		["query", "https://guides-tours.fuurma.tech/?next=127.0.0.1"],
+	])(
+		"requires email verification when loopback text appears only in SITE_URL's %s",
+		(_location, siteUrl) => {
+			process.env.SITE_URL = siteUrl;
+			const prodOptions = createAuthOptions({} as any);
+			expect(
+				prodOptions.emailAndPassword?.requireEmailVerification,
+			).toBe(true);
+		},
+	);
 
 	it("requireEmailVerificationOnInvitation is true in the organization plugin", () => {
 		// The organization plugin is the first plugin in the tuple.
@@ -129,20 +153,40 @@ describe("auth queries", () => {
 // NODE_ENV — and gates both the auth.ts degrade signal and http.ts's
 // localhost trust anchor.
 describe("isUnconfiguredDeployment", () => {
+	// Loopback text outside the host must keep development-only policy closed.
 	it("treats unset CONVEX_SITE_URL as unconfigured (dev/tests/codegen)", () => {
 		delete process.env.CONVEX_SITE_URL;
 		expect(isUnconfiguredDeployment()).toBe(true);
 	});
 
-	it("treats local CONVEX_SITE_URL as unconfigured", () => {
-		process.env.CONVEX_SITE_URL = "http://127.0.0.1:3020";
-		expect(isUnconfiguredDeployment()).toBe(true);
-	});
+	it.each([
+		"http://127.0.0.1:3020",
+		"http://localhost:3020",
+		"http://[::1]:3020",
+	])(
+		"treats explicit loopback CONVEX_SITE_URL as unconfigured: %s",
+		(siteUrl) => {
+			process.env.CONVEX_SITE_URL = siteUrl;
+			expect(isUnconfiguredDeployment()).toBe(true);
+		},
+	);
 
 	it("treats a non-local CONVEX_SITE_URL as configured", () => {
 		process.env.CONVEX_SITE_URL = "https://guides-tours.fuurma.tech";
 		expect(isUnconfiguredDeployment()).toBe(false);
 	});
+
+	it.each([
+		["hostname", "https://localhost.attacker.example"],
+		["path", "https://guides-tours.fuurma.tech/localhost"],
+		["query", "https://guides-tours.fuurma.tech/?next=127.0.0.1"],
+	])(
+		"treats loopback text only in the %s as a configured deployment",
+		(_location, siteUrl) => {
+			process.env.CONVEX_SITE_URL = siteUrl;
+			expect(isUnconfiguredDeployment()).toBe(false);
+		},
+	);
 });
 
 describe("trustedOriginsForDeployment (SITE_URL policy)", () => {
