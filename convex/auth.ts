@@ -10,7 +10,7 @@ import authConfig from "./auth.config";
 import { ac, roles } from "./authz";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { sendInvitationEmail } from "./lib/inviteEmail";
-import { getSiteUrl } from "./lib/siteUrl";
+import { getSiteUrl, isLoopbackUrl } from "./lib/siteUrl";
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
 	components.betterAuth,
@@ -54,15 +54,15 @@ const plugins = [
 // SITE_URL is explicitly set to a local URL. Missing SITE_URL must not
 // silently inherit getSiteUrl()'s localhost fallback, because that would
 // disable email verification on a misconfigured production deployment.
-// In production the site URL is the deployed domain, so verification is
-// required — this preserves the pre-registration-attack protection from
-// audit fix #112 (GHSA-FMH4-WCC4-5JM3).
+// Loopback recognition is hostname-exact (isLoopbackUrl): a production
+// hostname that merely contains "localhost"/"127.0.0.1" (e.g.
+// portal-localhost.example.com) stays production, so email verification
+// is required — this preserves the pre-registration-attack protection
+// from audit fix #112 (GHSA-FMH4-WCC4-5JM3).
 function isLocalDev(): boolean {
 	const siteUrl = process.env.SITE_URL;
 	if (!siteUrl) return false;
-	return (
-		siteUrl.includes("127.0.0.1") || siteUrl.includes("localhost")
-	);
+	return isLoopbackUrl(siteUrl);
 }
 
 function googleSocialProviders():
