@@ -451,10 +451,9 @@ export async function buildFinancialHealth(
 	const [payments, refunds, bookings] = await Promise.all([
 		ctx.db
 			.query("payments")
-			.withIndex("by_org_status_created", (q) =>
+			.withIndex("by_org_created", (q) =>
 				q
 					.eq("organizationId", orgId)
-					.eq("status", "succeeded")
 					.gte("createdAt", Date.parse(`${startDate}T00:00:00Z`))
 					.lte("createdAt", Date.parse(`${endDate}T23:59:59Z`)),
 			)
@@ -485,10 +484,21 @@ export async function buildFinancialHealth(
 		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
 	);
 
-	const grossCents = payments.reduce(
-		(s, p) => s + Number(p.amountCents),
-		0,
-	);
+	// Gross = originally captured payments: "succeeded" + fully-refunded.
+	// A full refund flips payments.status to "refunded" AFTER capture
+	// (markPaymentRefunded), so scoping gross to "succeeded" drops the
+	// payment while its succeeded refund row stays in the numerator —
+	// a lone full refund then reports gross 0 -> rate 0% instead of
+	// 100%, and mixed windows inflate. failed/pending never captured
+	// money, so they stay excluded.
+	// Window semantics (explicit): payments window on payment.createdAt,
+	// refunds window on refund.createdAt — independent windows, no
+	// cohort attribution. A February refund for a January payment lands
+	// in February's numerator against February's gross; each window is
+	// self-consistent (cross-window pairs split, pinned by tests).
+	const grossCents = payments
+		.filter((p) => p.status === "succeeded" || p.status === "refunded")
+		.reduce((s, p) => s + Number(p.amountCents), 0);
 	const refundCents = refunds.reduce(
 		(s, r) => s + Number(r.amountCents),
 		0,

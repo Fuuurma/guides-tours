@@ -751,6 +751,258 @@ describe("analytics", () => {
 		expect(fh.truncated).toBe(false);
 	});
 
+	it("getFinancialHealth: lone full refund reports 100% (refunded stays in gross)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_fin_full";
+		await t.run(async (ctx: any) => {
+			const id = await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "refunded",
+				provider: "stripe",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+			});
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				amountCents: 100000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_full",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-08-02T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-08-02T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+			});
+		});
+
+		const fh = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-08-01",
+				endDate: "2026-08-31",
+			},
+		);
+
+		expect(fh.grossCents).toBe(100000);
+		expect(fh.refundCents).toBe(100000);
+		expect(fh.refundRate).toBe(100);
+		expect(fh.truncated).toBe(false);
+	});
+
+	it("getFinancialHealth: partial refund keeps the payment in gross", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_fin_partial";
+		await t.run(async (ctx: any) => {
+			const id = await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "succeeded",
+				provider: "stripe",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-01T10:00:00Z"),
+			});
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				amountCents: 25000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_partial",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-08-02T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-08-02T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+			});
+		});
+
+		const fh = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-08-01",
+				endDate: "2026-08-31",
+			},
+		);
+
+		expect(fh.grossCents).toBe(100000);
+		expect(fh.refundCents).toBe(25000);
+		expect(fh.refundRate).toBe(25);
+	});
+
+	it("getFinancialHealth: mixed clean + fully-refunded payments", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_fin_mixed";
+		await t.run(async (ctx: any) => {
+			await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "succeeded",
+				provider: "stripe",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-01T10:00:00Z"),
+			});
+			const id = await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "refunded",
+				provider: "stripe",
+				createdAt: Date.parse("2026-08-03T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-04T10:00:00Z"),
+			});
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				amountCents: 100000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_mixed",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-08-04T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-08-04T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-04T10:00:00Z"),
+			});
+		});
+
+		const fh = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-08-01",
+				endDate: "2026-08-31",
+			},
+		);
+
+		expect(fh.grossCents).toBe(200000);
+		expect(fh.refundCents).toBe(100000);
+		expect(fh.refundRate).toBe(50);
+	});
+
+	it("getFinancialHealth: cross-window pairs split (independent windows)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_fin_xwin";
+		await t.run(async (ctx: any) => {
+			const id = await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "refunded",
+				provider: "stripe",
+				createdAt: Date.parse("2026-01-15T10:00:00Z"),
+				updatedAt: Date.parse("2026-02-10T10:00:00Z"),
+			});
+			await ctx.db.insert("refunds", {
+				organizationId: orgId,
+				paymentId: id,
+				amountCents: 100000n,
+				currency: "USD",
+				stripeRefundId: "re_fin_xwin",
+				status: "succeeded",
+				refundedAt: Date.parse("2026-02-10T10:00:00Z"),
+				metadata: {},
+				createdAt: Date.parse("2026-02-10T10:00:00Z"),
+				updatedAt: Date.parse("2026-02-10T10:00:00Z"),
+			});
+		});
+
+		// January: payment captured, no refund yet.
+		const jan = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-01-01",
+				endDate: "2026-01-31",
+			},
+		);
+		expect(jan.grossCents).toBe(100000);
+		expect(jan.refundCents).toBe(0);
+		expect(jan.refundRate).toBe(0);
+
+		// February: refund without in-window gross — guard holds at 0.
+		const feb = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-02-01",
+				endDate: "2026-02-28",
+			},
+		);
+		expect(feb.grossCents).toBe(0);
+		expect(feb.refundCents).toBe(100000);
+		expect(feb.refundRate).toBe(0);
+	});
+
+	it("getFinancialHealth: failed/pending payments and refunds stay excluded", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_fin_excl";
+		await t.run(async (ctx: any) => {
+			const failedId = await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "failed",
+				provider: "stripe",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-01T10:00:00Z"),
+			});
+			await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 50000n,
+				currency: "USD",
+				status: "pending",
+				provider: "stripe",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-01T10:00:00Z"),
+			});
+			await ctx.db.insert("payments", {
+				organizationId: orgId,
+				amountCents: 100000n,
+				currency: "USD",
+				status: "succeeded",
+				provider: "stripe",
+				createdAt: Date.parse("2026-08-01T10:00:00Z"),
+				updatedAt: Date.parse("2026-08-01T10:00:00Z"),
+			});
+			for (const [rid, status] of [
+				["re_fin_excl_f", "failed"],
+				["re_fin_excl_p", "pending"],
+				["re_fin_excl_c", "canceled"],
+			] as const) {
+				await ctx.db.insert("refunds", {
+					organizationId: orgId,
+					paymentId: failedId,
+					amountCents: 100000n,
+					currency: "USD",
+					stripeRefundId: rid,
+					status,
+					refundedAt: Date.parse("2026-08-02T10:00:00Z"),
+					metadata: {},
+					createdAt: Date.parse("2026-08-02T10:00:00Z"),
+					updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+				});
+			}
+		});
+
+		const fh = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{
+				organizationId: orgId,
+				startDate: "2026-08-01",
+				endDate: "2026-08-31",
+			},
+		);
+
+		expect(fh.grossCents).toBe(100000);
+		expect(fh.refundCents).toBe(0);
+		expect(fh.refundRate).toBe(0);
+	});
+
 	it("getFinancialHealth: outstanding balance aggregates across active bookings", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_out";
