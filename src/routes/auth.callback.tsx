@@ -1,12 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import { exchangeBoundOAuthOneTimeToken } from "@/lib/oauth-browser-binding";
 
 export const Route = createFileRoute("/auth/callback")({
 	validateSearch: (search: Record<string, unknown>) => ({
 		ott: typeof search.ott === "string" ? search.ott : undefined,
+		oauthBinding:
+			typeof search.oauthBinding === "string" ? search.oauthBinding : undefined,
 		// Only allow relative paths to prevent open redirect attacks.
 		redirect:
 			typeof search.redirect === "string" &&
@@ -21,26 +24,59 @@ export const Route = createFileRoute("/auth/callback")({
 });
 
 function AuthCallback() {
-	const { ott, redirect, invitationId } = Route.useSearch();
+	const { ott, oauthBinding, redirect, invitationId } = Route.useSearch();
 	const navigate = useNavigate();
 	const processed = useRef(false);
 	const [inviteError, setInviteError] = useState<string | null>(null);
 
+	useLayoutEffect(() => {
+		// ConvexBetterAuthProvider also watches the URL in a passive effect.
+		// Strip the token before that effect can exchange it without our binding.
+		const url = new URL(window.location.href);
+		if (!url.searchParams.has("ott")) return;
+		url.searchParams.delete("ott");
+		window.history.replaceState(window.history.state, "", url);
+	}, []);
+
 	useEffect(() => {
-		if (processed.current || !ott) return;
+		if (processed.current) return;
 		processed.current = true;
 
-		void fetch("/api/auth/cross-domain/one-time-token/verify", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			credentials: "include",
-			body: JSON.stringify({ token: ott }),
-		})
-			.then(async (res) => {
-				if (!res.ok) {
-					void navigate({ to: "/sign-in" });
+		const goToSignIn = () =>
+			void navigate({
+				to: "/sign-in",
+				search: {
+					...(redirect ? { redirect } : {}),
+					...(invitationId ? { invitationId } : {}),
+				},
+			});
+
+		if (!ott) {
+			goToSignIn();
+			return;
+		}
+
+		void exchangeBoundOAuthOneTimeToken(ott, oauthBinding, (token) =>
+			authClient.crossDomain.oneTimeToken.verify({ token }),
+		)
+			.then(async (exchange) => {
+				if (!exchange.accepted) {
+					goToSignIn();
 					return;
 				}
+				const { data, error } = exchange.result;
+				const session = data?.session;
+				if (error || !session) {
+					goToSignIn();
+					return;
+				}
+				await authClient.getSession({
+					fetchOptions: {
+						headers: { Authorization: `Bearer ${session.token}` },
+					},
+				});
+				authClient.updateSession();
+
 				if (invitationId) {
 					// OAuth sign-in from an invite link — accept before
 					// routing, and surface failures instead of dropping
@@ -93,9 +129,9 @@ function AuthCallback() {
 				});
 			})
 			.catch(() => {
-				void navigate({ to: "/sign-in" });
+				goToSignIn();
 			});
-	}, [ott, redirect, invitationId, navigate]);
+	}, [ott, oauthBinding, redirect, invitationId, navigate]);
 
 	if (inviteError) {
 		return (

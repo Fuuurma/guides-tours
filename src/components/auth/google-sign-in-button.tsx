@@ -4,6 +4,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import {
+	clearOAuthBrowserBinding,
+	createOAuthCallbackURL,
+} from "@/lib/oauth-browser-binding";
 import { api } from "../../../convex/_generated/api";
 
 // Renders a stable, branded "Continue with Google" button.
@@ -43,23 +47,20 @@ export function GoogleSignInButton({ callbackURL }: { callbackURL: string }) {
 	async function onClick() {
 		setPending(true);
 		try {
-			// Absolute origin is only known on the client — compose it at
-			// click time so render never branches on `window` (the sign-in
-			// route used to, causing a hydration-branch diagnostic).
-			const absoluteCallback = callbackURL.startsWith("/")
-				? `${window.location.origin}${callbackURL}`
-				: callbackURL;
+			const absoluteCallback = await createOAuthCallbackURL(callbackURL);
 			const result = await authClient.signIn.social({
 				callbackURL: absoluteCallback,
 				provider: "google",
 			});
 			if (result.error) {
+				clearOAuthBrowserBinding();
 				toast.error(result.error.message ?? "Google sign-in failed");
 				setPending(false);
 			}
 			// On success the browser redirects to callbackURL — pending
 			// stays true so the button stays disabled during the redirect.
 		} catch (error) {
+			clearOAuthBrowserBinding();
 			toast.error(
 				error instanceof Error ? error.message : "Google sign-in failed",
 			);
