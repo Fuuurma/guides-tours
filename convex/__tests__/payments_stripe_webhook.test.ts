@@ -18,6 +18,7 @@ import {
 	verifyStripeSignature,
 	signStripePayload,
 } from "../payments_stripe";
+import { decideCheckoutSettlement } from "../lib/checkoutSettlement";
 import { _resetKeyForTest } from "../lib/crypto";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
@@ -133,8 +134,7 @@ describe("stripe webhook dispatch", () => {
 		expect(row?.status).toBe("failed");
 	});
 
-	it("charge.refunded dispatches to markRefunded", async () => {
-		const t = convexTest(schema, modules);
+	it("charge.refunded dispatches to markRefunded", async () => {		const t = convexTest(schema, modules);
 		_resetKeyForTest();
 		const orgId = "org_sw3";
 		const bookingId = await t.run((ctx) => seedBooking(ctx, orgId));
@@ -237,5 +237,106 @@ describe("stripe webhook dispatch", () => {
 			organizationId: realOrg,
 		});
 		expect(ok).not.toBeNull();
+	});
+});
+
+/**
+ * F555 — a delayed Checkout payment must not be collected at `completed`.
+ *
+ * `checkout.session.completed` fires when the customer finishes the flow, not
+ * when money settles. For SEPA / ACH / boleto the session is complete while
+ * `payment_status` is still "unpaid" and settlement lands days later as
+ * `checkout.session.async_payment_succeeded` / `_failed`. The dispatcher sent
+ * `completed` straight to `markSucceeded`, crediting the booking balance for
+ * funds that had not arrived.
+ *
+ * The damage was not self-healing, and that is the part worth pinning: the
+ * later failure cannot repair a premature success, because `markFailed`
+ * refuses any row that is not `pending`. The contrast test at the bottom
+ * demonstrates exactly that — so "stay pending" is not a cosmetic choice, it
+ * is what keeps the failure repairable.
+ */
+describe("delayed Checkout settlement (F555)", () => {
+	async function pendingPayment(orgId: string, pi: string) {
+		const t = convexTest(schema, modules);
+		_resetKeyForTest();
+		const bookingId = await t.run((ctx) => seedBooking(ctx, orgId));
+		const paymentId = await t.mutation(internal.payments.recordFromAction, {
+			organizationId: orgId,
+			bookingId,
+			stripePaymentIntentId: pi,
+			amountCents: 10000n,
+			currency: "USD",
+		});
+		return { t, paymentId };
+	}
+
+	const status = async (t: any, id: any) =>
+		((await t.run((ctx: any) => ctx.db.get(id))) as any)?.status;
+
+	it("a completed-but-unpaid session leaves the payment pending", async () => {
+		const { t, paymentId } = await pendingPayment("org_sw555a", "pi_delay_1");
+
+		// This is the branch the dispatcher now takes instead of fulfilling.
+		expect(
+			decideCheckoutSettlement("checkout.session.completed", "unpaid"),
+		).toBe("await-async");
+
+		// No mutation is invoked, so the row is untouched and still pending.
+		expect(await status(t, paymentId)).toBe("pending");
+	});
+
+	it("a delayed payment that later fails is recorded as failed", async () => {
+		const { t, paymentId } = await pendingPayment("org_sw555b", "pi_delay_2");
+
+		expect(
+			decideCheckoutSettlement("checkout.session.completed", "unpaid"),
+		).toBe("await-async");
+		expect(await status(t, paymentId)).toBe("pending");
+
+		// Days later the async failure lands, and the row is still repairable.
+		expect(
+			decideCheckoutSettlement("checkout.session.async_payment_failed", "unpaid"),
+		).toBe("mark-failed");
+		await t.mutation(internal.payments.markFailed, {
+			paymentId,
+			reason: "insufficient funds",
+		});
+		expect(await status(t, paymentId)).toBe("failed");
+	});
+
+	it("a delayed payment that later succeeds is collected on the async event", async () => {
+		const { t, paymentId } = await pendingPayment("org_sw555c", "pi_delay_3");
+
+		expect(
+			decideCheckoutSettlement("checkout.session.completed", "unpaid"),
+		).toBe("await-async");
+		expect(
+			decideCheckoutSettlement("checkout.session.async_payment_succeeded", "paid"),
+		).toBe("mark-succeeded");
+
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		expect(await status(t, paymentId)).toBe("succeeded");
+	});
+
+	it("a card payment is still collected on completed, unchanged", async () => {
+		const { t, paymentId } = await pendingPayment("org_sw555d", "pi_card_1");
+
+		expect(decideCheckoutSettlement("checkout.session.completed", "paid")).toBe(
+			"mark-succeeded",
+		);
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		expect(await status(t, paymentId)).toBe("succeeded");
+	});
+
+	it("why this is not cosmetic: a succeeded row cannot be marked failed", async () => {
+		// The exact non-self-healing property F555 turned on. If this ever
+		// starts succeeding, the "stay pending" gate is what changed.
+		const { t, paymentId } = await pendingPayment("org_sw555e", "pi_race_1");
+		await t.mutation(internal.payments.markSucceeded, { paymentId });
+		await expect(
+			t.mutation(internal.payments.markFailed, { paymentId, reason: "later" }),
+		).rejects.toThrow(/non-pending/i);
+		expect(await status(t, paymentId)).toBe("succeeded");
 	});
 });

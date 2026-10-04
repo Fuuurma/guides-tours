@@ -29,6 +29,11 @@ import { requireRole } from "./lib/authz";
 import { normalizeEmail } from "./lib/validation";
 import { logger } from "./lib/logger";
 import {
+	CHECKOUT_SESSION_ASYNC_FAILED,
+	CHECKOUT_SESSION_ASYNC_SUCCEEDED,
+	decideCheckoutSettlement,
+} from "./lib/checkoutSettlement";
+import {
 	verifyStripeSignature,
 } from "./payments_stripe";
 
@@ -48,6 +53,7 @@ type StripeObject = {
 	amount?: number;
 	amount_total?: number;
 	currency?: string;
+	payment_status?: string;
 	payment_intent?: string | { id?: string } | null;
 	metadata?: {
 		organizationId?: string;
@@ -1132,6 +1138,8 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 			eventType === "payment_intent.succeeded" ||
 			eventType === "payment_intent.payment_failed" ||
 			eventType === "checkout.session.completed" ||
+			eventType === CHECKOUT_SESSION_ASYNC_SUCCEEDED ||
+			eventType === CHECKOUT_SESSION_ASYNC_FAILED ||
 			eventType === "charge.refunded"
 		) {
 			logger.warn(
@@ -1199,10 +1207,31 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	try {
 		if (
 			eventType === "payment_intent.succeeded" ||
-			eventType === "checkout.session.completed"
+			eventType === "checkout.session.completed" ||
+			eventType === CHECKOUT_SESSION_ASYNC_SUCCEEDED
 		) {
-			await applyPaymentSuccess(ctx, obj, orgId, eventType);
-		} else if (eventType === "payment_intent.payment_failed") {
+			// F555: `checkout.session.completed` fires when the customer
+			// finishes the flow, not when the money settles. A delayed method
+			// (SEPA / ACH / boleto) is complete with payment_status "unpaid"
+			// and resolves days later via the async events. Fulfilling here
+			// credits a balance for funds that have not arrived — and
+			// markFailed refuses any non-pending row, so the later failure
+			// throws instead of repairing it. Leave those rows pending.
+			const settlement = decideCheckoutSettlement(
+				eventType,
+				obj?.payment_status,
+			);
+			if (settlement === "await-async") {
+				logger.info(
+					`[stripe-webhook] ${eventType} awaiting async settlement (payment_status=${obj?.payment_status}, org=${orgId}, session=${obj?.id ?? "?"})`,
+				);
+			} else {
+				await applyPaymentSuccess(ctx, obj, orgId, eventType);
+			}
+		} else if (
+			eventType === "payment_intent.payment_failed" ||
+			eventType === CHECKOUT_SESSION_ASYNC_FAILED
+		) {
 			const earlyResponse = await applyPaymentFailed(ctx, obj, orgId);
 			if (earlyResponse) return earlyResponse;
 		} else if (eventType === "charge.refunded") {
