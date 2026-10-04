@@ -681,6 +681,10 @@ export const internalCreate = internalMutation({
 				scheduleId,
 				guests: args.guests,
 			});
+			// Record the claim only once the increment has actually
+			// succeeded, so releaseBookingCapacity can never be handed a
+			// claim this booking does not hold.
+			await ctx.db.patch(bookingId, { capacityClaimedScheduleId: scheduleId });
 		}
 
 		if (totalAmountCents > 0n) {

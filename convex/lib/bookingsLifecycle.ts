@@ -301,6 +301,13 @@ export async function performUpdate(
 
 	const oldScheduleId = booking.scheduleId;
 	const nextScheduleId = targetSchedule?._id;
+	// F-new-unlinked-booking-capacity-release follow-up: the capacity
+	// claim follows the seats. `undefined` means "this booking holds no
+	// seats on any schedule" and must be written as an explicit clear,
+	// so it is seeded to the booking's current claim and only reassigned
+	// by a counter branch that actually moved seats.
+	let nextClaim: Id<"tourSchedules"> | undefined =
+		booking.capacityClaimedScheduleId;
 
 	// Atomic capacity precheck: validate the target BEFORE any counter
 	// moves, so a failed move cannot strand the old schedule
@@ -342,6 +349,12 @@ export async function performUpdate(
 					guests: delta,
 				},
 			);
+			// This booking now holds seats here, so a claim is true from
+			// this point on. Written only where the code actually
+			// incremented — a legacy row that never claimed stays
+			// unclaimed, which is the safe direction (release becomes a
+			// no-op rather than draining someone else's counter).
+			nextClaim = nextScheduleId;
 		} else if (delta < 0 && nextScheduleId) {
 			await ctx.runMutation(
 				internal.tourSchedules.decrementBooked,
@@ -372,6 +385,15 @@ export async function performUpdate(
 					guests: nextGuests,
 				},
 			);
+			// The claim follows the seats across the move.
+			nextClaim = nextScheduleId;
+		} else {
+			// Moved onto a free-time request: this booking now holds no
+			// seats on any schedule, so it must claim nothing. Clearing
+			// (not leaving the old id) is what stops a later
+			// cancel/expiry from releasing the schedule it just left a
+			// second time.
+			nextClaim = undefined;
 		}
 	}
 
@@ -390,6 +412,9 @@ export async function performUpdate(
 		patch.netRevenueCents = booking.totalAmountCents;
 	}
 
+	// Commit the claim together with the field patch: one write, so the
+	// claim can never be observed disagreeing with the counter it mirrors.
+	patch.capacityClaimedScheduleId = nextClaim;
 	patch.updatedAt = now;
 	await ctx.db.patch(args.bookingId, patch);
 
@@ -452,43 +477,71 @@ export async function releaseBookingCapacity(
 		organizationId: string;
 		tourId: Id<"tours">;
 		scheduleId?: Id<"tourSchedules">;
+		capacityClaimedScheduleId?: Id<"tourSchedules">;
 		date: string;
 		startTime: string;
 		guests: number;
 	},
 ): Promise<void> {
-	let scheduleId: Id<"tourSchedules"> | undefined = booking.scheduleId;
-	if (!scheduleId) {
-		const schedule = await ctx.db
-			.query("tourSchedules")
-			.withIndex("by_tour_date", (q) =>
-				q.eq("tourId", booking.tourId).eq("date", booking.date),
-			)
-			.filter((q) =>
-				q.and(
-					q.eq(q.field("organizationId"), booking.organizationId),
-					q.eq(q.field("startTime"), booking.startTime),
-				),
-			)
-			.first();
-		// F-new-unlinked-booking-capacity-release: an unlinked booking
-		// (free-time request) never incremented any counter — every
-		// increment path pairs with a scheduleId on the booking — so a
-		// schedule created AFTER the booking cannot hold its seats and
-		// must not be decremented. Legacy compatibility: a schedule
-		// that already existed when the booking was made keeps the old
-		// restore behavior; ties fail open toward release.
-		if (schedule && schedule._creationTime > booking._creationTime) {
-			logger.warn(
-				"[bookingsLifecycle] skip capacity release: schedule postdates unlinked booking",
-				{
-					bookingId: booking._id,
-					scheduleId: schedule._id,
-				},
-			);
-			return;
+	// F-new-unlinked-booking-capacity-release follow-up (2026-10-04):
+	// the c8fc7de guard only covered the scheduleId-absent fallback. A
+	// booking whose scheduleId was patched retroactively WITHOUT a paired
+	// increment (manual repair, backfill) still drained that schedule here
+	// on the explicit path.
+	//
+	// A capacity claim is the only thing a release may undo, so release
+	// targets the claim — never the mutable scheduleId pointer. A booking
+	// with no claim releases nothing, which is correct: it never took
+	// seats, so there is nothing to give back.
+	//
+	// A timestamp heuristic was rejected for this (the finding's own
+	// reasoning): legitimate moves postdate the booking, so "schedule is
+	// older than the booking" cannot distinguish a real claim from a
+	// retroactively-patched pointer.
+	let scheduleId: Id<"tourSchedules"> | undefined;
+
+	if (booking.capacityClaimedScheduleId) {
+		// Authoritative: written only by a paired increment.
+		scheduleId = booking.capacityClaimedScheduleId;
+	} else {
+		// Legacy compatibility. Rows written before the claim field
+		// existed carry no claim and are indistinguishable from an
+		// unclaimed one, so they keep the pre-existing behavior: prefer
+		// scheduleId, else the (tourId, date, startTime) lookup behind
+		// the c8fc7de _creationTime guard.
+		scheduleId = booking.scheduleId;
+		if (!scheduleId) {
+			const schedule = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date", (q) =>
+					q.eq("tourId", booking.tourId).eq("date", booking.date),
+				)
+				.filter((q) =>
+					q.and(
+						q.eq(q.field("organizationId"), booking.organizationId),
+						q.eq(q.field("startTime"), booking.startTime),
+					),
+				)
+				.first();
+			// An unlinked booking (free-time request) never incremented
+			// any counter — every increment path pairs with a scheduleId
+			// on the booking — so a schedule created AFTER the booking
+			// cannot hold its seats and must not be decremented. Legacy
+			// compatibility: a schedule that already existed when the
+			// booking was made keeps the old restore behavior; ties fail
+			// open toward release.
+			if (schedule && schedule._creationTime > booking._creationTime) {
+				logger.warn(
+					"[bookingsLifecycle] skip capacity release: schedule postdates unlinked booking",
+					{
+						bookingId: booking._id,
+						scheduleId: schedule._id,
+					},
+				);
+				return;
+			}
+			scheduleId = schedule?._id;
 		}
-		scheduleId = schedule?._id;
 	}
 	if (scheduleId) {
 		try {

@@ -558,6 +558,12 @@ export const create = mutation({
 					guests: args.guests,
 				},
 			);
+			// Record the capacity claim only after the increment
+			// succeeded, so releaseBookingCapacity can never be handed a
+			// claim this booking does not hold.
+			await ctx.db.patch(bookingId, {
+				capacityClaimedScheduleId: scheduleId,
+			});
 		}
 
 		// Source pattern: unconditionally set customer.nextBookingDate

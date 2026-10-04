@@ -489,6 +489,21 @@ export default defineSchema({
 		// unset — they fall back to the (tourId, date, startTime) lookup
 		// at cancel time.
 		scheduleId: v.optional(v.id("tourSchedules")),
+		// F-new-unlinked-booking-capacity-release follow-up (2026-10-04):
+		// the schedule this booking ACTUALLY claimed seats on, written
+		// only by a paired increment. `scheduleId` above is a mutable
+		// pointer — a manual repair or backfill can set it without ever
+		// incrementing, and cancel/expiry then drains a schedule whose
+		// seats were never this booking's. Release targets THIS field
+		// instead, so an unclaimed booking releases nothing.
+		//
+		// Undefined means "claimed nothing" for rows written after this
+		// field shipped. Legacy rows (created before it) are
+		// indistinguishable from that case, so they keep the pre-existing
+		// scheduleId/date-fallback behavior — see
+		// releaseBookingCapacity and the backfill mutation
+		// internal.backfills.claimLinkedBookings.
+		capacityClaimedScheduleId: v.optional(v.id("tourSchedules")),
 		customerId: v.id("customers"),
 		date: v.string(),
 		startTime: v.string(),
