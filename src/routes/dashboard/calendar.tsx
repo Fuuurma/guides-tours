@@ -590,14 +590,22 @@ function MonthGrid({
 								</Link>
 								<div className="flex items-center gap-1">
 									{gaps > 0 && (
-										<span
-											className="text-[10px] font-medium text-destructive"
-											title={`${gaps} departure(s) need staffing`}
+										/* A real link, not a span. The month cell is
+										   where an operator scans for unstaffed
+										   departures across a whole month, and the count
+										   was the only signal there was — it reported a
+										   problem with no way to act on it. /dashboard/staffing
+										   validates from/to, so this lands on that exact day
+										   rather than the unscoped page the week view
+										   links to. */
+										<Link
+											to="/dashboard/staffing"
+											search={{ from: date, to: date }}
+											className="text-[10px] font-medium text-destructive hover:underline focus-visible:underline rounded-sm"
+											title={`${gaps} departure(s) on ${date} need staffing`}
 										>
-											{/* text content already reads the gaps; a span
-											   can't carry aria-label without a role */}
 											{gaps} gap{gaps === 1 ? "" : "s"}
-										</span>
+										</Link>
 									)}
 									{scheduleCount > 0 && (
 										<span
