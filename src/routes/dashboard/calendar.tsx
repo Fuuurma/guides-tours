@@ -745,11 +745,19 @@ function WeekAgenda({
 										<Link to="/dashboard/staffing">Gaps</Link>
 									</Button>
 								)}
-								<Button asChild size="sm" variant="outline" className="h-7">
-									<Link to="/dashboard/assignments/new" search={{ date }}>
-										+ Assign
-									</Link>
-								</Button>
+								{/* Only when the day has assignments. On an empty day the
+								    empty state below already offers "Assign guide", which is
+								    this exact link — rendering both put two identically
+								    targeted links with different labels on one card, which is
+								    noise for a mouse user and two same-destination links for a
+								    screen reader. */}
+								{items.length > 0 && (
+									<Button asChild size="sm" variant="outline" className="h-7">
+										<Link to="/dashboard/assignments/new" search={{ date }}>
+											+ Assign
+										</Link>
+									</Button>
+								)}
 							</div>
 						</CardHeader>
 						<CardContent className="flex flex-1 flex-col pb-3">
