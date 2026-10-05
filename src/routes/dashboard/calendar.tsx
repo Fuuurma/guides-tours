@@ -77,7 +77,9 @@ type SlotFleet = {
 	hasDriver: boolean;
 };
 
-function CalendarPage() {
+// Exported for the month-grid overflow test in
+// src/__tests__/calendar-month-overflow.test.tsx.
+export function CalendarPage() {
 	const [cursor, setCursor] = useState(() => new Date());
 	const [view, setView] = useState<"month" | "week">("week");
 	const [guideFilter, setGuideFilter] = useState(ALL);
@@ -267,6 +269,16 @@ function CalendarPage() {
 		}
 	};
 
+	/** Jump to the week view anchored on one specific day. The month cell
+	 *  only fits three assignments, so this is how the rest of a busy day
+	 *  becomes reachable — the week card for a day lists all of them.
+	 *  Parsed as local midnight to match `localYmd`, which is how the grid
+	 *  builds its date keys. */
+	const showDay = (date: string) => {
+		setCursor(new Date(`${date}T00:00:00`));
+		setView("week");
+	};
+
 	return (
 		<div className="flex flex-col gap-6">
 			<header className="flex flex-wrap items-center justify-between gap-4">
@@ -383,6 +395,7 @@ function CalendarPage() {
 									tourById={tourById}
 									tourNameById={tourNameById}
 									displayName={displayName}
+									onShowDay={showDay}
 								/>
 							)}
 						</CardContent>
@@ -490,6 +503,7 @@ function MonthGrid({
 	tourById,
 	tourNameById,
 	displayName,
+	onShowDay,
 }: {
 	year: number;
 	month: number;
@@ -500,6 +514,7 @@ function MonthGrid({
 	tourById: Map<string, TourLite>;
 	tourNameById: Map<string, string>;
 	displayName: (userId: string) => string;
+	onShowDay: (date: string) => void;
 }) {
 	const totalDays = daysInMonthLocal(year, month);
 	const firstDow = new Date(year, month, 1).getDay();
@@ -609,9 +624,14 @@ function MonthGrid({
 									);
 								})}
 								{items.length > 3 && (
-									<span className="text-[10px] text-muted-foreground px-1">
-										+{items.length - 3} more
-									</span>
+									<button
+										type="button"
+										onClick={() => onShowDay(date)}
+										className="text-[10px] text-muted-foreground px-1 text-left hover:underline focus-visible:underline rounded-sm"
+										title={`Show all ${items.length} assignments on ${date}`}
+									>
+										+{items.length - 3} more — show all {items.length}
+									</button>
 								)}
 							</div>
 						</div>
