@@ -548,10 +548,19 @@ function MonthGrid({
 							>
 								{d.getDate()}
 							</Link>
+							{/* No opacity dimming here. It used to be
+							    `sm:opacity-60` lifted by `sm:group-hover` /
+							    `sm:group-focus-within`, which meant the control
+							    rendered at 60% until the pointer entered the whole
+							    cell. On a tablet there is no hover, so the link sat
+							    there looking disabled and below contrast until
+							    tapped. The cell is already de-emphasised by
+							    `bg-muted/20`; the muted colour plus the hover /
+							    focus underline is enough affordance. */}
 							<Link
 								to="/dashboard/schedules/new"
 								search={{ date }}
-								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
 								title={`New schedule on ${date}`}
 							>
 								+ Schedule
@@ -663,10 +672,19 @@ function MonthGrid({
 							>
 								{d.getDate()}
 							</Link>
+							{/* No opacity dimming here. It used to be
+							    `sm:opacity-60` lifted by `sm:group-hover` /
+							    `sm:group-focus-within`, which meant the control
+							    rendered at 60% until the pointer entered the whole
+							    cell. On a tablet there is no hover, so the link sat
+							    there looking disabled and below contrast until
+							    tapped. The cell is already de-emphasised by
+							    `bg-muted/20`; the muted colour plus the hover /
+							    focus underline is enough affordance. */}
 							<Link
 								to="/dashboard/schedules/new"
 								search={{ date }}
-								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
 								title={`New schedule on ${date}`}
 							>
 								+ Schedule
