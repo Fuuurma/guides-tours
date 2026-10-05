@@ -433,9 +433,22 @@ export async function buildChannelRevenue(
  *   2. Outstanding       — sum of balanceDueCents for active
  *                          bookings created in the window.
  *   3. Deposit coverage  — share of bookings in the window that
- *                          have a deposit paid. Tells the operator
- *                          whether their deposit policy is being
- *                          honored.
+ *                          REQUIRE a deposit and have actually PAID
+ *                          it (successful payments applied to the
+ *                          booking, net of succeeded refunds).
+ *                          Tells the operator whether their deposit
+ *                          policy is being honored.
+ *
+ * Note on (3): `bookings.depositAmountCents` is NOT the configured
+ * deposit. It is seeded with the required deposit at creation and then
+ * incremented by every payment applied to the booking
+ * (payments.ts applyPaymentToBooking) and decremented by refunds
+ * (reversePaymentOnBooking) — a running total of retained money. So
+ * `depositAmountCents > 0` is true for any booking that merely *had* a
+ * deposit configured, and also for a no-deposit booking that was paid in
+ * full. Required deposit is therefore reconstructed by subtracting what has
+ * actually been collected, and coverage is only credited when collection
+ * reaches it.
  *
  * Bound to MAX_ANALYTICS_SCAN per query (10K) so a busy org
  * doesn't OOM. All three scans run in parallel since they
@@ -479,11 +492,37 @@ export async function buildFinancialHealth(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+	// Deposit attribution needs payments for the org as a whole, not just
+	// those created inside the window: a booking dated in the window is
+	// routinely deposited weeks earlier, and a window-scoped scan would
+	// report every one of those as unpaid. These two scans feed coverage
+	// only — gross/refund-rate keep the window semantics above.
+	const [depositPayments, depositRefunds] = await Promise.all([
+		ctx.db
+			.query("payments")
+			.withIndex("by_org_status", (q) =>
+				q.eq("organizationId", orgId).eq("status", "succeeded"),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("refunds")
+			.withIndex("by_org_status", (q) =>
+				q.eq("organizationId", orgId).eq("status", "succeeded"),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+	]);
+
 	// Hitting any cap means the org has more rows than were read —
-	// reported as truncated (fleet needs-work 09-13 P3).
-	const truncated = [payments, refunds, bookings].some(
-		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
-	);
+	// reported as truncated (fleet needs-work 09-13 P3). A capped payment
+	// scan understates collection, so it also understates coverage; the
+	// operator is told rather than shown a quietly wrong percentage.
+	const truncated = [
+		payments,
+		refunds,
+		bookings,
+		depositPayments,
+		depositRefunds,
+	].some((rows) => rows.length >= MAX_ANALYTICS_SCAN);
 
 	const grossCents = payments.reduce(
 		(s, p) => s + Number(p.amountCents),
@@ -496,17 +535,44 @@ export async function buildFinancialHealth(
 	const refundRate =
 		grossCents > 0 ? round1((refundCents / grossCents) * 100) : 0;
 
+	// Net money actually retained per booking. Refunds are attributed
+	// through their payment first — `refunds.bookingId` is optional and is
+	// absent on rows created by the generic refund path.
+	const bookingOfPayment = new Map<string, string>();
+	const collected = new Map<string, number>();
+	for (const p of depositPayments) {
+		if (!p.bookingId) continue;
+		const key = String(p.bookingId);
+		bookingOfPayment.set(String(p._id), key);
+		collected.set(key, (collected.get(key) ?? 0) + Number(p.amountCents));
+	}
+	for (const r of depositRefunds) {
+		const key = bookingOfPayment.get(String(r.paymentId)) ?? (r.bookingId ? String(r.bookingId) : null);
+		if (!key) continue;
+		collected.set(key, (collected.get(key) ?? 0) - Number(r.amountCents));
+	}
+
 	const activeBookings = bookings.filter((b) => b.status !== "cancelled");
 	const outstandingCents = activeBookings.reduce(
 		(s, b) => s + Number(b.balanceDueCents),
 		0,
 	);
-	const bookingsWithDeposit = activeBookings.filter(
-		(b) => Number(b.depositAmountCents) > 0,
-	).length;
+
+	// Required deposit = what the row says is held MINUS what we can see was
+	// actually collected, since the field carries both. Clamped at 0 so a
+	// refund larger than the charge cannot invent a negative requirement.
+	let bookingsRequiringDeposit = 0;
+	let bookingsWithDepositPaid = 0;
+	for (const b of activeBookings) {
+		const net = Math.max(0, collected.get(String(b._id)) ?? 0);
+		const required = Math.max(0, Number(b.depositAmountCents) - net);
+		if (required <= 0) continue;
+		bookingsRequiringDeposit++;
+		if (net >= required) bookingsWithDepositPaid++;
+	}
 	const depositCoverage =
-		activeBookings.length > 0
-			? round1((bookingsWithDeposit / activeBookings.length) * 100)
+		bookingsRequiringDeposit > 0
+			? round1((bookingsWithDepositPaid / bookingsRequiringDeposit) * 100)
 			: 0;
 
 	return {
@@ -517,7 +583,8 @@ export async function buildFinancialHealth(
 		refundRate,
 		outstandingCents,
 		bookingsTotal: activeBookings.length,
-		bookingsWithDeposit,
+		bookingsRequiringDeposit,
+		bookingsWithDepositPaid,
 		depositCoverage,
 		truncated,
 	};

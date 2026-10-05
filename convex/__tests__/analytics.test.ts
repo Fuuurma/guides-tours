@@ -676,9 +676,15 @@ describe("analytics", () => {
 		expect(fh.truncated).toBe(false);
 		// Outstanding: 0 (booking has balanceDueCents = 0)
 		expect(fh.outstandingCents).toBe(0);
-		// 100% deposit coverage (1 booking, deposit > 0)
+		// Deposit coverage: the booking required a 200.00 deposit (1000.00
+		// total − 800.00 net collected) and 800.00 was collected against it,
+		// so it counts as paid. The fixture seeds the booking row without
+		// replaying the refund onto it, so the reconstructed requirement is
+		// 200.00 rather than the original 1000.00 — the covered/uncovered
+		// outcome is the same either way, which is what this test is about.
 		expect(fh.bookingsTotal).toBe(1);
-		expect(fh.bookingsWithDeposit).toBe(1);
+		expect(fh.bookingsRequiringDeposit).toBe(1);
+		expect(fh.bookingsWithDepositPaid).toBe(1);
 		expect(fh.depositCoverage).toBe(100);
 	});
 
@@ -788,11 +794,119 @@ describe("analytics", () => {
 			},
 		);
 
-		// 3 × $50 = $150 outstanding, deposit coverage 100%
+		// 3 × $50 = $150 outstanding.
 		expect(fh.outstandingCents).toBe(15000);
 		expect(fh.bookingsTotal).toBe(3);
-		expect(fh.bookingsWithDeposit).toBe(3);
-		expect(fh.depositCoverage).toBe(100);
+		// All three require a $50 deposit and none has paid any — F590.
+		// This assertion used to read `depositCoverage: 100`, which is the
+		// defect itself: the old filter only asked whether a deposit was
+		// configured, so three untouched bookings reported as fully covered.
+		expect(fh.bookingsRequiringDeposit).toBe(3);
+		expect(fh.bookingsWithDepositPaid).toBe(0);
+		expect(fh.depositCoverage).toBe(0);
+	});
+
+	// F590: deposit coverage counted bookings with a *configured* deposit
+	// (depositAmountCents > 0) as if the deposit were *paid*. These five
+	// bookings cover every state the metric has to tell apart. The mutation
+	// helpers mirror payments.ts applyPaymentToBooking (49-53) and
+	// reversePaymentOnBooking (78-81) exactly — bookings.depositAmountCents
+	// is a running total of retained money seeded with the required deposit,
+	// NOT the configured deposit on its own.
+	it("getFinancialHealth: deposit coverage counts deposits actually paid, not merely configured", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_dep_cov";
+		const tourId = await t.run((ctx: any) => seedTour(ctx, { orgId, capacity: 20, maxGuests: 20 }));
+		const custId = await t.run((ctx: any) => seedCustomer(ctx, { orgId }));
+
+		const mkBooking = (date: string, deposit: bigint, total = 10000n) =>
+			t.run((ctx: any) =>
+				seedBooking(ctx, {
+					orgId,
+					tourId,
+					customerId: custId,
+					date,
+					totalAmountCents: total,
+					depositAmountCents: deposit,
+				}),
+			);
+		/** Mirror of payments.ts applyPaymentToBooking. */
+		const pay = (bookingId: any, amountCents: bigint) =>
+			t.run(async (ctx: any) => {
+				const b = await ctx.db.get(bookingId);
+				const nextBalance = b.balanceDueCents > amountCents ? b.balanceDueCents - amountCents : 0n;
+				const applied = b.balanceDueCents - nextBalance;
+				await ctx.db.patch(bookingId, {
+					balanceDueCents: nextBalance,
+					depositAmountCents: b.depositAmountCents + applied,
+				});
+				const id = await ctx.db.insert("payments", {
+					organizationId: orgId,
+					bookingId,
+					amountCents: applied,
+					currency: "USD",
+					status: "succeeded",
+					provider: "stripe",
+					stripePaymentIntentId: `pi_${bookingId}_${applied}`,
+					createdAt: Date.parse("2026-08-02T10:00:00Z"),
+					updatedAt: Date.parse("2026-08-02T10:00:00Z"),
+				});
+				return id;
+			});
+		/** Mirror of payments.ts reversePaymentOnBooking. */
+		const refundFull = (bookingId: any, paymentId: any, amountCents: bigint) =>
+			t.run(async (ctx: any) => {
+				await ctx.db.patch(bookingId, {
+					depositAmountCents: amountCents,
+					balanceDueCents: 7500n,
+				});
+				await ctx.db.insert("refunds", {
+					organizationId: orgId,
+					paymentId,
+					bookingId,
+					amountCents,
+					currency: "USD",
+					stripeRefundId: `re_${bookingId}`,
+					status: "succeeded",
+					refundedAt: Date.parse("2026-08-03T10:00:00Z"),
+					metadata: {},
+					createdAt: Date.parse("2026-08-03T10:00:00Z"),
+					updatedAt: Date.parse("2026-08-03T10:00:00Z"),
+				});
+			});
+
+		// 1. Required deposit, never paid.
+		await mkBooking("2026-08-01", 2500n);
+		// 2. Required deposit, partially paid (1000 of 2500).
+		const partial = await mkBooking("2026-08-02", 2500n);
+		await pay(partial, 1000n);
+		// 3. Required deposit, paid in full.
+		const paid = await mkBooking("2026-08-03", 2500n);
+		await pay(paid, 2500n);
+		// 4. Required deposit, paid then fully refunded — money is gone.
+		const refunded = await mkBooking("2026-08-04", 2500n);
+		const refundTarget = await pay(refunded, 2500n);
+		await refundFull(refunded, refundTarget, 2500n);
+		// 5. NO deposit required, but paid in full. depositAmountCents now
+		//    holds the 10000 collected — the old filter counted this as a
+		//    covered deposit even though the org never asked for one.
+		const noDeposit = await mkBooking("2026-08-05", 0n);
+		await pay(noDeposit, 10000n);
+
+		const fh = await t.query(
+			internal.analytics.getFinancialHealthInternal,
+			{ organizationId: orgId, startDate: "2026-08-01", endDate: "2026-08-31" },
+		);
+
+		expect(fh.bookingsTotal).toBe(5);
+		// 1 of the 4 bookings that require a deposit actually has it paid.
+		// Pre-fix this reads 100% — all five rows carry depositAmountCents > 0.
+		expect(fh.depositCoverage).toBe(25);
+		// Only the four bookings that actually require a deposit are in the
+		// denominator — #5 paid in full but was never asked for a deposit.
+		expect(fh.bookingsRequiringDeposit).toBe(4);
+		// ...and only #3 has that deposit in hand.
+		expect(fh.bookingsWithDepositPaid).toBe(1);
 	});
 
 	it("getFinancialHealth: empty org returns zeros (no division by zero)", async () => {

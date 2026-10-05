@@ -77,7 +77,9 @@ type SlotFleet = {
 	hasDriver: boolean;
 };
 
-function CalendarPage() {
+// Exported for the month-grid overflow test in
+// src/__tests__/calendar-month-overflow.test.tsx.
+export function CalendarPage() {
 	const [cursor, setCursor] = useState(() => new Date());
 	const [view, setView] = useState<"month" | "week">("week");
 	const [guideFilter, setGuideFilter] = useState(ALL);
@@ -267,6 +269,16 @@ function CalendarPage() {
 		}
 	};
 
+	/** Jump to the week view anchored on one specific day. The month cell
+	 *  only fits three assignments, so this is how the rest of a busy day
+	 *  becomes reachable — the week card for a day lists all of them.
+	 *  Parsed as local midnight to match `localYmd`, which is how the grid
+	 *  builds its date keys. */
+	const showDay = (date: string) => {
+		setCursor(new Date(`${date}T00:00:00`));
+		setView("week");
+	};
+
 	return (
 		<div className="flex flex-col gap-6">
 			<header className="flex flex-wrap items-center justify-between gap-4">
@@ -383,6 +395,7 @@ function CalendarPage() {
 									tourById={tourById}
 									tourNameById={tourNameById}
 									displayName={displayName}
+									onShowDay={showDay}
 								/>
 							)}
 						</CardContent>
@@ -490,6 +503,7 @@ function MonthGrid({
 	tourById,
 	tourNameById,
 	displayName,
+	onShowDay,
 }: {
 	year: number;
 	month: number;
@@ -500,6 +514,7 @@ function MonthGrid({
 	tourById: Map<string, TourLite>;
 	tourNameById: Map<string, string>;
 	displayName: (userId: string) => string;
+	onShowDay: (date: string) => void;
 }) {
 	const totalDays = daysInMonthLocal(year, month);
 	const firstDow = new Date(year, month, 1).getDay();
@@ -533,10 +548,19 @@ function MonthGrid({
 							>
 								{d.getDate()}
 							</Link>
+							{/* No opacity dimming here. It used to be
+							    `sm:opacity-60` lifted by `sm:group-hover` /
+							    `sm:group-focus-within`, which meant the control
+							    rendered at 60% until the pointer entered the whole
+							    cell. On a tablet there is no hover, so the link sat
+							    there looking disabled and below contrast until
+							    tapped. The cell is already de-emphasised by
+							    `bg-muted/20`; the muted colour plus the hover /
+							    focus underline is enough affordance. */}
 							<Link
 								to="/dashboard/schedules/new"
 								search={{ date }}
-								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
 								title={`New schedule on ${date}`}
 							>
 								+ Schedule
@@ -575,14 +599,22 @@ function MonthGrid({
 								</Link>
 								<div className="flex items-center gap-1">
 									{gaps > 0 && (
-										<span
-											className="text-[10px] font-medium text-destructive"
-											title={`${gaps} departure(s) need staffing`}
+										/* A real link, not a span. The month cell is
+										   where an operator scans for unstaffed
+										   departures across a whole month, and the count
+										   was the only signal there was — it reported a
+										   problem with no way to act on it. /dashboard/staffing
+										   validates from/to, so this lands on that exact day
+										   rather than the unscoped page the week view
+										   links to. */
+										<Link
+											to="/dashboard/staffing"
+											search={{ from: date, to: date }}
+											className="text-[10px] font-medium text-destructive hover:underline focus-visible:underline rounded-sm"
+											title={`${gaps} departure(s) on ${date} need staffing`}
 										>
-											{/* text content already reads the gaps; a span
-											   can't carry aria-label without a role */}
 											{gaps} gap{gaps === 1 ? "" : "s"}
-										</span>
+										</Link>
 									)}
 									{scheduleCount > 0 && (
 										<span
@@ -609,9 +641,14 @@ function MonthGrid({
 									);
 								})}
 								{items.length > 3 && (
-									<span className="text-[10px] text-muted-foreground px-1">
-										+{items.length - 3} more
-									</span>
+									<button
+										type="button"
+										onClick={() => onShowDay(date)}
+										className="text-[10px] text-muted-foreground px-1 text-left hover:underline focus-visible:underline rounded-sm"
+										title={`Show all ${items.length} assignments on ${date}`}
+									>
+										+{items.length - 3} more — show all {items.length}
+									</button>
 								)}
 							</div>
 						</div>
@@ -635,10 +672,19 @@ function MonthGrid({
 							>
 								{d.getDate()}
 							</Link>
+							{/* No opacity dimming here. It used to be
+							    `sm:opacity-60` lifted by `sm:group-hover` /
+							    `sm:group-focus-within`, which meant the control
+							    rendered at 60% until the pointer entered the whole
+							    cell. On a tablet there is no hover, so the link sat
+							    there looking disabled and below contrast until
+							    tapped. The cell is already de-emphasised by
+							    `bg-muted/20`; the muted colour plus the hover /
+							    focus underline is enough affordance. */}
 							<Link
 								to="/dashboard/schedules/new"
 								search={{ date }}
-								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline sm:opacity-60 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100"
+								className="text-[10px] text-muted-foreground hover:text-foreground hover:underline"
 								title={`New schedule on ${date}`}
 							>
 								+ Schedule
@@ -717,11 +763,19 @@ function WeekAgenda({
 										<Link to="/dashboard/staffing">Gaps</Link>
 									</Button>
 								)}
-								<Button asChild size="sm" variant="outline" className="h-7">
-									<Link to="/dashboard/assignments/new" search={{ date }}>
-										+ Assign
-									</Link>
-								</Button>
+								{/* Only when the day has assignments. On an empty day the
+								    empty state below already offers "Assign guide", which is
+								    this exact link — rendering both put two identically
+								    targeted links with different labels on one card, which is
+								    noise for a mouse user and two same-destination links for a
+								    screen reader. */}
+								{items.length > 0 && (
+									<Button asChild size="sm" variant="outline" className="h-7">
+										<Link to="/dashboard/assignments/new" search={{ date }}>
+											+ Assign
+										</Link>
+									</Button>
+								)}
 							</div>
 						</CardHeader>
 						<CardContent className="flex flex-1 flex-col pb-3">

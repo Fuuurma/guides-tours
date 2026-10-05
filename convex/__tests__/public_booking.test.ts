@@ -8,7 +8,7 @@
 // component mock at test-utils/betterAuthMock).
 
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import schema from "../schema";
@@ -46,6 +46,10 @@ function futureDate(offsetDays: number): string {
 		.toISOString()
 		.slice(0, 10)
 }
+
+afterEach(() => {
+	vi.useRealTimers();
+});
 
 describe("convex/public_booking — internalCreate mutation", () => {
 	it("creates a pending booking request for a valid tour in the org", async () => {
@@ -632,19 +636,25 @@ describe("convex/public_booking — internalCreate mutation", () => {
 	});
 
 	it("rejects booking when the date is blacked out by the operator", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2027-01-05T09:00:00Z"));
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub_blackout";
 		const tourId = await t.run(async (ctx) =>
 			seedTour(ctx as unknown as TestCtx, orgId),
 		);
-		// Mark the shifted date as blacked out (single-day range).
+		// F592: the clock is frozen above and every date below is derived
+		// from it. These were hardcoded to Dec 2026, so the suite would have
+		// started failing on 2026-12-27 with "Cannot book a tour in the past"
+		// instead of the blackout rejection it is meant to assert.
+		// Mark one day as blacked out (single-day range).
 		await t.run(async (ctx) =>
 			seedBlackout(ctx as unknown as TestCtx, {
 				orgId,
 				tourId,
-				startDate: "2026-12-25",
-				endDate: "2026-12-25",
-				reason: "Closed for Christmas",
+				startDate: futureDate(5),
+				endDate: futureDate(5),
+				reason: "Seasonal closure",
 			}),
 		);
 		// A different date should still book OK.
@@ -653,7 +663,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 			tourId,
 			customerName: "Bob",
 			customerEmail: "bob@example.com",
-			date: "2026-12-26",
+			date: futureDate(6),
 			startTime: "10:00",
 			guests: 2,
 		});
@@ -664,7 +674,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Alice",
 				customerEmail: "alice@example.com",
-				date: "2026-12-25",
+				date: futureDate(5),
 				startTime: "10:00",
 				guests: 2,
 			}),
@@ -677,18 +687,21 @@ describe("convex/public_booking — internalCreate mutation", () => {
 	});
 
 	it("rejects booking when the date falls inside a multi-day blackout range", async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2027-01-05T09:00:00Z"));
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub_blackout_range";
 		const tourId = await t.run(async (ctx) =>
 			seedTour(ctx as unknown as TestCtx, orgId),
 		);
-		// Blackout the 3-day shifted window.
+		// Same frozen clock as above: a 3-day window, first and last day
+		// both asserted, so the range boundaries stay covered.
 		await t.run(async (ctx) =>
 			seedBlackout(ctx as unknown as TestCtx, {
 				orgId,
 				tourId,
-				startDate: "2026-12-24",
-				endDate: "2026-12-26",
+				startDate: futureDate(4),
+				endDate: futureDate(6),
 				reason: "Holiday closure",
 			}),
 		);
@@ -699,7 +712,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Eve",
 				customerEmail: "eve@example.com",
-				date: "2026-12-24",
+				date: futureDate(4),
 				startTime: "10:00",
 				guests: 1,
 			}),
@@ -711,7 +724,7 @@ describe("convex/public_booking — internalCreate mutation", () => {
 				tourId,
 				customerName: "Frank",
 				customerEmail: "frank@example.com",
-				date: "2026-12-26",
+				date: futureDate(6),
 				startTime: "10:00",
 				guests: 1,
 			}),
