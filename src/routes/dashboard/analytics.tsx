@@ -560,15 +560,22 @@ function AnalyticsPage() {
 							}
 							isPending={!financialHealth}
 						/>
-						<MetricCard
-							label="Deposit coverage"
-							value={
-								financialHealth
-									? `${financialHealth.depositCoverage}%`
-									: undefined
-							}
-							isPending={!financialHealth}
-						/>
+						<MetricCard label="Deposit coverage" isPending={!financialHealth}>
+							{financialHealth ? (
+								<>
+									<p className="font-display text-2xl font-medium tracking-tight tabular-nums">
+										{financialHealth.depositCoverage}%
+									</p>
+									{/* The percentage only means something against the
+									    bookings that actually require a deposit, so the
+									    denominator is shown rather than implied. */}
+									<p className="mt-1 text-xs text-muted-foreground">
+										{financialHealth.bookingsWithDepositPaid} of{" "}
+										{financialHealth.bookingsRequiringDeposit} with deposit paid
+									</p>
+								</>
+							) : undefined}
+						</MetricCard>
 					</div>
 				</CardContent>
 			</Card>
