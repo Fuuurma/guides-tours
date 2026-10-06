@@ -955,8 +955,14 @@ function HeroVisual({ cardY }: { cardY: MotionValue<number> }) {
 			</FloatCard>
 
 			<div className="relative z-10 -mb-3.5 ml-5 flex items-center gap-2">
+				{/* F438 applied here too: this preview is a hardcoded mock — a
+				    pulsing "Live operation" badge with a frozen date beside it
+				    read as real-time product state. The same treatment the
+				    WorkspacePreview above already got: say what it is. The card
+				    body below already carries "Sample workspace", so the strip
+				    labels the day instead of repeating it. */}
 				<Badge className="border-primary-foreground/20 bg-primary/85 text-primary-foreground backdrop-blur-md">
-					<Radio /> Live operation
+					<CalendarDays className="size-3" /> Sample day
 				</Badge>
 				<span className="rounded-full border border-primary-foreground/20 bg-primary/85 px-3 py-1.5 text-[11px] font-medium text-primary-foreground/75 backdrop-blur-md">
 					Tuesday · June 24
