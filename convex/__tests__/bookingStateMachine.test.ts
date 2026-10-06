@@ -154,7 +154,7 @@ describe("convex/bookings — pending expiry (state machine)", () => {
 			internal.bookings.expireStalePending,
 			{},
 		);
-		expect(result).toEqual({ scanned: 1, expired: 1 });
+		expect(result).toEqual({ scanned: 1, expired: 1, keptPaid: 0 });
 
 		const booking = await t.run(async (ctx) => ctx.db.get(bookingId));
 		expect(booking?.status).toBe("expired");
@@ -180,7 +180,7 @@ describe("convex/bookings — pending expiry (state machine)", () => {
 			internal.bookings.expireStalePending,
 			{},
 		);
-		expect(result).toEqual({ scanned: 0, expired: 0 });
+		expect(result).toEqual({ scanned: 0, expired: 0, keptPaid: 0 });
 		const booking = await t.run(async (ctx) => ctx.db.get(bookingId));
 		expect(booking?.status).toBe("pending");
 	});

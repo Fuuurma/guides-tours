@@ -907,12 +907,36 @@ export const internalNoShow = internalMutation({
  */
 export const internalExpire = internalMutation({
 	args: { bookingId: v.id("bookings") },
-	handler: async (ctx, args) => {
+	// Returns whether the row actually transitioned, so the cron does not
+	// count a deliberately-skipped booking as expired. Callers that only want
+	// the side effect can ignore it.
+	handler: async (
+		ctx,
+		args,
+	): Promise<{ expired: boolean; skipped: "not-pending" | "paid" | null }> => {
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
-		if (booking.status !== "pending") return args.bookingId; // already transitioned
+		if (booking.status !== "pending") {
+			return { expired: false, skipped: "not-pending" }; // already transitioned
+		}
+		// GT-AUDIT-03: never expire a booking that has been paid for.
+		// applyPaymentToBooking reduces balanceDueCents but never leaves
+		// "pending", so the 15-minute cron used to sweep fully-paid requests:
+		// seats released and resold, and the row left unconfirmable while the
+		// guest had already paid. The check lives here, at the chokepoint every
+		// expiry path goes through, rather than in the cron scan filter — a
+		// direct internalExpire must not be able to sweep a paid row either.
+		//
+		// Only SUCCEEDED counts. A FAILED or CANCELLED payment leaves the guest
+		// owing the balance, so those rows must still expire unattended.
+		const paid = await ctx.db
+			.query("payments")
+			.withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
+			.filter((q) => q.eq(q.field("status"), "SUCCEEDED"))
+			.first();
+		if (paid) return { expired: false, skipped: "paid" };
 		await performExpire(ctx, booking, "system:cron");
-		return args.bookingId;
+		return { expired: true, skipped: null };
 	},
 });
 
@@ -938,12 +962,19 @@ export const expireStalePending = internalMutation({
 			)
 			.take(MAX_BATCH);
 		let expired = 0;
+		let keptPaid = 0;
 		for (const booking of stale) {
 			try {
-				await ctx.runMutation(internal.bookings.internalExpire, {
-					bookingId: booking._id,
-				});
-				expired++;
+				// internalExpire reports whether the row actually transitioned:
+				// a paid booking is deliberately left pending, and counting it
+				// as expired would report a clean sweep while customer money
+				// sits in an unconfirmable row.
+				const r = await ctx.runMutation(
+					internal.bookings.internalExpire,
+					{ bookingId: booking._id },
+				);
+				if (r.expired) expired++;
+				else if (r.skipped === "paid") keptPaid++;
 			} catch (err) {
 				logger.error("[bookings] internalExpire failed", {
 					bookingId: booking._id,
@@ -951,7 +982,14 @@ export const expireStalePending = internalMutation({
 				});
 			}
 		}
-		return { scanned: stale.length, expired };
+		if (keptPaid > 0) {
+			// Surfaced rather than swallowed: these rows need an operator to
+			// confirm, and a silent skip looks identical to "nothing to do".
+			logger.warn("[bookings] kept paid bookings pending for confirmation", {
+				count: keptPaid,
+			});
+		}
+		return { scanned: stale.length, expired, keptPaid };
 	},
 });
 
