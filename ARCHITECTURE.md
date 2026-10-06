@@ -6,22 +6,7 @@ and org scoping; Stripe runs checkout/refunds via signed webhooks; OTA
 providers (Viator et al.) integrate through a dedicated webhook → upsert
 pipeline; notifications fan out over SMS and push on crons.
 
-```mermaid
-flowchart TD
-  B["Browser<br/>dashboard + public booking"] --> APP["TanStack Start<br/>src/routes"]
-  APP --> CX["Convex backend<br/>typed queries · mutations"]
-  CX --> DOM["Domain core<br/>bookings · tours · tourSchedules<br/>assignments · customers"]
-  CX --> PAY["payments · payments_stripe_actions<br/>checkout · refunds · ledger"]
-  STRIPE["Stripe API"] -->|signed webhook| HTTP["convex/http.ts routes"]
-  HTTP --> PAY
-  CX --> OTA["convex/ota<br/>webhook_handler · upsert"]
-  PROV["OTA providers"] -->|signed payload| HTTP
-  CX --> NOTIF["notifications stack<br/>dispatch · sms · reminders"]
-  NOTIF --> TWILIO["Twilio"]
-  CRONS["convex/crons.ts"] --> NOTIF
-  AUTH["Better Auth<br/>convex/auth.ts · betterAuth/"] --> APP
-  AUTHZ["convex/authz.ts<br/>org scoping"] --> CX
-```
+The architecture, drawn: **[diagrams/architecture.html](diagrams/architecture.html)** (diagram-design editorial HTML — refresh it when modules or data flows change; never redraw it as Mermaid). Spine: the TanStack Start SSR app feeds a Convex backend hub that fans out to the domain core, payments, OTA pipeline and notifications, while Stripe and OTA providers enter through signed webhooks at convex/http.ts.
 
 ## Modules
 
