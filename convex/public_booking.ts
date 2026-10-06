@@ -568,6 +568,24 @@ export const internalCreate = internalMutation({
 				"This time slot is not available for booking. Please pick another time.",
 			);
 		}
+		// GT-AUDIT-02 / hub F602: the cap is enforced against the schedule's own
+		// capacityBooked, so it only works when a slot materialized. The
+		// free-text start-time branch leaves scheduleId undefined — the guard
+		// below never read the override there, and because incrementBooked is
+		// gated on the same `if (scheduleId)` nothing enforced capacity at all,
+		// so a guest could book 8 seats on a date the operator capped at 2.
+		//
+		// Fail safe: with no slot there is nothing to compare against, and
+		// bookings carries no index on (tourId, date) to count unmaterialized
+		// bookings without an unbounded scan. Refuse rather than oversell an
+		// operator's cap. Counting precisely (and keeping the sale) needs that
+		// index — tracked as follow-up, not smuggled in here.
+		if (!scheduleId && ex?.capacityOverride !== undefined) {
+			throw new ConvexError(
+				"This date has a limited capacity that cannot be booked online. " +
+					"Please choose another date or contact the operator.",
+			);
+		}
 		if (scheduleId && ex?.capacityOverride !== undefined) {
 			const attached = await ctx.db.get(scheduleId);
 			if (attached && attached.capacityBooked + args.guests > ex.capacityOverride) {
