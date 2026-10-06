@@ -281,8 +281,11 @@ function ScheduleDetailPage() {
 				</div>
 			}
 		>
-			{/* F431: booked/total is the operator KPI — not five equal cards */}
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+			{/* F431: booked/total is the operator KPI — not five equal cards.
+			    Five cards, so five tracks: the grid had four, which wrapped Status
+			    onto a row of its own. The sibling detail pages match their card
+			    count (assignments 3/3, bookings 4/4). */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
 				<MetricCard
 					label="Booked / Total"
 					value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`}
