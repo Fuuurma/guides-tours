@@ -55,6 +55,36 @@ import { logger } from "./lib/logger";
 
 // ----- Queries -----
 
+/**
+ * Resolve customer names for a set of bookings, one `.get()` per UNIQUE
+ * customer instead of one per row.
+ *
+ * `list` is already org-scoped by `requireMembership`, and every booking it
+ * returns belongs to the caller's org, so each resolved customer belongs to
+ * that org too. `bookings.listBySchedule` goes through its own org check
+ * before calling this. Ids that resolve to nothing are simply absent from the
+ * map — callers render their own fallback for a missing name, which is also
+ * what a booking with no `customerId` gets.
+ */
+export async function batchCustomerNames(
+	ctx: QueryCtx,
+	bookings: readonly { customerId?: Id<"customers"> }[],
+): Promise<Map<Id<"customers">, string>> {
+	const ids = [
+		...new Set(
+			bookings
+				.map((b) => b.customerId)
+				.filter((id): id is Id<"customers"> => id !== undefined),
+		),
+	];
+	const out = new Map<Id<"customers">, string>();
+	for (const id of ids) {
+		const customer = await ctx.db.get(id);
+		if (customer) out.set(id, customer.name);
+	}
+	return out;
+}
+
 export const list = query({
 	args: {
 		page: v.optional(v.number()),
@@ -206,11 +236,25 @@ export const list = query({
 
 		const total = filtered.length;
 		const offset = (page - 1) * pageSize;
-		const items = filtered.slice(offset, offset + pageSize);
+		const pageRows = filtered.slice(offset, offset + pageSize);
 		const hasNext = offset + pageSize < total;
 
+		// Hydrate customerName server-side. The three callers that render a
+		// customer name (bookings.tsx, dashboard/index.tsx x2) used to build
+		// their own name dictionary from ONE default page of
+		// customers.list, so any customer outside those 20 rows rendered as
+		// "Unknown customer". The ids are already on these rows; resolving
+		// them here is O(unique customers on the page) and cannot drift
+		// from the rows being rendered. Same batching as _listByScheduleRaw.
+		const nameByCustomer = await batchCustomerNames(ctx, pageRows);
+
 		return {
-			items,
+			items: pageRows.map((b) => ({
+				...b,
+				customerName: b.customerId
+					? (nameByCustomer.get(b.customerId) ?? null)
+					: null,
+			})),
 			total,
 			page,
 			pageSize,

@@ -79,9 +79,6 @@ function DashboardIndex() {
 	const { data: assignments, error: assignmentsError } = useQuery(
 		convexQuery(api.assignments.list, { dateFrom: today }),
 	);
-	const { data: customers, error: customersError } = useQuery(
-		convexQuery(api.customers.list, {}),
-	);
 	const {
 		data: tours,
 		error: toursError,
@@ -130,7 +127,6 @@ function DashboardIndex() {
 		bookingsError ??
 		pendingBookingsError ??
 		assignmentsError ??
-		customersError ??
 		toursError ??
 		staffingError ??
 		missingPhoneError ??
@@ -138,9 +134,6 @@ function DashboardIndex() {
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
-	);
-	const customerNameById = new Map<string, string>(
-		(customers?.items ?? []).map((c) => [String(c._id), c.name]),
 	);
 
 	const todaysBookings = (bookings?.items ?? []).filter(
@@ -447,8 +440,7 @@ function DashboardIndex() {
 											>
 												<div className="min-w-0 flex-1">
 													<p className="truncate font-medium">
-														{customerNameById.get(String(booking.customerId)) ??
-															"Customer request"}
+														{booking.customerName ?? "Customer request"}
 													</p>
 													<p className="text-xs text-muted-foreground">
 														{tourNameById.get(String(booking.tourId)) ??
@@ -552,9 +544,7 @@ function DashboardIndex() {
 									<ul className="flex flex-col gap-2">
 										{todaysBookings.slice(0, 6).map((b) => {
 											const tourName = tourNameById.get(String(b.tourId));
-											const customerName = b.customerId
-												? customerNameById.get(String(b.customerId))
-												: null;
+											const customerName = b.customerName;
 											return (
 												<li
 													key={b._id}

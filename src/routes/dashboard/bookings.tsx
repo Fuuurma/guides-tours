@@ -29,7 +29,6 @@ export const Route = createFileRoute("/dashboard/bookings")({
 
 function bookingColumns(
 	tourNameById: Map<string, string>,
-	customerNameById: Map<string, string>,
 ): DataTableColumn<Booking>[] {
 	return [
 		{
@@ -47,13 +46,10 @@ function bookingColumns(
 					params={{ bookingId: b._id }}
 					className="text-link hover:underline"
 				>
-					{b.customerId
-						? (customerNameById.get(b.customerId) ?? "Unknown customer")
-						: "Unknown customer"}
+					{b.customerName ?? "Unknown customer"}
 				</Link>
 			),
-			searchValue: (b) =>
-				b.customerId ? (customerNameById.get(b.customerId) ?? "") : "",
+			searchValue: (b) => b.customerName ?? "",
 		},
 		{
 			key: "tour",
@@ -107,15 +103,8 @@ function BookingsPage() {
 		error,
 	} = useQuery(convexQuery(api.bookings.list, args));
 	const { data: tours } = useQuery(convexQuery(api.tours.list, {}));
-	const { data: customers } = useQuery(convexQuery(api.customers.list, {}));
 	const tourNameById = new Map(
 		(tours ?? []).map((tour) => [String(tour._id), tour.name]),
-	);
-	const customerNameById = new Map(
-		(customers?.items ?? []).map((customer) => [
-			String(customer._id),
-			customer.name,
-		]),
 	);
 	const itemCount = bookings?.items?.length ?? 0;
 	const filtersActive =
@@ -235,7 +224,7 @@ function BookingsPage() {
 			</div>
 			<DataTable
 				data={bookings?.items as Booking[] | undefined}
-				columns={bookingColumns(tourNameById, customerNameById)}
+				columns={bookingColumns(tourNameById)}
 				rowKey={(b) => b._id}
 				isPending={isPending}
 				error={error}

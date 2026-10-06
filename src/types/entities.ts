@@ -31,6 +31,13 @@ export interface Booking {
 	status: BookingStatus;
 	source: string;
 	totalAmountCents: bigint | number;
+	/**
+	 * Resolved server-side by `bookings.list` from the row's own
+	 * `customerId`, so a list never has to guess a name from some other
+	 * query's page. Absent/null when the booking has no customer or the
+	 * customer was deleted.
+	 */
+	customerName?: string | null;
 }
 
 export interface BookingDetail extends Booking {
