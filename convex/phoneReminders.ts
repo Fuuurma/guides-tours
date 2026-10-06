@@ -11,6 +11,7 @@
  */
 
 import { v, ConvexError } from "convex/values";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
 	internalAction,
 	internalMutation,
@@ -109,15 +110,57 @@ export const markUserSent = internalMutation({
 	},
 });
 
-export const lastSentMapForOrg = internalQuery({
-	args: { organizationId: v.string() },
-	handler: async (ctx, args) => {
-		const rows = await ctx.db
+// GT-AUDIT-01: resolve lastSentAt per candidate through the by_org_user
+// index instead of reading one page of by_org. `by_org` returns rows in
+// creation order, so a .take(500) page keeps the 500 OLDEST sends — the
+// most recently reminded staff are exactly the ones dropped, and absence
+// was read as "never reminded". Duplicate reminders therefore went out
+// inside the 7-day window, and cooldownStatus reported the bypassed state
+// as correct. markUserSent keeps exactly one row per (org, user), so a
+// point read on that index is the whole answer.
+//
+// Sequential on purpose: candidate lists are staff-sized, and a single
+// indexed point read each is both cheaper and more predictable than the
+// fan-out a parallel map would produce.
+//
+// Exported so the truncation scenario can be tested directly: the decision
+// that consumes this map is three mutations deep behind auth and schedule
+// seeding, which is not where this contract is worth pinning.
+export async function lastSentAtByUserId(
+	ctx: QueryCtx | MutationCtx,
+	organizationId: string,
+	userIds: Iterable<string>,
+): Promise<Map<string, number>> {
+	const out = new Map<string, number>();
+	for (const userId of new Set(userIds)) {
+		const row = await ctx.db
 			.query("phoneReminderSends")
-			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-			.take(500);
-		return rows.map((r) => ({ userId: r.userId, lastSentAt: r.lastSentAt }));
-	},
+			.withIndex("by_org_user", (q) =>
+				q.eq("organizationId", organizationId).eq("userId", userId),
+			)
+			.unique();
+		if (row) out.set(userId, row.lastSentAt);
+	}
+	return out;
+}
+
+/**
+ * Action-facing seam for `lastSentAtByUserId`. Actions cannot touch the
+ * database directly, and this is the same lookup the query/mutation paths
+ * call — one implementation, so the cooldown rule cannot drift between
+ * them.
+ */
+// The explicit return type is load-bearing, not decoration: without it the
+// inference chain runForOrg -> internal.phoneReminders.lastSentForUsers ->
+// typeof phoneReminders -> runForOrg is circular, TS7022s runForOrg to `any`,
+// and that `any` poisons the whole module type — api.d.ts imports
+// `typeof phoneReminders`, so every Convex query in the app loses its return
+// type and the repo fails with ~588 unrelated errors.
+export const lastSentForUsers = internalQuery({
+	args: { organizationId: v.string(), userIds: v.array(v.string()) },
+	handler: async (ctx, args): Promise<Array<[string, number]>> => [
+		...(await lastSentAtByUserId(ctx, args.organizationId, args.userIds)),
+	],
 });
 
 /**
@@ -146,12 +189,10 @@ export const cooldownStatus = query({
 		);
 		const withEmail = missing.filter((p) => p.email.trim());
 
-		const sendRows = await ctx.db
-			.query("phoneReminderSends")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
-			.take(500);
-		const lastSentByUserId = new Map(
-			sendRows.map((r) => [r.userId, r.lastSentAt] as const),
+		const lastSentByUserId = await lastSentAtByUserId(
+			ctx,
+			orgId,
+			withEmail.map((p) => p.userId),
 		);
 		const { eligible, coolingDown } = partitionByUserCooldown(
 			withEmail,
@@ -261,7 +302,26 @@ export const runForOrg = internalAction({
 		emailFromEmail: v.optional(v.string()),
 		source: v.optional(v.union(v.literal("manual"), v.literal("digest"))),
 	},
-	handler: async (ctx, args) => {
+	// The explicit return type breaks an inference cycle and is load-bearing.
+	// This action's result is consumed through `internal.runForOrg`, whose
+	// type is derived from `typeof phoneReminders` — the module that contains
+	// it. Unannotated, TypeScript reports TS7022, types the action as `any`,
+	// and because api.d.ts imports the module type directly, every Convex
+	// query in the app loses its return type and the repo fails with hundreds
+	// of unrelated errors. `lastSentForUsers` carries the same annotation for
+	// the same reason on the other end of the cycle.
+	handler: async (
+		ctx,
+		args,
+	): Promise<{
+		source: string;
+		candidates: number;
+		withEmail: number;
+		coolingDown: number;
+		queued: number;
+		sent: number;
+		skipped: number;
+	}> => {
 		const missing = (await ctx.runQuery(
 			internal.userProfiles.missingStaffPhonesInternal,
 			{
@@ -272,12 +332,13 @@ export const runForOrg = internalAction({
 		)) as MissingStaffPhone[];
 
 		const withEmail = missing.filter((p) => p.email.trim());
-		const lastRows = (await ctx.runQuery(
-			internal.phoneReminders.lastSentMapForOrg,
-			{ organizationId: args.organizationId },
-		)) as Array<{ userId: string; lastSentAt: number }>;
+		// runForOrg is an ACTION — its ctx carries no `db` — so the point
+		// reads happen behind an internal query rather than inline.
 		const lastSentByUserId = new Map(
-			lastRows.map((r) => [r.userId, r.lastSentAt] as const),
+			(await ctx.runQuery(internal.phoneReminders.lastSentForUsers, {
+				organizationId: args.organizationId,
+				userIds: withEmail.map((p) => p.userId),
+			})) as Array<[string, number]>,
 		);
 		const { eligible, coolingDown } = partitionByUserCooldown(
 			withEmail,
@@ -369,14 +430,10 @@ export const sendReminders = mutation({
 			);
 		}
 
-		const sendRows = await ctx.db
-			.query("phoneReminderSends")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.take(500);
-		const lastSentByUserId = new Map(
-			sendRows.map((r) => [r.userId, r.lastSentAt] as const),
+		const lastSentByUserId = await lastSentAtByUserId(
+			ctx,
+			member.organizationId,
+			withEmail.map((p) => p.userId),
 		);
 		const { eligible, coolingDown } = partitionByUserCooldown(
 			withEmail,
