@@ -19,18 +19,19 @@
 //
 // Tour duration lookup: tour.durationHours (number).
 
-import { v, ConvexError } from "convex/values";
+import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 
 import type { Id, Doc } from "./_generated/dataModel";
 import { internalRefs } from "./lib/internalRefs";
-import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requireRole } from "./lib/authz";
 
 import { resolveTourStaffing, evaluateSlotStaffing } from "./lib/staffing";
 import { computeStaffingGaps } from "./lib/staffingGaps";
 
 import { timeToMinutes } from "./lib/assignmentTime";
 import {
+assertGuideAssignable,
 	collectConflictRows,
 	type ConflictIndexName,
 } from "./lib/assignmentsShared";
@@ -491,23 +492,9 @@ export const create = mutation({
 
 		// Validate guide has the "guide" role in this organization
 		// (source: assignment_service.py validates role__in=["guide","staff"]).
-		const guideMember = await findOrgMember(
-			ctx,
-			member.organizationId,
-			args.guideId,
-		);
-		if (!guideMember) {
-			throw new ConvexError("Guide is not a member of this organization");
-		}
-		if (
-			guideMember.role !== "guide" &&
-			guideMember.role !== "owner" &&
-			guideMember.role !== "admin"
-		) {
-			throw new ConvexError(
-				`User with role "${guideMember.role}" cannot be assigned as guide`,
-			);
-		}
+		// Shared with update and ops.staffDeparture so the invariant has one
+		// definition — it had drifted into two copies and one hole.
+		await assertGuideAssignable(ctx, member.organizationId, args.guideId);
 
 		return await ctx.runMutation(
 			internalRefs.assignments.internalCreate,
@@ -561,6 +548,20 @@ export const update = mutation({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+
+		// GT-AUDIT-02 / hub F594: reassignment took any caller-chosen guideId
+		// with no membership check, while `create` has always refused one
+		// (below). A foreign id therefore got assigned and then notified with
+		// this org's tour name, date and start/end times, and a nonexistent id
+		// still consumed a requiredGuides slot so the departure read fully
+		// staffed with nobody assigned. Enforce the same invariant `create`
+		// does, at the same layer: this is the client-reachable boundary, and
+		// internalUpdate is also called by cron/ops with no session, so the
+		// check cannot live in the lifecycle mutation.
+		if (args.guideId !== undefined) {
+			await assertGuideAssignable(ctx, member.organizationId, args.guideId);
+		}
+
 		return await ctx.runMutation(
 			internalRefs.assignments.internalUpdate,
 			{

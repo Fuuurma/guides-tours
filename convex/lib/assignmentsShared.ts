@@ -5,6 +5,8 @@
 
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
+import { ConvexError } from "convex/values";
+import { findOrgMember } from "./authz";
 import { shiftDate, windowsOverlapAbs } from "./assignmentTime";
 
 /** Bound the conflict scans in checkConflicts + checkConflictsHelper. */
@@ -147,4 +149,50 @@ export async function checkConflictsHelper(
 			message: `${(conflictType[0] ?? "").toUpperCase()}${conflictType.slice(1)} already assigned to '${tourName}' from ${r.startTime} to ${r.endTime ?? r.startTime}`,
 		};
 	});
+}
+
+/**
+ * The "guide must belong to this org" invariant, in one place.
+ *
+ * This check had three homes and one hole (GT-AUDIT-02 / hub F594): it was
+ * inlined in `assignments.create` and duplicated privately in `ops.ts`, while
+ * `performUpdate` — which is what actually writes `guideId` — had no check at
+ * all. A caller could therefore name any user id and have them assigned and
+ * notified with the org's tour name, date and times, across tenant boundaries.
+ *
+ * Kept in this module because every writer of `guideId` (assignments.create,
+ * lib/assignmentsLifecycle.performUpdate, ops.staffDeparture) already imports
+ * from here, so the invariant now has exactly one definition to drift from.
+ */
+export type OrgMemberLookup = (
+	ctx: MutationCtx,
+	organizationId: string,
+	userId: string,
+) => Promise<{ userId: string; role?: string } | null>;
+
+export async function assertGuideAssignable(
+	ctx: MutationCtx,
+	organizationId: string,
+	guideId: string,
+	// Injectable so the policy below is unit-testable. The default goes through
+	// the Better Auth component, which needs a live session: under convex-test
+	// there is none, so a test calling performUpdate directly gets Unauthorized
+	// from the lookup rather than from this function. That is why the lookup is
+	// a parameter and the role/rejection policy is tested with a stub instead of
+	// the suite growing its first component-registration harness.
+	lookup: OrgMemberLookup = findOrgMember,
+): Promise<void> {
+	const guideMember = await lookup(ctx, organizationId, guideId);
+	if (!guideMember) {
+		throw new ConvexError("Guide is not a member of this organization");
+	}
+	if (
+		guideMember.role !== "guide" &&
+		guideMember.role !== "owner" &&
+		guideMember.role !== "admin"
+	) {
+		throw new ConvexError(
+			`User with role "${guideMember.role}" cannot be assigned as guide`,
+		);
+	}
 }

@@ -10,7 +10,8 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import { internalRefs } from "./lib/internalRefs";
 import type { Id } from "./_generated/dataModel";
-import { findOrgMember, requireRole } from "./lib/authz";
+import { requireRole } from "./lib/authz";
+import { assertGuideAssignable } from "./lib/assignmentsShared";
 
 const staffDepartureArgs = {
 	tourId: v.id("tours"),
@@ -30,26 +31,6 @@ const staffDepartureReturns = v.object({
 	scheduleId: v.union(v.id("tourSchedules"), v.null()),
 	assignmentId: v.union(v.id("assignments"), v.null()),
 });
-
-async function assertGuideAssignable(
-	ctx: Parameters<typeof requireRole>[0],
-	organizationId: string,
-	guideId: string,
-): Promise<void> {
-	const guideMember = await findOrgMember(ctx, organizationId, guideId);
-	if (!guideMember) {
-		throw new ConvexError("Guide is not a member of this organization");
-	}
-	if (
-		guideMember.role !== "guide" &&
-		guideMember.role !== "owner" &&
-		guideMember.role !== "admin"
-	) {
-		throw new ConvexError(
-			`User with role "${guideMember.role}" cannot be assigned as guide`,
-		);
-	}
-}
 
 export const staffDeparture = mutation({
 	args: staffDepartureArgs,

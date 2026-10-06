@@ -9,6 +9,7 @@
 // the next batch.)
 
 import { convexTest } from "convex-test";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { seedAssignment, seedSchedule, seedTour } from "./helpers";
@@ -286,6 +287,7 @@ describe("assignmentsLifecycle.performCreate — schedule validation", () => {
 
 import { seedDriver, seedVehicle } from "./helpers";
 import { performUpdate } from "../lib/assignmentsLifecycle";
+import { assertGuideAssignable } from "../lib/assignmentsShared";
 
 describe("assignmentsLifecycle.performUpdate — guards", () => {
 	it("refuses deleted, cancelled, completed, and foreign-org updates", async () => {
@@ -531,5 +533,126 @@ describe("driver vacation enforcement (F347)", () => {
 				}),
 			).rejects.toThrow("Driver is on approved vacation on this date");
 		});
+	});
+});
+
+// ---- GT-AUDIT-02 / hub F594: cross-tenant guide reassignment ----
+//
+// performUpdate is the write of `guideId` and had no org-membership check:
+// `create` refused a foreign guideId ("Guide is not a member of this
+// organization") while reassignment accepted any caller-chosen id and then
+// notified that user with the org's tour name, date and times.
+//
+// The policy is tested through the injectable lookup rather than through the
+// Better Auth component, because under convex-test there is no auth session —
+// the default lookup throws Unauthorized and would make every assertion here
+// pass for the wrong reason. Two layers instead:
+//   1. the policy (reject non-member, reject wrong role, allow guide) with a
+//      stub lookup — exact messages, no auth dependency;
+//   2. the wiring — performUpdate reaches the check and leaves the row
+//      untouched when it rejects.
+
+describe("assertGuideAssignable — guide membership policy", () => {
+	const ORG_ID = "org_policy";
+	const noopLookup = () => Promise.resolve(null);
+	const asLookup =
+		(role: string) => () =>
+			Promise.resolve({ userId: "u1", role });
+
+	async function ctx() {
+		return {} as never;
+	}
+
+	it("rejects a guideId that is not a member of the org", async () => {
+		await expect(
+			assertGuideAssignable(await ctx(), ORG_ID, "outsider", noopLookup),
+		).rejects.toThrow("Guide is not a member of this organization");
+	});
+
+	it("rejects a member whose role cannot be assigned as guide", async () => {
+		for (const role of ["member", "driver", undefined]) {
+			await expect(
+				assertGuideAssignable(await ctx(), ORG_ID, "u1", asLookup(role as string)),
+			).rejects.toThrow("cannot be assigned as guide");
+		}
+	});
+
+	it("accepts guide, owner and admin", async () => {
+		for (const role of ["guide", "owner", "admin"]) {
+			await expect(
+				assertGuideAssignable(await ctx(), ORG_ID, "u1", asLookup(role)),
+			).resolves.toBeUndefined();
+		}
+	});
+
+	it("scopes the lookup to the caller's organization", async () => {
+		// A member of a DIFFERENT org must not satisfy the check: this is the
+		// whole point, so assert the lookup was given the caller's org id.
+		const seen: string[] = [];
+		await expect(
+			assertGuideAssignable(await ctx(), "org_a", "u1", (_c, orgId) => {
+				seen.push(orgId);
+				return Promise.resolve({ userId: "u1", role: "guide" });
+			}),
+		).resolves.toBeUndefined();
+		expect(seen).toEqual(["org_a"]);
+	});
+});
+
+describe("assignments.update — the public boundary enforces guide membership", () => {
+	// Structural, not behavioural: the public wrapper is the only client-reachable
+	// entry, and it calls requireRole, which needs a Better Auth session that
+	// convex-test cannot provide (the same reason the policy above is tested
+	// through the injectable lookup). So assert the wiring at the source level —
+	// the check present, scoped to the caller's own org, and ahead of the
+	// delegation to internalUpdate — rather than pretending to a runtime test
+	// that would pass for the wrong reason.
+	const src = readFileSync(
+		new URL("../assignments.ts", import.meta.url),
+		"utf8",
+	);
+
+	function updateHandler(): string {
+		const start = src.indexOf("export const update = mutation(");
+		expect(start, "public update mutation not found").toBeGreaterThan(-1);
+		const end = src.indexOf("export const internalUpdate", start);
+		expect(end, "internalUpdate not found after update").toBeGreaterThan(start);
+		return src.slice(start, end);
+	}
+
+	it("calls assertGuideAssignable before delegating to internalUpdate", () => {
+		const handler = updateHandler();
+		const guard = handler.indexOf("assertGuideAssignable");
+		const delegate = handler.indexOf("internalRefs.assignments.internalUpdate");
+		expect(guard, "update does not enforce guide membership").toBeGreaterThan(-1);
+		expect(guard, "check must precede the delegation").toBeLessThan(delegate);
+	});
+
+	it("scopes the check to the caller's organization, not a caller-supplied one", () => {
+		expect(updateHandler()).toContain(
+			"assertGuideAssignable(ctx, member.organizationId, args.guideId)",
+		);
+	});
+
+	it("only checks when a guideId is actually supplied", () => {
+		expect(updateHandler()).toContain("if (args.guideId !== undefined)");
+	});
+
+	it("keeps internalUpdate unguarded for trusted cron/ops callers", () => {
+		// internalUpdate is reachable from cron/ops with no session, so the check
+		// must NOT be duplicated into the lifecycle mutation — that is what made
+		// two unrelated existing tests fail before the check was moved here.
+		const start = src.indexOf("export const internalUpdate");
+		const body = src.slice(start, src.indexOf("export const", start + 10));
+		expect(body).not.toContain("assertGuideAssignable");
+	});
+
+	it("create still refuses a foreign guideId, via the same shared helper", () => {
+		expect(src).toContain(
+			"await assertGuideAssignable(ctx, member.organizationId, args.guideId);",
+		);
+		// one definition, not three
+		const defs = src.match(/assertGuideAssignable\(/g) ?? [];
+		expect(defs.length).toBeLessThanOrEqual(4); // import + update + create (+ comments)
 	});
 });
