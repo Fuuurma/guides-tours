@@ -1015,11 +1015,13 @@ function HeroVisual({ cardY }: { cardY: MotionValue<number> }) {
 								title="Old Town Walk"
 								time="09:30"
 								color="bg-chart-1"
+								guests={8}
 							/>
 							<ScheduleLine
 								title="Coastal Kayak"
 								time="11:00"
 								color="bg-chart-2"
+								guests={6}
 							/>
 						</div>
 					</div>
@@ -1475,13 +1477,20 @@ function WorkspacePreview() {
 								title="Old Town Walk"
 								time="09:30"
 								color="bg-chart-1"
+								guests={8}
 							/>
 							<ScheduleLine
 								title="Coastal Kayak"
 								time="11:00"
 								color="bg-chart-2"
+								guests={6}
 							/>
-							<ScheduleLine title="Wine Country" time="15:30" color="bg-sun" />
+							<ScheduleLine
+								title="Wine Country"
+								time="15:30"
+								color="bg-sun"
+								guests={4}
+							/>
 						</div>
 					</div>
 				</div>
@@ -1587,10 +1596,12 @@ function ScheduleLine({
 	title,
 	time,
 	color,
+	guests,
 }: {
 	title: string;
 	time: string;
 	color: string;
+	guests: number;
 }) {
 	return (
 		<div className="flex items-center gap-2.5">
@@ -1598,7 +1609,7 @@ function ScheduleLine({
 			<div className="min-w-0">
 				<p className="truncate text-[10px] font-semibold">{title}</p>
 				<p className="mt-0.5 text-[9px] text-muted-foreground">
-					{time} · 8 guests
+					{time} · {guests} {guests === 1 ? "guest" : "guests"}
 				</p>
 			</div>
 		</div>
