@@ -19,6 +19,11 @@ import { assertFieldWithinLimit } from "./lib/validation";
 
 // ---- queries ----
 
+// Bounds on one `internalGenerate` run. EXISTING_SCAN_CAP is the existing-
+// schedule scan; MAX_DAYS (below) is the generated window. Kept distinct
+// because hitting one does not imply the other.
+const EXISTING_SCAN_CAP = 5000;
+
 export const list = query({
 	args: {
 		tourId: v.optional(v.id("tours")),
@@ -344,10 +349,36 @@ export const internalGenerate = internalMutation({
 					.lte("date", args.dateTo),
 			)
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(5000);
+			.take(EXISTING_SCAN_CAP);
 		const existingKeys = new Set(
 			existingInRange.map((s) => `${s.date}|${s.startTime}`),
 		);
+
+		// F468: `by_tour_date` orders by date ascending, so a capped scan keeps
+		// the EARLIEST in-window schedules and silently drops everything after
+		// the cap. Absence from `existingKeys` then stops meaning "does not
+		// exist" — and the generator inserts a second row for the same
+		// (tourId, date, startTime). That is worse than a list that truncates:
+		// from then on every `.unique()` on the triple throws Convex's raw
+		// multi-document error instead of the intended ConvexError
+		// (tourSchedules.ts, bookings.ts, public_booking.ts).
+		//
+		// So the batch stays the fast path, and only a scan that actually hit
+		// the cap pays for an indexed point check per candidate.
+		const scanTruncated = existingInRange.length >= EXISTING_SCAN_CAP;
+		const slotExists = async (date: string, startTime: string) => {
+			const hit = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date_start", (q) =>
+					q
+						.eq("tourId", args.tourId)
+						.eq("date", date)
+						.eq("startTime", startTime),
+				)
+				.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+				.first();
+			return hit !== null;
+		};
 
 		// Load all blackouts for this tour once — avoids the per-day
 		// take(100) truncation in isBlackoutHelper for long-lived tours.
@@ -430,13 +461,15 @@ export const internalGenerate = internalMutation({
 				skipped++;
 				continue;
 			}
-
-			// Note: no per-day unique() check here — the
-			// existingInRange batch above covers all schedules in the
-			// window, and Convex mutations are serialized so no race
-			// can occur within this mutation. The previous per-day
-			// unique() added 366 queries for a year-long window with
-			// no additional safety.
+			// When the scan hit its cap, absence from the set is not evidence.
+			// This is the per-day check the old comment claimed was redundant —
+			// it is redundant only while the batch actually covers the window.
+			// Convex mutations are still serialized, so no intra-run race is
+			// possible; this is about what the truncated scan failed to see.
+			if (scanTruncated && (await slotExists(date, startTime))) {
+				skipped++;
+				continue;
+			}
 
 			const now = Date.now();
 			const id = await ctx.db.insert("tourSchedules", {
@@ -498,11 +531,22 @@ export const internalGenerate = internalMutation({
 				skipped,
 				truncated,
 				processedTo,
+				scanTruncated,
 				maxDays: MAX_DAYS,
 			},
 		});
 
-		return { created, skipped, truncated, processedTo, requestedTo: args.dateTo };
+		return {
+			created,
+			skipped,
+			truncated,
+			processedTo,
+			requestedTo: args.dateTo,
+			// Distinct from `truncated`, which is the DAY window hitting
+			// MAX_DAYS. This one says the existing-schedule scan was capped, so
+			// every slot beyond it was verified by point read instead.
+			scanTruncated,
+		};
 	},
 });
 
