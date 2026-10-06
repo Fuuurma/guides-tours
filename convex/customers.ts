@@ -14,7 +14,12 @@
 // the diff. Mirrors source's `AuditLogger.log_action`.
 
 import { v, ConvexError } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import {
+	mutation,
+	query,
+	type QueryCtx,
+} from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
@@ -42,6 +47,109 @@ const ALLOWED_UPDATE_FIELDS = new Set([
 ]);
 
 // ----- Queries -----
+
+/**
+ * Hard ceiling on how many customer rows one `list` call will read.
+ *
+ * The scan is a JS-side filter + sort over an index range, so it cannot be
+ * turned into an exact count: Convex has no index aggregate, and an
+ * unbounded `.collect()` fails hard (too many documents read) instead of
+ * degrading. So the window stays bounded — but it is now bounded at the
+ * *newest* end (see `scanCustomers`) and the cut is reported, instead of
+ * silently keeping whichever 5000 rows the index happened to yield.
+ */
+export const MAX_CUSTOMER_SCAN = 5000;
+
+/** A `customers` row as stored. */
+type CustomerDoc = Doc<"customers">;
+
+/**
+ * Read one bounded window of an org's customers, newest-first by default.
+ *
+ * `truncated: true` means this window is NOT the whole org — `total`/`hasNext`
+ * derived from it are lower bounds. Callers must not present it as complete.
+ *
+ * F468 + F57: the scan used to run over the bare `by_org` /
+ * `by_org_vip` ranges, which order by `_creationTime` when the index has no
+ * time tail. `.take(MAX_CUSTOMER_SCAN)` therefore kept the 5000 *oldest*
+ * customers in the org, and every customer created after that point was
+ * unreachable — in every sort order, behind every filter, on every page. The
+ * booking-form customer picker searches this same query, so a guide could
+ * not find a customer they had just added.
+ */
+export async function scanCustomers(
+	ctx: QueryCtx,
+	organizationId: string,
+	opts: { vipOnly?: boolean; order: "asc" | "desc"; maxScan: number },
+): Promise<{ rows: CustomerDoc[]; truncated: boolean }> {
+	// F364: vipOnly is tri-state (true / false / unset). `false` must mean
+	// "regular only" — truthiness used to treat it as "all". When it is set,
+	// lead the index with vipStatus so the server skips the other class
+	// instead of fetching every customer and filtering in JS.
+	//
+	// Reads one row past the cap so `truncated` means "there is more", not
+	// "we reached the limit" — an org holding exactly maxScan customers is
+	// complete and must not be reported as cut off.
+	const overfetch = opts.maxScan + 1;
+	const take = async (rows: CustomerDoc[]) => ({
+		rows: rows.length > opts.maxScan ? rows.slice(0, opts.maxScan) : rows,
+		truncated: rows.length > opts.maxScan,
+	});
+
+	if (opts.vipOnly === true || opts.vipOnly === false) {
+		return take(
+			await ctx.db
+				.query("customers")
+				.withIndex("by_org_vip_created", (q) =>
+					q
+						.eq("organizationId", organizationId)
+						.eq("vipStatus", opts.vipOnly as boolean),
+				)
+				.order(opts.order)
+				.take(overfetch),
+		);
+	}
+	return take(
+		await ctx.db
+			.query("customers")
+			.withIndex("by_org_created", (q) =>
+				q.eq("organizationId", organizationId),
+			)
+			.order(opts.order)
+			.take(overfetch),
+	);
+}
+
+/**
+ * Slice one already-filtered+sorted window into a page.
+ *
+ * `hasNext` only describes the window. It is deliberately NOT forced true
+ * when `truncated`, because that would feed a pager an endless "next page"
+ * of empty results; `truncated` is the signal that says the window is not
+ * the whole org.
+ */
+export function paginateCustomerRows<T>(
+	rows: T[],
+	opts: { page: number; pageSize: number; truncated: boolean },
+): {
+	items: T[];
+	total: number;
+	page: number;
+	pageSize: number;
+	hasNext: boolean;
+	hasPrevious: boolean;
+} {
+	const total = rows.length;
+	const offset = (opts.page - 1) * opts.pageSize;
+	return {
+		items: rows.slice(offset, offset + opts.pageSize),
+		total,
+		page: opts.page,
+		pageSize: opts.pageSize,
+		hasNext: offset + opts.pageSize < total,
+		hasPrevious: opts.page > 1,
+	};
+}
 
 /** List customers for the caller's active organization, paginated. */
 export const list = query({
@@ -73,32 +181,17 @@ export const list = query({
 		const sortOrder = args.sortOrder ?? "desc";
 		const order = sortOrder === "asc" ? "asc" : "desc";
 
-		// Pick the most selective index for the VIP filter — the
-		// by_org_vip compound index leads with (org, vipStatus) so the
-		// server can skip the other VIP class entirely instead of
-		// fetching every customer and filtering in JS.
-		// F364: vipOnly is tri-state (true / false / unset). `false`
-		// must mean "regular only" — truthiness treated it as "all".
-		// Bound the scan: a single page is at most 100, but the JS
-		// filter needs every matching row. Cap at 5000 — the FE
-		// paginates, so this is fine for reasonable org sizes.
-		const MAX_SCAN = 5000;
-		const all =
-			args.vipOnly === true || args.vipOnly === false
-				? await ctx.db
-						.query("customers")
-						.withIndex("by_org_vip", (q) =>
-							q
-								.eq("organizationId", member.organizationId)
-								.eq("vipStatus", args.vipOnly as boolean),
-						)
-						.take(MAX_SCAN)
-				: await ctx.db
-						.query("customers")
-						.withIndex("by_org", (q) =>
-							q.eq("organizationId", member.organizationId),
-						)
-						.take(MAX_SCAN);
+		// A single page is at most 100 rows, but the search/source filters
+		// and the JS sort both need every matching row first, so the scan
+		// is bounded rather than streamed. It is bounded at the newest end
+		// (scanCustomers) and reports the cut, so a large org degrades to
+		// "showing the most recent N" instead of "the newest customers do
+		// not exist".
+		const { rows: all, truncated } = await scanCustomers(ctx, member.organizationId, {
+			vipOnly: args.vipOnly,
+			order,
+			maxScan: MAX_CUSTOMER_SCAN,
+		});
 
 		let filtered = all;
 		if (args.search) {
@@ -113,7 +206,7 @@ export const list = query({
 					c.phone.toLowerCase().includes(q),
 			);
 		}
-		// vipOnly is handled by the by_org_vip index above.
+		// vipOnly is handled by the by_org_vip_created index above.
 		if (args.source) {
 			filtered = filtered.filter((c) => c.source === args.source);
 		}
@@ -129,18 +222,13 @@ export const list = query({
 			return order === "asc" ? as.localeCompare(bs) : bs.localeCompare(as);
 		});
 
-		const total = filtered.length;
-		const offset = (page - 1) * pageSize;
-		const items = filtered.slice(offset, offset + pageSize);
-		const hasNext = offset + pageSize < total;
-
 		return {
-			items,
-			total,
-			page,
-			pageSize,
-			hasNext,
-			hasPrevious: page > 1,
+			...paginateCustomerRows(filtered, { page, pageSize, truncated }),
+			/** true when MAX_CUSTOMER_SCAN cut the org off; totals are lower bounds. */
+			truncated,
+			/** Rows actually examined — equal to `total` before filtering. */
+			scanned: all.length,
+			maxScan: MAX_CUSTOMER_SCAN,
 		};
 	},
 });

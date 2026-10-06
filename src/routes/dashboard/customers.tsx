@@ -140,12 +140,17 @@ function CustomersPage() {
 		},
 	];
 
-	const itemCount = customers?.items?.length ?? 0;
+	// `items` is one page; `total` is the size of the scanned window.
+	// They differ the moment the org holds more than a page, and past
+	// MAX_CUSTOMER_SCAN `total` is a lower bound too — say which.
+	const windowLabel = customers?.truncated
+		? `most recent ${customers.total.toLocaleString()} of more`
+		: `${(customers?.total ?? 0).toLocaleString()} customer${customers?.total === 1 ? "" : "s"}`;
 
 	return (
 		<ListPage
 			title="Customers"
-			description={`${itemCount} customer${itemCount === 1 ? "" : "s"} — people you book onto departures`}
+			description={`${windowLabel} — people you book onto departures`}
 			newTo="/dashboard/customers/new"
 			newLabel="+ New customer"
 		>

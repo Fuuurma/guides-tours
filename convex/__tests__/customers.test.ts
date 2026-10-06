@@ -9,6 +9,12 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
+import type { QueryCtx } from "../_generated/server";
+import {
+	MAX_CUSTOMER_SCAN,
+	paginateCustomerRows,
+	scanCustomers,
+} from "../customers";
 import schema from "../schema";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
@@ -172,6 +178,190 @@ describe("convex/customers — list pagination behavior (unit-level)", () => {
 				.collect();
 		});
 		expect(regulars.map((c) => c.name)).toEqual(["NotVip"]);
+	});
+});
+
+describe("convex/customers — list scan window (F468/F57 class)", () => {
+	// The defect this pins: list() scanned the bare `by_org` /
+	// `by_org_vip` ranges, which fall back to _creationTime, so
+	// .take(MAX_CUSTOMER_SCAN) kept the OLDEST rows of the org. Every
+	// customer created past that point was unreachable from the CRM list
+	// AND from the booking-form customer picker (new-booking-page.tsx
+	// searches the same query). Seed a full window plus one and assert the
+	// survivor is the newest customer, not the oldest.
+
+	const ORG = "org_big";
+
+	async function seedWindow(ctx: TestCtx, count: number, vipEveryOther = false) {
+		for (let i = 0; i < count; i++) {
+			await ctx.db.insert("customers", {
+				organizationId: ORG,
+				name: `Customer ${String(i).padStart(5, "0")}`,
+				email: `c${i}@example.com`,
+				phone: "+15555550100",
+				notes: "",
+				smsConsent: false,
+				emailConsent: true,
+				preferredLanguage: "en",
+				tags: [],
+				source: "",
+				sourceDetails: "",
+				specialRequirements: "",
+				vipStatus: vipEveryOther ? i % 2 === 0 : false,
+				loyaltyPoints: 0,
+				totalVisits: 0,
+				totalRevenueCents: 0n,
+				// Strictly increasing so "newest" is unambiguous.
+				createdAt: 1_000_000 + i,
+				updatedAt: 1_000_000 + i,
+			});
+		}
+	}
+
+	it("keeps the NEWEST customers when the cap truncates the org", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			await seedWindow(ctx, MAX_CUSTOMER_SCAN + 1);
+		});
+		const { rows, truncated } = await t.run(async (ctx) =>
+			scanCustomers(ctx as unknown as QueryCtx, ORG, {
+				order: "desc",
+				maxScan: MAX_CUSTOMER_SCAN,
+			}),
+		);
+
+		expect(rows.length).toBe(MAX_CUSTOMER_SCAN);
+		expect(truncated).toBe(true);
+		// The newest customer — the one a guide just added — must survive
+		// the cap. Before the fix this was the customer 1 past the cap.
+		expect(rows[0]?.name).toBe(
+			`Customer ${String(MAX_CUSTOMER_SCAN).padStart(5, "0")}`,
+		);
+		expect(
+			rows.some((r) => r.name === `Customer ${String(MAX_CUSTOMER_SCAN).padStart(5, "0")}`),
+		).toBe(true);
+		// ...and the oldest is the one that gets dropped.
+		expect(
+			rows.some((r) => r.name === "Customer 00000"),
+		).toBe(false);
+	});
+
+	it("keeps the OLDEST customers when the caller asks for ascending order", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			await seedWindow(ctx, MAX_CUSTOMER_SCAN + 1);
+		});
+		const { rows, truncated } = await t.run(async (ctx) =>
+			scanCustomers(ctx as unknown as QueryCtx, ORG, {
+				order: "asc",
+				maxScan: MAX_CUSTOMER_SCAN,
+			}),
+		);
+		expect(truncated).toBe(true);
+		expect(rows[0]?.name).toBe("Customer 00000");
+	});
+
+	it("the newest customer survives the VIP-class scan too", async () => {
+		// Same cap, second index branch. VIP and non-VIP rows are
+		// interleaved so the VIP class is spread across creation order —
+		// a creation-time-ordered window would keep the oldest half.
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			await seedWindow(ctx as unknown as TestCtx, 40, true);
+		});
+		const { rows, truncated } = await t.run(async (ctx) =>
+			scanCustomers(ctx as unknown as QueryCtx, ORG, {
+				vipOnly: true,
+				order: "desc",
+				maxScan: 10,
+			}),
+		);
+		expect(truncated).toBe(true);
+		expect(rows.length).toBe(10);
+		expect(rows.every((r) => r.vipStatus)).toBe(true);
+		// Newest VIP is index 38 (39 is odd → not VIP).
+		expect(rows[0]?.name).toBe("Customer 00038");
+		expect(rows.at(-1)?.name).toBe("Customer 00020");
+		// The oldest VIPs are what a creation-time window would have kept.
+		expect(rows.some((r) => r.name === "Customer 00000")).toBe(false);
+	});
+
+	it("is not truncated when the org fits inside the window", async () => {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			await seedWindow(ctx, 12);
+		});
+		const { rows, truncated } = await t.run(async (ctx) =>
+			scanCustomers(ctx as unknown as QueryCtx, ORG, {
+				order: "desc",
+				maxScan: MAX_CUSTOMER_SCAN,
+			}),
+		);
+		expect(rows.length).toBe(12);
+		expect(truncated).toBe(false);
+	});
+
+	it("does not call an org of exactly maxScan customers truncated", async () => {
+		// The scan over-fetches by one row precisely so "reached the limit"
+		// and "there is more" stay distinguishable. Off-by-one here would
+		// render "most recent 5,000 of more" on a complete 5,000-row org.
+		const exact = convexTest(schema, modules);
+		await exact.run(async (ctx) => {
+			await seedWindow(ctx as unknown as TestCtx, 10);
+		});
+		const onLimit = await exact.run(async (ctx) =>
+			scanCustomers(ctx as unknown as QueryCtx, ORG, {
+				order: "desc",
+				maxScan: 10,
+			}),
+		);
+		expect(onLimit.rows.length).toBe(10);
+		expect(onLimit.truncated).toBe(false);
+
+		const over = convexTest(schema, modules);
+		await over.run(async (ctx) => {
+			await seedWindow(ctx as unknown as TestCtx, 11);
+		});
+		const past = await over.run(async (ctx) =>
+			scanCustomers(ctx as unknown as QueryCtx, ORG, {
+				order: "desc",
+				maxScan: 10,
+			}),
+		);
+		expect(past.rows.length).toBe(10);
+		expect(past.truncated).toBe(true);
+	});
+});
+
+describe("convex/customers — paginateCustomerRows", () => {
+	it("reports total/hasNext from the window", () => {
+		const rows = Array.from({ length: 45 }, (_, i) => i);
+		expect(paginateCustomerRows(rows, { page: 1, pageSize: 20, truncated: false }))
+			.toMatchObject({
+				items: Array.from({ length: 20 }, (_, i) => i),
+				total: 45,
+				page: 1,
+				pageSize: 20,
+				hasNext: true,
+				hasPrevious: false,
+			});
+		expect(
+			paginateCustomerRows(rows, { page: 3, pageSize: 20, truncated: false }),
+		).toMatchObject({ hasNext: false, hasPrevious: true });
+	});
+
+	it("does not invent an endless next page when the window was cut short", () => {
+		// hasNext describes the window. `truncated` is the separate signal
+		// that the window is not the whole org — folding it into hasNext
+		// would feed a pager an infinite run of empty pages.
+		const rows = Array.from({ length: 5000 }, (_, i) => i);
+		const page = paginateCustomerRows(rows, {
+			page: 250,
+			pageSize: 20,
+			truncated: true,
+		});
+		expect(page.hasNext).toBe(false);
+		expect(page.total).toBe(5000);
 	});
 });
 

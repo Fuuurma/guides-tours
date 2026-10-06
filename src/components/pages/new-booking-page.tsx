@@ -394,7 +394,13 @@ export function NewBookingPage() {
 													Add a customer first
 												</Link>
 											) : customerItems.length === 0 ? (
-												"No matches — try a different name or email."
+												customers?.truncated ? (
+													// The scan is capped, so "no matches" can mean
+													// "past the cap", not "not on file".
+													`No match in the ${customers.maxScan.toLocaleString()} most recent customers — check the CRM list.`
+												) : (
+													"No matches — try a different name or email."
+												)
 											) : (
 												"Must already be in this organization."
 											)}

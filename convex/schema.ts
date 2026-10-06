@@ -477,7 +477,14 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_org_email", ["organizationId", "email"])
 		.index("by_org_vip", ["organizationId", "vipStatus"])
-		.index("by_org_next_booking", ["organizationId", "nextBookingDate"]),
+		.index("by_org_next_booking", ["organizationId", "nextBookingDate"])
+		// Time-tailed twins of by_org / by_org_vip. customers.list used the
+		// bare by_org range, whose ordering falls back to _creationTime, so
+		// .take(MAX_CUSTOMER_SCAN) kept the OLDEST 5000 customers and every
+		// newer one was unreachable in every sort, filter and page (F468).
+		// Same fix as files.by_org_created (F57).
+		.index("by_org_created", ["organizationId", "createdAt"])
+		.index("by_org_vip_created", ["organizationId", "vipStatus", "createdAt"]),
 
 	bookings: defineTable({
 		organizationId: orgId,
