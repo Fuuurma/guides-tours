@@ -738,6 +738,13 @@ export async function performCancel(
 	if (a.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: wrong organization");
 	}
+	if (a.deletedAt !== undefined) {
+		// GT-AUDIT-06 / hub F604: performUpdate has always refused a
+		// soft-deleted row; the other three verbs never read deletedAt, so a
+		// cancelled/completed/removed assignment produced real notifications and
+		// audit rows for a departure that no longer exists.
+		throw new ConvexError("Assignment is deleted");
+	}
 	// Cap the cancel reason — it's stored in the audit log's
 	// newValues, so an unbounded reason would bloat every row.
 	const MAX_REASON_LEN = 500;
@@ -816,6 +823,13 @@ export async function performComplete(
 	if (a.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: wrong organization");
 	}
+	if (a.deletedAt !== undefined) {
+		// GT-AUDIT-06 / hub F604: performUpdate has always refused a
+		// soft-deleted row; the other three verbs never read deletedAt, so a
+		// cancelled/completed/removed assignment produced real notifications and
+		// audit rows for a departure that no longer exists.
+		throw new ConvexError("Assignment is deleted");
+	}
 	if (a.status !== "scheduled") {
 		throw new ConvexError(
 			`Only scheduled assignments can be completed (was ${a.status})`,
@@ -850,6 +864,13 @@ export async function performRemove(
 	if (!a) throw new ConvexError("Assignment not found");
 	if (a.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: wrong organization");
+	}
+	if (a.deletedAt !== undefined) {
+		// GT-AUDIT-06 / hub F604: performUpdate has always refused a
+		// soft-deleted row; the other three verbs never read deletedAt, so a
+		// cancelled/completed/removed assignment produced real notifications and
+		// audit rows for a departure that no longer exists.
+		throw new ConvexError("Assignment is deleted");
 	}
 	const now = Date.now();
 	await ctx.db.patch(args.assignmentId, {

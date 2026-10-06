@@ -656,3 +656,76 @@ describe("assignments.update — the public boundary enforces guide membership",
 		expect(defs.length).toBeLessThanOrEqual(4); // import + update + create (+ comments)
 	});
 });
+
+// ---- GT-AUDIT-06 / hub F604: the deletedAt guard reached only performUpdate ----
+//
+// performUpdate refuses a soft-deleted assignment ("Assignment is deleted"),
+// but performCancel, performComplete and performRemove never read deletedAt.
+// So cancelling an assignment already archived via remove patched status to
+// "cancelled" and emailed the guide AND driver about a departure that no
+// longer existed, and completing one wrote an assignment.completed audit row
+// for a row every read path hides. The FE cannot reach these rows
+// (assignments.list filters !deletedAt, assignments.get returns null) but the
+// BE is reachable by any Convex client.
+
+describe("lifecycle verbs — refuse a soft-deleted assignment", () => {
+	const verbs = [
+		{ name: "performCancel", run: performCancel, args: (id: never) => ({ assignmentId: id, organizationId: ORG, userId: "user_1" }) },
+		{ name: "performComplete", run: performComplete, args: (id: never) => ({ assignmentId: id, organizationId: ORG, userId: "user_1" }) },
+		{ name: "performRemove", run: performRemove, args: (id: never) => ({ assignmentId: id, organizationId: ORG, userId: "user_1" }) },
+	] as const;
+
+	for (const verb of verbs) {
+		it(`${verb.name} rejects with "Assignment is deleted" and writes nothing`, async () => {
+			const t = convexTest(schema, modules);
+			const { assignmentId } = await seedAssigned(t);
+			const deletedAt = 1_700_000_000_000;
+			await t.run(async (ctx) => {
+				await ctx.db.patch(assignmentId, { deletedAt });
+			});
+
+			await t.run(async (ctx) => {
+				await expect(verb.run(ctx, verb.args(assignmentId as never))).rejects.toThrow(
+					"Assignment is deleted",
+				);
+			});
+
+			// Nothing may have been written: status untouched, deletedAt
+			// unchanged, and no audit row for the verb.
+			const after = await t.run(async (ctx) => {
+				const row = await ctx.db.get(assignmentId);
+				const audits = await ctx.db
+					.query("auditLogs")
+					.withIndex("by_resource", (q) =>
+						q.eq("resourceType", "assignment").eq("resourceId", assignmentId),
+					)
+					.collect();
+				return {
+					status: row?.status,
+					deletedAt: row?.deletedAt,
+					auditActions: audits.map((a) => a.action),
+				};
+			});
+			expect(after.status).toBe("scheduled");
+			expect(after.deletedAt).toBe(deletedAt);
+			expect(after.auditActions).not.toContain("assignment.cancelled");
+			expect(after.auditActions).not.toContain("assignment.completed");
+			expect(after.auditActions).not.toContain("assignment.soft_deleted");
+		});
+	}
+
+	it("still operates normally on a live assignment", async () => {
+		// The guard must not have broken the ordinary path.
+		const t = convexTest(schema, modules);
+		const { assignmentId } = await seedAssigned(t);
+		await t.run(async (ctx) => {
+			await performCancel(ctx, {
+				assignmentId,
+				organizationId: ORG,
+				userId: "user_1",
+			});
+		});
+		const after = await t.run(async (ctx) => (await ctx.db.get(assignmentId))?.status);
+		expect(after).toBe("cancelled");
+	});
+});
