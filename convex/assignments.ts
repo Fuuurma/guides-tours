@@ -637,6 +637,10 @@ export const complete = mutation({
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
+				// GT-AUDIT-07: performComplete scopes guide-role callers to their
+				// own assignment, so it has to know the caller's role. member.role
+				// is the resolved role in the active org.
+				callerRole: member.role,
 				assignmentId: args.assignmentId,
 			},
 		);
@@ -648,6 +652,7 @@ export const internalComplete = internalMutation({
 		assignmentId: v.id("assignments"),
 		organizationId: v.string(),
 		userId: v.string(),
+		callerRole: v.string(),
 	},
 	handler: async (ctx, args) => performComplete(ctx, args),
 });

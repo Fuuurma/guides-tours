@@ -761,6 +761,9 @@ describe("convex/assignments — lifecycle", () => {
 		await t.mutation(internal.assignments.internalComplete, {
 			organizationId: orgId,
 			userId: "guide-1",
+			// guide-1 is this assignment's own guide, so the call exercises the
+			// path GT-AUDIT-07 keeps open (a guide may close their own departure).
+			callerRole: "guide",
 			assignmentId: aId,
 		});
 		await expect(

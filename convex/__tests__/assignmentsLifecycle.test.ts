@@ -11,6 +11,7 @@
 import { convexTest } from "convex-test";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { seedAssignment, seedSchedule, seedTour } from "./helpers";
 import {
@@ -140,6 +141,7 @@ describe("assignmentsLifecycle.performComplete", () => {
 					assignmentId,
 					organizationId: ORG,
 					userId: "user_1",
+					callerRole: "admin",
 				}),
 			).rejects.toThrow(
 				"Only scheduled assignments can be completed (was cancelled)",
@@ -155,6 +157,7 @@ describe("assignmentsLifecycle.performComplete", () => {
 				assignmentId,
 				organizationId: ORG,
 				userId: "user_1",
+				callerRole: "admin",
 			});
 		});
 		const row = await t.run((ctx) => ctx.db.get(assignmentId));
@@ -669,10 +672,33 @@ describe("assignments.update — the public boundary enforces guide membership",
 // BE is reachable by any Convex client.
 
 describe("lifecycle verbs — refuse a soft-deleted assignment", () => {
+	// Each verb keeps its OWN args in a closure rather than sharing a
+	// `{ run, args }` pair: GT-AUDIT-07 gave performComplete a callerRole the
+	// other two do not take, and with a shared pair TypeScript unions the
+	// `args` return types independently of `run`, so the call no longer
+	// typechecks even though every entry is correct.
+	type LifecycleCtx = Parameters<typeof performComplete>[0];
 	const verbs = [
-		{ name: "performCancel", run: performCancel, args: (id: never) => ({ assignmentId: id, organizationId: ORG, userId: "user_1" }) },
-		{ name: "performComplete", run: performComplete, args: (id: never) => ({ assignmentId: id, organizationId: ORG, userId: "user_1" }) },
-		{ name: "performRemove", run: performRemove, args: (id: never) => ({ assignmentId: id, organizationId: ORG, userId: "user_1" }) },
+		{
+			name: "performCancel",
+			call: (ctx: LifecycleCtx, id: Id<"assignments">) =>
+				performCancel(ctx, { assignmentId: id, organizationId: ORG, userId: "user_1" }),
+		},
+		{
+			name: "performComplete",
+			call: (ctx: LifecycleCtx, id: Id<"assignments">) =>
+				performComplete(ctx, {
+					assignmentId: id,
+					organizationId: ORG,
+					userId: "user_1",
+					callerRole: "admin",
+				}),
+		},
+		{
+			name: "performRemove",
+			call: (ctx: LifecycleCtx, id: Id<"assignments">) =>
+				performRemove(ctx, { assignmentId: id, organizationId: ORG, userId: "user_1" }),
+		},
 	] as const;
 
 	for (const verb of verbs) {
@@ -685,7 +711,7 @@ describe("lifecycle verbs — refuse a soft-deleted assignment", () => {
 			});
 
 			await t.run(async (ctx) => {
-				await expect(verb.run(ctx, verb.args(assignmentId as never))).rejects.toThrow(
+				await expect(verb.call(ctx, assignmentId)).rejects.toThrow(
 					"Assignment is deleted",
 				);
 			});

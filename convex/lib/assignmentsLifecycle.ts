@@ -816,12 +816,25 @@ export async function performComplete(
 		assignmentId: Id<"assignments">;
 		organizationId: string;
 		userId: string;
-	}
+		callerRole: string;
+	},
 ) {
 	const a = await ctx.db.get(args.assignmentId);
 	if (!a) throw new ConvexError("Assignment not found");
 	if (a.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: wrong organization");
+	}
+	// GT-AUDIT-07: `complete` admits the guide role so a guide can close their
+	// OWN departure, but nothing ever compared the caller against a.guideId, so
+	// any guide could close anyone's — the exact action the declared matrix
+	// withholds from that role (guide holds assignment:["read"]). Checked after
+	// the org boundary so a cross-org probe still answers "wrong organization"
+	// rather than leaking whether the assignment exists. Only the guide role is
+	// scoped: a dispatcher closing a shift on a guide's behalf is a real
+	// workflow, and narrowing owner/admin/member would be a behaviour change
+	// nobody asked for.
+	if (args.callerRole === "guide" && a.guideId !== args.userId) {
+		throw new ConvexError("Forbidden: not your assignment");
 	}
 	if (a.deletedAt !== undefined) {
 		// GT-AUDIT-06 / hub F604: performUpdate has always refused a
