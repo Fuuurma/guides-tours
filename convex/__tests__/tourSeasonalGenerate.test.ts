@@ -234,3 +234,137 @@ describe("midnight-wrap schedules (GT-AUDIT-04)", () => {
 		).rejects.toThrow();
 	});
 });
+
+// ---- GT-AUDIT-08 / hub F608: a >1-year window silently stops at 366 days ----
+//
+// The loop is bounded by MAX_DAYS = 366 but the mutation validates only
+// dateTo >= dateFrom and never compares the requested span to the cap, and
+// GenerateDialog imposes no maximum span — so a two-year window is reachable
+// from the shipped UI. The return value was `{ created, skipped }`, which for a
+// truncated window is indistinguishable from a complete one, and the audit
+// entry recorded no truncation either. The operator's toast then reported
+// "Created 365, skipped 0" for a year that was never touched, and a whole
+// season of departures was silently absent from the public booking page.
+
+describe("generate window truncation (GT-AUDIT-08)", () => {
+	const ORG = "org_trunc";
+	const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+
+	it("reports truncation and the date it actually reached", async () => {
+		const t = convexTest(schema, modules);
+		const tourId = await t.run((ctx) => seedTour(ctx, ORG, 2));
+
+		await t.mutation(internal.tourSeasonalSchedules.internalCreate, {
+			organizationId: ORG,
+			userId: "user-1",
+			tourId,
+			name: "Daily, two years",
+			startDate: "2027-01-01",
+			endDate: "2028-12-31",
+			daysOfWeek: ALL_DAYS,
+			startTime: "10:00",
+			capacityOverride: 10,
+		});
+
+		const result = await t.mutation(
+			internal.tourSeasonalSchedules.internalGenerate,
+			{
+				organizationId: ORG,
+				userId: "user-1",
+				tourId,
+				dateFrom: "2027-01-01",
+				dateTo: "2028-12-31",
+			},
+		);
+
+		// Pre-fix all three of these are undefined.
+		expect(result.truncated).toBe(true);
+		expect(result.requestedTo).toBe("2028-12-31");
+		// Day 1 is 2027-01-01, so the 366th and last processed day is
+		// 2028-01-01 — 366 inclusive days later, not 2027-12-31.
+		expect(result.processedTo).toBe("2028-01-01");
+
+		// And the truth it was hiding: everything after that day is missing,
+		// i.e. the tail of 2028 — almost a whole season — never got schedules.
+		const dates = await t.run(async (ctx) =>
+			ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date", (q) => q.eq("tourId", tourId))
+				.collect(),
+		);
+		expect(dates.length).toBe(366);
+		expect(dates.some((d) => d.date > "2028-01-01")).toBe(false);
+		expect(dates.some((d) => d.date === "2028-01-01")).toBe(true);
+	});
+
+	it("reports no truncation for a window inside the cap", async () => {
+		const t = convexTest(schema, modules);
+		const tourId = await t.run((ctx) => seedTour(ctx, ORG, 2));
+
+		await t.mutation(internal.tourSeasonalSchedules.internalCreate, {
+			organizationId: ORG,
+			userId: "user-1",
+			tourId,
+			name: "Daily, one month",
+			startDate: "2027-03-01",
+			endDate: "2027-03-31",
+			daysOfWeek: ALL_DAYS,
+			startTime: "10:00",
+			capacityOverride: 10,
+		});
+
+		const result = await t.mutation(
+			internal.tourSeasonalSchedules.internalGenerate,
+			{
+				organizationId: ORG,
+				userId: "user-1",
+				tourId,
+				dateFrom: "2027-03-01",
+				dateTo: "2027-03-31",
+			},
+		);
+
+		expect(result.truncated).toBe(false);
+		expect(result.processedTo).toBe("2027-03-31");
+		expect(result.requestedTo).toBe("2027-03-31");
+		expect(result.created).toBe(31);
+	});
+
+	it("records the truncation in the audit entry too", async () => {
+		const t = convexTest(schema, modules);
+		const tourId = await t.run((ctx) => seedTour(ctx, ORG, 2));
+		await t.mutation(internal.tourSeasonalSchedules.internalCreate, {
+			organizationId: ORG,
+			userId: "user-1",
+			tourId,
+			name: "Daily, audited",
+			startDate: "2027-01-01",
+			endDate: "2028-12-31",
+			daysOfWeek: ALL_DAYS,
+			startTime: "10:00",
+			capacityOverride: 10,
+		});
+		await t.mutation(internal.tourSeasonalSchedules.internalGenerate, {
+			organizationId: ORG,
+			userId: "user-1",
+			tourId,
+			dateFrom: "2027-01-01",
+			dateTo: "2028-12-31",
+		});
+
+		const audits = await t.run(async (ctx) =>
+			ctx.db
+				.query("auditLogs")
+				.withIndex("by_resource", (q) =>
+					q.eq("resourceType", "tour").eq("resourceId", tourId),
+				)
+				.collect(),
+		);
+		const gen = audits.find((a) => a.action === "tourSeasonalSchedule.generated");
+		expect(gen).toBeTruthy();
+		const nv = gen?.newValues as Record<string, unknown>;
+		expect(nv.truncated).toBe(true);
+		expect(nv.processedTo).toBe("2028-01-01");
+		expect(nv.maxDays).toBe(366);
+	});
+});

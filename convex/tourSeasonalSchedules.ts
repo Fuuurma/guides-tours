@@ -365,12 +365,19 @@ export const internalGenerate = internalMutation({
 		// rebuilt once each after the loop, inside this same mutation.
 		const touchedDates = new Set<string>();
 
+		// GT-AUDIT-08 / hub F608: MAX_DAYS silently truncated a >1-year window.
+		// Nothing compared the requested span to the cap and the result said
+		// nothing about it, so the caller could not tell a complete run from a
+		// cut-off one. Track the last date actually handled so the caller can.
+		let lastProcessed: string | null = null;
+
 		for (
 			let cursor = args.dateFrom;
 			cursor <= args.dateTo && dayCount < MAX_DAYS;
 			dayCount++
 		) {
 			const date = cursor;
+			lastProcessed = date;
 			cursor = nextIsoDate(cursor);
 
 			const blackedOut = blackouts.some(
@@ -472,6 +479,11 @@ export const internalGenerate = internalMutation({
 			});
 		}
 
+		// ISO dates compare correctly as strings, so "reached before the end"
+		// is a plain `<`. A window inside the cap lands exactly on dateTo.
+		const processedTo = lastProcessed ?? args.dateFrom;
+		const truncated = processedTo < args.dateTo;
+
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
@@ -484,10 +496,13 @@ export const internalGenerate = internalMutation({
 				dateTo: args.dateTo,
 				created,
 				skipped,
+				truncated,
+				processedTo,
+				maxDays: MAX_DAYS,
 			},
 		});
 
-		return { created, skipped };
+		return { created, skipped, truncated, processedTo, requestedTo: args.dateTo };
 	},
 });
 

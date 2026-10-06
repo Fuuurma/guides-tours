@@ -121,6 +121,21 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 									dateFrom,
 									dateTo,
 								});
+								// The backend caps a generate window and now says so
+								// (GT-AUDIT-08 / hub F608). Reporting the plain
+								// created/skipped counts made a truncated run
+								// indistinguishable from a complete one, so the
+								// operator was told a season went fine while a whole
+								// tail of dates had no departures at all.
+								if (result.truncated) {
+									toast.warning(
+										`Created ${result.created}, skipped ${result.skipped} — ` +
+											`stopped at ${result.processedTo}. Generate the remaining ` +
+											`dates up to ${result.requestedTo} in a second run.`,
+										{ duration: 12000 },
+									);
+									return;
+								}
 								toast.success(
 									`Created ${result.created}, skipped ${result.skipped}`,
 								);
