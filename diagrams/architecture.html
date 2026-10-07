@@ -82,6 +82,11 @@
       .diagram-container { overflow-x: visible; }
       svg { min-width: 0; }
     }
+
+    .cards{display:grid;grid-template-columns:1.1fr 1fr 0.9fr;gap:12px;margin:16px 0 0}
+    .card{background:#ffffff;border:1px solid rgba(45,49,66,0.12);border-radius:6px;padding:10px 12px}
+    .card h2{margin:0 0 6px;font-family:'Geist Mono',monospace;font-size:10px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#4f5d75}
+    .card p{margin:0;font-family:'Geist',sans-serif;font-size:12px;line-height:1.5;color:#2d3142}
   </style>
 </head>
 <body>
@@ -242,6 +247,11 @@
         <line x1="827" y1="698" x2="859" y2="698" stroke="#2e5aa8" stroke-width="1.2"/>
         <text x="867" y="702" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">SIGNED WEBHOOK</text>
       </svg>
+    </div>
+    <div class="cards">
+      <div class="card"><h2>SURFACE</h2><p>57 route files across the operations dashboard and the public booking site.</p></div>
+      <div class="card"><h2>BACKEND</h2><p>99 Convex modules: bookings, tours, schedules, Stripe payments and the OTA webhook pipeline.</p></div>
+      <div class="card"><h2>QUALITY</h2><p>108 test files guarding the booking chain, webhook idempotency and OTA upserts.</p></div>
     </div>
   </div>
 </body>
