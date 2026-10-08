@@ -9,7 +9,7 @@ import type { DataModel } from "../_generated/dataModel";
 
 type Ctx = GenericMutationCtx<DataModel>;
 
-export interface AuditLogEntry {
+interface AuditLogEntry {
 	organizationId: string;
 	userId: string;
 	/** e.g. "customer.created", "booking.cancelled", "tour.updated" */

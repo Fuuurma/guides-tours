@@ -17,7 +17,7 @@
 // does. An absent `payment_status` is treated as settled, preserving the
 // pre-gate behaviour for payloads that do not carry the field.
 
-export type CheckoutSettlement =
+type CheckoutSettlement =
 	/** Funds are collected (or were never required) — safe to fulfil. */
 	| "mark-succeeded"
 	/** Session is complete but the money is still in flight — wait. */

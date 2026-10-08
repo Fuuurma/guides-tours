@@ -4,7 +4,7 @@
 
 import { components } from "../_generated/api";
 
-export type UserContact = {
+type UserContact = {
 	userId: string;
 	name: string;
 	email: string;

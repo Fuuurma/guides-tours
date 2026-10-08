@@ -11,7 +11,7 @@ import { decrypt } from "./lib/crypto";
 import { logAudit } from "./lib/audit";
 import { logger } from "./lib/logger";
 
-export type TwilioSendResult = {
+type TwilioSendResult = {
 	ok: boolean;
 	sid?: string;
 	status?: string;

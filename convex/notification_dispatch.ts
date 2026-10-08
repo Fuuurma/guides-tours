@@ -15,7 +15,7 @@ import {
 import { sendTwilioSms } from "./notification_sms";
 import { logger } from "./lib/logger";
 
-export type DispatchChannel = "email" | "sms" | "none";
+type DispatchChannel = "email" | "sms" | "none";
 
 export type DispatchResult = {
 	channel: DispatchChannel;
