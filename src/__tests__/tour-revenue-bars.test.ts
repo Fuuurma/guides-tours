@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregateDailyTourMetrics } from "@/components/tour-revenue-bars";
+import { aggregateDailyTourMetrics } from "@/lib/tour-metrics";
 
 describe("aggregateDailyTourMetrics", () => {
 	it("sums multiple tours on the same day", () => {

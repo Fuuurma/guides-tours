@@ -9,10 +9,7 @@ import {
 	TopToursLeaderboard,
 } from "@/components/chart-tokens";
 import { MetricCard } from "@/components/metric-card";
-import {
-	aggregateDailyTourMetrics,
-	TourRevenueBars,
-} from "@/components/tour-revenue-bars";
+import { TourRevenueBars } from "@/components/tour-revenue-bars";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -34,6 +31,7 @@ import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { type DateRange, lastNDays, yearToDate } from "@/lib/date-range";
 import { formatCents, formatCentsWhole } from "@/lib/format";
+import { aggregateDailyTourMetrics } from "@/lib/tour-metrics";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
