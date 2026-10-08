@@ -27,8 +27,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { resolveTourStaffing, TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
+import { resolveTourStaffing, VEHICLE_TYPES } from "@/lib/staffing";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	MAX_DESCRIPTION_LEN,
@@ -38,6 +37,7 @@ import {
 	validatePositiveInteger,
 	validatePositiveNumber,
 } from "@/lib/validation";
+import { TourTypeField } from "./tour-type-field";
 
 type TourTemplateFormValues = {
 	name: string;
@@ -320,31 +320,7 @@ export function TourTemplateForm({
 
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<form.Field name="tourType">
-									{(field) => (
-										<Field>
-											<FieldLabel htmlFor={id("type")}>Type</FieldLabel>
-											<ToggleGroup
-												id={id("type")}
-												type="single"
-												variant="outline"
-												size="sm"
-												value={field.state.value}
-												onValueChange={(v) => {
-													if (v) field.handleChange(v);
-												}}
-												className="flex-wrap"
-											>
-												{TOUR_TYPES.map((t) => (
-													<ToggleGroupItem key={t} value={t}>
-														{t}
-													</ToggleGroupItem>
-												))}
-											</ToggleGroup>
-											<FieldDescription>
-												Transport types default to needing a vehicle and driver.
-											</FieldDescription>
-										</Field>
-									)}
+									{(field) => <TourTypeField field={field} id={id} />}
 								</form.Field>
 								<form.Field name="durationHours">
 									{(field) => (
