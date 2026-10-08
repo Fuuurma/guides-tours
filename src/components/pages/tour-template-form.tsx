@@ -1,62 +1,34 @@
 import { useForm, useStore } from "@tanstack/react-form";
-import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { PageBackLink } from "@/components/detail-page";
-import { Button } from "@/components/ui/button";
+import {
+	TemplateCheckboxField,
+	TemplateFormActions,
+	TemplateFormHeader,
+	TemplateNumberField,
+	TemplateStaffingHint,
+	TemplateSwitchField,
+	TemplateTextareaField,
+	TemplateTextField,
+	TemplateTypeToggle,
+	TemplateVehicleSelect,
+} from "@/components/pages/tour-template-fields";
+import {
+	type TourTemplateFormValues,
+	validateTourTemplateDraft,
+} from "@/components/pages/tour-template-validation";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
-	Field,
 	FieldDescription,
-	FieldError,
 	FieldGroup,
-	FieldLabel,
 	FieldLegend,
 	FieldSet,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { resolveTourStaffing, TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
+import { resolveTourStaffing } from "@/lib/staffing";
 import { getErrorMessage } from "@/lib/utils";
-import {
-	MAX_DESCRIPTION_LEN,
-	MAX_NAME_LEN,
-	validateDescriptionOptional,
-	validateName,
-	validatePositiveInteger,
-	validatePositiveNumber,
-} from "@/lib/validation";
+import { MAX_DESCRIPTION_LEN, MAX_NAME_LEN } from "@/lib/validation";
 
-type TourTemplateFormValues = {
-	name: string;
-	description: string;
-	tourType: string;
-	durationHours: string;
-	capacity: string;
-	minGuests: string;
-	maxGuests: string;
-	languages: string;
-	inclusions: string;
-	exclusions: string;
-	highlights: string;
-	requiredGuides: string;
-	requiresVehicle: boolean;
-	requiresDriver: boolean;
-	requiredVehicleType: string;
-	staffingOverride: boolean;
-};
+export type { TourTemplateFormValues } from "@/components/pages/tour-template-validation";
 
 export const EMPTY_TOUR_TEMPLATE_FORM: TourTemplateFormValues = {
 	name: "",
@@ -183,6 +155,70 @@ function metaErrors(
 	});
 }
 
+type BindableField = {
+	state: {
+		value: string;
+		meta: { isValid: boolean; errors: ReadonlyArray<unknown> };
+	};
+	handleChange: (value: string) => void;
+	handleBlur: () => void;
+};
+
+function bindTemplateField(field: BindableField) {
+	return {
+		value: field.state.value,
+		onChange: field.handleChange,
+		onBlur: field.handleBlur,
+		invalid: !field.state.meta.isValid,
+		errors: metaErrors(field.state.meta.errors),
+	};
+}
+
+function bindPlainField(field: BindableField) {
+	return {
+		value: field.state.value,
+		onChange: field.handleChange,
+		onBlur: field.handleBlur,
+	};
+}
+
+type StaffingSetter = {
+	getFieldValue: (name: "tourType") => string;
+	setFieldValue: (
+		name: "requiresVehicle" | "requiresDriver" | "requiredVehicleType",
+		value: boolean | string,
+	) => void;
+};
+
+function applyStaffingDefaults(form: StaffingSetter) {
+	const next = resolveTourStaffing({
+		tourType: form.getFieldValue("tourType"),
+	});
+	form.setFieldValue("requiresVehicle", next.requiresVehicle);
+	form.setFieldValue("requiresDriver", next.requiresDriver);
+	form.setFieldValue("requiredVehicleType", next.requiredVehicleType ?? "");
+}
+
+type BindableBoolField = {
+	state: { value: boolean };
+	handleChange: (value: boolean) => void;
+};
+
+function bindChecked(field: BindableBoolField) {
+	return {
+		checked: field.state.value,
+		onChange: field.handleChange,
+	};
+}
+
+function handleFormSubmit(form: { handleSubmit: () => unknown }) {
+	return (e: { preventDefault(): void; stopPropagation(): void }) => {
+		e.preventDefault();
+		e.stopPropagation();
+		void form.handleSubmit();
+	};
+}
+
 export function TourTemplateForm({
 	defaultValues,
 	title,
@@ -210,41 +246,14 @@ export function TourTemplateForm({
 		defaultValues,
 		onSubmit: async ({ value }) => {
 			setSubmitErr(null);
-			let invalid = false;
-			const fail = (name: keyof TourTemplateFormValues, message: string) => {
-				form.setFieldMeta(name, (prev) => ({
+			const problems = validateTourTemplateDraft(value);
+			for (const { field, message } of problems) {
+				form.setFieldMeta(field, (prev) => ({
 					...prev,
 					errorMap: { ...prev.errorMap, onSubmit: message },
 				}));
-				invalid = true;
-			};
-
-			const nameErr = validateName(value.name);
-			if (nameErr) fail("name", nameErr);
-			const descErr = validateDescriptionOptional(value.description);
-			if (descErr) fail("description", descErr);
-			const durErr = validatePositiveNumber(value.durationHours, "Duration");
-			if (durErr) fail("durationHours", durErr);
-			const capErr = validatePositiveInteger(value.capacity, "Capacity");
-			if (capErr) fail("capacity", capErr);
-			const minErr = validatePositiveInteger(value.minGuests, "Min guests");
-			if (minErr) fail("minGuests", minErr);
-			const maxErr = validatePositiveInteger(value.maxGuests, "Max guests");
-			if (maxErr) fail("maxGuests", maxErr);
-			if (
-				!minErr &&
-				!maxErr &&
-				Number(value.minGuests) > Number(value.maxGuests)
-			) {
-				fail("minGuests", "Min guests cannot exceed max guests");
-				fail("maxGuests", "Min guests cannot exceed max guests");
 			}
-			const guidesErr = validatePositiveInteger(
-				value.requiredGuides,
-				"Required guides",
-			);
-			if (guidesErr) fail("requiredGuides", guidesErr);
-			if (invalid) return;
+			if (problems.length > 0) return;
 
 			try {
 				await onSave(value);
@@ -263,110 +272,63 @@ export function TourTemplateForm({
 
 	return (
 		<div className="mx-auto flex max-w-2xl flex-col gap-6">
-			<div>
-				<PageBackLink to={backTo} />
-				<h1 className="mt-2 font-display text-2xl font-medium tracking-tight">
-					{title}
-				</h1>
-				<p className="mt-1 text-sm text-muted-foreground">{description}</p>
-			</div>
+			<TemplateFormHeader
+				backTo={backTo}
+				title={title}
+				description={description}
+			/>
 			<Card>
 				<CardContent className="pt-6">
-					<form
-						onSubmit={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							void form.handleSubmit();
-						}}
-					>
+					<form onSubmit={handleFormSubmit(form)}>
 						<FieldGroup className="gap-4">
 							<form.Field name="name">
 								{(field) => (
-									<Field data-invalid={!field.state.meta.isValid}>
-										<FieldLabel htmlFor={id("name")}>Name *</FieldLabel>
-										<Input
-											id={id("name")}
-											required
-											maxLength={MAX_NAME_LEN}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											placeholder="City Highlights"
-											aria-invalid={!field.state.meta.isValid}
-										/>
-										<FieldError errors={metaErrors(field.state.meta.errors)} />
-									</Field>
+									<TemplateTextField
+										id={id("name")}
+										label="Name *"
+										required
+										maxLength={MAX_NAME_LEN}
+										placeholder="City Highlights"
+										{...bindTemplateField(field)}
+									/>
 								)}
 							</form.Field>
 
 							<form.Field name="description">
 								{(field) => (
-									<Field data-invalid={!field.state.meta.isValid}>
-										<FieldLabel htmlFor={id("desc")}>Description</FieldLabel>
-										<Textarea
-											id={id("desc")}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											rows={3}
-											maxLength={MAX_DESCRIPTION_LEN}
-											placeholder="Optional"
-											aria-invalid={!field.state.meta.isValid}
-										/>
-										<FieldError errors={metaErrors(field.state.meta.errors)} />
-									</Field>
+									<TemplateTextareaField
+										id={id("desc")}
+										label="Description"
+										rows={3}
+										maxLength={MAX_DESCRIPTION_LEN}
+										placeholder="Optional"
+										{...bindTemplateField(field)}
+									/>
 								)}
 							</form.Field>
 
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<form.Field name="tourType">
 									{(field) => (
-										<Field>
-											<FieldLabel htmlFor={id("type")}>Type</FieldLabel>
-											<ToggleGroup
-												id={id("type")}
-												type="single"
-												variant="outline"
-												size="sm"
-												value={field.state.value}
-												onValueChange={(v) => {
-													if (v) field.handleChange(v);
-												}}
-												className="flex-wrap"
-											>
-												{TOUR_TYPES.map((t) => (
-													<ToggleGroupItem key={t} value={t}>
-														{t}
-													</ToggleGroupItem>
-												))}
-											</ToggleGroup>
-											<FieldDescription>
-												Transport types default to needing a vehicle and driver.
-											</FieldDescription>
-										</Field>
+										<TemplateTypeToggle
+											id={id("type")}
+											value={field.state.value}
+											onChange={(v) => {
+												if (v) field.handleChange(v);
+											}}
+										/>
 									)}
 								</form.Field>
 								<form.Field name="durationHours">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor={id("dur")}>
-												Duration (hours) *
-											</FieldLabel>
-											<Input
-												id={id("dur")}
-												type="number"
-												step="0.5"
-												min="0.5"
-												required
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<TemplateNumberField
+											id={id("dur")}
+											label="Duration (hours) *"
+											step="0.5"
+											min="0.5"
+											required
+											{...bindTemplateField(field)}
+										/>
 									)}
 								</form.Field>
 							</FieldGroup>
@@ -374,60 +336,33 @@ export function TourTemplateForm({
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
 								<form.Field name="capacity">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor={id("cap")}>Capacity *</FieldLabel>
-											<Input
-												id={id("cap")}
-												type="number"
-												min="1"
-												required
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<TemplateNumberField
+											id={id("cap")}
+											label="Capacity *"
+											min="1"
+											required
+											{...bindTemplateField(field)}
+										/>
 									)}
 								</form.Field>
 								<form.Field name="minGuests">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor={id("min")}>Min guests</FieldLabel>
-											<Input
-												id={id("min")}
-												type="number"
-												min="1"
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<TemplateNumberField
+											id={id("min")}
+											label="Min guests"
+											min="1"
+											{...bindTemplateField(field)}
+										/>
 									)}
 								</form.Field>
 								<form.Field name="maxGuests">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor={id("max")}>Max guests</FieldLabel>
-											<Input
-												id={id("max")}
-												type="number"
-												min="1"
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<TemplateNumberField
+											id={id("max")}
+											label="Max guests"
+											min="1"
+											{...bindTemplateField(field)}
+										/>
 									)}
 								</form.Field>
 							</FieldGroup>
@@ -440,200 +375,118 @@ export function TourTemplateForm({
 								<FieldGroup className="gap-4">
 									<form.Field name="requiredGuides">
 										{(field) => (
-											<Field data-invalid={!field.state.meta.isValid}>
-												<FieldLabel htmlFor={id("req-guides")}>
-													Required guides
-												</FieldLabel>
-												<Input
-													id={id("req-guides")}
-													type="number"
-													min="1"
-													max="10"
-													value={field.state.value}
-													onBlur={field.handleBlur}
-													onChange={(e) => field.handleChange(e.target.value)}
-													aria-invalid={!field.state.meta.isValid}
-												/>
-												<FieldError
-													errors={metaErrors(field.state.meta.errors)}
-												/>
-											</Field>
+											<TemplateNumberField
+												id={id("req-guides")}
+												label="Required guides"
+												min="1"
+												max="10"
+												{...bindTemplateField(field)}
+											/>
 										)}
 									</form.Field>
 									<form.Field name="staffingOverride">
 										{(field) => (
-											<Field orientation="horizontal">
-												<FieldLabel htmlFor={id("staffing-override")}>
-													Customize vehicle/driver rules
-												</FieldLabel>
-												<Switch
-													id={id("staffing-override")}
-													checked={field.state.value}
-													onCheckedChange={(checked) => {
-														field.handleChange(checked);
-														if (!checked) return;
-														const next = resolveTourStaffing({
-															tourType: form.getFieldValue("tourType"),
-														});
-														form.setFieldValue(
-															"requiresVehicle",
-															next.requiresVehicle,
-														);
-														form.setFieldValue(
-															"requiresDriver",
-															next.requiresDriver,
-														);
-														form.setFieldValue(
-															"requiredVehicleType",
-															next.requiredVehicleType ?? "",
-														);
-													}}
-												/>
-											</Field>
+											<TemplateSwitchField
+												id={id("staffing-override")}
+												label="Customize vehicle/driver rules"
+												checked={field.state.value}
+												onChange={(checked) => {
+													field.handleChange(checked);
+													if (checked) applyStaffingDefaults(form);
+												}}
+											/>
 										)}
 									</form.Field>
 									{staffingOverride ? (
 										<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
 											<form.Field name="requiresVehicle">
 												{(field) => (
-													<Field orientation="horizontal">
-														<Checkbox
-															id={id("requires-vehicle")}
-															checked={field.state.value}
-															onCheckedChange={(c) =>
-																field.handleChange(c === true)
-															}
-														/>
-														<FieldLabel htmlFor={id("requires-vehicle")}>
-															Requires vehicle
-														</FieldLabel>
-													</Field>
+													<TemplateCheckboxField
+														id={id("requires-vehicle")}
+														label="Requires vehicle"
+														{...bindChecked(field)}
+													/>
 												)}
 											</form.Field>
 											<form.Field name="requiresDriver">
 												{(field) => (
-													<Field orientation="horizontal">
-														<Checkbox
-															id={id("requires-driver")}
-															checked={field.state.value}
-															onCheckedChange={(c) =>
-																field.handleChange(c === true)
-															}
-														/>
-														<FieldLabel htmlFor={id("requires-driver")}>
-															Requires driver
-														</FieldLabel>
-													</Field>
+													<TemplateCheckboxField
+														id={id("requires-driver")}
+														label="Requires driver"
+														{...bindChecked(field)}
+													/>
 												)}
 											</form.Field>
 											<form.Field name="requiredVehicleType">
 												{(field) => (
-													<Field>
-														<FieldLabel htmlFor={id("req-vtype")}>
-															Required vehicle type
-														</FieldLabel>
-														<Select
-															value={field.state.value || "__any__"}
-															onValueChange={(v) =>
-																field.handleChange(v === "__any__" ? "" : v)
-															}
-														>
-															<SelectTrigger id={id("req-vtype")}>
-																<SelectValue placeholder="Any" />
-															</SelectTrigger>
-															<SelectContent>
-																<SelectGroup>
-																	<SelectItem value="__any__">Any</SelectItem>
-																	{VEHICLE_TYPES.map((t) => (
-																		<SelectItem key={t} value={t}>
-																			{t}
-																		</SelectItem>
-																	))}
-																</SelectGroup>
-															</SelectContent>
-														</Select>
-													</Field>
+													<TemplateVehicleSelect
+														id={id("req-vtype")}
+														label="Required vehicle type"
+														value={field.state.value}
+														onChange={field.handleChange}
+													/>
 												)}
 											</form.Field>
 										</FieldGroup>
 									) : (
-										<p className="text-xs text-muted-foreground">
-											{inferred.requiresVehicle
-												? `Inferred: needs ${inferred.requiredVehicleType ?? "a vehicle"} + driver`
-												: "Inferred: walking / no fleet required"}
-										</p>
+										<TemplateStaffingHint
+											requiresVehicle={inferred.requiresVehicle}
+											vehicleType={inferred.requiredVehicleType}
+										/>
 									)}
 								</FieldGroup>
 							</FieldSet>
 
 							<form.Field name="languages">
 								{(field) => (
-									<Field>
-										<FieldLabel htmlFor={id("langs")}>Languages</FieldLabel>
-										<Input
-											id={id("langs")}
-											maxLength={200}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											placeholder="en, es, fr"
-										/>
-										<FieldDescription>
-											Comma-separated codes (en, es, fr)
-										</FieldDescription>
-									</Field>
+									<TemplateTextField
+										id={id("langs")}
+										label="Languages"
+										maxLength={200}
+										placeholder="en, es, fr"
+										description="Comma-separated codes (en, es, fr)"
+										{...bindPlainField(field)}
+									/>
 								)}
 							</form.Field>
 
 							<form.Field name="inclusions">
 								{(field) => (
-									<Field>
-										<FieldLabel htmlFor={inclusionsId}>Inclusions</FieldLabel>
-										<Textarea
-											id={inclusionsId}
-											maxLength={5000}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											rows={3}
-											placeholder={"Lunch\nGuide"}
-										/>
-										<FieldDescription>One per line (max 100)</FieldDescription>
-									</Field>
+									<TemplateTextareaField
+										id={inclusionsId}
+										label="Inclusions"
+										rows={3}
+										maxLength={5000}
+										placeholder={"Lunch\nGuide"}
+										description="One per line (max 100)"
+										{...bindPlainField(field)}
+									/>
 								)}
 							</form.Field>
 							<form.Field name="exclusions">
 								{(field) => (
-									<Field>
-										<FieldLabel htmlFor={exclusionsId}>Exclusions</FieldLabel>
-										<Textarea
-											id={exclusionsId}
-											maxLength={5000}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											rows={3}
-											placeholder={"Flights\nVisa"}
-										/>
-										<FieldDescription>One per line (max 100)</FieldDescription>
-									</Field>
+									<TemplateTextareaField
+										id={exclusionsId}
+										label="Exclusions"
+										rows={3}
+										maxLength={5000}
+										placeholder={"Flights\nVisa"}
+										description="One per line (max 100)"
+										{...bindPlainField(field)}
+									/>
 								)}
 							</form.Field>
 							<form.Field name="highlights">
 								{(field) => (
-									<Field>
-										<FieldLabel htmlFor={highlightsId}>Highlights</FieldLabel>
-										<Textarea
-											id={highlightsId}
-											maxLength={5000}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											rows={3}
-											placeholder={"Old Town\nRiver cruise"}
-										/>
-										<FieldDescription>One per line (max 100)</FieldDescription>
-									</Field>
+									<TemplateTextareaField
+										id={highlightsId}
+										label="Highlights"
+										rows={3}
+										maxLength={5000}
+										placeholder={"Old Town\nRiver cruise"}
+										description="One per line (max 100)"
+										{...bindPlainField(field)}
+									/>
 								)}
 							</form.Field>
 
@@ -645,17 +498,12 @@ export function TourTemplateForm({
 								}
 							>
 								{([canSubmit, isSubmitting]) => (
-									<div className="flex justify-end gap-2 pt-2">
-										<Button type="button" variant="outline" asChild>
-											<Link to={backTo}>Back</Link>
-										</Button>
-										<Button type="submit" disabled={!canSubmit || isSubmitting}>
-											{isSubmitting ? (
-												<Spinner data-icon="inline-start" />
-											) : null}
-											{isSubmitting ? "Saving…" : submitLabel}
-										</Button>
-									</div>
+									<TemplateFormActions
+										backTo={backTo}
+										submitLabel={submitLabel}
+										canSubmit={canSubmit}
+										isSubmitting={isSubmitting}
+									/>
 								)}
 							</form.Subscribe>
 						</FieldGroup>
