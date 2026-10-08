@@ -54,7 +54,7 @@ function toAmzDate(date: Date): { amzDate: string; dateStamp: string } {
 	return { amzDate, dateStamp };
 }
 
-export interface SignedRequest {
+interface SignedRequest {
 	url: string;
 	method: string;
 	headers: Record<string, string>;
