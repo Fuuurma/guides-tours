@@ -6,6 +6,7 @@ import { useMutation } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageBackLink } from "@/components/detail-page";
+import { FormSubmitActions } from "@/components/forms/form-submit-actions";
 import { MemberSelect } from "@/components/member-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,6 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrgMembers } from "@/hooks/use-org-members";
@@ -787,17 +787,12 @@ export function StaffDepartureForm({
 								}
 							>
 								{([canSubmit, isSubmitting]) => (
-									<div className="flex justify-end gap-2 pt-2">
-										<Button type="button" variant="outline" asChild>
-											<Link to={backTo}>Back</Link>
-										</Button>
-										<Button type="submit" disabled={!canSubmit || isSubmitting}>
-											{isSubmitting ? (
-												<Spinner data-icon="inline-start" />
-											) : null}
-											{isSubmitting ? "Saving…" : submitLabel}
-										</Button>
-									</div>
+									<FormSubmitActions
+										backLink={<Link to={backTo}>Back</Link>}
+										canSubmit={canSubmit}
+										isSubmitting={isSubmitting}
+										submitLabel={submitLabel}
+									/>
 								)}
 							</form.Subscribe>
 						</FieldGroup>
