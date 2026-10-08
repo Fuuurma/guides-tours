@@ -92,3 +92,17 @@ export function formatSignedPct(
 	const sign = rounded > 0 ? "+" : "";
 	return `${sign}${rounded}%`;
 }
+
+/**
+ * Format a unit amount in an arbitrary currency.
+ *
+ * @example
+ *   formatPrice(49.99, "EUR")   // "€49.99"
+ *   formatPrice(120, "USD")     // "$120.00"
+ */
+export function formatPrice(value: number, currency: string): string {
+	return new Intl.NumberFormat("en-US", {
+		style: "currency",
+		currency: currency || "USD",
+	}).format(value);
+}
