@@ -19,8 +19,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
+import { VEHICLE_TYPES } from "@/lib/staffing";
 
 type StringFieldProps = {
 	id: string;
@@ -177,40 +176,6 @@ export function TemplateStaffingHint({
 				? `Inferred: needs ${vehicleType ?? "a vehicle"} + driver`
 				: "Inferred: walking / no fleet required"}
 		</p>
-	);
-}
-
-export function TemplateTypeToggle({
-	id,
-	value,
-	onChange,
-}: {
-	id: string;
-	value: string;
-	onChange: (value: string) => void;
-}) {
-	return (
-		<Field>
-			<FieldLabel htmlFor={id}>Type</FieldLabel>
-			<ToggleGroup
-				id={id}
-				type="single"
-				variant="outline"
-				size="sm"
-				value={value}
-				onValueChange={onChange}
-				className="flex-wrap"
-			>
-				{TOUR_TYPES.map((t) => (
-					<ToggleGroupItem key={t} value={t}>
-						{t}
-					</ToggleGroupItem>
-				))}
-			</ToggleGroup>
-			<FieldDescription>
-				Transport types default to needing a vehicle and driver.
-			</FieldDescription>
-		</Field>
 	);
 }
 

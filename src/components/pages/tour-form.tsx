@@ -29,8 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { resolveTourStaffing, TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
+import { resolveTourStaffing, VEHICLE_TYPES } from "@/lib/staffing";
 import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_DESCRIPTION_LEN,
@@ -42,6 +41,7 @@ import {
 } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import { type TourFormValues } from "@/components/pages/tour-form-model";
+import { TourTypeField } from "./tour-type-field";
 
 const NONE = "__none__";
 
@@ -213,31 +213,7 @@ export function TourForm({
 							</form.Field>
 
 							<form.Field name="tourType">
-								{(field) => (
-									<Field>
-										<FieldLabel htmlFor={id("type")}>Type</FieldLabel>
-										<ToggleGroup
-											id={id("type")}
-											type="single"
-											variant="outline"
-											size="sm"
-											value={field.state.value}
-											onValueChange={(v) => {
-												if (v) field.handleChange(v);
-											}}
-											className="flex-wrap"
-										>
-											{TOUR_TYPES.map((t) => (
-												<ToggleGroupItem key={t} value={t}>
-													{t}
-												</ToggleGroupItem>
-											))}
-										</ToggleGroup>
-										<FieldDescription>
-											Transport types default to needing a vehicle and driver.
-										</FieldDescription>
-									</Field>
-								)}
+								{(field) => <TourTypeField field={field} id={id} />}
 							</form.Field>
 
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">

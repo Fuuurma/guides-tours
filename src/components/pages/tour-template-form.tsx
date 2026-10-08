@@ -15,6 +15,7 @@ import {
 	TemplateVehicleSelect,
 } from "@/components/pages/tour-template-fields";
 import { validateTourTemplateDraft } from "@/components/pages/tour-template-validation";
+import { TourTypeField } from "@/components/pages/tour-type-field";
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
@@ -194,15 +195,7 @@ export function TourTemplateForm({
 
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<form.Field name="tourType">
-									{(field) => (
-										<TemplateTypeToggle
-											id={id("type")}
-											value={field.state.value}
-											onChange={(v) => {
-												if (v) field.handleChange(v);
-											}}
-										/>
-									)}
+									{(field) => <TourTypeField field={field} id={id} />}
 								</form.Field>
 								<form.Field name="durationHours">
 									{(field) => (
