@@ -6,28 +6,26 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { DetailPage, PageBackLink } from "@/components/detail-page";
+import {
+	BookingDateTimeField,
+	type BookingFieldBinding,
+	BookingNotesField,
+	BookingNumberField,
+	BookingSlotField,
+	BookingTextField,
+	type ScheduleLite,
+} from "@/components/pages/edit-booking-fields";
+import {
+	type BookingValues,
+	buildBookingUpdate,
+	validateBookingDraft,
+} from "@/components/pages/edit-booking-validation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import {
-	Field,
-	FieldDescription,
-	FieldError,
-	FieldGroup,
-	FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
+import { FieldGroup } from "@/components/ui/field";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { Textarea } from "@/components/ui/textarea";
 import { centsToInputValue } from "@/lib/format";
 import { getErrorMessage } from "@/lib/utils";
 import {
@@ -35,34 +33,9 @@ import {
 	MAX_NOTES_LEN,
 	MAX_PAYMENT_METHOD_LEN,
 	MAX_SHORT_FIELD_LEN,
-	parseUsdToCents,
-	validateNotesOptional,
-	validatePositiveInteger,
 } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-
-type ScheduleLite = {
-	_id: string;
-	startTime: string;
-	endTime: string;
-	capacityTotal: number;
-	capacityBooked: number;
-	status: string;
-};
-
-type BookingValues = {
-	date: string;
-	startTime: string;
-	guests: string;
-	guestNames: string;
-	languageRequired: string;
-	notes: string;
-	depositUsd: string;
-	totalUsd: string;
-	paymentMethod: string;
-	scheduleId: string;
-};
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,
@@ -79,6 +52,28 @@ function metaErrors(
 
 interface EditBookingPageProps {
 	bookingId: string;
+}
+
+type BindableField = {
+	state: {
+		value: string;
+		meta: { isValid: boolean; errors: ReadonlyArray<unknown> };
+	};
+	handleChange: (value: string) => void;
+	handleBlur: () => void;
+};
+
+function bindField(
+	field: BindableField,
+	onChange?: (value: string) => void,
+): BookingFieldBinding {
+	return {
+		value: field.state.value,
+		onChange: onChange ?? field.handleChange,
+		onBlur: field.handleBlur,
+		invalid: !field.state.meta.isValid,
+		errors: metaErrors(field.state.meta.errors),
+	};
 }
 
 export function EditBookingPage({ bookingId }: EditBookingPageProps) {
@@ -155,74 +150,25 @@ function EditBookingForm({
 		} satisfies BookingValues,
 		onSubmit: async ({ value }) => {
 			setSubmitErr(null);
-			let invalid = false;
-			const fail = (name: keyof BookingValues, message: string) => {
+			const problems = validateBookingDraft(value);
+			const failed = Object.keys(problems) as (keyof BookingValues)[];
+			for (const name of failed) {
+				const message = problems[name];
+				if (!message) continue;
 				form.setFieldMeta(name, (prev) => ({
 					...prev,
 					errorMap: { ...prev.errorMap, onSubmit: message },
 				}));
-				invalid = true;
-			};
+			}
+			if (failed.length > 0) return;
 
-			if (!value.date) fail("date", "Date is required");
-			if (!value.startTime) fail("startTime", "Start time is required");
-			const guestsErr = validatePositiveInteger(value.guests, "Guests");
-			if (guestsErr) fail("guests", guestsErr);
-			const notesErr = validateNotesOptional(value.notes);
-			if (notesErr) fail("notes", notesErr);
-			if (value.guestNames.trim().length > MAX_GUEST_NAMES_LEN) {
-				fail(
-					"guestNames",
-					`Guest names are too long (max ${MAX_GUEST_NAMES_LEN} characters)`,
-				);
-			}
-			if (value.languageRequired.trim().length > MAX_SHORT_FIELD_LEN) {
-				fail(
-					"languageRequired",
-					`Language is too long (max ${MAX_SHORT_FIELD_LEN} characters)`,
-				);
-			}
-			if (value.paymentMethod.trim().length > MAX_PAYMENT_METHOD_LEN) {
-				fail(
-					"paymentMethod",
-					`Payment method is too long (max ${MAX_PAYMENT_METHOD_LEN} characters)`,
-				);
-			}
-
-			const totalCents = value.totalUsd.trim()
-				? parseUsdToCents(value.totalUsd)
-				: null;
-			if (value.totalUsd.trim() && totalCents === null) {
-				fail("totalUsd", "Total amount must be a non-negative number");
-			}
-			const depositCents = value.depositUsd.trim()
-				? parseUsdToCents(value.depositUsd)
-				: null;
-			if (value.depositUsd.trim() && depositCents === null) {
-				fail("depositUsd", "Deposit must be a non-negative number");
-			} else if (
-				depositCents !== null &&
-				totalCents !== null &&
-				depositCents > totalCents
-			) {
-				fail("depositUsd", "Deposit cannot exceed the total amount");
-			}
-			if (invalid) return;
-
+			const payload = buildBookingUpdate(value);
 			try {
 				await update({
 					bookingId: bookingId as Id<"bookings">,
-					date: value.date,
-					startTime: value.startTime,
-					guests: Number(value.guests),
-					guestNames: value.guestNames.trim() || undefined,
-					languageRequired: value.languageRequired.trim() || undefined,
-					notes: value.notes.trim() || undefined,
-					depositAmountCents: depositCents ?? undefined,
-					totalAmountCents: totalCents ?? undefined,
-					paymentMethod: value.paymentMethod.trim() || undefined,
-					scheduleId: value.scheduleId
-						? (value.scheduleId as Id<"tourSchedules">)
+					...payload,
+					scheduleId: payload.scheduleId
+						? (payload.scheduleId as Id<"tourSchedules">)
 						: undefined,
 				});
 				toast.success("Booking updated");
@@ -279,236 +225,135 @@ function EditBookingForm({
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
 								<form.Field name="date">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor="edit-date">Date</FieldLabel>
-											<Input
-												id="edit-date"
-												type="date"
-												required
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => {
-													field.handleChange(e.target.value);
-													form.setFieldValue("scheduleId", "");
-												}}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<BookingDateTimeField
+											id="edit-date"
+											label="Date"
+											type="date"
+											binding={bindField(field, (v) => {
+												field.handleChange(v);
+												form.setFieldValue("scheduleId", "");
+											})}
+										/>
 									)}
 								</form.Field>
 
 								{slots.length > 0 ? (
 									<form.Field name="scheduleId">
 										{(field) => (
-											<Field data-invalid={!field.state.meta.isValid}>
-												<FieldLabel htmlFor="edit-slot">
-													Schedule slot
-												</FieldLabel>
-												<Select
-													value={field.state.value || undefined}
-													onValueChange={(id) => {
-														field.handleChange(id);
-														const slot = slots.find((s) => s._id === id);
-														if (slot) {
-															form.setFieldValue("startTime", slot.startTime);
-														}
-													}}
-												>
-													<SelectTrigger id="edit-slot">
-														<SelectValue placeholder="Select a time…" />
-													</SelectTrigger>
-													<SelectContent>
-														<SelectGroup>
-															{slots.map((s) => (
-																<SelectItem key={s._id} value={s._id}>
-																	{s.startTime}–{s.endTime} ·{" "}
-																	{s.capacityTotal - s.capacityBooked} left
-																</SelectItem>
-															))}
-														</SelectGroup>
-													</SelectContent>
-												</Select>
-												<FieldError
-													errors={metaErrors(field.state.meta.errors)}
-												/>
-											</Field>
+											<BookingSlotField
+												id="edit-slot"
+												label="Schedule slot"
+												slots={slots}
+												onSelect={(id) => {
+													field.handleChange(id);
+													const slot = slots.find((s) => s._id === id);
+													if (slot) {
+														form.setFieldValue("startTime", slot.startTime);
+													}
+												}}
+												binding={bindField(field)}
+											/>
 										)}
 									</form.Field>
 								) : (
 									<form.Field name="startTime">
 										{(field) => (
-											<Field data-invalid={!field.state.meta.isValid}>
-												<FieldLabel htmlFor="edit-time">Start time</FieldLabel>
-												<Input
-													id="edit-time"
-													type="time"
-													required
-													value={field.state.value}
-													onBlur={field.handleBlur}
-													onChange={(e) => {
-														field.handleChange(e.target.value);
-														form.setFieldValue("scheduleId", "");
-													}}
-													aria-invalid={!field.state.meta.isValid}
-												/>
-												<FieldError
-													errors={metaErrors(field.state.meta.errors)}
-												/>
-											</Field>
+											<BookingDateTimeField
+												id="edit-time"
+												label="Start time"
+												type="time"
+												binding={bindField(field, (v) => {
+													field.handleChange(v);
+													form.setFieldValue("scheduleId", "");
+												})}
+											/>
 										)}
 									</form.Field>
 								)}
 
 								<form.Field name="guests">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor="edit-guests">Guests</FieldLabel>
-											<Input
-												id="edit-guests"
-												type="number"
-												min="1"
-												required
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<BookingNumberField
+											id="edit-guests"
+											label="Guests"
+											min="1"
+											required
+											binding={bindField(field)}
+										/>
 									)}
 								</form.Field>
 							</FieldGroup>
 
 							<form.Field name="guestNames">
 								{(field) => (
-									<Field data-invalid={!field.state.meta.isValid}>
-										<FieldLabel htmlFor="edit-guest-names">
-											Guest names
-										</FieldLabel>
-										<Input
-											id="edit-guest-names"
-											maxLength={MAX_GUEST_NAMES_LEN}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											placeholder="Jane, John"
-											aria-invalid={!field.state.meta.isValid}
-										/>
-										<FieldDescription>Comma-separated</FieldDescription>
-										<FieldError errors={metaErrors(field.state.meta.errors)} />
-									</Field>
+									<BookingTextField
+										id="edit-guest-names"
+										label="Guest names"
+										placeholder="Jane, John"
+										maxLength={MAX_GUEST_NAMES_LEN}
+										description="Comma-separated"
+										binding={bindField(field)}
+									/>
 								)}
 							</form.Field>
 
 							<form.Field name="languageRequired">
 								{(field) => (
-									<Field data-invalid={!field.state.meta.isValid}>
-										<FieldLabel htmlFor="edit-lang">
-											Language required
-										</FieldLabel>
-										<Input
-											id="edit-lang"
-											maxLength={MAX_SHORT_FIELD_LEN}
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											placeholder="en, es, fr"
-											aria-invalid={!field.state.meta.isValid}
-										/>
-										<FieldError errors={metaErrors(field.state.meta.errors)} />
-									</Field>
+									<BookingTextField
+										id="edit-lang"
+										label="Language required"
+										placeholder="en, es, fr"
+										maxLength={MAX_SHORT_FIELD_LEN}
+										binding={bindField(field)}
+									/>
 								)}
 							</form.Field>
 
 							<form.Field name="notes">
 								{(field) => (
-									<Field data-invalid={!field.state.meta.isValid}>
-										<FieldLabel htmlFor="edit-notes">Notes</FieldLabel>
-										<Textarea
-											id="edit-notes"
-											value={field.state.value}
-											onBlur={field.handleBlur}
-											onChange={(e) => field.handleChange(e.target.value)}
-											rows={3}
-											maxLength={MAX_NOTES_LEN}
-											placeholder="Allergies, special requests…"
-											aria-invalid={!field.state.meta.isValid}
-										/>
-										<FieldDescription>
-											{notesLen} / {MAX_NOTES_LEN}
-										</FieldDescription>
-										<FieldError errors={metaErrors(field.state.meta.errors)} />
-									</Field>
+									<BookingNotesField
+										id="edit-notes"
+										label="Notes"
+										placeholder="Allergies, special requests…"
+										maxLength={MAX_NOTES_LEN}
+										counter={`${notesLen} / ${MAX_NOTES_LEN}`}
+										binding={bindField(field)}
+									/>
 								)}
 							</form.Field>
 
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-3">
 								<form.Field name="totalUsd">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor="edit-total">Total (USD)</FieldLabel>
-											<Input
-												id="edit-total"
-												type="number"
-												step="0.01"
-												min="0"
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<BookingNumberField
+											id="edit-total"
+											label="Total (USD)"
+											min="0"
+											step="0.01"
+											binding={bindField(field)}
+										/>
 									)}
 								</form.Field>
 								<form.Field name="depositUsd">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor="edit-deposit">
-												Deposit (USD)
-											</FieldLabel>
-											<Input
-												id="edit-deposit"
-												type="number"
-												step="0.01"
-												min="0"
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<BookingNumberField
+											id="edit-deposit"
+											label="Deposit (USD)"
+											min="0"
+											step="0.01"
+											binding={bindField(field)}
+										/>
 									)}
 								</form.Field>
 								<form.Field name="paymentMethod">
 									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor="edit-payment">
-												Payment method
-											</FieldLabel>
-											<Input
-												id="edit-payment"
-												maxLength={MAX_PAYMENT_METHOD_LEN}
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												placeholder="card, cash, invoice…"
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
+										<BookingTextField
+											id="edit-payment"
+											label="Payment method"
+											placeholder="card, cash, invoice…"
+											maxLength={MAX_PAYMENT_METHOD_LEN}
+											binding={bindField(field)}
+										/>
 									)}
 								</form.Field>
 							</FieldGroup>
