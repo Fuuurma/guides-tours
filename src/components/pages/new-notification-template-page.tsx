@@ -82,22 +82,153 @@ function metaErrors(
 	});
 }
 
+const DEFAULT_VALUES: NotifyValues = {
+	name: "",
+	templateType: "booking_confirmation",
+	channel: "email",
+	emailSubject: "",
+	emailBodyText: "",
+	smsBody: "",
+	sendTiming: "immediate",
+	retryCount: "3",
+};
+
+// useForm's options are inline in the page below, so the form's type is
+// nameless — this factory exists only to give it one for the sub-field
+// props. onSubmit doesn't change the type's parameters, so the page's
+// form is assignable to NotifyForm.
+function useNotifyForm() {
+	return useForm({ defaultValues: DEFAULT_VALUES });
+}
+type NotifyForm = ReturnType<typeof useNotifyForm>;
+
+function EmailFields({ form }: { form: NotifyForm }) {
+	return (
+		<>
+			<form.Field name="emailSubject">
+				{(field) => (
+					<Field data-invalid={!field.state.meta.isValid}>
+						<FieldLabel htmlFor="subject">Email subject *</FieldLabel>
+						<Input
+							id="subject"
+							required
+							maxLength={MAX_EMAIL_SUBJECT_LEN}
+							value={field.state.value}
+							onBlur={field.handleBlur}
+							onChange={(e) => field.handleChange(e.target.value)}
+							placeholder="Your booking is confirmed"
+							aria-invalid={!field.state.meta.isValid}
+						/>
+						<FieldError errors={metaErrors(field.state.meta.errors)} />
+					</Field>
+				)}
+			</form.Field>
+			<form.Field name="emailBodyText">
+				{(field) => (
+					<Field data-invalid={!field.state.meta.isValid}>
+						<FieldLabel htmlFor="body">Email body (text) *</FieldLabel>
+						<Textarea
+							id="body"
+							required
+							maxLength={10000}
+							value={field.state.value}
+							onBlur={field.handleBlur}
+							onChange={(e) => field.handleChange(e.target.value)}
+							rows={6}
+							className="font-mono"
+							aria-invalid={!field.state.meta.isValid}
+						/>
+						<FieldDescription>
+							{"Plain text — variables like {customerName}, {tourName}, {date}"}
+						</FieldDescription>
+						<FieldError errors={metaErrors(field.state.meta.errors)} />
+					</Field>
+				)}
+			</form.Field>
+		</>
+	);
+}
+
+function SmsField({ form }: { form: NotifyForm }) {
+	return (
+		<form.Field name="smsBody">
+			{(field) => (
+				<Field data-invalid={!field.state.meta.isValid}>
+					<FieldLabel htmlFor="sms">SMS body *</FieldLabel>
+					<Textarea
+						id="sms"
+						maxLength={MAX_SMS_BODY_LEN}
+						value={field.state.value}
+						onBlur={field.handleBlur}
+						onChange={(e) => field.handleChange(e.target.value)}
+						rows={3}
+						aria-invalid={!field.state.meta.isValid}
+					/>
+					<FieldDescription>
+						Plain text — keep under 160 characters when possible.
+					</FieldDescription>
+					<FieldError errors={metaErrors(field.state.meta.errors)} />
+				</Field>
+			)}
+		</form.Field>
+	);
+}
+
+function DeliveryFields({ form }: { form: NotifyForm }) {
+	return (
+		<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
+			<form.Field name="sendTiming">
+				{(field) => (
+					<Field>
+						<FieldLabel htmlFor="timing">Send timing</FieldLabel>
+						<Select
+							value={field.state.value}
+							onValueChange={(v) => field.handleChange(v)}
+						>
+							<SelectTrigger id="timing">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectGroup>
+									{SEND_TIMINGS.map((s) => (
+										<SelectItem key={s} value={s}>
+											{s.replaceAll("_", " ")}
+										</SelectItem>
+									))}
+								</SelectGroup>
+							</SelectContent>
+						</Select>
+					</Field>
+				)}
+			</form.Field>
+			<form.Field name="retryCount">
+				{(field) => (
+					<Field data-invalid={!field.state.meta.isValid}>
+						<FieldLabel htmlFor="retries">Retries</FieldLabel>
+						<Input
+							id="retries"
+							type="number"
+							min="0"
+							value={field.state.value}
+							onBlur={field.handleBlur}
+							onChange={(e) => field.handleChange(e.target.value)}
+							aria-invalid={!field.state.meta.isValid}
+						/>
+						<FieldError errors={metaErrors(field.state.meta.errors)} />
+					</Field>
+				)}
+			</form.Field>
+		</FieldGroup>
+	);
+}
+
 export function NewNotificationTemplatePage() {
 	const navigate = useNavigate();
 	const create = useMutation(api.notificationTemplates.create);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
 
 	const form = useForm({
-		defaultValues: {
-			name: "",
-			templateType: "booking_confirmation",
-			channel: "email",
-			emailSubject: "",
-			emailBodyText: "",
-			smsBody: "",
-			sendTiming: "immediate",
-			retryCount: "3",
-		} satisfies NotifyValues,
+		defaultValues: DEFAULT_VALUES,
 		onSubmit: async ({ value }) => {
 			setSubmitErr(null);
 			let invalid = false;
@@ -241,131 +372,11 @@ export function NewNotificationTemplatePage() {
 								)}
 							</form.Field>
 
-							{wantsEmail ? (
-								<>
-									<form.Field name="emailSubject">
-										{(field) => (
-											<Field data-invalid={!field.state.meta.isValid}>
-												<FieldLabel htmlFor="subject">
-													Email subject *
-												</FieldLabel>
-												<Input
-													id="subject"
-													required
-													maxLength={MAX_EMAIL_SUBJECT_LEN}
-													value={field.state.value}
-													onBlur={field.handleBlur}
-													onChange={(e) => field.handleChange(e.target.value)}
-													placeholder="Your booking is confirmed"
-													aria-invalid={!field.state.meta.isValid}
-												/>
-												<FieldError
-													errors={metaErrors(field.state.meta.errors)}
-												/>
-											</Field>
-										)}
-									</form.Field>
-									<form.Field name="emailBodyText">
-										{(field) => (
-											<Field data-invalid={!field.state.meta.isValid}>
-												<FieldLabel htmlFor="body">
-													Email body (text) *
-												</FieldLabel>
-												<Textarea
-													id="body"
-													required
-													maxLength={10000}
-													value={field.state.value}
-													onBlur={field.handleBlur}
-													onChange={(e) => field.handleChange(e.target.value)}
-													rows={6}
-													className="font-mono"
-													aria-invalid={!field.state.meta.isValid}
-												/>
-												<FieldDescription>
-													{
-														"Plain text — variables like {customerName}, {tourName}, {date}"
-													}
-												</FieldDescription>
-												<FieldError
-													errors={metaErrors(field.state.meta.errors)}
-												/>
-											</Field>
-										)}
-									</form.Field>
-								</>
-							) : null}
+							{wantsEmail ? <EmailFields form={form} /> : null}
 
-							{wantsSms ? (
-								<form.Field name="smsBody">
-									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor="sms">SMS body *</FieldLabel>
-											<Textarea
-												id="sms"
-												maxLength={MAX_SMS_BODY_LEN}
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												rows={3}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldDescription>
-												Plain text — keep under 160 characters when possible.
-											</FieldDescription>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
-									)}
-								</form.Field>
-							) : null}
+							{wantsSms ? <SmsField form={form} /> : null}
 
-							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<form.Field name="sendTiming">
-									{(field) => (
-										<Field>
-											<FieldLabel htmlFor="timing">Send timing</FieldLabel>
-											<Select
-												value={field.state.value}
-												onValueChange={(v) => field.handleChange(v)}
-											>
-												<SelectTrigger id="timing">
-													<SelectValue />
-												</SelectTrigger>
-												<SelectContent>
-													<SelectGroup>
-														{SEND_TIMINGS.map((s) => (
-															<SelectItem key={s} value={s}>
-																{s.replaceAll("_", " ")}
-															</SelectItem>
-														))}
-													</SelectGroup>
-												</SelectContent>
-											</Select>
-										</Field>
-									)}
-								</form.Field>
-								<form.Field name="retryCount">
-									{(field) => (
-										<Field data-invalid={!field.state.meta.isValid}>
-											<FieldLabel htmlFor="retries">Retries</FieldLabel>
-											<Input
-												id="retries"
-												type="number"
-												min="0"
-												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) => field.handleChange(e.target.value)}
-												aria-invalid={!field.state.meta.isValid}
-											/>
-											<FieldError
-												errors={metaErrors(field.state.meta.errors)}
-											/>
-										</Field>
-									)}
-								</form.Field>
-							</FieldGroup>
+							<DeliveryFields form={form} />
 
 							{submitErr ? <ErrorBanner message={submitErr} /> : null}
 
