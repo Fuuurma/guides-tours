@@ -17,6 +17,8 @@ export type OrgMemberRow = {
  * `api.organizations.listMembers` ad hoc so loading/error and name
  * maps stay consistent across calendar, assignments, guides, etc.
  */
+const EMPTY_MEMBERS: OrgMemberRow[] = [];
+
 export function useOrgMembers(roles?: string[]) {
 	const query = useQuery(
 		convexQuery(api.organizations.listMembers, {
@@ -24,7 +26,10 @@ export function useOrgMembers(roles?: string[]) {
 		}),
 	);
 
-	const members = (query.data ?? []) as OrgMemberRow[];
+	// `?? []` would mint a fresh array each render while the query is
+	// pending, so nameById's useMemo dep would change identity every render
+	// and memoize nothing (react-doctor exhaustive-deps, 2026-10-08).
+	const members = (query.data ?? EMPTY_MEMBERS) as OrgMemberRow[];
 	const nameById = useMemo(
 		() => new Map(members.map((m) => [m.userId, m.name])),
 		[members],
