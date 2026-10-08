@@ -22,6 +22,21 @@ export type BookingHeroStats = {
 	maxGroup: number | null;
 };
 
+const fromPriceFormatters = new Map<string, Intl.NumberFormat>();
+
+function formatFromPrice(cents: number, currency: string): string {
+	let fmt = fromPriceFormatters.get(currency);
+	if (!fmt) {
+		fmt = new Intl.NumberFormat("en-US", {
+			style: "currency",
+			currency,
+			maximumFractionDigits: 0,
+		});
+		fromPriceFormatters.set(currency, fmt);
+	}
+	return fmt.format(cents / 100);
+}
+
 export function deriveBookingHeroStats(
 	tours: BookingHeroTour[],
 ): BookingHeroStats {
@@ -43,13 +58,7 @@ export function deriveBookingHeroStats(
 	return {
 		tourCount: tours.length,
 		fromPrice:
-			minCents === null
-				? null
-				: new Intl.NumberFormat("en-US", {
-						style: "currency",
-						currency: minCurrency,
-						maximumFractionDigits: 0,
-					}).format(minCents / 100),
+			minCents === null ? null : formatFromPrice(minCents, minCurrency),
 		maxGroup,
 	};
 }
