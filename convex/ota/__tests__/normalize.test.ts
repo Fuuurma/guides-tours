@@ -339,3 +339,104 @@ describe("Viator.normalize (regression check)", () => {
 		expect(ev.commissionCents).toBe(4000n);
 	});
 });
+
+// F410 parity: JSON.parse('{"g":1e999}') yields a non-finite NUMBER, so
+// it must normalize like a bad string — throw via numberOrThrow into
+// webhook_handler's 400 malformed-payload catch, not sail through as
+// guests: Infinity into upsert's isFinite guard (a 500 rethrow +
+// endless provider retries). Viator already guards; these six did not.
+describe("non-finite guests take the malformed-payload path (F410)", () => {
+	const INF = Number.POSITIVE_INFINITY;
+
+	test("airbnb", () => {
+		expect(() =>
+			AirbnbClient.normalize({
+				event_type: "reservationConfirmed",
+				data: {
+					reservation_id: "HM-INF",
+					guest: {
+						first_name: "A",
+						last_name: "B",
+						email: "a@b.c",
+					},
+					number_of_guests: INF,
+					start_date: "2026-08-01",
+				},
+			}),
+		).toThrow();
+	});
+
+	test("booking", () => {
+		expect(() =>
+			BookingClient.normalize({
+				eventType: "RESERVATION_CREATED",
+				data: {
+					id: "BK-INF",
+					productId: "BK-PROD",
+					startDate: "2026-11-05",
+					guest: { name: "Eve", email: "eve@x.c" },
+					guestCount: INF,
+				},
+			}),
+		).toThrow();
+	});
+
+	test("expedia", () => {
+		expect(() =>
+			ExpediaClient.normalize({
+				eventType: "ITINERARY_CREATED",
+				data: {
+					id: "EX-INF",
+					activityId: "EX-ACT",
+					startDate: "2026-12-01",
+					traveler: { name: "F", email: "f@x.c" },
+					travelerCount: INF,
+				},
+			}),
+		).toThrow();
+	});
+
+	test("getyourguide", () => {
+		expect(() =>
+			GetYourGuideClient.normalize({
+				type: "booking_created",
+				data: {
+					bookingId: "GYG-INF",
+					traveler: { name: "A", email: "a@x.c" },
+					participants: INF,
+					tourDate: "2026-07-15",
+				},
+			}),
+		).toThrow();
+	});
+
+	test("klook", () => {
+		expect(() =>
+			KlookClient.normalize({
+				event_type: "order_created",
+				data: {
+					order_id: "KL-INF",
+					guest_name: "D",
+					guest_email: "d@x.c",
+					quantity: INF,
+					tour_date: "2026-10-20",
+				},
+			}),
+		).toThrow();
+	});
+
+	test("tripadvisor", () => {
+		expect(() =>
+			TripAdvisorClient.normalize({
+				event_type: "booking_created",
+				data: {
+					booking_id: "TA-INF",
+					guest_name: "C",
+					guest_email: "c@x.c",
+					guest_count: INF,
+					tour_date: "2026-09-10",
+				},
+			}),
+		).toThrow();
+	});
+});
