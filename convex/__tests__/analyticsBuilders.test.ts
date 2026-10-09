@@ -9,9 +9,16 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
-import { seedBooking, seedCustomer, seedTour } from "./helpers";
+import { seedBooking, seedCustomer, seedTour, type TestCtx } from "./helpers";
 import {
 	buildBookingSources,
+	buildChannelRevenue,
+	buildFinancialHealth,
+	buildForTour,
+	buildGuideStats,
+	buildRevenueSummary,
+	buildTopTours,
+	buildTourStats,
 	buildWeeklyPulse,
 	dateRange,
 	round1,
@@ -162,5 +169,70 @@ describe("analyticsBuilders.buildWeeklyPulse", () => {
 		expect(out.avgGroupSize).toBe(3);
 		expect(out.previousBookings).toBe(0);
 		expect(out.previousRevenueCents).toBe(0);
+	});
+});
+
+// F722: the eight analytics builders that feed index scans take bare
+// v.string() bounds. An unpadded "2026-1-1" sorts ahead of "2026-10-…"
+// lexicographically and Date.parse(`${s}T00:00:00Z`) yields NaN — both
+// widen the scan (scout probe: outstandingCents 7000 where 5000 was
+// correct; a cleared picker sends ""). They must reject coded like
+// dateRange does before a single row is read.
+describe("F722 — date-bounded builders reject malformed bounds", () => {
+	const CALLERS: ReadonlyArray<
+		readonly [
+			string,
+			(ctx: TestCtx, start: string, end: string) => Promise<unknown>,
+		]
+	> = [
+		["buildTourStats", (ctx, s, e) => buildTourStats(ctx, ORG, s, e)],
+		["buildGuideStats", (ctx, s, e) => buildGuideStats(ctx, ORG, s, e)],
+		[
+			"buildRevenueSummary",
+			(ctx, s, e) => buildRevenueSummary(ctx, ORG, s, e),
+		],
+		[
+			"buildChannelRevenue",
+			(ctx, s, e) => buildChannelRevenue(ctx, ORG, s, e),
+		],
+		[
+			"buildFinancialHealth",
+			(ctx, s, e) => buildFinancialHealth(ctx, ORG, s, e),
+		],
+		["buildTopTours", (ctx, s, e) => buildTopTours(ctx, ORG, s, e, 10)],
+		[
+			"buildForTour",
+			async (ctx, s, e) => {
+				const tourId = await seedTour(ctx, { orgId: ORG });
+				return buildForTour(ctx, ORG, tourId, s, e);
+			},
+		],
+		[
+			"buildBookingSources",
+			(ctx, s, e) => buildBookingSources(ctx, ORG, s, e),
+		],
+	];
+	const BAD_BOUNDS: ReadonlyArray<readonly [string, string, string]> = [
+		["unpadded", "2026-1-1", "2026-3-1"],
+		["empty (cleared picker)", "", ""],
+		["non-date", "garbage", "2026-03-01"],
+	];
+
+	for (const [builder, call] of CALLERS) {
+		for (const [label, start, end] of BAD_BOUNDS) {
+			it(`${builder} rejects ${label} bounds`, async () => {
+				const t = convexTest(schema, modules);
+				await expect(
+					t.run(async (ctx) => call(ctx, start, end)),
+				).rejects.toThrow(/Invalid date range bound/);
+			});
+		}
+	}
+
+	it("valid bounds still resolve for every builder", async () => {
+		const t = convexTest(schema, modules);
+		for (const [, call] of CALLERS) {
+			await t.run(async (ctx) => call(ctx, "2026-07-01", "2026-07-31"));
+		}
 	});
 });

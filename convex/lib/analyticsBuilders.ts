@@ -14,12 +14,12 @@ import { parseYmd } from "../lib/time";
 type QCtx = GenericQueryCtx<DataModel>;
 type Booking = Doc<"bookings">;
 
-export function dateRange(start: string, end: string): string[] {
-	// F710: bounds are caller-supplied bare strings — validate the
-	// YYYY-MM-DD shape before iterating. An unpadded "2026-1-1" used to
-	// pass the lexicographic compare below and inflate a 2-month window
-	// into ~365 zero-filled rows; a non-date string walked Date.parse
-	// into NaN and looped "NaN-NaN-NaN" forever.
+// F722: every date-bounded builder validates its bounds before the
+// first scan — an unpadded "2026-1-1" sorts ahead of "2026-10-…"
+// lexicographically and Date.parse(`${s}T00:00:00Z`) yields NaN, so a
+// malformed bound silently widened the booking set (a cleared picker
+// sends ""). Same reject shape as dateRange (F710).
+function assertYmdRange(start: string, end: string): [number, number] {
 	const startTs = parseYmd(start);
 	const endTs = parseYmd(end);
 	if (startTs === null || endTs === null) {
@@ -27,6 +27,16 @@ export function dateRange(start: string, end: string): string[] {
 			"Invalid date range bound (expected YYYY-MM-DD)",
 		);
 	}
+	return [startTs, endTs];
+}
+
+export function dateRange(start: string, end: string): string[] {
+	// F710: bounds are caller-supplied bare strings — validate the
+	// YYYY-MM-DD shape before iterating. An unpadded "2026-1-1" used to
+	// pass the lexicographic compare below and inflate a 2-month window
+	// into ~365 zero-filled rows; a non-date string walked Date.parse
+	// into NaN and looped "NaN-NaN-NaN" forever.
+	const [startTs, endTs] = assertYmdRange(start, end);
 	const dates: string[] = [];
 	for (let ts = startTs; ts <= endTs; ts += 86_400_000) {
 		dates.push(new Date(ts).toISOString().slice(0, 10));
@@ -157,6 +167,7 @@ export async function buildTourStats(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scans to prevent OOM on large orgs.
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const [tours, assignments] = await Promise.all([
@@ -218,6 +229,7 @@ export async function buildGuideStats(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scan to prevent OOM on large orgs. Hitting the cap
 	// means the org has more rows than were read — reported as
 	// truncated (fleet needs-work 09-08, silent take(N) caps).
@@ -315,6 +327,7 @@ export async function buildRevenueSummary(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Range-scan within the org + date window to avoid a full-table
 	// collect. by_org_date is leading (orgId, date) so gte/lte work.
 	// Bound the scan to prevent OOM on large orgs. Hitting the cap
@@ -387,6 +400,7 @@ export async function buildChannelRevenue(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const bookings = await ctx.db
 		.query("bookings")
@@ -470,6 +484,7 @@ export async function buildFinancialHealth(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const [payments, refunds, bookings] = await Promise.all([
 		ctx.db
@@ -702,6 +717,7 @@ export async function buildTopTours(
 	endDate: string,
 	limit: number,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scans to prevent OOM on large orgs. Hitting either
 	// cap means the org has more rows than were read — reported as
 	// truncated (fleet needs-work 09-08/09-13, silent take(N) caps).
@@ -767,6 +783,7 @@ export async function buildForTour(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const tour = await ctx.db.get(tourId as Id<"tours">);
 	if (!tour || tour.organizationId !== orgId || tour.deletedAt !== undefined) {
@@ -849,6 +866,7 @@ export async function buildBookingSources(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scan to prevent OOM on large orgs.
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const bookings = await ctx.db
