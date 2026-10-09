@@ -109,4 +109,44 @@ describe("tour templates", () => {
 		)) as any;
 		expect(logs.some((l: any) => l.action === "tour_template.deleted")).toBe(true);
 	});
+
+	describe("instantiate currency (F734)", () => {
+		async function instantiateFor(orgId: string, defaultCurrency?: string) {
+			const t = convexTest(schema, modules);
+			const templateId = await t.run(async (ctx) => {
+				if (defaultCurrency !== undefined) {
+					await ctx.db.insert("paymentSettings", {
+						organizationId: orgId,
+						stripeEnabled: false,
+						stripePublishableKey: "",
+						stripeSecretKey: "",
+						stripeWebhookSecret: "",
+						stripeIsSandbox: true,
+						acceptDeposits: false,
+						depositPercentage: 0,
+						defaultCurrency,
+						createdAt: 0,
+						updatedAt: 0,
+					});
+				}
+				return seedTemplate(ctx, orgId);
+			});
+			const tourId = await t.mutation(internal.tourTemplates.internalInstantiate, {
+				organizationId: orgId,
+				userId: "user-1",
+				templateId,
+			});
+			return (await t.run((ctx) => ctx.db.get(tourId))) as any;
+		}
+
+		it("inherits the org's payment currency instead of a fabricated USD", async () => {
+			const tour = await instantiateFor("org_tpl_eur", "EUR");
+			expect(tour?.currency).toBe("EUR");
+		});
+
+		it("falls back to USD when the org has no payment settings", async () => {
+			const tour = await instantiateFor("org_tpl_none");
+			expect(tour?.currency).toBe("USD");
+		});
+	});
 });

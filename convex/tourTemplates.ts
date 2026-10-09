@@ -331,11 +331,25 @@ export const internalUpdate = internalMutation({
  */
 export const instantiate = mutation({
 	args: { templateId: v.id("tourTemplates") },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<Id<"tours">> => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
+		return await ctx.runMutation(
+			internalRefs.tourTemplates.internalInstantiate,
+			{ organizationId: member.organizationId, userId: member.userId, templateId: args.templateId },
+		);
+	},
+});
+
+export const internalInstantiate = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		templateId: v.id("tourTemplates"),
+	},
+	handler: async (ctx, args) => {
 		const tmpl = await ctx.db.get(args.templateId);
 		if (!tmpl) throw new ConvexError("Template not found");
-		if (tmpl.organizationId !== member.organizationId) {
+		if (tmpl.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: template belongs to a different organization");
 		}
 		// SECURITY: re-validate categoryId belongs to this org
@@ -343,7 +357,7 @@ export const instantiate = mutation({
 		// but the category could have been deleted or moved since).
 		if (tmpl.categoryId !== undefined) {
 			const cat = await ctx.db.get(tmpl.categoryId);
-			if (cat && cat.organizationId !== member.organizationId) {
+			if (cat && cat.organizationId !== args.organizationId) {
 				throw new ConvexError(
 					"Template's category belongs to a different organization",
 				);
@@ -360,9 +374,16 @@ export const instantiate = mutation({
 		if (tmpl.maxGuests > tmpl.capacity) {
 			throw new ConvexError("Template maxGuests cannot exceed capacity");
 		}
+		// F734: never fabricate "USD" for a non-US org — inherit its payment
+		// currency (the F720 lookup); USD only when payments are unset, as
+		// tours.create does.
+		const paymentSettings = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.unique();
 		const now = Date.now();
 		const tourId: Id<"tours"> = await ctx.db.insert("tours", {
-			organizationId: member.organizationId,
+			organizationId: args.organizationId,
 			name: tmpl.name,
 			description: tmpl.description,
 			durationHours: tmpl.durationHours,
@@ -386,13 +407,13 @@ export const instantiate = mutation({
 			inclusions: tmpl.inclusions,
 			exclusions: tmpl.exclusions,
 			highlights: tmpl.highlights,
-			currency: "USD",
+			currency: paymentSettings?.defaultCurrency ?? "USD",
 			createdAt: now,
 			updatedAt: now,
 		});
 		await logAudit(ctx, {
-			organizationId: member.organizationId,
-			userId: member.userId,
+			organizationId: args.organizationId,
+			userId: args.userId,
 			action: "tour.created_from_template",
 			resourceType: "tour",
 			resourceId: tourId,
