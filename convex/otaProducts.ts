@@ -13,6 +13,7 @@ import {
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { normalizeCurrency } from "./lib/money";
 
 // ---- queries ----
 
@@ -174,6 +175,13 @@ export const internalCreate = internalMutation({
 				`OTA product ${args.otaProductId} is already linked to this integration`,
 			);
 		}
+		// F720: never fabricate "USD" — schema requires a code, so an
+		// omitted/unparseable one inherits the org's payment currency,
+		// then the tour's (same fallback chain as public_booking).
+		const paymentSettings = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.unique();
 		const now = Date.now();
 		const id = await ctx.db.insert("otaProducts", {
 			organizationId: args.organizationId,
@@ -189,7 +197,10 @@ export const internalCreate = internalMutation({
 			otaDurationMinutes: args.otaDurationMinutes,
 			otaPriceOriginalCents: args.otaPriceOriginalCents,
 			otaPriceSellingCents: args.otaPriceSellingCents,
-			otaCurrency: args.otaCurrency ?? "USD",
+			otaCurrency:
+				normalizeCurrency(args.otaCurrency) ??
+				paymentSettings?.defaultCurrency ??
+				tour.currency.toUpperCase(),
 			basePriceCents: args.basePriceCents,
 			commissionRate: args.commissionRate,
 			commissionAmountCents: args.commissionAmountCents,

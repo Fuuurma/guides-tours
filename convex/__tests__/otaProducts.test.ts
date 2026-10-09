@@ -66,7 +66,50 @@ describe("OTA products", () => {
 		expect(id).toBeDefined();
 		const row = (await t.run((ctx) => ctx.db.get(id))) as any;
 		expect(row?.syncStatus).toBe("PENDING");
+		// F720: no fabricated "USD" — an omitted currency inherits the
+		// org/tour currency. The seeded tour is USD by default, so this
+		// only proves inheritance coincides; the EUR pin below proves
+		// the value really comes from the tour.
 		expect(row?.otaCurrency).toBe("USD");
+	});
+
+	it("create: an omitted currency inherits the tour's, not a fabricated USD (F720)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_op_eur";
+		const tourId = await t.run(async (ctx) => {
+			const id = await seedTour(ctx, orgId);
+			await ctx.db.patch(id, { currency: "EUR" });
+			return id;
+		});
+		const integrationId = await t.run((ctx) => seedIntegration(ctx, orgId));
+		const id = await t.mutation(internal.otaProducts.internalCreate, {
+			organizationId: orgId,
+			userId: "test-user",
+			tourId,
+			integrationId,
+			otaProductId: "VR-200",
+			commissionRate: 0.2,
+		});
+		const row = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(row?.otaCurrency).toBe("EUR");
+	});
+
+	it("create: a sent currency is normalized to ISO uppercase (F720)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_op_norm";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const integrationId = await t.run((ctx) => seedIntegration(ctx, orgId));
+		const id = await t.mutation(internal.otaProducts.internalCreate, {
+			organizationId: orgId,
+			userId: "test-user",
+			tourId,
+			integrationId,
+			otaProductId: "VR-300",
+			otaCurrency: "eur",
+			commissionRate: 0.2,
+		});
+		const row = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(row?.otaCurrency).toBe("EUR");
 	});
 
 	it("create: rejects a duplicate (integrationId, otaProductId) pair (F333)", async () => {
