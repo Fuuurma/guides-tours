@@ -42,7 +42,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import { formatCentsWhole, formatSignedPct } from "@/lib/format";
-import { cn, getErrorMessage } from "@/lib/utils";
+import { cn, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -289,7 +289,7 @@ function DashboardIndex() {
 				}`,
 			);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setRemindPending(false);
 		}
@@ -299,7 +299,7 @@ function DashboardIndex() {
 		<div className="flex flex-col gap-6">
 			{firstError && (
 				<ErrorBanner
-					message={`Some data failed to load: ${firstError.message}`}
+					message={`Some data failed to load: ${getSafeDisplayMessage(firstError)}`}
 					hint="Cards below may show stale or empty data. Refresh to retry."
 				/>
 			)}
