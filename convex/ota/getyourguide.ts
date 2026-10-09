@@ -12,6 +12,7 @@
 // Webhook auth: HMAC-SHA256 over raw body, hex digest in
 //               x-getyourguide-signature header (no `sha256=` prefix).
 
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 import { OTAHttpClient, HttpError } from "./http_client";
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
@@ -141,6 +142,7 @@ export class GetYourGuideClient {
 			const totalPaid = numberOrUndefined(
 				data.totalAmount ?? data.total_amount,
 			);
+			const currency = normalizeCurrency(stringOrUndefined(data.currency));
 			return {
 				kind: "booking.created",
 				reservationId: stringOrThrow(
@@ -171,10 +173,11 @@ export class GetYourGuideClient {
 					data.participants ?? data.guests ?? data.guestCount,
 					"data.participants",
 				),
-				totalPaidCents: totalPaid !== undefined
-					? BigInt(Math.round(totalPaid * 100))
-					: undefined,
-				currency: stringOrUndefined(data.currency),
+				totalPaidCents:
+					totalPaid !== undefined
+						? toMinorUnits(totalPaid, currency)
+						: undefined,
+				currency,
 				rawPayload: payload,
 			};
 		}

@@ -13,6 +13,7 @@ import type { MutationCtx } from "../_generated/server";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { logAudit } from "../lib/audit";
+import { normalizeCurrency } from "../lib/money";
 
 /**
  * Upsert an OTA booking. Called by every provider's webhook handler
@@ -139,6 +140,11 @@ export const upsertOtaBooking = internalMutation({
 					: paidCents
 				: undefined;
 
+		// F708: never fabricate "USD" when the provider omits a currency —
+		// store only what was actually sent (normalized to ISO uppercase).
+		// Conditional spread keeps a currency-less re-delivery from wiping
+		// a previously stored code via patch's undefined-means-delete.
+		const currency = normalizeCurrency(event.currency);
 		const patch = {
 			organizationId,
 			integrationId,
@@ -156,7 +162,7 @@ export const upsertOtaBooking = internalMutation({
 			otaTourTime: event.tourTime,
 			otaGuests: guests,
 			otaTotalPaidCents: paidCents,
-			otaCurrency: event.currency ?? "USD",
+			...(currency !== undefined ? { otaCurrency: currency } : {}),
 			commissionRate: rate,
 			commissionAmountCents: commissionCents,
 			netRevenueCents,

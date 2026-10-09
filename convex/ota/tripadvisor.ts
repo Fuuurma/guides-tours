@@ -12,6 +12,7 @@
 // Webhook auth: HMAC-SHA256 over raw body, hex digest in
 //               x-tripadvisor-signature header.
 
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 import { OTAHttpClient, HttpError } from "./http_client";
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
@@ -135,6 +136,7 @@ export class TripAdvisorClient {
 			const totalPaid = numberOrUndefined(
 				data.total_amount ?? data.totalAmount,
 			);
+			const currency = normalizeCurrency(stringOrUndefined(data.currency));
 			return {
 				kind: "booking.created",
 				reservationId: stringOrThrow(
@@ -169,10 +171,11 @@ export class TripAdvisorClient {
 					data.guest_count ?? data.guestCount,
 					"data.guest_count",
 				),
-				totalPaidCents: totalPaid !== undefined
-					? BigInt(Math.round(totalPaid * 100))
-					: undefined,
-				currency: stringOrUndefined(data.currency),
+				totalPaidCents:
+					totalPaid !== undefined
+						? toMinorUnits(totalPaid, currency)
+						: undefined,
+				currency,
 				rawPayload: payload,
 			};
 		}

@@ -17,6 +17,7 @@
 // Source verified webhook events list:
 //   parse_webhook_event(event_type) → ("booking_created" | "booking_cancelled")
 
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 import { OTAHttpClient } from "./http_client";;
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
@@ -148,6 +149,9 @@ export class ViatorClient {
 			const totalPaid = numberOrUndefined(
 				reservation.totalPaid ?? reservation.total_paid,
 			);
+			const currency = normalizeCurrency(
+				stringOrUndefined(reservation.currency ?? tour?.currency),
+			);
 			return {
 				kind: "booking.created",
 				reservationId: stringOrThrow(
@@ -181,21 +185,16 @@ export class ViatorClient {
 					reservation.guests ?? reservation.partySize,
 					"reservation.guests",
 				),
-				totalPaidCents: totalPaid !== undefined
-					? BigInt(Math.round(totalPaid * 100))
-					: undefined,
-				currency: stringOrUndefined(
-					reservation.currency ?? tour?.currency,
-				),
+				totalPaidCents:
+					totalPaid !== undefined
+						? toMinorUnits(totalPaid, currency)
+						: undefined,
+				currency,
 				commissionRate: numberOrUndefined(reservation.commissionRate),
 				commissionCents: numberOrUndefined(
 					reservation.commissionAmount,
 				) !== undefined
-					? BigInt(
-							Math.round(
-								(reservation.commissionAmount as number) * 100,
-							),
-						)
+					? toMinorUnits(reservation.commissionAmount as number, currency)
 					: undefined,
 				rawPayload: payload,
 			};

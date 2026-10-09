@@ -12,6 +12,7 @@
 // Webhook auth: HMAC-SHA256 over raw body, hex digest in
 //               x-airbnb-signature header (no `sha256=` prefix).
 
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 import { OTAHttpClient, HttpError } from "./http_client";
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
@@ -153,11 +154,19 @@ export class AirbnbClient {
 						.filter((s): s is string => typeof s === "string" && s.length > 0)
 						.join(" ")
 				: undefined;
+			const currency = normalizeCurrency(
+				stringOrUndefined(
+					isRecord(data.total_price)
+						? data.total_price.currency
+						: data.currency,
+				),
+			);
 			// Currency-aware total. Airbnb's documented wrapper is
 			// { total_price: { amount, currency } } where amount is
 			// already in cents (matches Stripe-like partner API
 			// conventions and source's behavior of dividing by 100).
-			// Flat fields (totalAmount) are dollars, like other providers.
+			// Flat fields (totalAmount) are major units, like other
+			// providers — converted with the currency's exponent.
 			let totalPaidCents: bigint | undefined;
 			if (isRecord(data.total_price)) {
 				const cents = numberOrUndefined(data.total_price.amount);
@@ -167,14 +176,9 @@ export class AirbnbClient {
 					data.totalAmount ?? data.total_amount,
 				);
 				if (dollars !== undefined) {
-					totalPaidCents = BigInt(Math.round(dollars * 100));
+					totalPaidCents = toMinorUnits(dollars, currency);
 				}
 			}
-			const currency = stringOrUndefined(
-				isRecord(data.total_price)
-					? data.total_price.currency
-					: data.currency,
-			);
 			return {
 				kind: "booking.created",
 				reservationId: stringOrThrow(

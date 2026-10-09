@@ -659,7 +659,9 @@ export default defineSchema({
 		otaTourTime: v.optional(v.string()),
 		otaGuests: v.number(),
 		otaTotalPaidCents: v.optional(v.int64()),
-		otaCurrency: v.string(),
+		// Optional: providers that omit a currency code must not have one
+		// fabricated (was silently "USD" — F708).
+		otaCurrency: v.optional(v.string()),
 		commissionRate: v.optional(v.number()),
 		commissionAmountCents: v.optional(v.int64()),
 		netRevenueCents: v.optional(v.int64()),

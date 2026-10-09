@@ -440,3 +440,145 @@ describe("non-finite guests take the malformed-payload path (F410)", () => {
 		).toThrow();
 	});
 });
+// F708: providers send paid amounts in MAJOR units — conversion to minor
+// units is per-currency (ISO 4217 exponent), not a blanket ×100. JPY
+// stores as-is (¥1,200 → 1200, not 120,000), KWD multiplies by 1,000
+// (1.234 → 1234 fils), and provider codes normalize to ISO uppercase.
+describe("minor-unit conversion honors the currency exponent (F708)", () => {
+	test("viator: JPY stays 1:1 and lowercase codes normalize", () => {
+		const ev = ViatorClient.normalize({
+			eventType: "BOOKING_CREATED",
+			reservation: {
+				id: "V-JPY",
+				productCode: "V-PROD",
+				customer: { name: "A I", email: "a@b.c" },
+				tour: { date: "2026-07-20" },
+				guests: 2,
+				totalPaid: 1200,
+				currency: "jpy",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1200n);
+		expect(ev.currency).toBe("JPY");
+	});
+
+	test("viator: KWD pays in fils (×1000), commission included", () => {
+		const ev = ViatorClient.normalize({
+			eventType: "BOOKING_CREATED",
+			reservation: {
+				id: "V-KWD",
+				productCode: "V-PROD",
+				customer: { name: "A I", email: "a@b.c" },
+				tour: { date: "2026-07-20" },
+				guests: 2,
+				totalPaid: 1.234,
+				commissionAmount: 0.411,
+				currency: "KWD",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1234n);
+		expect(ev.commissionCents).toBe(411n);
+	});
+
+	test("getyourguide: JPY stays 1:1", () => {
+		const ev = GetYourGuideClient.normalize({
+			type: "booking_created",
+			data: {
+				bookingId: "GYG-JPY",
+				traveler: { name: "A", email: "a@x.c" },
+				participants: 2,
+				totalAmount: 1200,
+				currency: "JPY",
+				tourDate: "2026-07-15",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1200n);
+	});
+
+	test("tripadvisor: JPY stays 1:1", () => {
+		const ev = TripAdvisorClient.normalize({
+			event_type: "booking_created",
+			data: {
+				booking_id: "TA-JPY",
+				guest_name: "C",
+				guest_email: "c@x.c",
+				guest_count: 2,
+				total_amount: 1200,
+				currency: "JPY",
+				tour_date: "2026-09-10",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1200n);
+	});
+
+	test("klook: JPY stays 1:1", () => {
+		const ev = KlookClient.normalize({
+			event_type: "order_created",
+			data: {
+				order_id: "KL-JPY",
+				guest_name: "D",
+				guest_email: "d@x.c",
+				quantity: 2,
+				total_price: 1200,
+				currency: "JPY",
+				tour_date: "2026-10-20",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1200n);
+	});
+
+	test("booking: JPY stays 1:1", () => {
+		const ev = BookingClient.normalize({
+			eventType: "RESERVATION_CREATED",
+			data: {
+				id: "BK-JPY",
+				productId: "BK-PROD",
+				startDate: "2026-11-05",
+				guest: { name: "E", email: "e@x.c" },
+				guestCount: 2,
+				totalAmount: 1200,
+				currency: "JPY",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1200n);
+	});
+
+	test("expedia: JPY stays 1:1", () => {
+		const ev = ExpediaClient.normalize({
+			eventType: "ITINERARY_CREATED",
+			data: {
+				id: "EX-JPY",
+				activityId: "EX-ACT",
+				startDate: "2026-12-01",
+				traveler: { name: "F", email: "f@x.c" },
+				travelerCount: 2,
+				totalPrice: 1200,
+				currency: "JPY",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1200n);
+	});
+
+	test("airbnb flat-amount fallback honors the exponent too", () => {
+		const ev = AirbnbClient.normalize({
+			event_type: "reservationConfirmed",
+			data: {
+				reservation_id: "AB-JPY",
+				guest: { first_name: "G", email: "g@x.c" },
+				number_of_guests: 2,
+				totalAmount: 1200,
+				currency: "JPY",
+				start_date: "2026-08-01",
+			},
+		});
+		if (ev?.kind !== "booking.created") throw new Error();
+		expect(ev.totalPaidCents).toBe(1200n);
+	});
+});

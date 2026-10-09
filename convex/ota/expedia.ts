@@ -15,6 +15,7 @@
 // parse_webhook_event anticipates. Expedia uses "itinerary"
 // instead of "reservation" in their domain language.
 
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 import { OTAHttpClient, HttpError } from "./http_client";
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
@@ -126,6 +127,7 @@ export class ExpediaClient {
 			const totalPaid = numberOrUndefined(
 				data.totalPrice ?? data.total_price,
 			);
+			const currency = normalizeCurrency(stringOrUndefined(data.currency));
 			return {
 				kind: "booking.created",
 				reservationId: stringOrThrow(data.id, "data.id"),
@@ -156,10 +158,11 @@ export class ExpediaClient {
 					data.travelerCount ?? data.traveler_count,
 					"data.travelerCount",
 				),
-				totalPaidCents: totalPaid !== undefined
-					? BigInt(Math.round(totalPaid * 100))
-					: undefined,
-				currency: stringOrUndefined(data.currency),
+				totalPaidCents:
+					totalPaid !== undefined
+						? toMinorUnits(totalPaid, currency)
+						: undefined,
+				currency,
 				rawPayload: payload,
 			};
 		}
