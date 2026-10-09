@@ -26,7 +26,6 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatCentsCompact } from "@/lib/format";
 import {
 	cn,
-	getErrorMessage,
 	getSafeDisplayMessage,
 	isStripeCheckoutUrl,
 } from "@/lib/utils";
@@ -116,7 +115,7 @@ function BookingDetailPage() {
 			await fn();
 			toast.success(msg);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -174,7 +173,7 @@ function BookingDetailPage() {
 			}
 			window.location.href = url;
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 			setPending(false);
 		}
 	};
@@ -196,7 +195,7 @@ function BookingDetailPage() {
 			);
 			setElementsOpen(true);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -587,7 +586,7 @@ function CancelBookingForm({
 				toast.success("Booking cancelled");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -679,7 +678,7 @@ function RefundPaymentForm({
 				toast.success("Payment refunded");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -780,7 +779,7 @@ function RecordReviewForm({
 				toast.success("Review recorded");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});

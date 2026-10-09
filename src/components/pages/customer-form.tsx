@@ -17,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_EMAIL_LEN,
 	MAX_NAME_LEN,
@@ -144,7 +144,7 @@ export function CustomerForm({
 			try {
 				await onSave(value);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});

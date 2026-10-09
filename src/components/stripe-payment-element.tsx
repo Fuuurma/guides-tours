@@ -8,7 +8,7 @@ import { loadStripe, type Stripe } from "@stripe/stripe-js";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 
 const stripePromiseCache = new Map<string, Promise<Stripe | null>>();
 
@@ -62,7 +62,7 @@ function PaymentElementForm({
 				onPaid();
 			}
 		} catch (err) {
-			setError(getErrorMessage(err));
+			setError(getSafeDisplayMessage(err));
 		} finally {
 			setPending(false);
 		}

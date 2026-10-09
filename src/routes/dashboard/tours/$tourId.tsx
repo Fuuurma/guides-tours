@@ -22,7 +22,7 @@ import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import { lastNDays } from "@/lib/date-range";
 import { formatCents } from "@/lib/format";
 import { resolveTourStaffing } from "@/lib/staffing";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -95,7 +95,7 @@ function TourDetailPage() {
 			toast.success("Tour deleted");
 			void navigate({ to: "/dashboard/tours" });
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 			setDeleting(false);
 		}
 	};

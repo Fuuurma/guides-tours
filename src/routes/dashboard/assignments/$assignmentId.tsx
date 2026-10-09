@@ -31,7 +31,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { resolveTourStaffing } from "@/lib/staffing";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -115,7 +115,7 @@ function AssignmentDetailPage() {
 			await complete({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment marked complete");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setAction(null);
 		}
@@ -138,7 +138,7 @@ function AssignmentDetailPage() {
 			});
 			toast.success("Assignment cancelled");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setAction(null);
 		}
@@ -157,7 +157,7 @@ function AssignmentDetailPage() {
 			await remove({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setAction(null);
 		}
@@ -178,7 +178,7 @@ function AssignmentDetailPage() {
 					: "Nothing queued",
 			);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setResendPending(false);
 		}
@@ -540,7 +540,7 @@ function AssignmentStaffingForm({
 				toast.success("Assignment updated");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});

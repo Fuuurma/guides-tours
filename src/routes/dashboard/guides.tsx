@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { organization } from "@/lib/auth-client";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { MAX_EMAIL_LEN, validateEmail } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { RoleName } from "../../../convex/authz";
@@ -139,7 +139,7 @@ function InviteGuideDialog({ onInvited }: { onInvited: () => void }) {
 				setOpen(false);
 				onInvited();
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});

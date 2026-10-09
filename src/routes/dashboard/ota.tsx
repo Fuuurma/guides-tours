@@ -38,7 +38,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { validateNonNegativeNumber } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -86,7 +86,7 @@ function OtaIntegrationsPage() {
 				currentActive ? "Integration disabled" : "Integration enabled",
 			);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -105,7 +105,7 @@ function OtaIntegrationsPage() {
 			await removeIntegration({ integrationId: id as Id<"otaIntegrations"> });
 			toast.success("Integration deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -415,7 +415,7 @@ function OtaProductsSection({
 												await removeProduct({ productId: p._id });
 												toast.success("Product deleted");
 											} catch (err) {
-												toast.error(getErrorMessage(err));
+												toast.error(getSafeDisplayMessage(err));
 											} finally {
 												setDeletingId(null);
 											}
@@ -520,8 +520,8 @@ function OtaProductForm({
 				}
 				onClose();
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-				toast.error(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -737,8 +737,8 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 				toast.success("Integration created");
 				form.reset();
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-				toast.error(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});

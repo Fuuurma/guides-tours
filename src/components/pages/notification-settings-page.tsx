@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_NAME_LEN,
 	validateEmail,
@@ -231,8 +231,8 @@ function NotificationSettingsForm({ settings }: { settings: Settings | null }) {
 				form.setFieldValue("twilioAuthToken", "");
 				toast.success("Settings saved");
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-				toast.error(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -243,7 +243,7 @@ function NotificationSettingsForm({ settings }: { settings: Settings | null }) {
 			await sendDigestNow({ force: true });
 			toast.success("Digest queued — check email/SMS shortly");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setDigestPending(false);
 		}
@@ -255,7 +255,7 @@ function NotificationSettingsForm({ settings }: { settings: Settings | null }) {
 			await sendAvailNow({ force: false });
 			toast.success("Availability reminders queued for guides");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setAvailPending(false);
 		}
@@ -269,7 +269,7 @@ function NotificationSettingsForm({ settings }: { settings: Settings | null }) {
 			await sendAssignTest({ role });
 			toast.success(`Test ${role} notification queued — check your email/SMS`);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(false);
 		}

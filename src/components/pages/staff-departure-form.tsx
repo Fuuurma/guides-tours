@@ -36,7 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { resolveTourStaffing } from "@/lib/staffing";
 import { addHours } from "@/lib/time";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_NOTES_LEN,
 	validateNotesOptional,
@@ -277,7 +277,7 @@ export function StaffDepartureForm({
 					params: { assignmentId: result.assignmentId },
 				});
 			} catch (err) {
-				const message = getErrorMessage(err);
+				const message = getSafeDisplayMessage(err);
 				setSubmitErr(message);
 				toast.error(message);
 			}

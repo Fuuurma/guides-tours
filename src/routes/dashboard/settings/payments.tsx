@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { validateCurrency, validateNonNegativeNumber } from "@/lib/validation";
 import { api } from "../../../../convex/_generated/api";
 
@@ -155,8 +155,8 @@ function PaymentSettingsForm({
 				form.setFieldValue("stripeWebhookSecret", "");
 				toast.success("Payment settings saved");
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-				toast.error(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});

@@ -30,7 +30,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useTodayYmd } from "@/hooks/use-today-ymd";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_GUEST_NAMES_LEN,
 	MAX_NOTES_LEN,
@@ -223,7 +223,7 @@ export function NewBookingPage() {
 					params: { bookingId: id },
 				});
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});

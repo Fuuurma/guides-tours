@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/invite/$invitationId")({
 	component: AcceptInvitePage,
@@ -107,7 +107,7 @@ function AcceptInvitePage() {
 				}
 				window.location.assign("/dashboard");
 			} catch (e) {
-				setServerError(getErrorMessage(e));
+				setServerError(getSafeDisplayMessage(e));
 			}
 		},
 	});

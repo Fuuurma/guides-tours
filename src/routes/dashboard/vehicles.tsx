@@ -17,7 +17,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import type { Vehicle } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -53,7 +53,7 @@ function VehiclesPage() {
 			});
 			toast.success("Status updated");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -72,7 +72,7 @@ function VehiclesPage() {
 			await removeVehicle({ vehicleId: id as Id<"vehicles"> });
 			toast.success("Vehicle deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPendingId(null);
 		}

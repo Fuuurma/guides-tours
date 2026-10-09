@@ -48,7 +48,6 @@ import {
 	publicBookingSchema,
 } from "@/lib/public-booking-form";
 import {
-	getErrorMessage,
 	getSafeDisplayMessage,
 	isStripeCheckoutUrl,
 } from "@/lib/utils";
@@ -245,7 +244,7 @@ function PublicBookingPage() {
 					toast.success("Booking request received");
 				}
 			} catch (err) {
-				const msg = getErrorMessage(err);
+				const msg = getSafeDisplayMessage(err);
 				setSubmitErr(msg);
 				toast.error(msg);
 			}
@@ -465,7 +464,7 @@ function PublicBookingPage() {
 																			result.clientSecret,
 																		);
 																	} catch (err) {
-																		toast.error(getErrorMessage(err));
+																		toast.error(getSafeDisplayMessage(err));
 																	} finally {
 																		setPaying(false);
 																	}
@@ -505,7 +504,7 @@ function PublicBookingPage() {
 																	}
 																	window.location.href = url;
 																} catch (err) {
-																	toast.error(getErrorMessage(err));
+																	toast.error(getSafeDisplayMessage(err));
 																	setPaying(false);
 																}
 															}}

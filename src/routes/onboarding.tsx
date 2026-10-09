@@ -10,7 +10,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({
 	component: OnboardingPage,
@@ -44,7 +44,7 @@ function OnboardingPage() {
 				keepCurrentActiveOrganization: false,
 			});
 			if (error) {
-				setServerError(getErrorMessage(error));
+				setServerError(getSafeDisplayMessage(error));
 				return;
 			}
 			// Force-refresh so the dashboard's tenant-scoped queries

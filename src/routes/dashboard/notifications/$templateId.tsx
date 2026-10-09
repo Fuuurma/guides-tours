@@ -25,7 +25,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_EMAIL_SUBJECT_LEN,
 	MAX_NAME_LEN,
@@ -146,7 +146,7 @@ function NotificationTemplateBody({
 				setEditing(false);
 				onSaved();
 			} catch (err) {
-				setSaveErr(getErrorMessage(err));
+				setSaveErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -190,7 +190,7 @@ function NotificationTemplateBody({
 				});
 				toast.success("Test send queued — check Recent deliveries shortly");
 			} catch (err) {
-				setTestErr(getErrorMessage(err));
+				setTestErr(getSafeDisplayMessage(err));
 			}
 		},
 	});

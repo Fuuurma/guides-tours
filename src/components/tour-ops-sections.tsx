@@ -18,7 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -53,7 +53,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 			await reorderImages({ tourId, orderedImageIds: ids });
 			toast.success("Gallery order updated");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setReorderPending(false);
 		}
@@ -82,7 +82,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 			});
 			toast.success("Image uploaded");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setUploading(false);
 			if (fileRef.current) fileRef.current.value = "";
@@ -152,7 +152,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 												});
 												toast.success("Set as primary");
 											} catch (err) {
-												toast.error(getErrorMessage(err));
+												toast.error(getSafeDisplayMessage(err));
 											}
 										}}
 									>
@@ -198,7 +198,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 														await removeImage({ imageId: img._id });
 														toast.success("Photo deleted");
 													} catch (err) {
-														toast.error(getErrorMessage(err));
+														toast.error(getSafeDisplayMessage(err));
 													}
 												}}
 											>

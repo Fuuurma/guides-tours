@@ -35,7 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
@@ -187,7 +187,7 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 												await removeSeasonal({ scheduleId: s._id });
 												toast.success("Rule deleted");
 											} catch (err) {
-												toast.error(getErrorMessage(err));
+												toast.error(getSafeDisplayMessage(err));
 											} finally {
 												setPendingSeasonalId(null);
 											}
@@ -252,7 +252,7 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 											await removeException({ exceptionId: e._id });
 											toast.success("Exception deleted");
 										} catch (err) {
-											toast.error(getErrorMessage(err));
+											toast.error(getSafeDisplayMessage(err));
 										} finally {
 											setPendingExceptionId(null);
 										}
@@ -313,7 +313,7 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 											await removeBlackout({ blackoutId: b._id });
 											toast.success("Blackout deleted");
 										} catch (err) {
-											toast.error(getErrorMessage(err));
+											toast.error(getSafeDisplayMessage(err));
 										} finally {
 											setPendingBlackoutId(null);
 										}
@@ -374,7 +374,7 @@ function GenerateDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -538,7 +538,7 @@ function SeasonalDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -781,7 +781,7 @@ function ExceptionDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -992,7 +992,7 @@ function BlackoutDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});

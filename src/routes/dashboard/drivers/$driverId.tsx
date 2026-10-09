@@ -33,7 +33,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { localYmd } from "@/lib/calendar-date";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_LICENSE_LEN,
 	MAX_NOTES_LEN,
@@ -92,7 +92,7 @@ function DriverDetailPage() {
 			await setActive({ driverId: driver._id, isActive: next });
 			toast.success(next ? "Driver activated" : "Driver deactivated");
 		} catch (e) {
-			toast.error(getErrorMessage(e));
+			toast.error(getSafeDisplayMessage(e));
 		} finally {
 			setActiveSaving(false);
 		}
@@ -265,7 +265,7 @@ function DriverPhoneForm({ userId, phone }: { userId: string; phone: string }) {
 				await updatePhone({ userId, phone: value.phone.trim() });
 				toast.success("Phone updated");
 			} catch (e) {
-				toast.error(getErrorMessage(e));
+				toast.error(getSafeDisplayMessage(e));
 			}
 		},
 	});
@@ -372,7 +372,7 @@ function DriverProfileForm({
 				});
 				toast.success("Driver profile updated");
 			} catch (e) {
-				toast.error(getErrorMessage(e));
+				toast.error(getSafeDisplayMessage(e));
 			}
 		},
 	});

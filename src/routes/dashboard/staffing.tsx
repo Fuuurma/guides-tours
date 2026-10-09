@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import type { SlotGap } from "@/lib/staffing";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 
 function defaultRange() {
@@ -124,7 +124,7 @@ function StaffingPage() {
 				}`,
 			);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setRemindPending(false);
 		}

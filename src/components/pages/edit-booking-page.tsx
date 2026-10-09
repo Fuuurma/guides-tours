@@ -29,7 +29,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { centsToInputValue } from "@/lib/format";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_GUEST_NAMES_LEN,
 	MAX_NOTES_LEN,
@@ -231,7 +231,7 @@ function EditBookingForm({
 					params: { bookingId },
 				});
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});

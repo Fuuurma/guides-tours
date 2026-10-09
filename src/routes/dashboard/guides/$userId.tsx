@@ -19,7 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { cn, getErrorMessage } from "@/lib/utils";
+import { cn, getSafeDisplayMessage } from "@/lib/utils";
 import { MAX_PHONE_LEN, validatePhoneOptional } from "@/lib/validation";
 import { api } from "../../../../convex/_generated/api";
 
@@ -125,7 +125,7 @@ function GuideDetailPage() {
 				toast.success("Marked unavailable");
 			}
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPendingDate(null);
 		}
@@ -333,7 +333,7 @@ function GuidePhoneForm({ userId, phone }: { userId: string; phone: string }) {
 				await updatePhone({ userId, phone: value.phone.trim() });
 				toast.success("Phone updated");
 			} catch (e) {
-				toast.error(getErrorMessage(e));
+				toast.error(getSafeDisplayMessage(e));
 			}
 		},
 	});
