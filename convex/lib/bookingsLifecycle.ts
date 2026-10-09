@@ -397,6 +397,27 @@ export async function performUpdate(
 		}
 	}
 
+	// Money-field validation (F138): create applies the same checks on
+	// insert (bookings.ts); an unguarded update could write a negative
+	// total/deposit or deposit > total, corrupting balanceDueCents and
+	// silently blocking every later charge.
+	if (
+		patch.totalAmountCents !== undefined ||
+		patch.depositAmountCents !== undefined
+	) {
+		const newTotal =
+			(patch.totalAmountCents as bigint | undefined) ??
+			booking.totalAmountCents;
+		const dep =
+			(patch.depositAmountCents as bigint | undefined) ??
+			booking.depositAmountCents;
+		if (newTotal < 0n || dep < 0n) {
+			throw new ConvexError("Amounts cannot be negative");
+		}
+		if (dep > newTotal) {
+			throw new ConvexError("Deposit cannot exceed total amount");
+		}
+	}
 	// Source: balance_due = total_amount - deposit_amount on total update.
 	if (patch.totalAmountCents !== undefined) {
 		const newTotal = patch.totalAmountCents as bigint;

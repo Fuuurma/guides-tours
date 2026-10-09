@@ -465,6 +465,59 @@ describe("bookingsLifecycle.performUpdate — effects", () => {
 		expect(row?.balanceDueCents).toBe(18_000n);
 		expect(row?.netRevenueCents).toBe(20_000n);
 	});
+
+	it("rejects negative/deposit-over-total money fields on update (F138 — create parity)", async () => {
+		const t = convexTest(schema, modules);
+		const world = await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const customerId = await seedCustomer(ctx, { orgId: ORG });
+			const bookingId = await seedBooking(ctx, {
+				orgId: ORG,
+				tourId,
+				customerId,
+				totalAmountCents: 10_000n,
+				depositAmountCents: 2_000n,
+			});
+			const booking = (await ctx.db.get(bookingId))!;
+			return { booking };
+		});
+		await t.run(async (ctx) => {
+			await expect(
+				performUpdate(ctx, world.booking, ORG, "user_1", {
+					bookingId: world.booking._id,
+					totalAmountCents: -1n,
+				}),
+			).rejects.toThrow("Amounts cannot be negative");
+			await expect(
+				performUpdate(ctx, world.booking, ORG, "user_1", {
+					bookingId: world.booking._id,
+					depositAmountCents: -1n,
+				}),
+			).rejects.toThrow("Amounts cannot be negative");
+			await expect(
+				performUpdate(ctx, world.booking, ORG, "user_1", {
+					bookingId: world.booking._id,
+					depositAmountCents: 15_000n,
+				}),
+			).rejects.toThrow("Deposit cannot exceed total amount");
+			// Lowering the total below the standing deposit is the same
+			// corruption through the other field.
+			await expect(
+				performUpdate(ctx, world.booking, ORG, "user_1", {
+					bookingId: world.booking._id,
+					totalAmountCents: 1_000n,
+				}),
+			).rejects.toThrow("Deposit cannot exceed total amount");
+			// A same-call fix is accepted: total+deposit agree within the patch.
+			await performUpdate(ctx, world.booking, ORG, "user_1", {
+				bookingId: world.booking._id,
+				totalAmountCents: 1_000n,
+				depositAmountCents: 1_000n,
+			});
+			const row = (await ctx.db.get(world.booking._id))!;
+			expect(row.balanceDueCents).toBe(0n);
+		});
+	});
 });
 
 describe("bookingsLifecycle.performConfirm + findTargetSchedule", () => {
