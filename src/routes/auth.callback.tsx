@@ -26,7 +26,19 @@ export const Route = createFileRoute("/auth/callback")({
 	// executes client-side — SSR would fetch with the wrong credentials.
 	ssr: false,
 	loader: async ({ deps: { ott, redirect: redirectTo, invitationId } }) => {
-		if (!ott) return { inviteError: null, invitationId, ott };
+		// F704: no token to consume — a tokenless visit (stripped query,
+		// stale link) used to return data and the component rendered a
+		// "Redirecting..." spinner forever. Bounce to sign-in carrying the
+		// invite/redirect intent so the flow can restart properly.
+		if (!ott) {
+			throw redirect({
+				to: "/sign-in",
+				search: {
+					...(redirectTo ? { redirect: redirectTo } : {}),
+					...(invitationId ? { invitationId } : {}),
+				},
+			});
+		}
 
 		let res: Response;
 		try {
@@ -54,8 +66,7 @@ export const Route = createFileRoute("/auth/callback")({
 					});
 				if (acceptError) {
 					return {
-						inviteError:
-							acceptError.message ?? "Could not accept invitation",
+						inviteError: acceptError.message ?? "Could not accept invitation",
 						invitationId,
 						ott,
 					};
@@ -119,7 +130,7 @@ function CallbackSpinner({ label }: { label: string }) {
 }
 
 function AuthCallback() {
-	const { inviteError, invitationId, ott } = Route.useLoaderData();
+	const { inviteError, invitationId } = Route.useLoaderData();
 
 	if (inviteError) {
 		return (
@@ -137,7 +148,17 @@ function AuthCallback() {
 		);
 	}
 
-	// Reached only without an OTT — a completed exchange always throws a
-	// redirect above, so this is the "no token to consume" fallback.
-	return <CallbackSpinner label={ott ? "Completing sign in..." : "Redirecting..."} />;
+	// F704: unreachable today — every loader path throws a redirect or
+	// returns the inviteError payload above. If a future path returns
+	// bare data, surface a way out instead of the dead spinner.
+	return (
+		<div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6">
+			<a
+				href="/sign-in"
+				className="font-medium text-foreground text-sm underline"
+			>
+				Back to sign in
+			</a>
+		</div>
+	);
 }

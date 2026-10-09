@@ -76,7 +76,10 @@ const MISSING_PHONES = [
 function stubQueries({
 	errorPaths = [],
 	missingPhones = [],
-}: { errorPaths?: string[]; missingPhones?: unknown[] } = {}) {
+}: {
+	errorPaths?: string[];
+	missingPhones?: unknown[];
+} = {}) {
 	mocks.useQuery.mockImplementation((opts: { queryKey?: unknown[] }) => {
 		const path = String(opts.queryKey?.[1] ?? "");
 		if (errorPaths.includes(path)) {
