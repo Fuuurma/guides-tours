@@ -126,6 +126,30 @@ describe("vacation requests", () => {
 		).rejects.toThrow(/endDate must be on or after startDate/);
 	});
 
+	// F710: the ordering check alone passed unpadded or non-date bounds —
+	// a stored "2026-7-1" later parsed NaN into calculateVacationDays'
+	// Date.parse and surfaced as NaN usedDays. The bound is now
+	// shape-validated before the ordering check.
+	it("create: rejects unpadded or non-date bounds", async () => {
+		const t = convexTest(schema, modules);
+		const bad: Array<[string, string]> = [
+			["2026-7-1", "2026-07-14"],
+			["2026-07-01", "2026-7-14"],
+			["not-a-date", "2026-07-14"],
+			["2026-02-31", "2026-07-14"],
+		];
+		for (const [startDate, endDate] of bad) {
+			await expect(
+				t.mutation(internal.vacationRequests.internalCreate, {
+					organizationId: "org_v2",
+					userId: "guide-1",
+					startDate,
+					endDate,
+				}),
+			).rejects.toThrow(/Invalid date/);
+		}
+	});
+
 	it("create: rejects overlapping pending request", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_v3";

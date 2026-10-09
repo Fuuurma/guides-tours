@@ -32,6 +32,25 @@ describe("analyticsBuilders — pure helpers", () => {
 		expect(dateRange("2026-09-22", "2026-09-22")).toEqual(["2026-09-22"]);
 	});
 
+	// F710: caller bounds are bare v.string() — an unpadded bound must be
+	// rejected, not lexicographically compared. "2026-1-1" <= "2026-3-1"
+	// used to hold, inflating a 2-month window into ~365 zero-filled rows;
+	// a non-date bound walked Date.parse into NaN and iterated NaN keys.
+	it("dateRange rejects unpadded and non-date bounds", () => {
+		expect(() => dateRange("2026-1-1", "2026-3-1")).toThrow(
+			/Invalid date range bound/,
+		);
+		expect(() => dateRange("2026-01-01", "2026-3-1")).toThrow(
+			/Invalid date range bound/,
+		);
+		expect(() => dateRange("garbage", "2026-03-01")).toThrow(
+			/Invalid date range bound/,
+		);
+		expect(() => dateRange("2026-02-31", "2026-03-01")).toThrow(
+			/Invalid date range bound/,
+		);
+	});
+
 	it("round1 keeps one decimal", () => {
 		expect(round1(2.25)).toBe(2.3);
 		expect(round1(2.24)).toBe(2.2);

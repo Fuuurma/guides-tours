@@ -5,21 +5,31 @@
  * in convex/analytics.ts — the client-facing api surface is identical.
  */
 import { authComponent, createAuth } from "../auth";
+import { ConvexError } from "convex/values";
 import type { GenericQueryCtx } from "convex/server";
 import type { DataModel, Doc, Id } from "../_generated/dataModel";
 import { logger } from "../lib/logger";
+import { parseYmd } from "../lib/time";
 
 type QCtx = GenericQueryCtx<DataModel>;
 type Booking = Doc<"bookings">;
 
 export function dateRange(start: string, end: string): string[] {
+	// F710: bounds are caller-supplied bare strings — validate the
+	// YYYY-MM-DD shape before iterating. An unpadded "2026-1-1" used to
+	// pass the lexicographic compare below and inflate a 2-month window
+	// into ~365 zero-filled rows; a non-date string walked Date.parse
+	// into NaN and looped "NaN-NaN-NaN" forever.
+	const startTs = parseYmd(start);
+	const endTs = parseYmd(end);
+	if (startTs === null || endTs === null) {
+		throw new ConvexError(
+			"Invalid date range bound (expected YYYY-MM-DD)",
+		);
+	}
 	const dates: string[] = [];
-	let d = start;
-	while (d <= end) {
-		dates.push(d);
-		// advance by 1 day
-		const next = new Date(Date.parse(d) + 86_400_000);
-		d = next.toISOString().slice(0, 10);
+	for (let ts = startTs; ts <= endTs; ts += 86_400_000) {
+		dates.push(new Date(ts).toISOString().slice(0, 10));
 	}
 	return dates;
 }

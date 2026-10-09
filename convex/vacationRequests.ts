@@ -16,6 +16,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalRefs } from "./lib/internalRefs";
 import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { parseYmd } from "./lib/time";
 import { MAX_NOTES_LEN } from "./lib/validation";
 
 // ---- helpers ----
@@ -345,6 +346,15 @@ export const internalCreate = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		// Date validation (source: vacation_service.py:119-120).
+		// F710: shape first — ordering-compares alone let unpadded or
+		// non-date strings through, and a stored bad bound later parsed
+		// NaN into calculateVacationDays/usedDays.
+		if (
+			parseYmd(args.startDate) === null ||
+			parseYmd(args.endDate) === null
+		) {
+			throw new ConvexError("Invalid date (expected YYYY-MM-DD)");
+		}
 		if (args.endDate < args.startDate) {
 			throw new ConvexError("endDate must be on or after startDate");
 		}

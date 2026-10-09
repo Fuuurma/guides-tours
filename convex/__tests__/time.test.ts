@@ -11,7 +11,7 @@
 //   - Verifies round-trip (the parsed timestamp decodes back to the same date)
 
 import { describe, expect, test } from "vitest";
-import { parseBookingTime } from "../lib/time";
+import { parseBookingTime, parseYmd } from "../lib/time";
 
 describe("parseBookingTime", () => {
 	test("accepts a valid date and HH:MM", () => {
@@ -101,5 +101,43 @@ describe("parseBookingTime", () => {
 		expect(d.getUTCMonth()).toBe(0);
 		expect(d.getUTCDate()).toBe(1);
 		expect(d.getUTCHours()).toBe(0);
+	});
+});
+
+// F710: parseYmd is the shared bare-date half — dateRange and
+// vacationRequests' bounds validate through it. Unpadded input like
+// "2026-1-1" must NOT pass: lexicographic ordering on unpadded strings
+// is wrong ("2026-12-31" <= "2026-3-1"), which is exactly the window
+// inflation the caller used to ship.
+describe("parseYmd", () => {
+	test("accepts a padded YYYY-MM-DD and returns UTC midnight", () => {
+		const ts = parseYmd("2026-07-15");
+		expect(ts).not.toBeNull();
+		const d = new Date(ts!);
+		expect(d.getUTCFullYear()).toBe(2026);
+		expect(d.getUTCMonth()).toBe(6);
+		expect(d.getUTCDate()).toBe(15);
+		expect(d.getUTCHours()).toBe(0);
+		expect(d.getUTCMinutes()).toBe(0);
+	});
+
+	test("rejects unpadded month and day", () => {
+		expect(parseYmd("2026-1-1")).toBeNull();
+		expect(parseYmd("2026-01-1")).toBeNull();
+		expect(parseYmd("2026-1-15")).toBeNull();
+	});
+
+	test("rejects non-date strings", () => {
+		expect(parseYmd("")).toBeNull();
+		expect(parseYmd("garbage")).toBeNull();
+		expect(parseYmd("2026/07/15")).toBeNull();
+		expect(parseYmd("2026-07-15T00:00:00Z")).toBeNull();
+	});
+
+	test("rejects rollover dates (Feb 31, Apr 31, Feb 29 non-leap)", () => {
+		expect(parseYmd("2026-02-31")).toBeNull();
+		expect(parseYmd("2026-04-31")).toBeNull();
+		expect(parseYmd("2026-02-29")).toBeNull();
+		expect(parseYmd("2028-02-29")).not.toBeNull();
 	});
 });

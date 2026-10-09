@@ -21,25 +21,24 @@
  * invalid dates — Feb 31 → Mar 3 — and bookings would silently land
  * on the wrong day.
  */
-export function parseBookingTime(
-	date: string,
-	startTime: string,
-): number | null {
+
+/**
+ * Validate a bare "YYYY-MM-DD" calendar date; returns its UTC midnight
+ * timestamp or null on malformed input. Same strictness as
+ * parseBookingTime's date half — the one YYYY-MM-DD rule for the
+ * codebase, so callers must not re-roll the regex (F710: dateRange and
+ * vacation bounds took any string and compared lexicographically, which
+ * orders unpadded dates wrong and parses garbage into NaN).
+ */
+export function parseYmd(date: string): number | null {
 	const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-	const t = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(startTime);
-	if (!m || !t) return null;
+	if (!m) return null;
 	const year = Number(m[1]);
 	const month = Number(m[2]);
 	const day = Number(m[3]);
-	const hh = Number(t[1]);
-	const mm = Number(t[2]);
-	const ss = t[3] ? Number(t[3]) : 0;
 	if (month < 1 || month > 12) return null;
 	if (day < 1 || day > 31) return null;
-	if (hh < 0 || hh > 23) return null;
-	if (mm < 0 || mm > 59) return null;
-	if (ss < 0 || ss > 59) return null;
-	const ts = Date.UTC(year, month - 1, day, hh, mm, ss);
+	const ts = Date.UTC(year, month - 1, day);
 	if (!Number.isFinite(ts)) return null;
 	// Verify the parsed timestamp round-trips back to the same
 	// calendar date — Date.UTC rolls over (Feb 31 → Mar 3), and
@@ -52,11 +51,23 @@ export function parseBookingTime(
 	) {
 		return null;
 	}
-	if (
-		checkDate.getUTCHours() !== hh ||
-		checkDate.getUTCMinutes() !== mm
-	) {
-		return null;
-	}
 	return ts;
+}
+
+export function parseBookingTime(
+	date: string,
+	startTime: string,
+): number | null {
+	const dayTs = parseYmd(date);
+	const t = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(startTime);
+	if (dayTs === null || !t) return null;
+	const hh = Number(t[1]);
+	const mm = Number(t[2]);
+	const ss = t[3] ? Number(t[3]) : 0;
+	if (hh < 0 || hh > 23) return null;
+	if (mm < 0 || mm > 59) return null;
+	if (ss < 0 || ss > 59) return null;
+	// dayTs is UTC midnight; adding the time-of-day offset is identical
+	// to Date.UTC(y, m-1, d, hh, mm, ss) — UTC has no DST rollover.
+	return dayTs + (hh * 3600 + mm * 60 + ss) * 1000;
 }
