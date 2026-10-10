@@ -3,11 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
 import { useDeferredValue, useMemo, useState } from "react";
-import {
-	buildSparklineByTour,
-	ChannelMixBar,
-	TopToursLeaderboard,
-} from "@/components/chart-tokens";
+import { ChannelMixBar, TopToursLeaderboard } from "@/components/chart-tokens";
+import { buildSparklineByTour } from "@/lib/chart-series";
 import { MetricCard } from "@/components/metric-card";
 import { TourRevenueBars } from "@/components/tour-revenue-bars";
 import { Button } from "@/components/ui/button";
