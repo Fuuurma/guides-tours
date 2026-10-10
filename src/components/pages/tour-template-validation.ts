@@ -1,10 +1,10 @@
-import type { TourTemplateFormValues } from "./tour-template-form-model";
 import {
 	validateDescriptionOptional,
 	validateName,
 	validatePositiveInteger,
 	validatePositiveNumber,
 } from "@/lib/validation";
+import type { TourTemplateFormValues } from "./tour-template-form-model";
 
 export type TemplateDraftProblem = {
 	field: keyof TourTemplateFormValues;

@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageBackLink } from "@/components/detail-page";
 import { FormSubmitActions } from "@/components/forms/form-submit-actions";
+import type { TourFormValues } from "@/components/pages/tour-form-model";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -40,11 +41,9 @@ import {
 	validatePositiveNumber,
 } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
-import { type TourFormValues } from "@/components/pages/tour-form-model";
 import { TourTypeField } from "./tour-type-field";
 
 const NONE = "__none__";
-
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,

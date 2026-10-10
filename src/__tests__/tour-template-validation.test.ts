@@ -6,11 +6,11 @@
  * exact messages, including the min/max pair failing both fields at once.
  */
 import { describe, expect, it } from "vitest";
-import { EMPTY_TOUR_TEMPLATE_FORM } from "@/components/pages/tour-template-form-model";
 import {
+	EMPTY_TOUR_TEMPLATE_FORM,
 	type TourTemplateFormValues,
-	validateTourTemplateDraft,
-} from "@/components/pages/tour-template-validation";
+} from "@/components/pages/tour-template-form-model";
+import { validateTourTemplateDraft } from "@/components/pages/tour-template-validation";
 
 const VALID: TourTemplateFormValues = {
 	...EMPTY_TOUR_TEMPLATE_FORM,

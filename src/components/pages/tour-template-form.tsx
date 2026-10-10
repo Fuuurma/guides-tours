@@ -1,4 +1,3 @@
-import { type TourTemplateFormValues } from "./tour-template-form-model";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -11,7 +10,6 @@ import {
 	TemplateSwitchField,
 	TemplateTextareaField,
 	TemplateTextField,
-	TemplateTypeToggle,
 	TemplateVehicleSelect,
 } from "@/components/pages/tour-template-fields";
 import { validateTourTemplateDraft } from "@/components/pages/tour-template-validation";
@@ -24,9 +22,10 @@ import {
 	FieldLegend,
 	FieldSet,
 } from "@/components/ui/field";
-import { MAX_DESCRIPTION_LEN, MAX_NAME_LEN } from "@/lib/validation";
 import { resolveTourStaffing } from "@/lib/staffing";
 import { getSafeDisplayMessage } from "@/lib/utils";
+import { MAX_DESCRIPTION_LEN, MAX_NAME_LEN } from "@/lib/validation";
+import type { TourTemplateFormValues } from "./tour-template-form-model";
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,

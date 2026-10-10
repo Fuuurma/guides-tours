@@ -1,6 +1,4 @@
-import { Link } from "@tanstack/react-router";
 import { PageBackLink } from "@/components/detail-page";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
 	Field,
