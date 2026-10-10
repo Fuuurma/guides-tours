@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -227,7 +228,7 @@ function DeliveryLogsSection() {
 							<div className="flex items-center gap-2 shrink-0">
 								<StatusBadge status={log.status} />
 								<span className="text-muted-foreground text-xs font-mono">
-									{new Date(log.sentAt ?? log.createdAt).toLocaleString()}
+									{formatDateTime(log.sentAt ?? log.createdAt)}
 								</span>
 							</div>
 						</li>

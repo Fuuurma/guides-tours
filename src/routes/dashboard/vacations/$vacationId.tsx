@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -174,7 +175,7 @@ function VacationDetailPage() {
 					{vacation.reviewedAt && (
 						<DetailRow
 							label="Reviewed at"
-							value={new Date(vacation.reviewedAt).toLocaleString()}
+							value={formatDateTime(vacation.reviewedAt)}
 						/>
 					)}
 				</DetailSection>

@@ -23,7 +23,9 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { formatCentsCompact } from "@/lib/format";
+import { formatCentsCompact,
+	formatDateTime,
+} from "@/lib/format";
 import { cn, getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
 import type { BookingDetail } from "@/types/entities";
@@ -426,7 +428,7 @@ function BookingDetailPage() {
 					label="Checked in"
 					value={
 						b.checkedInAt
-							? `${new Date(b.checkedInAt).toLocaleString()} by ${b.checkedInBy || "unknown"}`
+							? `${formatDateTime(b.checkedInAt)} by ${b.checkedInBy || "unknown"}`
 							: "(not checked in)"
 					}
 				/>
@@ -434,7 +436,7 @@ function BookingDetailPage() {
 					label="Completed at"
 					value={
 						b.completedAt
-							? new Date(b.completedAt).toLocaleString()
+							? formatDateTime(b.completedAt)
 							: "(not completed)"
 					}
 				/>
@@ -462,7 +464,7 @@ function BookingDetailPage() {
 									</p>
 									<p className="text-muted-foreground text-xs">
 										{payment.currency} ·{" "}
-										{new Date(payment.createdAt).toLocaleString()}
+										{formatDateTime(payment.createdAt)}
 									</p>
 								</div>
 								<StatusBadge status={payment.status} />

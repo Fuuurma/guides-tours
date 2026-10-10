@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import { convexQuery } from "@convex-dev/react-query";
 import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
@@ -180,7 +181,7 @@ function OtaIntegrationsPage() {
 											<p className="text-muted-foreground text-xs">
 												Sync every {i.syncIntervalMinutes}m
 												{i.lastSyncAt
-													? ` · last sync ${new Date(i.lastSyncAt).toLocaleString()}`
+													? ` · last sync ${formatDateTime(i.lastSyncAt)}`
 													: ""}
 											</p>
 										</div>
@@ -923,7 +924,7 @@ function WebhookDeliveriesSection() {
 								<div className="flex shrink-0 items-center gap-2">
 									<StatusBadge status={d.status} />
 									<span className="font-mono text-muted-foreground text-xs">
-										{new Date(d.receivedAt).toLocaleString()}
+										{formatDateTime(d.receivedAt)}
 									</span>
 								</div>
 							</li>

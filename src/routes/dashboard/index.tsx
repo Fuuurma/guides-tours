@@ -41,7 +41,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
-import { formatCentsWhole, formatSignedPct } from "@/lib/format";
+import { formatCentsWhole, formatSignedPct,
+		formatLongDate,
+} from "@/lib/format";
 import { cn, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -315,11 +317,7 @@ function DashboardIndex() {
 						This week
 					</h1>
 					<p className="mt-0.5 text-sm text-muted-foreground">
-						{new Date().toLocaleDateString(undefined, {
-							weekday: "long",
-							month: "long",
-							day: "numeric",
-						})}
+						{formatLongDate(new Date())}
 						{" · "}
 						{org?.name ?? "your workspace"}
 					</p>

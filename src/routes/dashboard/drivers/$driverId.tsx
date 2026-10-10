@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import { convexQuery } from "@convex-dev/react-query";
 import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
@@ -224,11 +225,11 @@ function DriverDetailPage() {
 				<DetailRow label="Member" value={name} />
 				<DetailRow
 					label="Created at"
-					value={new Date(driver.createdAt).toLocaleString()}
+					value={formatDateTime(driver.createdAt)}
 				/>
 				<DetailRow
 					label="Updated at"
-					value={new Date(driver.updatedAt).toLocaleString()}
+					value={formatDateTime(driver.updatedAt)}
 				/>
 			</DetailSection>
 		</DetailPage>

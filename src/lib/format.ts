@@ -13,13 +13,38 @@
  *   formatCents(0)         // "$0.00"
  *   formatCents(123456)    // "$1,234.56"
  */
+// Hoisted: constructing an Intl.NumberFormat per call is the expensive part
+// of formatting, and formatCents runs inside hot list renders.
+const USD_CURRENCY = new Intl.NumberFormat("en-US", {
+	style: "currency",
+	currency: "USD",
+});
+
+const DATE_TIME = new Intl.DateTimeFormat("en-US", {
+	dateStyle: "medium",
+	timeStyle: "short",
+});
+
+/** Dashboard-standard timestamp rendering (en-US, medium date + short time). */
+export function formatDateTime(value: string | number | Date): string {
+	return DATE_TIME.format(new Date(value));
+}
+
+const LONG_DATE = new Intl.DateTimeFormat("en-US", {
+	weekday: "long",
+	month: "long",
+	day: "numeric",
+});
+
+/** "Friday, October 10" style heading date (en-US — never host-locale). */
+export function formatLongDate(value: string | number | Date): string {
+	return LONG_DATE.format(new Date(value));
+}
+
 export function formatCents(cents: number | bigint | null | undefined): string {
 	if (cents == null) return "$0.00";
 	const n = typeof cents === "bigint" ? Number(cents) : cents;
-	return new Intl.NumberFormat("en-US", {
-		style: "currency",
-		currency: "USD",
-	}).format(n / 100);
+	return USD_CURRENCY.format(n / 100);
 }
 
 /**
