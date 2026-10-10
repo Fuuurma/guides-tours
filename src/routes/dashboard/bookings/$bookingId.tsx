@@ -481,9 +481,7 @@ function BookingDetailPage() {
 									</p>
 									<p className="text-muted-foreground text-xs">
 										{refund.currency} ·{" "}
-										{new Date(
-											refund.refundedAt ?? refund.createdAt,
-										).toLocaleString()}
+										{formatDateTime(refund.refundedAt ?? refund.createdAt)}
 										{refund.reason ? ` · ${refund.reason}` : ""}
 									</p>
 								</div>
