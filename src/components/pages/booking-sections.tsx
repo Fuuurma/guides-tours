@@ -145,102 +145,16 @@ export function BookingConfirmationCard({
 						</p>
 						{confirmation.canPay &&
 							Number(confirmation.balanceDueCents) > 0 && (
-								<div className="flex flex-col gap-3 rounded-md border p-3">
-									<p className="text-sm font-medium">
-										Balance due:{" "}
-										{formatCentsCompact(BigInt(confirmation.balanceDueCents))}
-									</p>
-									{elementsClientSecret && confirmation.stripePublishableKey ? (
-										<StripePaymentElement
-											publishableKey={confirmation.stripePublishableKey}
-											clientSecret={elementsClientSecret}
-											returnUrl={
-												typeof window !== "undefined"
-													? `${window.location.origin}/book/${slug}?paid=1`
-													: `/book/${slug}?paid=1`
-											}
-											amountLabel={formatCentsCompact(
-												BigInt(confirmation.balanceDueCents),
-											)}
-											onPaid={() => {
-												toast.success(
-													"Payment submitted — you’ll get a confirmation shortly",
-												);
-												setElementsClientSecret(null);
-											}}
-											onCancel={() => setElementsClientSecret(null)}
-										/>
-									) : (
-										<>
-											<p className="text-xs text-muted-foreground">
-												Pay securely with Stripe — on this page or via hosted
-												Checkout.
-											</p>
-											<div className="flex flex-col gap-2 sm:flex-row">
-												{confirmation.stripePublishableKey ? (
-													<Button
-														className="w-full"
-														disabled={paying}
-														onClick={async () => {
-															setPaying(true);
-															try {
-																const result = await createPaymentIntent({
-																	bookingId:
-																		confirmation.bookingId as Id<"bookings">,
-																	customerEmail:
-																		confirmation.email.toLowerCase(),
-																});
-																setElementsClientSecret(result.clientSecret);
-															} catch (err) {
-																toast.error(getSafeDisplayMessage(err));
-															} finally {
-																setPaying(false);
-															}
-														}}
-													>
-														{paying ? (
-															<Spinner data-icon="inline-start" />
-														) : null}
-														{paying ? "Preparing…" : "Pay on this page"}
-													</Button>
-												) : null}
-												<Button
-													className="w-full"
-													variant={
-														confirmation.stripePublishableKey
-															? "outline"
-															: "default"
-													}
-													disabled={paying}
-													onClick={async () => {
-														setPaying(true);
-														try {
-															const { url } = await createCheckout({
-																bookingId:
-																	confirmation.bookingId as Id<"bookings">,
-																customerEmail: confirmation.email.toLowerCase(),
-																successPath: `/book/${slug}?paid=1`,
-																cancelPath: `/book/${slug}?pay_cancelled=1`,
-															});
-															if (!isStripeCheckoutUrl(url)) {
-																toast.error("Invalid checkout URL received");
-																setPaying(false);
-																return;
-															}
-															window.location.href = url;
-														} catch (err) {
-															toast.error(getSafeDisplayMessage(err));
-															setPaying(false);
-														}
-													}}
-												>
-													{paying ? <Spinner data-icon="inline-start" /> : null}
-													{paying ? "Opening checkout…" : "Stripe Checkout"}
-												</Button>
-											</div>
-										</>
-									)}
-								</div>
+								<PaymentActions
+									confirmation={confirmation}
+									slug={slug}
+									paying={paying}
+									elementsClientSecret={elementsClientSecret}
+									createPaymentIntent={createPaymentIntent}
+									createCheckout={createCheckout}
+									setPaying={setPaying}
+									setElementsClientSecret={setElementsClientSecret}
+								/>
 							)}
 						<Button
 							variant="outline"
@@ -291,7 +205,6 @@ export function BookingRequestForm({
 	submitErr: string | null;
 }) {
 	const reduceMotion = useReducedMotion();
-	const today = useTodayYmd();
 	return (
 		<LazyMotion features={domAnimation}>
 			<m.div
@@ -340,131 +253,17 @@ export function BookingRequestForm({
 
 								<Separator />
 
-								<section className="flex flex-col gap-4">
-									<h2 className="text-sm font-medium">Date and time</h2>
-									<div className="grid gap-4 sm:grid-cols-2">
-										<form.Field name="date">
-											{(field) => (
-												<FormField
-													field={field}
-													label="Date *"
-													hint={
-														isBlackedOut
-															? "This date is not available — the operator has blocked bookings on this day."
-															: undefined
-													}
-												>
-													<Input
-														id={field.name}
-														name={field.name}
-														type="date"
-														required
-														min={today}
-														value={field.state.value}
-														onBlur={field.handleBlur}
-														onChange={(e) => {
-															field.handleChange(e.target.value);
-															form.setFieldValue("scheduleId", "");
-															form.setFieldValue("startTime", "");
-														}}
-														aria-invalid={
-															field.state.meta.errors.length > 0 ||
-															Boolean(isBlackedOut)
-														}
-													/>
-												</FormField>
-											)}
-										</form.Field>
-
-										<form.Field name="startTime">
-											{(field) => (
-												<Field
-													data-invalid={field.state.meta.errors.length > 0}
-												>
-													<FieldLabel htmlFor="time">Start time *</FieldLabel>
-													{slotsLoading ? (
-														<p className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
-															<Spinner />
-															Loading available times…
-														</p>
-													) : hasPublishedSlots ? (
-														<select
-															id="time"
-															required
-															className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-															value={scheduleId}
-															onBlur={field.handleBlur}
-															onChange={(e) => {
-																const id = e.target.value;
-																form.setFieldValue("scheduleId", id);
-																const slot = availableSlots?.find(
-																	(s) => s._id === id,
-																);
-																field.handleChange(slot?.startTime ?? "");
-															}}
-															aria-invalid={field.state.meta.errors.length > 0}
-														>
-															<option value="">Select a time…</option>
-															{(availableSlots ?? []).map((s) => (
-																<option key={s._id} value={s._id}>
-																	{s.startTime}
-																	{s.endTime ? `–${s.endTime}` : ""} ·{" "}
-																	{s.seatsLeft} left
-																</option>
-															))}
-														</select>
-													) : (
-														<Input
-															id="time"
-															type="time"
-															required
-															value={field.state.value}
-															onBlur={field.handleBlur}
-															onChange={(e) => {
-																field.handleChange(e.target.value);
-																form.setFieldValue("scheduleId", "");
-															}}
-															disabled={Boolean(isBlackedOut) || !slotReady}
-														/>
-													)}
-													{slotsLoaded &&
-														!hasPublishedSlots &&
-														!isBlackedOut && (
-															<FieldDescription>
-																No published times for this date — enter a
-																preferred start time.
-															</FieldDescription>
-														)}
-													<FieldError
-														errors={field.state.meta.errors.map((err) => ({
-															message: String(err),
-														}))}
-													/>
-												</Field>
-											)}
-										</form.Field>
-									</div>
-
-									<form.Field name="guests">
-										{(field) => (
-											<FormField
-												field={field}
-												label="Guests *"
-												hint={
-													selectedTour
-														? `Max ${selectedTour.maxGuests} guests`
-														: undefined
-												}
-												inputProps={{
-													type: "number",
-													min: 1,
-													max: selectedTour?.maxGuests ?? 20,
-													required: true,
-												}}
-											/>
-										)}
-									</form.Field>
-								</section>
+								<BookingDateTimeSection
+									form={form}
+									availableSlots={availableSlots}
+									slotsLoading={slotsLoading}
+									slotsLoaded={slotsLoaded}
+									hasPublishedSlots={hasPublishedSlots}
+									isBlackedOut={isBlackedOut}
+									slotReady={slotReady}
+									scheduleId={scheduleId}
+									selectedTour={selectedTour}
+								/>
 
 								<Separator />
 
@@ -619,5 +418,276 @@ export function BookingRequestForm({
 				</form>
 			</m.div>
 		</LazyMotion>
+	);
+}
+
+function PaymentActions({
+	confirmation,
+	slug,
+	paying,
+	elementsClientSecret,
+	createPaymentIntent,
+	createCheckout,
+	setPaying,
+	setElementsClientSecret,
+}: {
+	confirmation: BookingConfirmation;
+	slug: string;
+	paying: boolean;
+	elementsClientSecret: string | null;
+	createPaymentIntent: (args: {
+		bookingId: Id<"bookings">;
+		customerEmail: string;
+	}) => Promise<{ clientSecret: string }>;
+	createCheckout: (args: {
+		bookingId: Id<"bookings">;
+		customerEmail: string;
+		successPath: string;
+		cancelPath: string;
+	}) => Promise<{ url: string }>;
+	setPaying: (v: boolean) => void;
+	setElementsClientSecret: (v: string | null) => void;
+}) {
+	return (
+		<>
+			{confirmation.canPay && Number(confirmation.balanceDueCents) > 0 && (
+				<div className="flex flex-col gap-3 rounded-md border p-3">
+					<p className="text-sm font-medium">
+						Balance due:{" "}
+						{formatCentsCompact(BigInt(confirmation.balanceDueCents))}
+					</p>
+					{elementsClientSecret && confirmation.stripePublishableKey ? (
+						<StripePaymentElement
+							publishableKey={confirmation.stripePublishableKey}
+							clientSecret={elementsClientSecret}
+							returnUrl={
+								typeof window !== "undefined"
+									? `${window.location.origin}/book/${slug}?paid=1`
+									: `/book/${slug}?paid=1`
+							}
+							amountLabel={formatCentsCompact(
+								BigInt(confirmation.balanceDueCents),
+							)}
+							onPaid={() => {
+								toast.success(
+									"Payment submitted — you’ll get a confirmation shortly",
+								);
+								setElementsClientSecret(null);
+							}}
+							onCancel={() => setElementsClientSecret(null)}
+						/>
+					) : (
+						<>
+							<p className="text-xs text-muted-foreground">
+								Pay securely with Stripe — on this page or via hosted Checkout.
+							</p>
+							<div className="flex flex-col gap-2 sm:flex-row">
+								{confirmation.stripePublishableKey ? (
+									<Button
+										className="w-full"
+										disabled={paying}
+										onClick={async () => {
+											setPaying(true);
+											try {
+												const result = await createPaymentIntent({
+													bookingId: confirmation.bookingId as Id<"bookings">,
+													customerEmail: confirmation.email.toLowerCase(),
+												});
+												setElementsClientSecret(result.clientSecret);
+											} catch (err) {
+												toast.error(getSafeDisplayMessage(err));
+											} finally {
+												setPaying(false);
+											}
+										}}
+									>
+										{paying ? <Spinner data-icon="inline-start" /> : null}
+										{paying ? "Preparing…" : "Pay on this page"}
+									</Button>
+								) : null}
+								<Button
+									className="w-full"
+									variant={
+										confirmation.stripePublishableKey ? "outline" : "default"
+									}
+									disabled={paying}
+									onClick={async () => {
+										setPaying(true);
+										try {
+											const { url } = await createCheckout({
+												bookingId: confirmation.bookingId as Id<"bookings">,
+												customerEmail: confirmation.email.toLowerCase(),
+												successPath: `/book/${slug}?paid=1`,
+												cancelPath: `/book/${slug}?pay_cancelled=1`,
+											});
+											if (!isStripeCheckoutUrl(url)) {
+												toast.error("Invalid checkout URL received");
+												setPaying(false);
+												return;
+											}
+											window.location.href = url;
+										} catch (err) {
+											toast.error(getSafeDisplayMessage(err));
+											setPaying(false);
+										}
+									}}
+								>
+									{paying ? <Spinner data-icon="inline-start" /> : null}
+									{paying ? "Opening checkout…" : "Stripe Checkout"}
+								</Button>
+							</div>
+						</>
+					)}
+				</div>
+			)}
+		</>
+	);
+}
+
+function BookingDateTimeSection({
+	form,
+	availableSlots,
+	slotsLoading,
+	slotsLoaded,
+	hasPublishedSlots,
+	isBlackedOut,
+	slotReady,
+	scheduleId,
+	selectedTour,
+}: {
+	form: BookingFormApi;
+	availableSlots:
+		| Array<{
+				_id: string;
+				startTime: string;
+				endTime?: string;
+				seatsLeft: number;
+		  }>
+		| undefined;
+	slotsLoading: boolean;
+	slotsLoaded: boolean;
+	hasPublishedSlots: boolean;
+	isBlackedOut: boolean | undefined;
+	slotReady: boolean;
+	scheduleId: string;
+	selectedTour: PublicTour | undefined;
+}) {
+	const today = useTodayYmd();
+	return (
+		<section className="flex flex-col gap-4">
+			<h2 className="text-sm font-medium">Date and time</h2>
+			<div className="grid gap-4 sm:grid-cols-2">
+				<form.Field name="date">
+					{(field) => (
+						<FormField
+							field={field}
+							label="Date *"
+							hint={
+								isBlackedOut
+									? "This date is not available — the operator has blocked bookings on this day."
+									: undefined
+							}
+						>
+							<Input
+								id={field.name}
+								name={field.name}
+								type="date"
+								required
+								min={today}
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => {
+									field.handleChange(e.target.value);
+									form.setFieldValue("scheduleId", "");
+									form.setFieldValue("startTime", "");
+								}}
+								aria-invalid={
+									field.state.meta.errors.length > 0 || Boolean(isBlackedOut)
+								}
+							/>
+						</FormField>
+					)}
+				</form.Field>
+
+				<form.Field name="startTime">
+					{(field) => (
+						<Field data-invalid={field.state.meta.errors.length > 0}>
+							<FieldLabel htmlFor="time">Start time *</FieldLabel>
+							{slotsLoading ? (
+								<p className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+									<Spinner />
+									Loading available times…
+								</p>
+							) : hasPublishedSlots ? (
+								<select
+									id="time"
+									required
+									className="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+									value={scheduleId}
+									onBlur={field.handleBlur}
+									onChange={(e) => {
+										const id = e.target.value;
+										form.setFieldValue("scheduleId", id);
+										const slot = availableSlots?.find((s) => s._id === id);
+										field.handleChange(slot?.startTime ?? "");
+									}}
+									aria-invalid={field.state.meta.errors.length > 0}
+								>
+									<option value="">Select a time…</option>
+									{(availableSlots ?? []).map((s) => (
+										<option key={s._id} value={s._id}>
+											{s.startTime}
+											{s.endTime ? `–${s.endTime}` : ""} · {s.seatsLeft} left
+										</option>
+									))}
+								</select>
+							) : (
+								<Input
+									id="time"
+									type="time"
+									required
+									value={field.state.value}
+									onBlur={field.handleBlur}
+									onChange={(e) => {
+										field.handleChange(e.target.value);
+										form.setFieldValue("scheduleId", "");
+									}}
+									disabled={Boolean(isBlackedOut) || !slotReady}
+								/>
+							)}
+							{slotsLoaded && !hasPublishedSlots && !isBlackedOut && (
+								<FieldDescription>
+									No published times for this date — enter a preferred start
+									time.
+								</FieldDescription>
+							)}
+							<FieldError
+								errors={field.state.meta.errors.map((err) => ({
+									message: String(err),
+								}))}
+							/>
+						</Field>
+					)}
+				</form.Field>
+			</div>
+
+			<form.Field name="guests">
+				{(field) => (
+					<FormField
+						field={field}
+						label="Guests *"
+						hint={
+							selectedTour ? `Max ${selectedTour.maxGuests} guests` : undefined
+						}
+						inputProps={{
+							type: "number",
+							min: 1,
+							max: selectedTour?.maxGuests ?? 20,
+							required: true,
+						}}
+					/>
+				)}
+			</form.Field>
+		</section>
 	);
 }
