@@ -47,10 +47,7 @@ import {
 	publicBookingDefaults,
 	publicBookingSchema,
 } from "@/lib/public-booking-form";
-import {
-	getSafeDisplayMessage,
-	isStripeCheckoutUrl,
-} from "@/lib/utils";
+import { getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import {
 	MAX_EMAIL_LEN,
 	MAX_NAME_LEN,

@@ -24,11 +24,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { formatCentsCompact } from "@/lib/format";
-import {
-	cn,
-	getSafeDisplayMessage,
-	isStripeCheckoutUrl,
-} from "@/lib/utils";
+import { cn, getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
 import type { BookingDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
