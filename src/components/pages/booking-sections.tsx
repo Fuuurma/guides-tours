@@ -421,6 +421,63 @@ export function BookingRequestForm({
 	);
 }
 
+type PaymentActionDeps = {
+	confirmation: BookingConfirmation;
+	slug: string;
+	setPaying: (v: boolean) => void;
+	setElementsClientSecret: (v: string | null) => void;
+	createPaymentIntent: (args: {
+		bookingId: Id<"bookings">;
+		customerEmail: string;
+	}) => Promise<{ clientSecret: string }>;
+	createCheckout: (args: {
+		bookingId: Id<"bookings">;
+		customerEmail: string;
+		successPath: string;
+		cancelPath: string;
+	}) => Promise<{ url: string }>;
+};
+
+/** Mint an Elements client secret so the guest can pay on this page. */
+async function payWithElements(deps: PaymentActionDeps) {
+	const { confirmation, setPaying, setElementsClientSecret } = deps;
+	setPaying(true);
+	try {
+		const result = await deps.createPaymentIntent({
+			bookingId: confirmation.bookingId as Id<"bookings">,
+			customerEmail: confirmation.email.toLowerCase(),
+		});
+		setElementsClientSecret(result.clientSecret);
+	} catch (err) {
+		toast.error(getSafeDisplayMessage(err));
+	} finally {
+		setPaying(false);
+	}
+}
+
+/** Open Stripe hosted Checkout for the balance (works without a publishable key on the page). */
+async function payWithHostedCheckout(deps: PaymentActionDeps) {
+	const { confirmation, slug, setPaying } = deps;
+	setPaying(true);
+	try {
+		const { url } = await deps.createCheckout({
+			bookingId: confirmation.bookingId as Id<"bookings">,
+			customerEmail: confirmation.email.toLowerCase(),
+			successPath: `/book/${slug}?paid=1`,
+			cancelPath: `/book/${slug}?pay_cancelled=1`,
+		});
+		if (!isStripeCheckoutUrl(url)) {
+			toast.error("Invalid checkout URL received");
+			setPaying(false);
+			return;
+		}
+		window.location.href = url;
+	} catch (err) {
+		toast.error(getSafeDisplayMessage(err));
+		setPaying(false);
+	}
+}
+
 function PaymentActions({
 	confirmation,
 	slug,
@@ -486,20 +543,16 @@ function PaymentActions({
 									<Button
 										className="w-full"
 										disabled={paying}
-										onClick={async () => {
-											setPaying(true);
-											try {
-												const result = await createPaymentIntent({
-													bookingId: confirmation.bookingId as Id<"bookings">,
-													customerEmail: confirmation.email.toLowerCase(),
-												});
-												setElementsClientSecret(result.clientSecret);
-											} catch (err) {
-												toast.error(getSafeDisplayMessage(err));
-											} finally {
-												setPaying(false);
-											}
-										}}
+										onClick={() =>
+											void payWithElements({
+												confirmation,
+												slug,
+												setPaying,
+												setElementsClientSecret,
+												createPaymentIntent,
+												createCheckout,
+											})
+										}
 									>
 										{paying ? <Spinner data-icon="inline-start" /> : null}
 										{paying ? "Preparing…" : "Pay on this page"}
@@ -511,26 +564,16 @@ function PaymentActions({
 										confirmation.stripePublishableKey ? "outline" : "default"
 									}
 									disabled={paying}
-									onClick={async () => {
-										setPaying(true);
-										try {
-											const { url } = await createCheckout({
-												bookingId: confirmation.bookingId as Id<"bookings">,
-												customerEmail: confirmation.email.toLowerCase(),
-												successPath: `/book/${slug}?paid=1`,
-												cancelPath: `/book/${slug}?pay_cancelled=1`,
-											});
-											if (!isStripeCheckoutUrl(url)) {
-												toast.error("Invalid checkout URL received");
-												setPaying(false);
-												return;
-											}
-											window.location.href = url;
-										} catch (err) {
-											toast.error(getSafeDisplayMessage(err));
-											setPaying(false);
-										}
-									}}
+									onClick={() =>
+										void payWithHostedCheckout({
+											confirmation,
+											slug,
+											setPaying,
+											setElementsClientSecret,
+											createPaymentIntent,
+											createCheckout,
+										})
+									}
 								>
 									{paying ? <Spinner data-icon="inline-start" /> : null}
 									{paying ? "Opening checkout…" : "Stripe Checkout"}
