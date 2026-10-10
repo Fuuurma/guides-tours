@@ -1,7 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { Check } from "lucide-react";
 import { domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FormField } from "@/components/forms/form-field";
 import { StripePaymentElement } from "@/components/stripe-payment-element";
@@ -505,6 +505,13 @@ function PaymentActions({
 	setPaying: (v: boolean) => void;
 	setElementsClientSecret: (v: string | null) => void;
 }) {
+	// Hydration-safe returnUrl: the initial render is relative on server AND
+	// client (no window branch); after mount it upgrades to absolute, which
+	// Stripe requires — payments only ever complete post-interaction.
+	const [returnUrl, setReturnUrl] = useState(`/book/${slug}?paid=1`);
+	useEffect(() => {
+		setReturnUrl(`${window.location.origin}/book/${slug}?paid=1`);
+	}, [slug]);
 	return (
 		<>
 			{confirmation.canPay && Number(confirmation.balanceDueCents) > 0 && (
@@ -517,11 +524,7 @@ function PaymentActions({
 						<StripePaymentElement
 							publishableKey={confirmation.stripePublishableKey}
 							clientSecret={elementsClientSecret}
-							returnUrl={
-								typeof window !== "undefined"
-									? `${window.location.origin}/book/${slug}?paid=1`
-									: `/book/${slug}?paid=1`
-							}
+							returnUrl={returnUrl}
 							amountLabel={formatCentsCompact(
 								BigInt(confirmation.balanceDueCents),
 							)}
