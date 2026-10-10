@@ -20,10 +20,8 @@ vi.mock("motion/react", () => ({
 	useReducedMotion: () => true,
 }));
 
-import {
-	BookingHero,
-	deriveBookingHeroStats,
-} from "../components/booking-hero";
+import { BookingHero } from "../components/booking-hero";
+import { deriveBookingHeroStats } from "@/lib/booking-hero-stats";
 import { TrustMetric } from "../components/trust-metric";
 
 const TOURS = [
