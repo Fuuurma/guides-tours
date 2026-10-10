@@ -1,6 +1,7 @@
-import type {
-	NotifFormApi,
-	Settings,
+import {
+	metaErrors,
+	type NotifFormApi,
+	type Settings,
 } from "@/components/pages/notification-settings-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,18 +31,6 @@ import { MAX_NAME_LEN } from "@/lib/validation";
  * from the pre-split JSX; send-now handlers and pending flags stay owned by
  * the page (they touch mutations and toasts) and are passed in.
  */
-export function metaErrors(
-	errors: ReadonlyArray<unknown>,
-): Array<{ message?: string }> {
-	return errors.map((err) => {
-		if (typeof err === "string") return { message: err };
-		if (err && typeof err === "object" && "message" in err) {
-			const message = (err as { message?: unknown }).message;
-			if (typeof message === "string") return { message };
-		}
-		return { message: String(err) };
-	});
-}
 
 export function EmailChannelCard({ form }: { form: NotifFormApi }) {
 	return (

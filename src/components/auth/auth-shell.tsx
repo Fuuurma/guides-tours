@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { AUTH_PANEL } from "@/lib/auth-panel";
 import { Check, MapPin } from "lucide-react";
 import type * as React from "react";
 
@@ -12,13 +13,7 @@ import type * as React from "react";
 // The design mirrors src/routes/index.tsx (landing page) so the auth
 // experience feels like part of the same product, not a bare form.
 
-export const AUTH_PANEL = {
-	signIn: "/landing/guides-auth-signin-dispatch.png",
-	signUp: "/landing/guides-auth-signup-trail.png",
-	forgot: "/landing/guides-auth-forgot-path.png",
-	onboard: "/landing/guides-auth-onboard-keys.png",
-	invite: "/landing/guides-auth-invite-crew.png",
-} as const;
+
 
 const TRUST_BULLETS = [
 	"Live availability shared with every channel",

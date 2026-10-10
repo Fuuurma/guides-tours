@@ -207,3 +207,16 @@ export function useNotifForm(opts: {
 }
 
 export type NotifFormApi = ReturnType<typeof useNotifForm>;
+
+export function metaErrors(
+	errors: ReadonlyArray<unknown>,
+): Array<{ message?: string }> {
+	return errors.map((err) => {
+		if (typeof err === "string") return { message: err };
+		if (err && typeof err === "object" && "message" in err) {
+			const message = (err as { message?: unknown }).message;
+			if (typeof message === "string") return { message };
+		}
+		return { message: String(err) };
+	});
+}
