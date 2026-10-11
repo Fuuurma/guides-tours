@@ -41,6 +41,10 @@ const NOTIFICATION_CUTOFF_MINUTES = 10;
 const RETRY_BACKOFF_BASE_MINUTES = 5;
 
 const ARCHIVE_AFTER_DAYS = 90;
+// F460: soft-deleted (archived) assignments are hard-deleted one year
+// after their archive date — bounded history for audits/undo-window
+// questions, bounded table growth forever.
+const ASSIGNMENT_PURGE_AFTER_DAYS = 365;
 const NOTIFICATION_LOG_RETENTION_DAYS = 30;
 
 /**
@@ -491,6 +495,83 @@ export const cleanupOldAssignments = internalMutation({
 
 		return {
 			archived: targets.length,
+			status,
+			done: result.isDone,
+			continueCursor: result.continueCursor,
+			cutoffDate,
+		};
+	},
+});
+
+
+// F460: archived assignments were soft-deleted forever — no hard-delete
+// purge existed, so the table grew without bound. This walks the same
+// by_status_date pages the archiver walks (completed then cancelled,
+// self-continuing per F49) and HARD-DELETES rows whose deletedAt is
+// older than the retention window.
+export const purgeArchivedAssignments = internalMutation({
+	args: {
+		status: v.optional(
+			v.union(v.literal("completed"), v.literal("cancelled")),
+		),
+		cursor: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const cutoffMs =
+			Date.now() - ASSIGNMENT_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+		const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10);
+
+		const status = args.status ?? "completed";
+		const PAGE = 2000;
+		const result = await ctx.db
+			.query("assignments")
+			.withIndex("by_status_date", (q) =>
+				q.eq("status", status).lt("date", cutoffDate),
+			)
+			.paginate({ numItems: PAGE, cursor: args.cursor ?? null });
+
+		// Only rows archived BEFORE the retention cutoff get deleted; rows
+		// archived after it (or never archived) stay for a later run.
+		const targets = result.page.filter(
+			(a) =>
+				a.deletedAt !== undefined &&
+				a.deletedAt < Date.now() - ASSIGNMENT_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000,
+		);
+		for (const a of targets) {
+			await ctx.db.delete(a._id);
+		}
+
+		if (targets.length > 0) {
+			logger.info(
+				`[cron] purgeArchivedAssignments deleted ${targets.length} ${status} assignments archived before ${cutoffDate}`,
+			);
+			await logAudit(ctx, {
+				organizationId: "system",
+				userId: "system",
+				action: "assignments.bulk_purged",
+				resourceType: "assignment",
+				resourceId: targets[0]?._id ?? "",
+				oldValues: {},
+				newValues: { count: targets.length, status, cutoffDate },
+			});
+		}
+
+		if (!result.isDone) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notifications.purgeArchivedAssignments,
+				{ status, cursor: result.continueCursor },
+			);
+		} else if (status === "completed") {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notifications.purgeArchivedAssignments,
+				{ status: "cancelled" },
+			);
+		}
+
+		return {
+			purged: targets.length,
 			status,
 			done: result.isDone,
 			continueCursor: result.continueCursor,

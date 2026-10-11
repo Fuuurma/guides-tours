@@ -73,6 +73,17 @@ crons.daily(
 	internal.notifications.cleanupOldNotifications,
 );
 
+// Daily at 04:15 UTC — hard-delete assignments archived more than a year
+// ago (F460). Runs after the 03:00 archiver so a freshly archived row is
+// never the target of the same night's purge, and shares the archiver's
+// by_status_date pagination with self-continuation.
+crons.daily(
+	"purge_archived_assignments",
+	{ hourUTC: 4, minuteUTC: 15 },
+	internal.notifications.purgeArchivedAssignments,
+	{},
+);
+
 // Daily at 04:30 UTC — drop public-booking rate-limit rows older
 // than 2× the window (30 minutes). Keeps the table from growing
 // unbounded while preserving rows that are still relevant for
