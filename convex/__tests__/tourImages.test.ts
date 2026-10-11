@@ -262,9 +262,9 @@ describe("tour images", () => {
 		await t.run(async (ctx) => {
 			const now = Date.now();
 			for (let i = 0; i < 199; i++) {
-				const sid = (await ctx.storage.store(
+				const sid = await ctx.storage.store(
 					new Blob([`fake image bytes ${i}`]),
-				)) as unknown as string;
+				);
 				await ctx.db.insert("tourImages", {
 					organizationId: orgId,
 					tourId,
