@@ -1104,6 +1104,11 @@ export default defineSchema({
 		organizationId: orgId,
 		userId: v.string(),
 		lastSentAt: v.number(),
+		// F680: claim stamp taken BEFORE the SES send dispatches — an
+		// overlapping cron tick sees a fresh claim and skips, so a 5-min
+		// SES stall can't produce a second email. Cleared on failure/skip
+		// so a retry is never blocked by a dead claim.
+		claimedAt: v.optional(v.number()),
 	})
 		.index("by_org_user", ["organizationId", "userId"])
 		.index("by_org", ["organizationId"])
