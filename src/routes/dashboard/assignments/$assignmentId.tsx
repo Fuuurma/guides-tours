@@ -90,9 +90,9 @@ function AssignmentDetailPage() {
 	// F772: the route component is reused across $assignmentId navigations,
 	// so without this reset an open edit form (or an armed destructive
 	// action) can carry over from the previous assignment.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: assignmentId
-	// is the reset TRIGGER, not a value the body reads — resetting on every
-	// entity change is the entire purpose of this effect (F772).
+	// The reset trigger is assignmentId itself, not a value the body reads
+	// — resetting on every entity change is the entire purpose (F772).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: assignmentId is the reset trigger, not a read value
 	useEffect(() => {
 		setEditing(false);
 		setAction(null);
