@@ -44,9 +44,15 @@ function fromHex(hex: string): Uint8Array {
 }
 
 function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-	if (a.length !== b.length) return false;
-	let diff = 0;
-	for (let i = 0; i < a.length; i++) {
+	// Compare over the LONGER length so execution time doesn't leak
+	// whether a length mismatch occurred (F466; the RC twin of this fix
+	// landed 2026-09-06). The early return also diverges from the
+	// constant-time contract the OTA docs promise. The extra bytes of the
+	// longer input XOR against 0 and only widen the diff — mismatch still
+	// returns false.
+	const max = Math.max(a.length, b.length);
+	let diff = a.length === b.length ? 0 : 1;
+	for (let i = 0; i < max; i++) {
 		diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
 	}
 	return diff === 0;
@@ -87,7 +93,7 @@ async function hmacSha256Hex(
  * Compute the HMAC-SHA256 hex signature for a payload. Exposed so
  * tests + provider-specific helpers can use it.
  */
-export { hmacSha256Hex, fromHex };
+export { hmacSha256Hex, fromHex, timingSafeEqual };
 
 /**
  * Verify a webhook signature.

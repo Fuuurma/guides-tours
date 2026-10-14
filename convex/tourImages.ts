@@ -16,6 +16,11 @@ import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 
+// F812: the gallery read caps at this many images per tour; the add
+// path enforces the same cap so rows beyond it could never exist
+// (invisible AND unbounded before this).
+const MAX_IMAGES_PER_TOUR = 200;
+
 // ---- queries ----
 
 export const list = query({
@@ -28,7 +33,6 @@ export const list = query({
 		// Bound the result so a tour with thousands of images
 		// doesn't OOM the response. The FE gallery renders at most
 		// a few dozen per tour.
-		const MAX_IMAGES = 200;
 		let q = ctx.db
 			.query("tourImages")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
@@ -39,7 +43,7 @@ export const list = query({
 				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
-		const rows = await q.take(MAX_IMAGES);
+		const rows = await q.take(MAX_IMAGES_PER_TOUR);
 		const sorted = rows.sort((a, b) => a.displayOrder - b.displayOrder);
 		// Attach signed URLs for the gallery UI.
 		return await Promise.all(
@@ -131,6 +135,18 @@ export const internalAdd = internalMutation({
 		if (!tour) throw new ConvexError("Tour not found");
 		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
+		}
+		// F812: enforce the gallery cap at the write. The read takes at
+		// most MAX_IMAGES_PER_TOUR rows, so images beyond it were both
+		// invisible and unbounded.
+		const existing = await ctx.db
+			.query("tourImages")
+			.withIndex("by_tour", (q) => q.eq("tourId", args.tourId))
+			.take(MAX_IMAGES_PER_TOUR);
+		if (existing.length >= MAX_IMAGES_PER_TOUR) {
+			throw new ConvexError(
+				`Gallery is full: a tour can hold at most ${MAX_IMAGES_PER_TOUR} images`,
+			);
 		}
 		// If isPrimary is set, demote any existing primary for this tour.
 		// Use by_tour_primary to fetch only primary images (small set)

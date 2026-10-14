@@ -1,6 +1,8 @@
 // Scheduled notifications: queue reminders + post-tour reviews.
-// The cron in convex/notifications.ts picks rows where sent=false
-// and scheduledFor <= now, dispatches via notification_dispatch.ts.
+// The cron (registered in convex/crons.ts) calls
+// internal.notifications.processPendingNotifications, which picks rows
+// where sent=false and scheduledFor <= now and dispatches via
+// notification_dispatch.ts.
 //
 // Source: backend/notifications/service.py::schedule_booking_reminders
 // (the source defines it but doesn't wire it into booking creation —

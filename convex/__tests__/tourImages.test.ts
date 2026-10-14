@@ -241,4 +241,66 @@ describe("tour images", () => {
 		expect(rows.map((r) => r._id)).toEqual([id3, id1, id2]);
 		expect(rows.map((r) => r.displayOrder)).toEqual([0, 1, 2]);
 	});
+
+	// F812: the gallery cap is enforced at the write — a tour at the cap
+	// rejects further adds instead of accumulating invisible rows past
+	// the read's take(200).
+	it("add: rejects when the tour gallery is at the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ti1";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		const store = async () =>
+			(await t.run(async (ctx) =>
+				(await ctx.storage.store(
+					new Blob(["fake image bytes"]),
+				)) as unknown as string,
+			)) as never;
+
+		// Fill to the cap. Inserting 200 rows one mutation at a time is
+		// slow; patch rows in bulk instead: create 3, then force-count to
+		// the cap minus one via direct inserts in one run.
+		await t.run(async (ctx) => {
+			const now = Date.now();
+			for (let i = 0; i < 199; i++) {
+				const sid = await ctx.storage.store(
+					new Blob([`fake image bytes ${i}`]),
+				);
+				await ctx.db.insert("tourImages", {
+					organizationId: orgId,
+					tourId,
+					storageId: sid,
+					altText: "",
+					isPrimary: false,
+					displayOrder: i,
+					width: 0,
+					height: 0,
+					fileSize: 0,
+					format: "",
+					createdAt: now,
+					updatedAt: now,
+				});
+			}
+		});
+
+		// The 200th add goes through.
+		const lastId = await t.mutation(internal.tourImages.internalAdd, {
+			organizationId: orgId,
+			userId: "user-1",
+			tourId,
+			storageId: (await store()) as never,
+		});
+		await t.run(async (ctx) => {
+			expect(await ctx.db.get(lastId)).not.toBeNull();
+		});
+
+		// The 201st is rejected with the gallery-full error.
+		await expect(
+			t.mutation(internal.tourImages.internalAdd, {
+				organizationId: orgId,
+				userId: "user-1",
+				tourId,
+				storageId: (await store()) as never,
+			}),
+		).rejects.toThrow("Gallery is full");
+	});
 });

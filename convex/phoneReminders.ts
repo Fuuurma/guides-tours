@@ -38,6 +38,11 @@ import {
 
 const MAX_RECIPIENTS = 50;
 
+// F680: how long a claim on a user's reminder send stays live. Must
+// exceed the worst-case SES/Twilio stall (the finding cites >5 min) so
+// an overlapping cron tick inside the stall sees the claim and skips.
+const CLAIM_TTL_MS = 15 * 60 * 1000;
+
 export function formatPhoneReminder(input: {
 	name: string;
 	profileUrl: string;
@@ -99,7 +104,10 @@ export const markUserSent = internalMutation({
 			)
 			.unique();
 		if (existing) {
-			await ctx.db.patch(existing._id, { lastSentAt: now });
+			await ctx.db.patch(existing._id, {
+				lastSentAt: now,
+				claimedAt: undefined,
+			});
 			return existing._id;
 		}
 		return await ctx.db.insert("phoneReminderSends", {
@@ -107,6 +115,70 @@ export const markUserSent = internalMutation({
 			userId: args.userId,
 			lastSentAt: now,
 		});
+	},
+});
+
+// F680: claim a user's reminder send BEFORE dispatching. The claim is
+// the race fix: an overlapping cron tick (Convex does not skip ticks) or
+// a queued action re-scanning during a 5-min SES stall previously
+// re-sent the same reminder because the cooldown stamp only landed after
+// success. claimUserSend is an internalMutation — Convex mutations are
+// serializable, so the read-check-write inside it is atomic against
+// other mutations. Returns whether the caller owns the send.
+export const claimUserSend = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		const existing = await ctx.db
+			.query("phoneReminderSends")
+			.withIndex("by_org_user", (q) =>
+				q.eq("organizationId", args.organizationId).eq("userId", args.userId),
+			)
+			.unique();
+		if (existing) {
+			// Inside the 7d cooldown — the reminder already went out.
+			if (now - existing.lastSentAt < USER_COOLDOWN_MS) {
+				return { claimed: false, reason: "cooldown" as const };
+			}
+			// A live claim from another tick — let it own the send.
+			if (
+				existing.claimedAt !== undefined &&
+				now - existing.claimedAt < CLAIM_TTL_MS
+			) {
+				return { claimed: false, reason: "claimed" as const };
+			}
+			await ctx.db.patch(existing._id, { claimedAt: now });
+			return { claimed: true };
+		}
+		await ctx.db.insert("phoneReminderSends", {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			lastSentAt: 0,
+			claimedAt: now,
+		});
+		return { claimed: true };
+	},
+});
+
+/** Release a dead claim so a retry is never blocked by it. */
+export const clearUserClaim = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db
+			.query("phoneReminderSends")
+			.withIndex("by_org_user", (q) =>
+				q.eq("organizationId", args.organizationId).eq("userId", args.userId),
+			)
+			.unique();
+		if (existing?.claimedAt !== undefined) {
+			await ctx.db.patch(existing._id, { claimedAt: undefined });
+		}
 	},
 });
 
@@ -235,6 +307,10 @@ export const sendForPerson = internalAction({
 	},
 	handler: async (ctx, args) => {
 		if (!args.email.trim()) {
+			await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+			});
 			await ctx.runMutation(internal.phoneReminders.recordLog, {
 				organizationId: args.organizationId,
 				recipient: args.userId,
@@ -275,7 +351,9 @@ export const sendForPerson = internalAction({
 		});
 
 		// Only start the 7d clock after a real delivery — failed/skipped
-		// must remain retryable (manual or next digest).
+		// must remain retryable (manual or next digest). Failed/skipped
+		// also release the F680 claim so the retry isn't blocked by a
+		// dead claim.
 		if (sent.status === "sent") {
 			await ctx.runMutation(internal.phoneReminders.markUserSent, {
 				organizationId: args.organizationId,
@@ -283,6 +361,10 @@ export const sendForPerson = internalAction({
 			});
 			return { skipped: false as const, email: "sent" as const };
 		}
+		await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
+			organizationId: args.organizationId,
+			userId: args.userId,
+		});
 
 		return {
 			skipped: true as const,
@@ -349,6 +431,17 @@ export const runForOrg = internalAction({
 		let sent = 0;
 		let skipped = 0;
 		for (const p of targets) {
+			// F680: claim the send BEFORE dispatching. An overlapping cron
+			// tick re-scanning during a slow SES call now loses the race
+			// here instead of double-sending the email.
+			const claim = await ctx.runMutation(
+				internal.phoneReminders.claimUserSend,
+				{ organizationId: args.organizationId, userId: p.userId },
+			);
+			if (!claim.claimed) {
+				skipped += 1;
+				continue;
+			}
 			const result = await ctx.runAction(
 				internal.phoneReminders.sendForPerson,
 				{

@@ -3,7 +3,7 @@ import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-dialog";
 import { DetailPage, DetailSection } from "@/components/detail-page";
@@ -86,6 +86,18 @@ function AssignmentDetailPage() {
 	);
 	const [editing, setEditing] = useState(false);
 	const [resendPending, setResendPending] = useState(false);
+
+	// F772: the route component is reused across $assignmentId navigations,
+	// so without this reset an open edit form (or an armed destructive
+	// action) can carry over from the previous assignment.
+	// The reset trigger is assignmentId itself, not a value the body reads
+	// — resetting on every entity change is the entire purpose (F772).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: assignmentId is the reset trigger, not a read value
+	useEffect(() => {
+		setEditing(false);
+		setAction(null);
+		setResendPending(false);
+	}, [assignmentId]);
 
 	const staffing = tour
 		? resolveTourStaffing({

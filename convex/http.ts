@@ -259,43 +259,7 @@ http.route({
 		} catch (err) {
 			// Log full error server-side for debugging.
 			logger.error("[public-booking] Error:", err);
-			// Return only safe, user-facing error messages to the
-			// client — internal details could aid attackers.
-			let message = "An error occurred processing your booking";
-			let status = 500;
-			if (err instanceof ConvexError) {
-				const data = err.data as string;
-				if (typeof data === "string") {
-					const lower = data.toLowerCase();
-					if (lower.includes("rate limit")) {
-						message = "Too many booking attempts. Please try again later.";
-						status = 429;
-					} else if (lower.includes("not found")) {
-						message = "Tour, schedule, or organization not found";
-						status = 404;
-					} else if (lower.includes("capacity") || lower.includes("over capacity")) {
-						message = "This tour is fully booked";
-						status = 400;
-					} else if (lower.includes("blacked out") || lower.includes("not available")) {
-						message = "This date is not available for booking";
-						status = 400;
-					} else if (lower.includes("past") || lower.includes("cutoff")) {
-						message = "Cannot book tours in the past or within the cutoff period";
-						status = 400;
-					} else if (lower.includes("invalid email")) {
-						message = "Invalid email address";
-						status = 400;
-					} else if (lower.includes("missing") || lower.includes("invalid")) {
-						message = data;
-						status = 400;
-					}
-				}
-			} else if (err instanceof Error && err.message.includes("Validator error")) {
-				// Convex args validator rejected the input — this is a
-				// client-side error, not a server fault.
-				message = "Invalid request data";
-				status = 400;
-			}
+			const { message, status } = mapBookingError(err);
 			return bookingResponse(
 				JSON.stringify({ error: message }),
 				status,
@@ -305,6 +269,80 @@ http.route({
 		}
 	}),
 });
+
+
+/**
+ * F758 — the public-booking catch-map, extracted so the refusal strings
+ * and their mappings are unit-testable. Every branch returns a SAFE,
+ * authored message: internal details never reach the client. The
+ * public_booking.ts refusals that fall through to the 500 here were the
+ * finding's failure — guests saw a generic server error instead of an
+ * actionable 4xx.
+ */
+export function mapBookingError(err: unknown): {
+	message: string;
+	status: number;
+} {
+	let message = "An error occurred processing your booking";
+	let status = 500;
+	if (err instanceof ConvexError) {
+		const data = err.data as string;
+		if (typeof data === "string") {
+			const lower = data.toLowerCase();
+			if (lower.includes("rate limit")) {
+				message = "Too many booking attempts. Please try again later.";
+				status = 429;
+			} else if (lower.includes("not found")) {
+				message = "Tour, schedule, or organization not found";
+				status = 404;
+			} else if (lower.includes("capacity") || lower.includes("over capacity")) {
+				message = "This tour is fully booked";
+				status = 400;
+			} else if (lower.includes("blacked out") || lower.includes("not available")) {
+				message = "This date is not available for booking";
+				status = 400;
+			} else if (lower.includes("cancelled")) {
+				// F758: matches both "Cannot book a cancelled schedule" and
+				// the twin spelling in tourSchedules.incrementBooked.
+				message = "This schedule has been cancelled";
+				status = 400;
+			} else if (lower.includes("not active")) {
+				message = "This tour is not currently accepting bookings";
+				status = 400;
+			} else if (lower.includes("not enough seats")) {
+				// Authored message already names the slot.
+				message = data;
+				status = 400;
+			} else if (lower.includes("exceeds tour maximum")) {
+				// Authored message already names the maximum.
+				message = data;
+				status = 400;
+			} else if (lower.includes("must be made at least")) {
+				// Authored message already names the cutoff hours.
+				message = data;
+				status = 400;
+			} else if (lower.includes("does not belong")) {
+				message = "This schedule does not belong to the selected tour";
+				status = 400;
+			} else if (lower.includes("past") || lower.includes("cutoff")) {
+				message = "Cannot book tours in the past or within the cutoff period";
+				status = 400;
+			} else if (lower.includes("invalid email")) {
+				message = "Invalid email address";
+				status = 400;
+			} else if (lower.includes("missing") || lower.includes("invalid")) {
+				message = data;
+				status = 400;
+			}
+		}
+	} else if (err instanceof Error && err.message.includes("Validator error")) {
+		// Convex args validator rejected the input — this is a
+		// client-side error, not a server fault.
+		message = "Invalid request data";
+		status = 400;
+	}
+	return { message, status };
+}
 
 export default http;
 

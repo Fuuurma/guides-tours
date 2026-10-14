@@ -9,6 +9,7 @@
 // the next batch.)
 
 import { convexTest } from "convex-test";
+import { internal } from "../_generated/api";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { Id } from "../_generated/dataModel";
@@ -753,5 +754,82 @@ describe("lifecycle verbs — refuse a soft-deleted assignment", () => {
 		});
 		const after = await t.run(async (ctx) => (await ctx.db.get(assignmentId))?.status);
 		expect(after).toBe("cancelled");
+	});
+});
+
+// F460: the archived-assignment purge. Pins the retention contract:
+// rows archived within the window survive, rows archived past the
+// window are hard-deleted, never-archived rows are never touched, and
+// the completed→cancelled chaining leaves nothing behind.
+describe("purgeArchivedAssignments (F460 retention)", () => {
+	it("hard-deletes rows archived past the window and spares the rest", async () => {
+		const t = convexTest(schema, modules);
+		const now = Date.now();
+		const DAY = 24 * 60 * 60 * 1000;
+		await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const oldArchived = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				status: "completed",
+			});
+			await ctx.db.patch(oldArchived, {
+				deletedAt: now - 400 * DAY,
+				updatedAt: now - 400 * DAY,
+			});
+			const freshArchived = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_2",
+				status: "completed",
+			});
+			await ctx.db.patch(freshArchived, {
+				deletedAt: now - 10 * DAY,
+				updatedAt: now - 10 * DAY,
+			});
+			const live = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_3",
+				status: "completed",
+			});
+			await ctx.db.patch(live, { updatedAt: now });
+
+			await ctx.runMutation(internal.notifications.purgeArchivedAssignments, {});
+
+			// Past-window archived row: gone.
+			expect(ctx.db.get(oldArchived)).resolves.toBeNull();
+			// Freshly archived row: survives (its purge date is next year).
+			await ctx.db.get(freshArchived).then((row) => expect(row).not.toBeNull());
+			// Never-archived row: never touched.
+			await ctx.db.get(live).then((row) => expect(row).not.toBeNull());
+		});
+	});
+
+	it("purges the cancelled pass too", async () => {
+		const t = convexTest(schema, modules);
+		const now = Date.now();
+		const DAY = 24 * 60 * 60 * 1000;
+		await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const oldCancelled = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				status: "cancelled",
+			});
+			await ctx.db.patch(oldCancelled, {
+				deletedAt: now - 500 * DAY,
+				updatedAt: now - 500 * DAY,
+			});
+
+			await ctx.runMutation(
+				internal.notifications.purgeArchivedAssignments,
+				{ status: "cancelled" },
+			);
+
+			expect(ctx.db.get(oldCancelled)).resolves.toBeNull();
+		});
 	});
 });
