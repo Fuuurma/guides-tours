@@ -17,6 +17,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { formatDateTime } from "@/lib/format";
 import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -131,7 +132,7 @@ function FilesPage() {
 			header: "Uploaded",
 			render: (f) => (
 				<span className="font-mono text-xs">
-					{new Date(f.createdAt).toLocaleString()}
+					{formatDateTime(f.createdAt)}
 				</span>
 			),
 		},
