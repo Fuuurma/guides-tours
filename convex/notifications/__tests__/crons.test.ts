@@ -19,6 +19,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../../schema";
 import { internal } from "../../_generated/api";
+import crons from "../../crons";
 
 const modules = import.meta.glob("../../**/*.{ts,tsx}");
 
@@ -448,33 +449,31 @@ describe("convex/crons — cleanupOldNotifications", () => {
 });
 
 describe("convex/crons — crons.ts schedule shape", () => {
-	it("declares expected scheduled functions with the right schedules", async () => {
-		// Re-import the file as text and assert the cron schedule calls.
-		// This is a string-level test — cheap regression guard for
-		// schedule shape without needing convex-test to load crons.
-		const { readFileSync } = await import("node:fs");
-		const { resolve } = await import("node:path");
-		const cronsSource = readFileSync(
-			resolve(__dirname, "../../crons.ts"),
-			"utf8",
-		);
-		expect(cronsSource).toMatch(
-			/crons\.interval\(\s*"process_pending_notifications"/,
-		);
-		expect(cronsSource).toMatch(/minutes:\s*5/);
-		expect(cronsSource).toMatch(
-			/crons\.daily\(\s*"cleanup_old_assignments"/,
-		);
-		expect(cronsSource).toMatch(/hourUTC:\s*3/);
-		expect(cronsSource).toMatch(
-			/crons\.daily\(\s*"cleanup_old_notifications"/,
-		);
-		expect(cronsSource).toMatch(/hourUTC:\s*4/);
-		expect(cronsSource).toMatch(/crons\.daily\(\s*"staffing_digest"/);
-		expect(cronsSource).toMatch(/hourUTC:\s*7/);
-		expect(cronsSource).toMatch(
-			/crons\.daily\(\s*"availability_reminders"/,
-		);
-		expect(cronsSource).toMatch(/hourUTC:\s*8/);
+	it("registers each job against the right function on the right schedule", () => {
+		// Reads the registry cronJobs() builds, so a job pointed at the wrong
+		// function, or one hour swapped for another, fails here. The previous
+		// regex scan matched `hourUTC: 3` anywhere in the file.
+		expect(crons.crons).toMatchObject({
+			process_pending_notifications: {
+				name: "notifications:processPendingNotifications",
+				schedule: { type: "interval", minutes: 5 },
+			},
+			cleanup_old_assignments: {
+				name: "notifications:cleanupOldAssignments",
+				schedule: { type: "daily", hourUTC: 3, minuteUTC: 0 },
+			},
+			cleanup_old_notifications: {
+				name: "notifications:cleanupOldNotifications",
+				schedule: { type: "daily", hourUTC: 4, minuteUTC: 0 },
+			},
+			staffing_digest: {
+				name: "staffingDigest:runDaily",
+				schedule: { type: "daily", hourUTC: 7, minuteUTC: 0 },
+			},
+			availability_reminders: {
+				name: "availabilityReminders:runDaily",
+				schedule: { type: "daily", hourUTC: 8, minuteUTC: 0 },
+			},
+		});
 	});
 });

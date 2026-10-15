@@ -5,7 +5,7 @@
 //   - requireEmailVerificationOnInvitation is true in the organization plugin
 //   - sendVerificationEmail callback is defined
 //   - minPasswordLength is at least 8
-//   - isGoogleEnabled query returns a boolean
+//   (isGoogleEnabled env gates live in auth_oauth.test.ts)
 //   - getCurrentUser returns null when not authenticated
 //
 // Note: requireEmailVerification is env-aware — true when SITE_URL is a
@@ -27,13 +27,11 @@ import {
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
-// These tests mutate deployment env vars (SITE_URL, GOOGLE_*). Without
+// These tests mutate deployment env vars (SITE_URL). Without
 // a restore, the last-writer value leaks into later cases and any file
 // sharing the worker — snapshot and restore around each test (F132).
 const ENV_KEYS = [
 	"SITE_URL",
-	"GOOGLE_CLIENT_ID",
-	"GOOGLE_CLIENT_SECRET",
 ] as const;
 let savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string>>;
 beforeEach(() => {
@@ -116,23 +114,6 @@ describe("auth security configuration", () => {
 });
 
 describe("auth queries", () => {
-	it("isGoogleEnabled returns a boolean", async () => {
-		delete process.env.GOOGLE_CLIENT_ID;
-		delete process.env.GOOGLE_CLIENT_SECRET;
-		const t = convexTest(schema, modules);
-
-		const result = await t.query(api.auth.isGoogleEnabled, {});
-		expect(typeof result).toBe("boolean");
-	});
-
-	it("isGoogleEnabled returns true when both env vars are set", async () => {
-		process.env.GOOGLE_CLIENT_ID = "test-id.apps.googleusercontent.com";
-		process.env.GOOGLE_CLIENT_SECRET = "test-secret";
-		const t = convexTest(schema, modules);
-
-		await expect(t.query(api.auth.isGoogleEnabled, {})).resolves.toBe(true);
-	});
-
 	it("getCurrentUser returns null when not authenticated", async () => {
 		const t = convexTest(schema, modules);
 

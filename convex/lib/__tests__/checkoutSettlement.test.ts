@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { decideCheckoutSettlement } from "../checkoutSettlement";
 
@@ -74,44 +73,5 @@ describe("decideCheckoutSettlement (F555)", () => {
 		);
 		expect(completed).not.toBe("mark-succeeded");
 		expect(laterSuccess).toBe("mark-succeeded");
-	});
-});
-
-/**
- * The webhook is an `httpAction`, which convexTest cannot invoke — the
- * existing `payments_stripe_webhook.test.ts` says so and calls the internal
- * mutations directly instead. So the decision table above is executed, but
- * the dispatcher's own branch is not.
- *
- * These are SHAPE checks, not behaviour checks, and the first version of them
- * was worse than useless: asserting that the text `await-async` appears
- * between the decision and the fulfilment stayed green when the arm was
- * neutered to `if (false && settlement === "await-async")`, because the string
- * was still there. So these now pin the control-flow form — an
- * `await-async` guard whose `else` carries the fulfilment. Undoing the fix
- * still has to touch the dispatcher and still fails here, but a determined
- * rewiring would not be caught, and it is not caught.
- */
-describe("webhook wiring (source shape, not executed)", () => {
-	const dispatcher = readFileSync(
-		new URL("../../payments_stripe_actions.ts", import.meta.url),
-		"utf8",
-	);
-
-	it("routes the async success and failure events", () => {
-		expect(dispatcher).toContain("CHECKOUT_SESSION_ASYNC_SUCCEEDED");
-		expect(dispatcher).toContain("CHECKOUT_SESSION_ASYNC_FAILED");
-	});
-
-	it("an unpaid completed session is guarded out of the fulfilment path", () => {
-		// `if (settlement === "await-async") { … } else { applyPaymentSuccess… }`
-		// The `else` is load-bearing: it is what keeps an unsettled session off
-		// the success path, and a neutered condition must fail this.
-		// `[\s\S]*?` rather than `[^}]*` because the log line in between
-		// interpolates `${eventType}`, and a character-class exclusion stops
-		// at the first `}` it meets inside a template literal.
-		expect(dispatcher).toMatch(
-			/if \(settlement === "await-async"\) \{[\s\S]*?\} else \{[\s\S]*?applyPaymentSuccess/,
-		);
 	});
 });

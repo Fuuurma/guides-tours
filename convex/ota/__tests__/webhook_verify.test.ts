@@ -1,5 +1,6 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+	fromHex,
 	verifyWebhookSignature,
 	verifyWebhookSignatureWithTimestamp,
 	checkWebhookTimestamp,
@@ -21,10 +22,6 @@ async function signWithNode(
 }
 
 describe("convex/ota/webhook_verify", () => {
-	beforeEach(() => {
-		// Force-clean any global state
-	});
-
 	describe("verifyWebhookSignature", () => {
 		it("accepts a signature computed with the same secret", async () => {
 			const payload = JSON.stringify({ eventType: "BOOKING_CREATED" });
@@ -59,6 +56,17 @@ describe("convex/ota/webhook_verify", () => {
 			expect(await verifyWebhookSignature(payload, "not-hex-z", "shh")).toBe(
 				false,
 			);
+		});
+
+		it("rejects a signature-length non-hex string (no silent zero-byte coercion)", async () => {
+			// 64 non-hex chars — the length of a real SHA-256 digest, so it
+			// reaches fromHex. parseInt("zz", 16) is NaN and used to coerce
+			// silently to a 0 byte (needs-work 2026-09-10).
+			expect(await verifyWebhookSignature("payload", "zz".repeat(32), "shh")).toBe(
+				false,
+			);
+			expect(() => fromHex("zz")).toThrow("invalid hex character");
+			expect(fromHex("00ff")).toEqual(new Uint8Array([0, 255]));
 		});
 
 		it("accepts Buffer payloads (not just strings)", async () => {
@@ -152,6 +160,15 @@ describe("convex/ota/webhook_verify", () => {
 			expect(checkWebhookTimestamp(edgeOld, NOW).valid).toBe(true);
 			expect(checkWebhookTimestamp(edgeFuture, NOW).valid).toBe(true);
 		});
+
+		it("honours a custom maxAgeMs", () => {
+			const tenSecAgo = String(NOW - 10_000);
+			expect(checkWebhookTimestamp(tenSecAgo, NOW, 60_000).valid).toBe(true);
+			expect(checkWebhookTimestamp(tenSecAgo, NOW, 1_000)).toEqual({
+				valid: false,
+				reason: "too_old",
+			});
+		});
 	});
 
 	describe("verifyWebhookSignatureWithTimestamp", () => {
@@ -188,6 +205,36 @@ describe("convex/ota/webhook_verify", () => {
 				reason: "missing",
 				signatureOk: false,
 			});
+		});
+
+		it("a stale timestamp fails before the signature is checked", async () => {
+			// A captured webhook replayed later still carries a valid HMAC.
+			const sig = await signWithNode(payload, secret);
+			const now = 1_700_000_000_000;
+			const result = await verifyWebhookSignatureWithTimestamp(
+				payload,
+				sig,
+				String(now - WEBHOOK_MAX_AGE_MS - 1),
+				secret,
+				now,
+			);
+			expect(result).toEqual({
+				valid: false,
+				reason: "too_old",
+				signatureOk: false,
+			});
+		});
+
+		it("a fresh timestamp with a bad signature is rejected with no reason", async () => {
+			const result = await verifyWebhookSignatureWithTimestamp(
+				payload,
+				"badsig",
+				String(Date.now()),
+				secret,
+			);
+			expect(result.valid).toBe(false);
+			expect(result.signatureOk).toBe(false);
+			expect(result.reason).toBeUndefined();
 		});
 
 		it("accepts valid signature + fresh timestamp", async () => {

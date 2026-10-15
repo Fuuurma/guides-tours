@@ -786,6 +786,32 @@ describe("convex/payments — input validation (defense in depth)", () => {
 });
 
 describe("convex/payments — upsertSettings validation", () => {
+	it("stores new Stripe secrets encrypted, never as plaintext", async () => {
+		const t = convexTest(schema, modules);
+		const { decrypt } = await import("../lib/crypto");
+		await t.mutation(internal.payments.upsertSettingsInternal, {
+			_organizationId: "org_secret_write",
+			stripeEnabled: true,
+			stripePublishableKey: "pk_test_x",
+			stripeSecretKey: "sk_test_plaintext_value",
+			stripeWebhookSecret: "whsec_plaintext_value",
+			stripeIsSandbox: true,
+			acceptDeposits: false,
+			depositPercentage: 20,
+			defaultCurrency: "USD",
+		});
+		const s = await t.run((ctx) =>
+			ctx.db
+				.query("paymentSettings")
+				.withIndex("by_org", (q) => q.eq("organizationId", "org_secret_write"))
+				.unique(),
+		);
+		expect(s?.stripeSecretKey).not.toContain("sk_test_plaintext_value");
+		expect(s?.stripeWebhookSecret).not.toContain("whsec_plaintext_value");
+		expect(await decrypt(s!.stripeSecretKey)).toBe("sk_test_plaintext_value");
+		expect(await decrypt(s!.stripeWebhookSecret)).toBe("whsec_plaintext_value");
+	});
+
 	it("allows fresh publishable-only settings without ENCRYPTION_KEY", async () => {
 		const originalKey = process.env.ENCRYPTION_KEY;
 		const { _resetKeyForTest } = await import("../lib/crypto");

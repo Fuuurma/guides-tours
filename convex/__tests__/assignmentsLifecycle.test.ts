@@ -9,9 +9,8 @@
 // the next batch.)
 
 import { convexTest } from "convex-test";
-import { internal } from "../_generated/api";
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { api, internal } from "../_generated/api";
+import { describe, expect, it, vi } from "vitest";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { seedAssignment, seedSchedule, seedTour } from "./helpers";
@@ -25,6 +24,46 @@ import {
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
 const ORG = "org_test";
+
+// Auth seam (same vi.mock("../auth") pattern as files_remove_gate.test.ts):
+// requireRole and the default org-member lookup resolve against these lists.
+const { mockState } = vi.hoisted(() => ({
+	mockState: { user: null as { _id: string; name: string; email: string } | null },
+}));
+const MEMBERS: Record<string, Array<{ userId: string; role: string }>> = {
+	org_test: [
+		{ userId: "user_admin", role: "admin" },
+		{ userId: "guide_in", role: "guide" },
+	],
+	org_other: [{ userId: "guide_out", role: "guide" }],
+};
+
+vi.mock("../auth", () => ({
+	authComponent: {
+		getAuthUser: async () => mockState.user,
+		safeGetAuthUser: async () => mockState.user ?? undefined,
+		getAuth: async () => ({
+			auth: {
+				api: {
+					getSession: async () =>
+						mockState.user
+							? { session: { activeOrganizationId: "org_test" }, user: mockState.user }
+							: null,
+					listOrganizations: async () => [{ id: "org_test", name: "Org" }],
+					listMembers: async (args: { query: { organizationId: string } }) => ({
+						members: MEMBERS[args.query.organizationId] ?? [],
+					}),
+				},
+			},
+			headers: new Headers(),
+		}),
+	},
+	createAuth: (() => ({})) as never,
+}));
+
+function signInAsAdmin() {
+	mockState.user = { _id: "user_admin", name: "Admin", email: "a@t.dev" };
+}
 
 type TClient = ReturnType<typeof convexTest>;
 
@@ -603,61 +642,82 @@ describe("assertGuideAssignable — guide membership policy", () => {
 	});
 });
 
-describe("assignments.update — the public boundary enforces guide membership", () => {
-	// Structural, not behavioural: the public wrapper is the only client-reachable
-	// entry, and it calls requireRole, which needs a Better Auth session that
-	// convex-test cannot provide (the same reason the policy above is tested
-	// through the injectable lookup). So assert the wiring at the source level —
-	// the check present, scoped to the caller's own org, and ahead of the
-	// delegation to internalUpdate — rather than pretending to a runtime test
-	// that would pass for the wrong reason.
-	const src = readFileSync(
-		new URL("../assignments.ts", import.meta.url),
-		"utf8",
-	);
-
-	function updateHandler(): string {
-		const start = src.indexOf("export const update = mutation(");
-		expect(start, "public update mutation not found").toBeGreaterThan(-1);
-		const end = src.indexOf("export const internalUpdate", start);
-		expect(end, "internalUpdate not found after update").toBeGreaterThan(start);
-		return src.slice(start, end);
+describe("guide membership at the public boundary (GT-AUDIT-02 / hub F594)", () => {
+	// Real calls through the auth seam (vi.mock("../auth") above): the caller
+	// is an admin of ORG; guide_in guides for ORG, guide_out for another org.
+	// These replace source-text pins that read assignments.ts and searched for
+	// the guard's call string.
+	async function seeded(guideId = "guide_1") {
+		const t = convexTest(schema, modules);
+		signInAsAdmin();
+		const ids = await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const assignmentId = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId,
+				status: "scheduled",
+			});
+			return { tourId, assignmentId };
+		});
+		const guideOf = async () =>
+			(await t.run((ctx) => ctx.db.get(ids.assignmentId)))?.guideId;
+		return { t, ...ids, guideOf };
 	}
 
-	it("calls assertGuideAssignable before delegating to internalUpdate", () => {
-		const handler = updateHandler();
-		const guard = handler.indexOf("assertGuideAssignable");
-		const delegate = handler.indexOf("internalRefs.assignments.internalUpdate");
-		expect(guard, "update does not enforce guide membership").toBeGreaterThan(-1);
-		expect(guard, "check must precede the delegation").toBeLessThan(delegate);
+	it("update refuses a guide from another organization and writes nothing", async () => {
+		const { t, assignmentId, guideOf } = await seeded();
+		await expect(
+			t.mutation(api.assignments.update, { assignmentId, guideId: "guide_out" }),
+		).rejects.toThrow("Guide is not a member of this organization");
+		expect(await guideOf()).toBe("guide_1");
 	});
 
-	it("scopes the check to the caller's organization, not a caller-supplied one", () => {
-		expect(updateHandler()).toContain(
-			"assertGuideAssignable(ctx, member.organizationId, args.guideId)",
+	it("update reassigns to a guide of the caller's own organization", async () => {
+		const { t, assignmentId, guideOf } = await seeded();
+		await t.mutation(api.assignments.update, { assignmentId, guideId: "guide_in" });
+		expect(await guideOf()).toBe("guide_in");
+	});
+
+	it("update without a guideId does not re-check the stored guide", async () => {
+		// The stored guide predates the check and is no longer a member; an
+		// unrelated edit must not start failing because of it.
+		const { t, assignmentId, guideOf } = await seeded("guide_legacy");
+		await t.mutation(api.assignments.update, { assignmentId, clearVehicle: true });
+		expect(await guideOf()).toBe("guide_legacy");
+	});
+
+	it("internalUpdate stays unguarded for session-less cron/ops callers", async () => {
+		// Moving the check into the lifecycle mutation broke cron/ops paths
+		// that run with no session; it belongs on the public wrapper only.
+		const { t, assignmentId, guideOf } = await seeded();
+		mockState.user = null;
+		await t.mutation(internal.assignments.internalUpdate, {
+			assignmentId,
+			guideId: "guide_out",
+			organizationId: ORG,
+			userId: "system",
+		});
+		expect(await guideOf()).toBe("guide_out");
+	});
+
+	it("create refuses a guide from another organization", async () => {
+		const { t, tourId } = await seeded();
+		await expect(
+			t.mutation(api.assignments.create, {
+				tourId,
+				guideId: "guide_out",
+				date: "2026-07-16",
+				startTime: "09:00",
+			}),
+		).rejects.toThrow("Guide is not a member of this organization");
+		const created = await t.run((ctx) =>
+			ctx.db
+				.query("assignments")
+				.filter((q) => q.eq(q.field("guideId"), "guide_out"))
+				.collect(),
 		);
-	});
-
-	it("only checks when a guideId is actually supplied", () => {
-		expect(updateHandler()).toContain("if (args.guideId !== undefined)");
-	});
-
-	it("keeps internalUpdate unguarded for trusted cron/ops callers", () => {
-		// internalUpdate is reachable from cron/ops with no session, so the check
-		// must NOT be duplicated into the lifecycle mutation — that is what made
-		// two unrelated existing tests fail before the check was moved here.
-		const start = src.indexOf("export const internalUpdate");
-		const body = src.slice(start, src.indexOf("export const", start + 10));
-		expect(body).not.toContain("assertGuideAssignable");
-	});
-
-	it("create still refuses a foreign guideId, via the same shared helper", () => {
-		expect(src).toContain(
-			"await assertGuideAssignable(ctx, member.organizationId, args.guideId);",
-		);
-		// one definition, not three
-		const defs = src.match(/assertGuideAssignable\(/g) ?? [];
-		expect(defs.length).toBeLessThanOrEqual(4); // import + update + create (+ comments)
+		expect(created).toEqual([]);
 	});
 });
 
@@ -766,6 +826,10 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 		const t = convexTest(schema, modules);
 		const now = Date.now();
 		const DAY = 24 * 60 * 60 * 1000;
+		// The purge scans by departure date (by_status_date < cutoff) before
+		// checking deletedAt, so every row here departs well before the
+		// window — otherwise none is scanned and "spared" proves nothing.
+		const oldDate = new Date(now - 500 * DAY).toISOString().slice(0, 10);
 		await t.run(async (ctx) => {
 			const tourId = await seedTour(ctx, { orgId: ORG });
 			const oldArchived = await seedAssignment(ctx, {
@@ -773,6 +837,7 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_1",
 				status: "completed",
+				date: oldDate,
 			});
 			await ctx.db.patch(oldArchived, {
 				deletedAt: now - 400 * DAY,
@@ -783,6 +848,7 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_2",
 				status: "completed",
+				date: oldDate,
 			});
 			await ctx.db.patch(freshArchived, {
 				deletedAt: now - 10 * DAY,
@@ -793,13 +859,15 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_3",
 				status: "completed",
+				date: oldDate,
 			});
 			await ctx.db.patch(live, { updatedAt: now });
 
 			await ctx.runMutation(internal.notifications.purgeArchivedAssignments, {});
 
-			// Past-window archived row: gone.
-			expect(ctx.db.get(oldArchived)).resolves.toBeNull();
+			// Past-window archived row: gone. (Awaited: the un-awaited form
+			// rejected after the test had already passed.)
+			await expect(ctx.db.get(oldArchived)).resolves.toBeNull();
 			// Freshly archived row: survives (its purge date is next year).
 			await ctx.db.get(freshArchived).then((row) => expect(row).not.toBeNull());
 			// Never-archived row: never touched.
@@ -818,6 +886,7 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_1",
 				status: "cancelled",
+				date: new Date(now - 600 * DAY).toISOString().slice(0, 10),
 			});
 			await ctx.db.patch(oldCancelled, {
 				deletedAt: now - 500 * DAY,
@@ -829,7 +898,7 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				{ status: "cancelled" },
 			);
 
-			expect(ctx.db.get(oldCancelled)).resolves.toBeNull();
+			await expect(ctx.db.get(oldCancelled)).resolves.toBeNull();
 		});
 	});
 });

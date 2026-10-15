@@ -33,9 +33,10 @@ describe("declared RBAC matrix (booking resource)", () => {
     }
   })
 
-  it("every declared role is accounted for", () => {
-    for (const role of ALL_ROLES) {
-      expect(roles[role]).toBeDefined()
-    }
+  it("ALL_ROLES lists exactly the roles the matrix defines", () => {
+    // ALL_ROLES is typed RoleName[], so tsc already proves every entry
+    // exists in `roles`. The drift tsc misses is the other direction: a
+    // role added to `roles` but left out of the runtime list.
+    expect([...ALL_ROLES].sort()).toEqual(Object.keys(roles).sort())
   })
 })

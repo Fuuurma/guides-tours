@@ -1,5 +1,15 @@
+// Unit tests for convex/lib/staffingGaps — the ops staffing-digest
+// core (F19 coverage gap: zero direct tests). Pure functions, no
+// convex-test harness needed.
+//
+// Pins: cancelled/deleted filtering on both sides, ready slots
+// producing no rows, guide/vehicle/driver gap enumeration, orphan
+// assignments (no schedule) surfacing with capacityBooked 0, date+
+// startTime sort, the ymd helpers' UTC rollover, and the digest
+// formatter's OK / gaps / truncation / missing-phone variants.
+
 import { describe, expect, it } from "vitest";
-import type { Id } from "../../_generated/dataModel";
+import type { GapAssignment, GapSchedule, GapTour } from "../staffingGaps";
 import {
 	addDaysYmd,
 	computeStaffingGaps,
@@ -7,217 +17,243 @@ import {
 	utcYmd,
 } from "../staffingGaps";
 
-describe("utcYmd / addDaysYmd", () => {
-	it("adds days across month boundaries", () => {
-		expect(addDaysYmd("2026-01-31", 1)).toBe("2026-02-01");
-		expect(addDaysYmd("2026-07-19", 0)).toBe("2026-07-19");
+function tour(overrides: Partial<GapTour> = {}): GapTour {
+	return {
+		_id: "tours_t1" as GapTour["_id"],
+		name: "Old Town Walk",
+		tourType: "walking",
+		requiredGuides: 1,
+		...overrides,
+	};
+}
+
+function schedule(overrides: Partial<GapSchedule> = {}): GapSchedule {
+	return {
+		_id: "tourSchedules_s1" as GapSchedule["_id"],
+		tourId: "tours_t1" as GapSchedule["tourId"],
+		date: "2026-12-20",
+		startTime: "09:00",
+		endTime: "11:00",
+		status: "available",
+		capacityBooked: 6,
+		...overrides,
+	};
+}
+
+function assignment(overrides: Partial<GapAssignment> = {}): GapAssignment {
+	return {
+		_id: "assignments_a1" as GapAssignment["_id"],
+		tourId: "tours_t1" as GapAssignment["tourId"],
+		date: "2026-12-20",
+		startTime: "09:00",
+		status: "scheduled",
+		guideId: "guide_1",
+		...overrides,
+	};
+}
+
+const toursById = new Map([["tours_t1", tour()]]);
+
+describe("staffingGaps.computeStaffingGaps", () => {
+	it("a fully staffed slot produces no rows", () => {
+		const rows = computeStaffingGaps({
+			schedules: [schedule()],
+			assignments: [assignment()],
+			toursById,
+		});
+		expect(rows).toEqual([]);
 	});
 
-	it("formats a fixed UTC date", () => {
-		expect(utcYmd(new Date(Date.UTC(2026, 6, 19)))).toBe("2026-07-19");
+	it("an unstaffed schedule surfaces a guides gap", () => {
+		const rows = computeStaffingGaps({
+			schedules: [schedule()],
+			assignments: [],
+			toursById,
+		});
+		expect(rows.length).toBe(1);
+		const row = rows[0]!;
+		expect(row.gaps).toEqual(["guides"]);
+		expect(row.guidesNeeded).toBe(1);
+		expect(row.guideCount).toBe(0);
+		expect(row.requiredGuides).toBe(1);
+		expect(row.capacityBooked).toBe(6);
+		expect(row.scheduleId).toBe("tourSchedules_s1");
 	});
-});
 
-describe("computeStaffingGaps", () => {
-	const tourId = "tour_walk" as Id<"tours">;
-	const carTourId = "tour_car" as Id<"tours">;
+	it("cancelled and soft-deleted assignments do not staff a slot", () => {
+		const rows = computeStaffingGaps({
+			schedules: [schedule()],
+			assignments: [
+				assignment({ status: "cancelled" }),
+				assignment({ _id: "assignments_a2" as never, deletedAt: 123 }),
+			],
+			toursById,
+		});
+		expect(rows.length).toBe(1);
+		expect(rows[0]!.guideCount).toBe(0);
+	});
 
-	it("flags schedules with no guides", () => {
-		const gaps = computeStaffingGaps({
+	it("cancelled schedules are skipped entirely", () => {
+		const rows = computeStaffingGaps({
+			schedules: [schedule({ status: "cancelled" })],
+			assignments: [],
+			toursById,
+		});
+		expect(rows).toEqual([]);
+	});
+
+	it("vehicle and driver requirements enumerate separately", () => {
+		const rows = computeStaffingGaps({
+			schedules: [schedule()],
+			assignments: [assignment()],
+			toursById: new Map([
+				[
+					"tours_t1",
+					tour({ requiresVehicle: true, requiresDriver: true }),
+				],
+			]),
+		});
+		expect(rows.length).toBe(1);
+		expect(rows[0]!.gaps).toEqual(["vehicle", "driver"]);
+		expect(rows[0]!.guidesNeeded).toBe(0);
+	});
+
+	it("a car tour infers its vehicle and driver needs from tourType", () => {
+		const rows = computeStaffingGaps({
+			schedules: [schedule()],
+			assignments: [assignment()],
+			toursById: new Map([["tours_t1", tour({ tourType: "car" })]]),
+		});
+		expect(rows.length).toBe(1);
+		expect(rows[0]!.gaps).toEqual(["vehicle", "driver"]);
+	});
+
+	it("orphan assignments with no schedule surface with capacityBooked 0", () => {
+		const rows = computeStaffingGaps({
+			schedules: [],
+			assignments: [
+				assignment({ date: "2026-12-21", startTime: "10:00" }),
+			],
+			toursById: new Map([["tours_t1", tour({ requiredGuides: 2 })]]),
+		});
+		expect(rows.length).toBe(1);
+		expect(rows[0]!.date).toBe("2026-12-21");
+		expect(rows[0]!.capacityBooked).toBe(0);
+		expect(rows[0]!.guidesNeeded).toBe(1);
+		expect(rows[0]!.endTime).toBeUndefined();
+	});
+
+	it("rows sort by date then startTime", () => {
+		const rows = computeStaffingGaps({
 			schedules: [
-				{
-					_id: "sch1" as Id<"tourSchedules">,
-					tourId,
-					date: "2026-08-01",
+				schedule({ date: "2026-12-21", startTime: "14:00" }),
+				schedule({
+					_id: "tourSchedules_s2" as never,
+					date: "2026-12-20",
+					startTime: "17:00",
+				}),
+				schedule({
+					_id: "tourSchedules_s3" as never,
+					date: "2026-12-20",
 					startTime: "09:00",
-					endTime: "11:00",
-					status: "available",
-					capacityBooked: 2,
-				},
+				}),
 			],
 			assignments: [],
-			toursById: new Map([
-				[
-					String(tourId),
-					{
-						_id: tourId,
-						name: "Walk",
-						tourType: "walking",
-						requiredGuides: 1,
-					},
-				],
-			]),
+			toursById,
 		});
-		expect(gaps).toHaveLength(1);
-		expect(gaps[0]?.gaps).toEqual(["guides"]);
-	});
-
-	it("flags car tours missing vehicle and driver", () => {
-		const gaps = computeStaffingGaps({
-			schedules: [
-				{
-					_id: "sch2" as Id<"tourSchedules">,
-					tourId: carTourId,
-					date: "2026-08-02",
-					startTime: "10:00",
-					endTime: "12:00",
-					status: "available",
-					capacityBooked: 0,
-				},
-			],
-			assignments: [
-				{
-					_id: "a1" as Id<"assignments">,
-					tourId: carTourId,
-					date: "2026-08-02",
-					startTime: "10:00",
-					status: "scheduled",
-					guideId: "g1",
-				},
-			],
-			toursById: new Map([
-				[
-					String(carTourId),
-					{
-						_id: carTourId,
-						name: "City Car",
-						tourType: "car",
-						requiredGuides: 1,
-					},
-				],
-			]),
-		});
-		expect(gaps).toHaveLength(1);
-		expect(gaps[0]?.gaps).toEqual(["vehicle", "driver"]);
-	});
-
-	it("returns empty when fully staffed", () => {
-		const gaps = computeStaffingGaps({
-			schedules: [
-				{
-					_id: "sch3" as Id<"tourSchedules">,
-					tourId,
-					date: "2026-08-03",
-					startTime: "09:00",
-					endTime: "11:00",
-					status: "available",
-					capacityBooked: 1,
-				},
-			],
-			assignments: [
-				{
-					_id: "a2" as Id<"assignments">,
-					tourId,
-					date: "2026-08-03",
-					startTime: "09:00",
-					status: "scheduled",
-					guideId: "g1",
-				},
-			],
-			toursById: new Map([
-				[
-					String(tourId),
-					{
-						_id: tourId,
-						name: "Walk",
-						tourType: "walking",
-						requiredGuides: 1,
-					},
-				],
-			]),
-		});
-		expect(gaps).toHaveLength(0);
+		expect(rows.map((r) => `${r.date} ${r.startTime}`)).toEqual([
+			"2026-12-20 09:00",
+			"2026-12-20 17:00",
+			"2026-12-21 14:00",
+		]);
 	});
 });
 
-describe("formatStaffingDigest", () => {
-	it("reports OK when no gaps", () => {
-		const msg = formatStaffingDigest({
-			dateFrom: "2026-08-01",
-			dateTo: "2026-08-03",
-			gaps: [],
-		});
-		expect(msg.subject).toContain("Staffing OK");
-		expect(msg.bodyText).toContain("fully staffed");
+describe("staffingGaps date helpers", () => {
+	it("utcYmd renders UTC calendar day", () => {
+		expect(utcYmd(new Date(Date.UTC(2026, 8, 22)))).toBe("2026-09-22");
 	});
 
-	it("lists missing phones in the digest body", () => {
-		const msg = formatStaffingDigest({
-			dateFrom: "2026-08-01",
-			dateTo: "2026-08-03",
+	it("addDaysYmd rolls over month and year boundaries", () => {
+		expect(addDaysYmd("2026-12-31", 1)).toBe("2027-01-01");
+		expect(addDaysYmd("2026-09-30", 1)).toBe("2026-10-01");
+		expect(addDaysYmd("2026-10-01", -1)).toBe("2026-09-30");
+	});
+});
+
+describe("staffingGaps.formatStaffingDigest", () => {
+	const gap = computeStaffingGaps({
+		schedules: [schedule()],
+		assignments: [],
+		toursById,
+	})[0]!;
+
+	it("zero gaps renders the all-staffed variant", () => {
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-21",
 			gaps: [],
+		});
+		expect(out.subject).toBe("Staffing OK · 2026-12-20–2026-12-21");
+		expect(out.bodyText).toContain("fully staffed");
+	});
+
+	it("gaps render bullet lines with needs + guide counts", () => {
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-20",
+			gaps: [gap],
+		});
+		expect(out.subject).toBe("1 staffing gap · 2026-12-20–2026-12-20");
+		expect(out.bodyText).toContain(
+			"• 2026-12-20 09:00 Old Town Walk — needs guides (guides 0/1)",
+		);
+		expect(out.smsBody).toContain("1 staffing gap");
+	});
+
+	it("truncates past maxLines and links the staffing page", () => {
+		const many = Array.from({ length: 14 }, (_, i) => ({
+			...gap,
+			key: `k${i}`,
+		}));
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-21",
+			gaps: many,
+			maxLines: 3,
+			siteUrl: "https://app.example.com/",
+		});
+		expect(out.bodyText).toContain("…and 11 more.");
+		expect(out.bodyText).toContain(
+			"See all: https://app.example.com/dashboard/staffing?from=2026-12-20&to=2026-12-21",
+		);
+	});
+
+	it("links each gap to a pre-filled assignment form", () => {
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-20",
+			gaps: [gap],
 			siteUrl: "https://app.example.com",
+		});
+		expect(out.bodyText).toContain(
+			"https://app.example.com/dashboard/assignments/new?date=2026-12-20&scheduleId=tourSchedules_s1",
+		);
+		expect(out.smsBody).toContain("/dashboard/staffing?");
+	});
+
+	it("lists staff missing phones", () => {
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-20",
+			gaps: [gap],
 			missingPhones: [
-				{ name: "Alex", roles: ["guide"], assignmentCount: 2 },
-				{ name: "Sam", roles: ["driver"], assignmentCount: 1 },
+				{ name: "Blas", roles: ["guide"], assignmentCount: 2 },
 			],
 		});
-		expect(msg.bodyText).toContain("missing phone");
-		expect(msg.bodyText).toContain("Alex");
-		expect(msg.bodyText).toContain("Sam");
-		expect(msg.bodyText).toContain("/dashboard/staffing?");
-	});
-
-	it("includes deep links when siteUrl is set", () => {
-		const msg = formatStaffingDigest({
-			dateFrom: "2026-08-01",
-			dateTo: "2026-08-03",
-			siteUrl: "https://app.example.com",
-			gaps: [
-				{
-					key: "k",
-					tourId: "t" as Id<"tours">,
-					tourName: "Walk",
-					date: "2026-08-01",
-					startTime: "09:00",
-					scheduleId: "sch1" as Id<"tourSchedules">,
-					capacityBooked: 0,
-					guideCount: 0,
-					requiredGuides: 1,
-					guidesNeeded: 1,
-					requiresVehicle: false,
-					requiresDriver: false,
-					hasVehicle: false,
-					hasDriver: false,
-					gaps: ["guides"],
-					assignmentIds: [],
-				},
-			],
-		});
-		expect(msg.bodyText).toContain(
-			"https://app.example.com/dashboard/staffing?from=2026-08-01&to=2026-08-03",
+		expect(out.bodyText).toContain(
+			"1 assigned staff missing phone (no SMS):",
 		);
-		expect(msg.bodyText).toContain(
-			"https://app.example.com/dashboard/assignments/new?date=2026-08-01&scheduleId=sch1",
-		);
-		expect(msg.smsBody).toContain("/dashboard/staffing?");
-	});
-
-	it("summarizes gaps for SMS", () => {
-		const msg = formatStaffingDigest({
-			dateFrom: "2026-08-01",
-			dateTo: "2026-08-03",
-			gaps: [
-				{
-					key: "k",
-					tourId: "t" as Id<"tours">,
-					tourName: "Walk",
-					date: "2026-08-01",
-					startTime: "09:00",
-					capacityBooked: 0,
-					guideCount: 0,
-					requiredGuides: 1,
-					guidesNeeded: 1,
-					requiresVehicle: false,
-					requiresDriver: false,
-					hasVehicle: false,
-					hasDriver: false,
-					gaps: ["guides"],
-					assignmentIds: [],
-				},
-			],
-		});
-		expect(msg.subject).toContain("1 staffing gap");
-		expect(msg.smsBody).toContain("Walk");
+		expect(out.bodyText).toContain("• Blas (guide, 2 assignments)");
 	});
 });

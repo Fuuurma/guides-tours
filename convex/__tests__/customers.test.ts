@@ -6,7 +6,7 @@
 // fake Better Auth identities (Phase 4 mocking is its own beast).
 
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
@@ -15,9 +15,50 @@ import {
 	paginateCustomerRows,
 	scanCustomers,
 } from "../customers";
+import { api } from "../_generated/api";
 import schema from "../schema";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
+
+// Auth seam for the update() tests: same vi.mock("../auth") pattern as
+// files_remove_gate.test.ts, so requireRole resolves a controlled member.
+const ORG = "org_customers_update";
+const { mockState } = vi.hoisted(() => ({
+	mockState: {
+		user: null as { _id: string; name: string; email: string } | null,
+		role: "admin",
+	},
+}));
+
+vi.mock("../auth", () => ({
+	authComponent: {
+		getAuthUser: async () => mockState.user,
+		safeGetAuthUser: async () => mockState.user ?? undefined,
+		getAuth: async () => ({
+			auth: {
+				api: {
+					getSession: async () =>
+						mockState.user
+							? { session: { activeOrganizationId: ORG }, user: mockState.user }
+							: null,
+					listOrganizations: async () => [{ id: ORG, name: "Org" }],
+					listMembers: async () => ({
+						members: mockState.user
+							? [{ userId: mockState.user._id, role: mockState.role }]
+							: [],
+					}),
+				},
+			},
+			headers: new Headers(),
+		}),
+	},
+	createAuth: (() => ({})) as never,
+}));
+
+function signInAs(role: string) {
+	mockState.user = { _id: "user_customers", name: "Admin", email: "a@t.dev" };
+	mockState.role = role;
+}
 
 type TestCtx = GenericMutationCtx<DataModel> & {
 	storage: { getUrl: (id: string) => Promise<string | null> };
@@ -72,55 +113,6 @@ async function seedCustomer(
 		updatedAt: 0,
 	});
 }
-
-describe("convex/customers — schema invariants", () => {
-	it("allows inserting a customer with the minimum required fields", async () => {
-		const t = convexTest(schema, modules);
-		const id = await t.run(async (ctx) => {
-			return await seedCustomer(ctx as unknown as TestCtx, "org_a");
-		});
-		const row = await t.run(async (ctx) => {
-			return await ctx.db.get(id);
-		});
-		expect(row).not.toBeNull();
-		expect(row?.email).toBe("alice@example.com");
-		expect(row?.vipStatus).toBe(false);
-		expect(row?.totalRevenueCents).toBe(0n);
-	});
-
-	it("supports totalRevenueCents as a bigint (cents-only)", async () => {
-		const t = convexTest(schema, modules);
-		const id = await t.run(async (ctx) => {
-			return await seedCustomer(ctx as unknown as TestCtx, "org_a", {
-				totalRevenueCents: 123456n,
-			});
-		});
-		const row = await t.run(async (ctx) => ctx.db.get(id));
-		expect(row?.totalRevenueCents).toBe(123456n);
-	});
-});
-
-describe("convex/customers — ALLOWED_UPDATE_FIELDS contract", () => {
-	it("ALLOWED_UPDATE_FIELDS does not include email", () => {
-		// Email has a unique-per-org constraint, so it's a separate code
-		// path. Make sure nobody adds it to the whitelist by accident.
-		const allowed = new Set([
-			"name",
-			"phone",
-			"preferredLanguage",
-			"notes",
-			"tags",
-			"source",
-			"sourceDetails",
-			"preferredGuideId",
-			"specialRequirements",
-			"vipStatus",
-			"emailConsent",
-			"smsConsent",
-		]);
-		expect(allowed.has("email")).toBe(false);
-	});
-});
 
 describe("convex/customers — list pagination behavior (unit-level)", () => {
 	it("filters by vipOnly when index lookups would match", async () => {
@@ -365,39 +357,69 @@ describe("convex/customers — paginateCustomerRows", () => {
 	});
 });
 
-describe("convex/customers — consent date transitions (F365)", () => {
-	it("only re-stamps consentDate on a false→true transition", async () => {
+describe("convex/customers.update — consent dates and the email path", () => {
+	// Drives the real public mutation through the auth seam. The previous
+	// F365 test re-implemented the consent rule inline and asserted its own
+	// copy, so it stayed green when update() re-stamped every save.
+	async function seed(overrides: Parameters<typeof seedCustomer>[2] = {}) {
 		const t = convexTest(schema, modules);
-		const customerId = await t.run(async (ctx) => {
-			const c = ctx as unknown as TestCtx;
-			return await seedCustomer(c, "org_consent", {
-				name: "C",
-				email: "c@x.com",
-				emailConsent: true,
-				emailConsentDate: 1_000,
-				smsConsent: true,
-				smsConsentDate: 2_000,
-			});
+		signInAs("admin");
+		const customerId = await t.run((ctx) =>
+			seedCustomer(ctx as unknown as TestCtx, ORG, overrides),
+		);
+		return { t, customerId };
+	}
+
+	it("re-sending consent=true keeps the original consent dates (F365)", async () => {
+		const { t, customerId } = await seed({
+			emailConsent: true,
+			emailConsentDate: 1_000,
+			smsConsent: true,
+			smsConsentDate: 2_000,
 		});
-		// Simulate the update() consent-date rule: re-sending `true`
-		// must not overwrite the original timestamp.
-		const after = await t.run(async (ctx) => {
-			const existing = (await ctx.db.get(customerId))!;
-			const patch: Record<string, unknown> = {
-				emailConsent: true,
-				smsConsent: true,
-			};
-			if (patch.emailConsent === true && !existing.emailConsent) {
-				patch.emailConsentDate = 9_999;
-			}
-			if (patch.smsConsent === true && !existing.smsConsent) {
-				patch.smsConsentDate = 9_999;
-			}
-			await ctx.db.patch(customerId, patch);
-			return (await ctx.db.get(customerId))!;
+		await t.mutation(api.customers.update, {
+			customerId,
+			name: "Renamed",
+			emailConsent: true,
+			smsConsent: true,
 		});
-		expect(after.emailConsentDate).toBe(1_000);
-		expect(after.smsConsentDate).toBe(2_000);
+		const row = await t.run((ctx) => ctx.db.get(customerId));
+		expect(row?.name).toBe("Renamed");
+		expect(row?.emailConsentDate).toBe(1_000);
+		expect(row?.smsConsentDate).toBe(2_000);
+	});
+
+	it("stamps a consent date on a false→true transition and clears it on revoke", async () => {
+		const { t, customerId } = await seed({
+			smsConsent: false,
+			emailConsent: true,
+			emailConsentDate: 1_000,
+		});
+		await t.mutation(api.customers.update, {
+			customerId,
+			smsConsent: true,
+			emailConsent: false,
+		});
+		const row = await t.run((ctx) => ctx.db.get(customerId));
+		expect(row?.smsConsentDate).toBeGreaterThan(2_000);
+		expect(row?.emailConsentDate).toBeUndefined();
+	});
+
+	it("routes email through normalization and the per-org uniqueness check", async () => {
+		const { t, customerId } = await seed({ email: "alice@example.com" });
+		await t.run((ctx) =>
+			seedCustomer(ctx as unknown as TestCtx, ORG, { email: "taken@example.com" }),
+		);
+		await t.mutation(api.customers.update, {
+			customerId,
+			email: "  Alice.New@Example.COM ",
+		});
+		expect((await t.run((ctx) => ctx.db.get(customerId)))?.email).toBe(
+			"alice.new@example.com",
+		);
+		await expect(
+			t.mutation(api.customers.update, { customerId, email: "TAKEN@example.com" }),
+		).rejects.toThrow(/already in use/);
 	});
 });
 

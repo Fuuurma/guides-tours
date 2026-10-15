@@ -82,6 +82,11 @@ describe("convex/lib/crypto", () => {
 
 		it("throws on malformed ciphertext", async () => {
 			await expect(decrypt("not-a-valid-format")).rejects.toThrow(/format/);
+			await expect(decrypt("two:parts")).rejects.toThrow(/format/);
+		});
+
+		it("throws on non-hex iv/body instead of decoding garbage", async () => {
+			await expect(decrypt("zz:not-hex:not-hex")).rejects.toThrow();
 		});
 	});
 
