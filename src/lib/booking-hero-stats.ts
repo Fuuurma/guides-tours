@@ -4,6 +4,8 @@ export type BookingHeroTour = {
 	maxGuests: number;
 	currency: string;
 	basePriceCents: bigint | number | undefined;
+	/** Operator cover photo from the payload; null when the tour has none. */
+	primaryImageUrl: string | null;
 };
 
 export type BookingHeroStats = {
