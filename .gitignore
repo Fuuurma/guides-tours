@@ -18,6 +18,8 @@ playwright-report
 playwright/.cache
 # IDE / orchestrator state — not part of the project
 .commandcode/
+# Impeccable critique dumps — review artifacts, never committed
+.impeccable/
 tsconfig.tsbuildinfo
 .codex/
 .cursor/
