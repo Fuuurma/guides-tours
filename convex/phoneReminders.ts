@@ -321,50 +321,72 @@ export const sendForPerson = internalAction({
 			return { skipped: true as const, reason: "no_email" as const };
 		}
 
-		const profileUrl = dashboardUrl(`/dashboard/guides/${args.userId}`);
-		const { subject, bodyText } = formatPhoneReminder({
-			name: args.name,
-			profileUrl,
-			roles: args.roles,
-			assignmentCount: args.assignmentCount,
-			dateFrom: args.dateFrom,
-			dateTo: args.dateTo,
-		});
+		let sent: Awaited<ReturnType<typeof sendTemplatedEmail>>;
+		try {
+			const profileUrl = dashboardUrl(`/dashboard/guides/${args.userId}`);
+			const { subject, bodyText } = formatPhoneReminder({
+				name: args.name,
+				profileUrl,
+				roles: args.roles,
+				assignmentCount: args.assignmentCount,
+				dateFrom: args.dateFrom,
+				dateTo: args.dateTo,
+			});
 
-		const sent = await sendTemplatedEmail({
-			to: args.email,
-			subject,
-			bodyText,
-			from: args.emailFromEmail,
-		});
-		await ctx.runMutation(internal.phoneReminders.recordLog, {
-			organizationId: args.organizationId,
-			recipient: args.email,
-			status: sent.status === "sent" ? "sent" : sent.status,
-			userId: args.userId,
-			errorMessage:
-				sent.status === "failed"
-					? sent.error
-					: sent.status === "skipped"
-						? sent.reason
-						: undefined,
-		});
+			// The email helper returns transport errors as results; a thrown
+			// error here happens before a request is sent, so release the claim
+			// for an immediate retry.
+			sent = await sendTemplatedEmail({
+				to: args.email,
+				subject,
+				bodyText,
+				from: args.emailFromEmail,
+			});
+		} catch (error) {
+			await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+			});
+			throw error;
+		}
 
-		// Only start the 7d clock after a real delivery — failed/skipped
-		// must remain retryable (manual or next digest). Failed/skipped
-		// also release the F680 claim so the retry isn't blocked by a
-		// dead claim.
+		// Persist delivery state before the best-effort log write. Failed or
+		// skipped sends release the claim; a real delivery starts the 7d clock.
 		if (sent.status === "sent") {
 			await ctx.runMutation(internal.phoneReminders.markUserSent, {
 				organizationId: args.organizationId,
 				userId: args.userId,
 			});
+		} else {
+			await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+			});
+		}
+
+		try {
+			await ctx.runMutation(internal.phoneReminders.recordLog, {
+				organizationId: args.organizationId,
+				recipient: args.email,
+				status: sent.status === "sent" ? "sent" : sent.status,
+				userId: args.userId,
+				errorMessage:
+					sent.status === "failed"
+						? sent.error
+						: sent.status === "skipped"
+							? sent.reason
+							: undefined,
+			});
+		} catch (error) {
+			logger.error(
+				"[phoneReminders] could not record a delivery log",
+				error instanceof Error ? error.name : "unknown error",
+			);
+		}
+
+		if (sent.status === "sent") {
 			return { skipped: false as const, email: "sent" as const };
 		}
-		await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
-			organizationId: args.organizationId,
-			userId: args.userId,
-		});
 
 		return {
 			skipped: true as const,
@@ -442,20 +464,33 @@ export const runForOrg = internalAction({
 				skipped += 1;
 				continue;
 			}
-			const result = await ctx.runAction(
-				internal.phoneReminders.sendForPerson,
-				{
-					organizationId: args.organizationId,
-					userId: p.userId,
-					name: p.name,
-					email: p.email,
-					roles: p.roles,
-					assignmentCount: p.assignmentCount,
-					dateFrom: args.dateFrom,
-					dateTo: args.dateTo,
-					emailFromEmail: args.emailFromEmail,
-				},
-			);
+			let result: { skipped: boolean };
+			try {
+				result = await ctx.runAction(
+					internal.phoneReminders.sendForPerson,
+					{
+						organizationId: args.organizationId,
+						userId: p.userId,
+						name: p.name,
+						email: p.email,
+						roles: p.roles,
+						assignmentCount: p.assignmentCount,
+						dateFrom: args.dateFrom,
+						dateTo: args.dateTo,
+						emailFromEmail: args.emailFromEmail,
+					},
+				);
+			} catch (error) {
+				// Pre-delivery failures release their claim in sendForPerson.
+				// For remaining errors the delivery outcome may be unknown, so do
+				// not clear a live claim; keep later recipients moving regardless.
+				logger.warn(
+					"[phoneReminders] recipient send failed; continuing batch",
+					error instanceof Error ? error.name : "unknown error",
+				);
+				skipped += 1;
+				continue;
+			}
 			if (result.skipped) skipped += 1;
 			else sent += 1;
 		}

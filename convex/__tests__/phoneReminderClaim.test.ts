@@ -1,11 +1,25 @@
 import { convexTest } from "convex-test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { internal } from "../_generated/api";
 import schema from "../schema";
+import { seedAssignment, seedTour } from "./helpers";
+import {
+	registerBetterAuthMock,
+	resetMockOrgs,
+	seedMockUser,
+} from "../../test-utils/betterAuthMock";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
 const ORG = "org_claim";
+
+beforeEach(() => resetMockOrgs());
+afterEach(() => {
+	vi.unstubAllGlobals();
+	vi.unstubAllEnvs();
+	vi.restoreAllMocks();
+	resetMockOrgs();
+});
 
 // F680: the claim contract for reminder sends. An overlapping cron tick
 // (Convex does not skip ticks) or a queued action re-scanning during a
@@ -102,5 +116,66 @@ describe("phoneReminderSends claim (F680)", () => {
 		});
 		expect(a).toEqual({ claimed: true });
 		expect(b).toEqual({ claimed: true });
+	});
+
+	it("releases a failed recipient claim and continues the batch", async () => {
+		const t = convexTest(schema, modules);
+		registerBetterAuthMock(t);
+		seedMockUser({
+			id: "user-failed",
+			name: "Aardvark",
+			email: "aardvark@example.com",
+		});
+		seedMockUser({
+			id: "user-later",
+			name: "Beryl",
+			email: "beryl@example.com",
+		});
+		const tourId = await t.run((ctx) => seedTour(ctx, { orgId: ORG }));
+		await t.run(async (ctx) => {
+			await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "user-failed",
+				date: "2040-01-02",
+			});
+			await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "user-later",
+				date: "2040-01-03",
+			});
+		});
+
+		vi.stubEnv("AWS_REGION", "us-east-1");
+		vi.stubEnv("AWS_ACCESS_KEY_ID", "test-access-key");
+		vi.stubEnv("AWS_SECRET_ACCESS_KEY", "test-secret-key");
+		vi.stubEnv("SES_FROM_ADDRESS", "reminders@example.com");
+		const fetchMock = vi.fn(
+			async (_input: RequestInfo | URL, _init?: RequestInit) =>
+				new Response(null, { status: 200 }),
+		);
+		vi.stubGlobal("fetch", fetchMock);
+		vi.spyOn(globalThis.crypto.subtle, "digest").mockImplementationOnce(() =>
+			Promise.reject(new Error("simulated signing failure")),
+		);
+
+		const result = await t.action(internal.phoneReminders.runForOrg, {
+			organizationId: ORG,
+			dateFrom: "2040-01-01",
+			dateTo: "2040-01-14",
+		});
+
+		expect(result).toMatchObject({ queued: 2, sent: 1, skipped: 1 });
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		expect(String(fetchMock.mock.calls[0]?.[1]?.body)).toContain(
+			"beryl@example.com",
+		);
+		expect(
+			await t.mutation(internal.phoneReminders.claimUserSend, {
+				organizationId: ORG,
+				userId: "user-failed",
+			}),
+		).toEqual({ claimed: true });
 	});
 });

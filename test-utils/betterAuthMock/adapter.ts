@@ -1,17 +1,15 @@
-// Mock `findOne` for the betterAuth component, used by
-// `convex/public_booking.ts` to resolve an organization by slug.
+// Mock `findOne` for the betterAuth component, used by public booking and
+// staff-contact queries to resolve organizations and users.
 //
 // Background: the real `@convex-dev/better-auth` adapter implements
-// `findOne` as a Convex query that reads the component's `organization`
-// table. In convex-test, the real component is not registered, so the
+// `findOne` as a Convex query that reads the component's tables. In
+// convex-test, the real component is not registered, so the
 // syscall would throw "Component "betterAuth" is not registered. Call
-// "t.registerComponent"." This mock provides a tiny `findOne` that
-// answers organization lookups from a module-scoped in-memory map
-// (populated by the test seam in `./index.ts`).
+// "t.registerComponent"." This mock answers org and user lookups from
+// module-scoped maps populated by the test seam in `./index.ts`.
 //
-// The shape matches the real component's expected input/output:
-//   - input:  { model: "organization", where: [{ field: "slug", value }] }
-//   - output: { id?: string, _id?: string, name: string, slug: string } | null
+// The shape matches the real component's expected input/output: org by slug
+// or user by `_id`, returning a matching Better Auth-like record or null.
 //
 // TEST-ONLY. The production code path uses the real
 // `convex/betterAuth` component, not this file.
@@ -25,16 +23,23 @@ type MockOrg = {
 	slug: string;
 };
 
-// Module-scoped mock data. The test seam mutates this map directly
-// via `seedMockOrg` / `resetMockOrgs` from `./index.ts`. Because
-// vitest runs the test file in a single Node process, the same map
-// is visible to both the httpAction's `ctx.runQuery` (which calls
-// `findOne` here) and the test code.
+type MockUser = {
+	id?: string;
+	_id?: string;
+	name?: string | null;
+	email?: string | null;
+	phone?: string | null;
+};
+
+// Module-scoped mock data. The test seam mutates these maps directly
+// via `seedMockOrg`, `seedMockUser`, and `resetMockOrgs` from `./index.ts`.
+// They are shared by component queries and the test code in this process.
 //
 // IMPORTANT: this module is loaded by vitest's moduleCache. If
 // vitest's optimizer re-evaluates the module, the state is lost —
-// call `seedMockOrg` in `beforeEach` of every test that needs it.
+// call the relevant seed helper in `beforeEach` of every test that needs it.
 const mockOrgsById = new Map<string, MockOrg>();
+const mockUsersById = new Map<string, MockUser>();
 
 export const findOne = query({
 	args: {
@@ -49,9 +54,15 @@ export const findOne = query({
 		),
 	},
 	handler: async (_ctx, args) => {
+		if (args.model === "user") {
+			const userId = args.where?.find((w) => w.field === "_id")?.value;
+			return typeof userId === "string"
+				? (mockUsersById.get(userId) ?? null)
+				: null;
+		}
 		if (args.model !== "organization") {
 			throw new Error(
-				`[betterAuthMock] findOne only supports model: "organization"; got "${args.model}"`,
+				`[betterAuthMock] findOne does not support model "${args.model}"`,
 			);
 		}
 		const whereList = args.where ?? [];
@@ -88,3 +99,4 @@ export function _resetMockOrgsDirect(): void {
 // loader is per-glob, so duplicating the Map between two files
 // would lose writes).
 export { mockOrgsById as _mockOrgsById };
+export { mockUsersById as _mockUsersById };
