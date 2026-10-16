@@ -35,6 +35,14 @@ describe("mapBookingError (F758)", () => {
     expect(message).toBe("Guest count exceeds tour maximum of 12")
   })
 
+  it("maps invalid guest counts to 400 with the authored refusal", () => {
+    const { message, status } = mapBookingError(
+      refusal("guests must be a positive integer"),
+    )
+    expect(status).toBe(400)
+    expect(message).toBe("guests must be a positive integer")
+  })
+
   it("maps the seats refusal to 400", () => {
     const { message, status } = mapBookingError(
       refusal("Not enough seats left for this tour slot"),

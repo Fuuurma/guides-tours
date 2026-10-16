@@ -317,6 +317,9 @@ export function mapBookingError(err: unknown): {
 				// Authored message already names the maximum.
 				message = data;
 				status = 400;
+			} else if (lower.includes("guests must be a positive integer")) {
+				message = data;
+				status = 400;
 			} else if (lower.includes("must be made at least")) {
 				// Authored message already names the cutoff hours.
 				message = data;
