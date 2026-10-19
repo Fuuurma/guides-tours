@@ -125,13 +125,22 @@ export function createWebhookHandler(config: WebhookConfig) {
 			throw err;
 		}
 		if (!integration) {
-			return new Response("unknown integration", { status: 404 });
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: unknown integration`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		if (integration.provider !== config.provider) {
-			return new Response("wrong provider for this route", { status: 400 });
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: wrong provider for this route`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		if (!integration.isActive) {
-			return new Response("integration is not active", { status: 410 });
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: integration is not active`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		if (!integration.webhookSecret) {
 			return new Response("integration missing webhook secret", {
