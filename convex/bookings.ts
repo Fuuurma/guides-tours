@@ -45,6 +45,7 @@ import {
 	assertFieldWithinLimit,
 } from "./lib/validation";
 import { isBlackoutHelper } from "./tourBlackoutDates";
+import { exceptionForDateHelper } from "./tourExceptionDates";
 import {
 	PENDING_EXPIRY_MS,
 	performCancel,
@@ -53,6 +54,7 @@ import {
 	performExpire,
 	performNoShow,
 	performUpdate,
+	staffCreateExceptionRefusal,
 } from "./lib/bookingsLifecycle";
 import { logger } from "./lib/logger";
 
@@ -548,6 +550,31 @@ export const create = mutation({
 			throw new ConvexError(
 				"This date is not available for booking. Please pick another date.",
 			);
+		}
+
+		// F878: exception dates gate staff create like blackouts — a
+		// "removed" exception stays unbookable (update + the public path
+		// already refused it; create was the gap), and a capacityOverride
+		// caps the attached slot's sellable seats so a phone booking
+		// cannot oversell an operator-capped date.
+		const dateException = await exceptionForDateHelper(
+			ctx,
+			args.tourId,
+			member.organizationId,
+			date,
+		);
+		let attachedCapacityBooked: number | undefined;
+		if (scheduleId && dateException?.capacityOverride !== undefined) {
+			attachedCapacityBooked = (await ctx.db.get(scheduleId))
+				?.capacityBooked;
+		}
+		const exceptionRefusal = staffCreateExceptionRefusal(dateException, {
+			scheduleId,
+			guests: args.guests,
+			attachedCapacityBooked,
+		});
+		if (exceptionRefusal) {
+			throw new ConvexError(exceptionRefusal.message);
 		}
 
 		// Money-field validation (fleet audit 09-16): every other field

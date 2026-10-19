@@ -55,6 +55,43 @@ export const ALLOWED_UPDATE_FIELDS = new Set([
 	"scheduleId",
 ]);
 
+export type StaffCreateExceptionRefusal = { message: string };
+
+/**
+ * F878 — the staff-create exception gate, pure so the refusals are
+ * pinned without an auth session (requireMembership cannot run under
+ * convex-test; see customers.test.ts).
+ *
+ * A "removed" exception date is unbookable exactly like a blackout
+ * (update and the public path already refuse it). A capacityOverride
+ * caps the ATTACHED slot's sellable seats only — a staff booking with
+ * no concrete slot is the operator's own phone sale, so the public
+ * path's blanket unattached refusal (GT-AUDIT-02) is deliberately not
+ * ported here.
+ */
+export function staffCreateExceptionRefusal(
+	ex: { exceptionType: string; capacityOverride?: number } | null,
+	opts: {
+		scheduleId?: Id<"tourSchedules">;
+		guests: number;
+		attachedCapacityBooked?: number;
+	},
+): StaffCreateExceptionRefusal | null {
+	if (ex?.exceptionType === "removed") {
+		return {
+			message:
+				"This date is not available for booking. Please pick another date.",
+		};
+	}
+	if (opts.scheduleId && ex?.capacityOverride !== undefined) {
+		const booked = opts.attachedCapacityBooked ?? 0;
+		if (booked + opts.guests > ex.capacityOverride) {
+			return { message: "Not enough seats left for this tour slot" };
+		}
+	}
+	return null;
+}
+
 export async function findTargetSchedule(
 	ctx: MutationCtx,
 	args: {
