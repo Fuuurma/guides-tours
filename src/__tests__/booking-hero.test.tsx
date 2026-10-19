@@ -20,8 +20,8 @@ vi.mock("motion/react", () => ({
 	useReducedMotion: () => true,
 }));
 
-import { BookingHero } from "../components/booking-hero";
 import { deriveBookingHeroStats } from "@/lib/booking-hero-stats";
+import { BookingHero } from "../components/booking-hero";
 import { TrustMetric } from "../components/trust-metric";
 
 const TOURS = [
@@ -45,7 +45,7 @@ describe("deriveBookingHeroStats", () => {
 	it("derives count, min price, and max group from real tours", () => {
 		expect(deriveBookingHeroStats(TOURS)).toEqual({
 			tourCount: 2,
-			fromPrice: "€45",
+			fromPrice: "€45.00",
 			maxGroup: 12,
 		});
 	});
@@ -83,7 +83,13 @@ describe("deriveBookingHeroStats", () => {
 					basePriceCents: 2500n,
 				},
 			]),
-		).toEqual({ tourCount: 1, fromPrice: "$25", maxGroup: 6 });
+		).toEqual({ tourCount: 1, fromPrice: "$25.00", maxGroup: 6 });
+	});
+
+	it("keeps cents so the hero agrees with the tour cards below it (F908)", () => {
+		expect(
+			deriveBookingHeroStats([{ ...TOURS[0], basePriceCents: 4950 }]).fromPrice,
+		).toBe("€49.50");
 	});
 });
 
@@ -98,7 +104,7 @@ describe("BookingHero", () => {
 		);
 		expect(screen.getByRole("heading", { name: /Costa Brava Tours/ })); // throws when missing
 		expect(screen.getByText("tours offered")); // throws when missing
-		expect(screen.getByText("€45")); // throws when missing
+		expect(screen.getByText("€45.00")); // throws when missing
 		expect(screen.getByText("largest group welcome")); // throws when missing
 	});
 

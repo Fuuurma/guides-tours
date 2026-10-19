@@ -1,3 +1,5 @@
+import { formatPrice } from "./format";
+
 export type BookingHeroTour = {
 	_id: string;
 	name: string;
@@ -14,19 +16,10 @@ export type BookingHeroStats = {
 	maxGroup: number | null;
 };
 
-const fromPriceFormatters = new Map<string, Intl.NumberFormat>();
-
+// The same precision as the per-tour cards on the page: a €49.50 tour must
+// not read "from €50" in the hero above them (F908).
 function formatFromPrice(cents: number, currency: string): string {
-	let fmt = fromPriceFormatters.get(currency);
-	if (!fmt) {
-		fmt = new Intl.NumberFormat("en-US", {
-			style: "currency",
-			currency,
-			maximumFractionDigits: 0,
-		});
-		fromPriceFormatters.set(currency, fmt);
-	}
-	return fmt.format(cents / 100);
+	return formatPrice(cents / 100, currency);
 }
 
 export function deriveBookingHeroStats(
