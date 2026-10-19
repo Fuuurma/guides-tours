@@ -70,11 +70,6 @@ describe("mapBookingError (F758)", () => {
     expect(mapBookingError(refusal("rate limit exceeded")).status).toBe(429)
     expect(mapBookingError(refusal("Tour not found")).status).toBe(404)
     expect(
-      mapBookingError(
-        refusal("This date has a limited capacity that cannot be booked online."),
-      ).message,
-    ).toBe("This tour is fully booked")
-    expect(
       mapBookingError(refusal("date is blacked out")).message,
     ).toBe("This date is not available for booking")
     expect(
@@ -83,6 +78,17 @@ describe("mapBookingError (F758)", () => {
     expect(mapBookingError(refusal("Invalid email address")).message).toBe(
       "Invalid email address",
     )
+  })
+
+  it("passes the limited-capacity refusal through intact and keeps the sold-out mapping (F902)", () => {
+    const authored =
+      "This date has a limited capacity that cannot be booked online. " +
+      "Please choose another date or contact the operator."
+    expect(mapBookingError(refusal(authored))).toEqual({ message: authored, status: 400 })
+    expect(mapBookingError(refusal("Schedule over capacity"))).toEqual({
+      message: "This tour is fully booked",
+      status: 400,
+    })
   })
 
   it("falls back to the generic 500 for unknown errors", () => {

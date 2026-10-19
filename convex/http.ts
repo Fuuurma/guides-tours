@@ -295,7 +295,13 @@ export function mapBookingError(err: unknown): {
 			} else if (lower.includes("not found")) {
 				message = "Tour, schedule, or organization not found";
 				status = 404;
-			} else if (lower.includes("capacity") || lower.includes("over capacity")) {
+			} else if (lower.includes("cannot be booked online")) {
+				// Authored message already carries the recovery: another date,
+				// or the operator. "capacity" alone would collapse it into the
+				// sold-out copy below (F902).
+				message = data;
+				status = 400;
+			} else if (lower.includes("over capacity")) {
 				message = "This tour is fully booked";
 				status = 400;
 			} else if (lower.includes("blacked out") || lower.includes("not available")) {
