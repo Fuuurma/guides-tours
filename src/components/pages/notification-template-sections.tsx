@@ -59,108 +59,100 @@ export function TemplateEditFields({
 				void form.handleSubmit();
 			}}
 		>
-			<form
-				onSubmit={(e) => {
-					e.preventDefault();
-					e.stopPropagation();
-					void form.handleSubmit();
-				}}
-			>
-				<FieldGroup className="gap-4">
-					<form.Field name="name">
-						{(field) => (
-							<Field data-invalid={!field.state.meta.isValid}>
-								<FieldLabel htmlFor="tpl-name">Name</FieldLabel>
-								<Input
-									id="tpl-name"
-									maxLength={MAX_NAME_LEN}
-									value={field.state.value}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									aria-invalid={!field.state.meta.isValid}
-								/>
-								<FieldError errors={metaErrors(field.state.meta.errors)} />
-							</Field>
-						)}
-					</form.Field>
-					<form.Field name="isActive">
-						{(field) => (
-							<Field orientation="horizontal">
-								<FieldLabel htmlFor="tpl-active">Active</FieldLabel>
-								<Switch
-									id="tpl-active"
-									checked={field.state.value}
-									onCheckedChange={field.handleChange}
-								/>
-							</Field>
-						)}
-					</form.Field>
-					<form.Field name="emailSubject">
-						{(field) => (
-							<Field>
-								<FieldLabel htmlFor="tpl-subject">Email subject</FieldLabel>
-								<Input
-									id="tpl-subject"
-									maxLength={MAX_EMAIL_SUBJECT_LEN}
-									value={field.state.value}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-								/>
-							</Field>
-						)}
-					</form.Field>
-					<form.Field name="emailBodyText">
-						{(field) => (
-							<Field>
-								<FieldLabel htmlFor="tpl-text">Email body (text)</FieldLabel>
-								<Textarea
-									id="tpl-text"
-									value={field.state.value}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									rows={8}
-									className="font-mono text-sm"
-								/>
-							</Field>
-						)}
-					</form.Field>
-					<form.Field name="emailBodyHtml">
-						{(field) => (
-							<Field>
-								<FieldLabel htmlFor="tpl-html">Email body (HTML)</FieldLabel>
-								<Textarea
-									id="tpl-html"
-									value={field.state.value}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									rows={6}
-									className="font-mono text-xs"
-								/>
-							</Field>
-						)}
-					</form.Field>
-					<form.Field name="smsBody">
-						{(field) => (
-							<Field>
-								<FieldLabel htmlFor="tpl-sms">SMS body</FieldLabel>
-								<Textarea
-									id="tpl-sms"
-									maxLength={MAX_SMS_BODY_LEN}
-									value={field.state.value}
-									onBlur={field.handleBlur}
-									onChange={(e) => field.handleChange(e.target.value)}
-									rows={3}
-								/>
-								<FieldDescription>
-									{field.state.value.length} / 160 chars (SMS may segment over
-									160)
-								</FieldDescription>
-							</Field>
-						)}
-					</form.Field>
-					{saveErr ? <ErrorBanner message={saveErr} /> : null}
-				</FieldGroup>
-			</form>
+			<FieldGroup className="gap-4">
+				<form.Field name="name">
+					{(field) => (
+						<Field data-invalid={!field.state.meta.isValid}>
+							<FieldLabel htmlFor="tpl-name">Name</FieldLabel>
+							<Input
+								id="tpl-name"
+								maxLength={MAX_NAME_LEN}
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								aria-invalid={!field.state.meta.isValid}
+							/>
+							<FieldError errors={metaErrors(field.state.meta.errors)} />
+						</Field>
+					)}
+				</form.Field>
+				<form.Field name="isActive">
+					{(field) => (
+						<Field orientation="horizontal">
+							<FieldLabel htmlFor="tpl-active">Active</FieldLabel>
+							<Switch
+								id="tpl-active"
+								checked={field.state.value}
+								onCheckedChange={field.handleChange}
+							/>
+						</Field>
+					)}
+				</form.Field>
+				<form.Field name="emailSubject">
+					{(field) => (
+						<Field>
+							<FieldLabel htmlFor="tpl-subject">Email subject</FieldLabel>
+							<Input
+								id="tpl-subject"
+								maxLength={MAX_EMAIL_SUBJECT_LEN}
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+							/>
+						</Field>
+					)}
+				</form.Field>
+				<form.Field name="emailBodyText">
+					{(field) => (
+						<Field>
+							<FieldLabel htmlFor="tpl-text">Email body (text)</FieldLabel>
+							<Textarea
+								id="tpl-text"
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								rows={8}
+								className="font-mono text-sm"
+							/>
+						</Field>
+					)}
+				</form.Field>
+				<form.Field name="emailBodyHtml">
+					{(field) => (
+						<Field>
+							<FieldLabel htmlFor="tpl-html">Email body (HTML)</FieldLabel>
+							<Textarea
+								id="tpl-html"
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								rows={6}
+								className="font-mono text-xs"
+							/>
+						</Field>
+					)}
+				</form.Field>
+				<form.Field name="smsBody">
+					{(field) => (
+						<Field>
+							<FieldLabel htmlFor="tpl-sms">SMS body</FieldLabel>
+							<Textarea
+								id="tpl-sms"
+								maxLength={MAX_SMS_BODY_LEN}
+								value={field.state.value}
+								onBlur={field.handleBlur}
+								onChange={(e) => field.handleChange(e.target.value)}
+								rows={3}
+							/>
+							<FieldDescription>
+								{field.state.value.length} / 160 chars (SMS may segment over
+								160)
+							</FieldDescription>
+						</Field>
+					)}
+				</form.Field>
+				{saveErr ? <ErrorBanner message={saveErr} /> : null}
+			</FieldGroup>
 		</form>
 	);
 }
