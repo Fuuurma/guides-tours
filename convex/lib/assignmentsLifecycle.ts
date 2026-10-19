@@ -12,7 +12,10 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { assertFieldWithinLimit } from "./validation";
 import { logAudit } from "./audit";
-import { parseBookingTime } from "./time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./time";
 import { resolveTourStaffing } from "./staffing";
 import { calculateEndTime } from "./assignmentTime";
 import { checkConflictsHelper } from "./assignmentsShared";
@@ -55,7 +58,8 @@ if (scheduleId) {
 	startTime = schedule.startTime;
 }
 
-if (parseBookingTime(date, startTime) === null) {
+const timeZone = await organizationTimeZone(ctx, args.organizationId);
+if (parseBookingTimeInZone(date, startTime, timeZone) === null) {
 	throw new ConvexError(
 		"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
 	);
@@ -402,7 +406,8 @@ export async function performUpdate(
 		date: args.date ?? existing.date,
 		startTime: args.startTime ?? existing.startTime,
 	};
-	if (parseBookingTime(next.date, next.startTime) === null) {
+	const timeZone = await organizationTimeZone(ctx, tour.organizationId);
+	if (parseBookingTimeInZone(next.date, next.startTime, timeZone) === null) {
 		throw new ConvexError(
 			"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
 		);

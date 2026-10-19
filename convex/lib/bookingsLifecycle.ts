@@ -12,7 +12,10 @@ import { ConvexError } from "convex/values";
 import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { parseBookingTime } from "./time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./time";
 import { logger } from "./logger";
 import { logAudit } from "./audit";
 import {
@@ -223,7 +226,8 @@ export async function performUpdate(
 	const slotExceptionStart = slotException?.startTime;
 
 	if (rescheduleRequested) {
-		const tourTs = parseBookingTime(nextDate, nextStartTime);
+		const timeZone = await organizationTimeZone(ctx, organizationId);
+		const tourTs = parseBookingTimeInZone(nextDate, nextStartTime, timeZone);
 		if (tourTs === null || tourTs <= Date.now()) {
 			throw new ConvexError("Cannot move a booking into the past");
 		}

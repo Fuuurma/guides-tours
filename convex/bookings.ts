@@ -32,7 +32,10 @@ import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requirePermission } from "./lib/authz";
-import { parseBookingTime } from "./lib/time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./lib/time";
 import { logAudit } from "./lib/audit";
 import {
 	MAX_GUEST_NAMES_LEN,
@@ -518,8 +521,12 @@ export const create = mutation({
 		}
 
 		// Reject past dates and dates inside the bookingCutoffHours
-		// window. parseBookingTime returns null on malformed input.
-		const tourTs = parseBookingTime(date, startTime);
+		// window. parseBookingTimeInZone returns null on malformed input.
+		const timeZone = await organizationTimeZone(
+			ctx,
+			tour.organizationId,
+		);
+		const tourTs = parseBookingTimeInZone(date, startTime, timeZone);
 		if (tourTs === null) {
 			throw new ConvexError(`Invalid date or time: "${date} ${startTime}"`);
 		}

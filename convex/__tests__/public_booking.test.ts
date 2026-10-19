@@ -430,6 +430,157 @@ describe("convex/public_booking — internalCreate mutation", () => {
 		).rejects.toThrow(/at least 48h/);
 	});
 
+	it("rejects a slot that already started in the operator timezone", async () => {
+		// Frozen clock: 07:30 UTC on 2026-06-16 is 09:30 in Europe/Madrid
+		// (CEST, UTC+2). A 09:00 departure started half an hour ago for the
+		// operator, so the booking must be refused even though 09:00 UTC
+		// still sits in the future — the regression pinned here is the
+		// UTC-midnight parse that kept such slots bookable.
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-06-16T07:30:00Z"));
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_tz";
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("tours", {
+				organizationId: orgId,
+				name: "Morning walk",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 0,
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Late Booker",
+				customerEmail: "late@example.com",
+				date: "2026-06-16",
+				startTime: "09:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/in the past/);
+	});
+
+	it("honors a per-org timeZone override from organizationSettings", async () => {
+		// Same frozen instant as the pin above (07:30 UTC = 09:30 Madrid)
+		// but this operator runs in America/New_York (EDT, UTC-4): their
+		// 09:00 departure is 13:00 UTC — still 5.5h out, so it books.
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-06-16T07:30:00Z"));
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_tz_ny";
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			await c.db.insert("organizationSettings", {
+				organizationId: orgId,
+				timeZone: "America/New_York",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			return await c.db.insert("tours", {
+				organizationId: orgId,
+				name: "Morning walk",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 0,
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		const bookingId = await t.mutation(
+			internal.public_booking.internalCreate,
+			{
+				organizationId: orgId,
+				tourId,
+				customerName: "NY Booker",
+				customerEmail: "ny@example.com",
+				date: "2026-06-16",
+				startTime: "09:00",
+				guests: 1,
+			},
+		);
+		expect(bookingId).toBeDefined();
+	});
+
+	it("enforces bookingCutoffHours against the operator-zone instant", async () => {
+		// 23:30 UTC on 2026-06-15 is 01:30 CEST on 06-16. The 09:00 tour on
+		// 06-16 departs 07:00 UTC — 7.5h out, inside a 9h cutoff. The old
+		// UTC parse computed 9.5h and let it through.
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-06-15T23:30:00Z"));
+		const t = convexTest(schema, modules);
+		const orgId = "org_pub_tz_cutoff";
+		const tourId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			return await c.db.insert("tours", {
+				organizationId: orgId,
+				name: "Dawn tour",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 9,
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: orgId,
+				tourId,
+				customerName: "Cutoff Booker",
+				customerEmail: "cutoff@example.com",
+				date: "2026-06-16",
+				startTime: "09:00",
+				guests: 1,
+			}),
+		).rejects.toThrow(/at least 9h/);
+	});
+
 	it("persists phone and notes on new customer", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_pub_phone";
