@@ -41,8 +41,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
-import { formatCentsWhole, formatSignedPct,
-		formatLongDate,
+import {
+	formatCentsWhole,
+	formatLongDate,
+	formatSignedPct,
 } from "@/lib/format";
 import { cn, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";

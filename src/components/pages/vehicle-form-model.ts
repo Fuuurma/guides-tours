@@ -72,4 +72,3 @@ export function vehicleFormToMutationArgs(value: VehicleFormValues) {
 		notes: value.notes.trim() || undefined,
 	};
 }
-

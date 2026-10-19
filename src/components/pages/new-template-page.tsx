@@ -3,7 +3,10 @@ import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
 import { TourTemplateForm } from "./tour-template-form";
-import { EMPTY_TOUR_TEMPLATE_FORM, templateFormToMutationArgs } from "./tour-template-form-model";
+import {
+	EMPTY_TOUR_TEMPLATE_FORM,
+	templateFormToMutationArgs,
+} from "./tour-template-form-model";
 
 export function NewTemplatePage() {
 	const navigate = useNavigate();

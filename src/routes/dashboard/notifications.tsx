@@ -1,4 +1,3 @@
-import { formatDateTime } from "@/lib/format";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -11,6 +10,7 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { formatDateTime } from "@/lib/format";
 import { getSafeDisplayMessage } from "@/lib/utils";
 import type { NotificationTemplate } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
