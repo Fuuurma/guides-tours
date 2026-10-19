@@ -5,3 +5,8 @@ onlyBuiltDependencies:
   - "lightningcss"
 overrides:
   "js-yaml": ">=4.3.2"
+  "semver": "7.8.5"
+  "seroval": ">=1.6.3"
+  "seroval-plugins": ">=1.6.3"
+  "sharp": ">=0.35.5"
+  "undici": "^7.29.1"
