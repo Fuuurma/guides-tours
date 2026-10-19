@@ -24,7 +24,10 @@ import type { ActionCtx } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
-import { parseBookingTime } from "./lib/time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./lib/time";
 import { logAudit } from "./lib/audit";
 import { isBlackoutHelper } from "./tourBlackoutDates";
 import { exceptionForDateHelper } from "./tourExceptionDates";
@@ -247,13 +250,18 @@ export const listAvailableSlots = query({
 
 		const nowMs = Date.now();
 		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
+		const timeZone = await organizationTimeZone(ctx, organizationId);
 
 		return slots
 			.filter((s) => {
 				if (s.status !== "available") return false;
 				if (exceptionTime !== undefined && s.startTime !== exceptionTime) return false;
 				if (s.capacityBooked >= capacityOf(s.capacityTotal)) return false;
-				const tourTs = parseBookingTime(args.date, s.startTime);
+				const tourTs = parseBookingTimeInZone(
+					args.date,
+					s.startTime,
+					timeZone,
+				);
 				if (tourTs === null || tourTs <= nowMs) return false;
 				if (cutoffMs > 0 && tourTs - nowMs < cutoffMs) return false;
 				return true;
@@ -522,7 +530,8 @@ export const internalCreate = internalMutation({
 
 		// Reject past dates and dates that fall inside the
 		// bookingCutoffHours window (operator-defined lead time).
-		const tourTs = parseBookingTime(date, startTime);
+		const timeZone = await organizationTimeZone(ctx, args.organizationId);
+		const tourTs = parseBookingTimeInZone(date, startTime, timeZone);
 		if (tourTs === null) {
 			throw new ConvexError(`Invalid date or time: "${date} ${startTime}"`);
 		}
