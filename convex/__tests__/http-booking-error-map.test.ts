@@ -49,6 +49,28 @@ describe("mapBookingError (F758)", () => {
     expect(message).toBe("This tour is not currently accepting bookings")
   })
 
+  // F892 — the action's own guests validation. The HTTP boundary rejects
+  // the same shape earlier (positive integer <= 200), so this guards the
+  // defense-in-depth copy: before the branch it fell through to the
+  // generic 500.
+  it("maps the guests validation refusal to 400 (F892)", () => {
+    const { message, status } = mapBookingError(
+      refusal("guests must be a positive integer"),
+    )
+    expect(status).toBe(400)
+    expect(message).toBe("guests must be a positive integer")
+  })
+
+  // Deliberate 500s — server-fault classes, not client input: a broken
+  // org record and a customer-resolution failure. Pinned so a future
+  // branch collapse into 4xx is a conscious edit, not an accident.
+  it.each([
+    "organization has no id",
+    "Failed to resolve customer",
+  ])("keeps the server-fault refusal as a 500 (%s)", (text) => {
+    expect(mapBookingError(refusal(text)).status).toBe(500)
+  })
+
   it.each([
     "Cannot book a cancelled schedule",
     "Cannot book cancelled schedule",
