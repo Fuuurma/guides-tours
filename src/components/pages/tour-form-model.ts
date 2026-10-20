@@ -125,4 +125,3 @@ export function tourFormToMutationArgs(value: TourFormValues) {
 		isActive: value.isActive,
 	};
 }
-

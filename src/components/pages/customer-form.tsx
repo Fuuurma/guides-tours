@@ -1,4 +1,3 @@
-import { type CustomerFormValues } from "./customer-form-model";
 import { useForm, useStore } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -29,10 +28,7 @@ import {
 	validateNotesOptional,
 	validatePhoneOptional,
 } from "@/lib/validation";
-
-
-
-
+import type { CustomerFormValues } from "./customer-form-model";
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,

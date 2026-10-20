@@ -6,7 +6,10 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { TourTemplateForm } from "./tour-template-form";
-import { templateDocToFormValues, templateFormToMutationArgs } from "./tour-template-form-model";
+import {
+	templateDocToFormValues,
+	templateFormToMutationArgs,
+} from "./tour-template-form-model";
 
 interface EditTemplatePageProps {
 	templateId: string;

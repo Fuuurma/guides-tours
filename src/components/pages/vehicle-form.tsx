@@ -1,4 +1,3 @@
-import { type VehicleFormValues } from "./vehicle-form-model";
 import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
@@ -24,14 +23,10 @@ import {
 	validateNotesOptional,
 	validatePositiveInteger,
 } from "@/lib/validation";
+import type { VehicleFormValues } from "./vehicle-form-model";
 
 const OWNERSHIP_TYPES = ["owned", "rented", "leased"] as const;
 const STATUSES = ["available", "in_use", "maintenance", "retired"] as const;
-
-
-
-
-
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,

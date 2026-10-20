@@ -4,13 +4,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { AuthShell } from "@/components/auth/auth-shell";
-import { AUTH_PANEL } from "@/lib/auth-panel";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import { AUTH_PANEL } from "@/lib/auth-panel";
 import { getSafeDisplayMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({

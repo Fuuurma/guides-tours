@@ -23,9 +23,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { formatCentsCompact,
-	formatDateTime,
-} from "@/lib/format";
+import { formatCentsCompact, formatDateTime } from "@/lib/format";
 import { cn, getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
 import type { BookingDetail } from "@/types/entities";
@@ -435,9 +433,7 @@ function BookingDetailPage() {
 				<DetailRow
 					label="Completed at"
 					value={
-						b.completedAt
-							? formatDateTime(b.completedAt)
-							: "(not completed)"
+						b.completedAt ? formatDateTime(b.completedAt) : "(not completed)"
 					}
 				/>
 			</DetailSection>
@@ -463,8 +459,7 @@ function BookingDetailPage() {
 										{payment.provider}
 									</p>
 									<p className="text-muted-foreground text-xs">
-										{payment.currency} ·{" "}
-										{formatDateTime(payment.createdAt)}
+										{payment.currency} · {formatDateTime(payment.createdAt)}
 									</p>
 								</div>
 								<StatusBadge status={payment.status} />

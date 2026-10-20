@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { AUTH_PANEL } from "@/lib/auth-panel";
 import { Check, MapPin } from "lucide-react";
 import type * as React from "react";
+import { AUTH_PANEL } from "@/lib/auth-panel";
 
 // Shared split-screen shell for all auth pages (sign-in, sign-up,
 // onboarding, invite, forgot/reset password).
@@ -12,8 +12,6 @@ import type * as React from "react";
 //
 // The design mirrors src/routes/index.tsx (landing page) so the auth
 // experience feels like part of the same product, not a bare form.
-
-
 
 const TRUST_BULLETS = [
 	"Live availability shared with every channel",

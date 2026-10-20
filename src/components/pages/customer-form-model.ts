@@ -45,4 +45,3 @@ export function customerDocToFormValues(
 		smsConsent: customer.smsConsent === true,
 	};
 }
-

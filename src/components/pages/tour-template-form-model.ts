@@ -122,7 +122,6 @@ export function templateFormToMutationArgs(value: TourTemplateFormValues) {
 	};
 }
 
-
 function splitLines(s: string) {
 	return s
 		.split("\n")

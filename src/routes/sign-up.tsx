@@ -3,7 +3,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { AuthShell } from "@/components/auth/auth-shell";
-import { AUTH_PANEL } from "@/lib/auth-panel";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { PasswordInput } from "@/components/auth/password-field";
 import { FormField } from "@/components/forms/form-field";
@@ -12,6 +11,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import { AUTH_PANEL } from "@/lib/auth-panel";
 
 export const Route = createFileRoute("/sign-up")({
 	validateSearch: (search: Record<string, unknown>) => {

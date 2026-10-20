@@ -131,9 +131,7 @@ function FilesPage() {
 			key: "created",
 			header: "Uploaded",
 			render: (f) => (
-				<span className="font-mono text-xs">
-					{formatDateTime(f.createdAt)}
-				</span>
+				<span className="font-mono text-xs">{formatDateTime(f.createdAt)}</span>
 			),
 		},
 		{
