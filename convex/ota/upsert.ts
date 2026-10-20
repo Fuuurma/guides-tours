@@ -13,6 +13,7 @@ import type { MutationCtx } from "../_generated/server";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { logAudit } from "../lib/audit";
+import { syncTourAvailability } from "../lib/availabilityProjection";
 import { logger } from "../lib/logger";
 import { normalizeCurrency } from "../lib/money";
 
@@ -368,6 +369,15 @@ async function applyOtaCapacity(
 			updatedAt: Date.now(),
 		});
 	}
+	// F702: the projection mirrors capacityBooked/status per slot — the
+	// patch above changed both, so rebuild it in the same mutation or the
+	// public page reads stale seats after every OTA create, cancel,
+	// guest-count change and schedule move.
+	await syncTourAvailability(ctx, {
+		organizationId,
+		tourId: schedule.tourId,
+		date: schedule.date,
+	});
 }
 
 /**
