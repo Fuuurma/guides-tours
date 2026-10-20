@@ -12,7 +12,7 @@ import {
 } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
-import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
+import { findOrgMember, requireMembership, requirePermission } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
 	MAX_LICENSE_LEN,
@@ -81,7 +81,7 @@ export const create = mutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "driver", "create");
 
 		// Mirror assignments.create: the selected user must belong to
 		// this organization. Any org member can be a driver profile.
@@ -167,7 +167,7 @@ export const update = mutation({
 		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "driver", "update");
 		const { driverId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.drivers.internalUpdate,
@@ -239,7 +239,7 @@ export const setActive = mutation({
 		isActive: v.boolean(),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "driver", "update");
 		return await ctx.runMutation(
 			internalRefs.drivers.internalSetActive,
 			{
@@ -285,7 +285,7 @@ export const internalSetActive = internalMutation({
 export const remove = mutation({
 	args: { driverId: v.id("drivers") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
+		const member = await requirePermission(ctx, "driver", "delete");
 		return await ctx.runMutation(
 			internalRefs.drivers.internalRemove,
 			{

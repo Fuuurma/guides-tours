@@ -20,7 +20,7 @@ import {
 	query,
 	type QueryCtx,
 } from "./_generated/server";
-import { requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requirePermission } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
 	assertValidCustomerInput,
@@ -354,7 +354,7 @@ export const create = mutation({
 		smsConsent: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "customer", "create");
 		// Normalize + validate email via shared helper. Same regex +
 		// length cap as the public booking flow and the FE validator.
 		const email = normalizeEmail(args.email);
@@ -470,7 +470,7 @@ export const update = mutation({
 		email: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "customer", "update");
 		const customer = await ctx.db.get(args.customerId);
 		if (!customer) throw new ConvexError("Customer not found");
 		if (customer.organizationId !== member.organizationId) {
@@ -604,7 +604,7 @@ export const remove = mutation({
 		// Source: @require_staff → any STAFF-role user. Our nearest
 		// equivalents are owner/admin/member (the people who do CRM
 		// work). Deliberately tighter than source on guides/drivers.
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "customer", "delete");
 		const customer = await ctx.db.get(args.customerId);
 		if (!customer) throw new ConvexError("Customer not found");
 		if (customer.organizationId !== member.organizationId) {

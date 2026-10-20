@@ -92,7 +92,9 @@ const member = ac.newRole({
 });
 
 // Guide — same read as member, plus can update own availability + file
-// vacation requests. Cannot create tours/bookings.
+// vacation requests, and complete the assignments they are rostered on
+// (field staff close their own task; GT-AUDIT-10 binding migration kept
+// that operational grant). Cannot create tours/bookings.
 const guide = ac.newRole({
 	...memberAc.statements,
 	tour: ["read"],
@@ -100,7 +102,7 @@ const guide = ac.newRole({
 	customer: ["read"],
 	vehicle: ["read"],
 	driver: ["read"],
-	assignment: ["read"],
+	assignment: ["read", "update"],
 	otaIntegration: ["read"],
 	notification: ["read"],
 	ownAvailability: ["read", "update"],

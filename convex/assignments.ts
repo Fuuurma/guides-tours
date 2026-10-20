@@ -24,7 +24,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 
 import type { Id, Doc } from "./_generated/dataModel";
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requirePermission } from "./lib/authz";
 
 import { resolveTourStaffing, evaluateSlotStaffing } from "./lib/staffing";
 import { computeStaffingGaps } from "./lib/staffingGaps";
@@ -469,7 +469,7 @@ export const checkConflicts = query({
 
 // ----- Mutations -----
 //
-// Pattern: each public mutation does requireRole + delegates to an
+// Pattern: each public mutation gates via requirePermission and delegates to an
 // internal* mutation that takes (organizationId, userId) directly.
 // Tests call internal* and skip the auth layer. Source doesn't have
 // this split — it uses a Django `@require_staff` decorator on the
@@ -488,7 +488,7 @@ const createArgs = {
 export const create = mutation({
 	args: createArgs,
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "assignment", "create");
 
 		// Validate guide has the "guide" role in this organization
 		// (source: assignment_service.py validates role__in=["guide","staff"]).
@@ -547,7 +547,7 @@ export const update = mutation({
 		startTime: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "assignment", "update");
 
 		// GT-AUDIT-02 / hub F594: reassignment took any caller-chosen guideId
 		// with no membership check, while `create` has always refused one
@@ -598,7 +598,7 @@ export const cancel = mutation({
 		reason: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "assignment", "update");
 		return await ctx.runMutation(
 			internalRefs.assignments.internalCancel,
 			{
@@ -626,12 +626,7 @@ export const internalCancel = internalMutation({
 export const complete = mutation({
 	args: { assignmentId: v.id("assignments") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-			"guide",
-		]);
+		const member = await requirePermission(ctx, "assignment", "update");
 		return await ctx.runMutation(
 			internalRefs.assignments.internalComplete,
 			{
@@ -663,7 +658,7 @@ export const internalComplete = internalMutation({
 export const remove = mutation({
 	args: { assignmentId: v.id("assignments") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
+		const member = await requirePermission(ctx, "assignment", "delete");
 		return await ctx.runMutation(
 			internalRefs.assignments.internalRemove,
 			{
