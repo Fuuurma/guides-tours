@@ -40,6 +40,42 @@ describe("declared RBAC matrix (booking resource)", () => {
   })
 })
 
+// F938: notification writes bind to the declared matrix. Template create +
+// the new update action need owner/admin; member/guide/driver keep the
+// read-only grant the matrix always declared (the old requireRole literals
+// admitted member writes the matrix denies).
+describe("declared RBAC matrix (notification resource)", () => {
+  const can = (
+    role: string,
+    action: "create" | "read" | "update" | "send",
+  ) =>
+    roles[role as keyof typeof roles]?.authorize({ notification: [action] })
+      .success
+
+  it("owner and admin can create, update, send and read notifications", () => {
+    for (const role of ["owner", "admin"]) {
+      for (const action of ["create", "update", "send", "read"] as const) {
+        expect(can(role, action), `${role}:${action}`).toBe(true)
+      }
+    }
+  })
+
+  it("member, guide and driver are read-only on notifications", () => {
+    for (const role of ["member", "guide", "driver"]) {
+      expect(can(role, "read"), `${role}:read`).toBe(true)
+      for (const action of ["create", "update", "send"] as const) {
+        expect(can(role, action), `${role}:${action}`).toBe(false)
+      }
+    }
+  })
+
+  it("update is a declared notification action now (template edits)", () => {
+    expect(can("owner", "update")).toBe(true)
+    expect(can("admin", "update")).toBe(true)
+    expect(can("member", "update")).toBe(false)
+  })
+})
+
 // GT-AUDIT-10: the assignment resource is now permission-bound too
 // (assignments.ts gates via requirePermission("assignment", action)).
 describe("declared RBAC matrix (assignment resource)", () => {

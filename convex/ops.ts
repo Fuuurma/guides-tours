@@ -36,7 +36,7 @@ export const staffDeparture = mutation({
 	args: staffDepartureArgs,
 	returns: staffDepartureReturns,
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireRole(ctx, ["owner", "admin"]);
 		if (args.guideId) {
 			await assertGuideAssignable(ctx, member.organizationId, args.guideId);
 		}

@@ -40,7 +40,9 @@ export const statement = {
 	assignment: ["create", "read", "update", "delete"],
 	otaIntegration: ["create", "read", "update", "delete"],
 	payment: ["create", "read", "refund"],
-	notification: ["create", "read", "send"],
+	// F938: "update" is the template-edit action — owner/admin declare it;
+	// member/guide/driver keep read-only notification grants.
+	notification: ["create", "read", "update", "send"],
 	// Per-user self-service: a guide updating their own availability
 	// or vacation request is always allowed regardless of role, but
 	// the API surface for "guide self" lives under these resources.
@@ -62,7 +64,7 @@ const owner = ac.newRole({
 	assignment: ["create", "read", "update", "delete"],
 	otaIntegration: ["create", "read", "update", "delete"],
 	payment: ["create", "read", "refund"],
-	notification: ["create", "read", "send"],
+	notification: ["create", "read", "update", "send"],
 });
 
 const admin = ac.newRole({
@@ -75,7 +77,7 @@ const admin = ac.newRole({
 	assignment: ["create", "read", "update", "delete"],
 	otaIntegration: ["create", "read", "update", "delete"],
 	payment: ["create", "read", "refund"],
-	notification: ["create", "read", "send"],
+	notification: ["create", "read", "update", "send"],
 });
 
 const member = ac.newRole({
