@@ -12,6 +12,8 @@ import {
 	mutation,
 	internalMutation,
 } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
@@ -28,31 +30,61 @@ export const list = query({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const orgId = member.organizationId;
-		// Bound the result so an org with thousands of exception
-		// dates doesn't OOM the response.
-		const MAX_EXCEPTIONS = 500;
-		let q = ctx.db
+		const { rows, truncated } = await _exceptionRowsForList(ctx, {
+			organizationId: member.organizationId,
+			tourId: args.tourId,
+			exceptionType: args.exceptionType,
+			dateFrom: args.dateFrom,
+			dateTo: args.dateTo,
+		});
+		return { exceptions: rows, truncated };
+	},
+});
+
+/**
+ * Org-scoped exception-date scan shared by `list`. Probes one row
+ * past the cap so `truncated` says "more rows exist" instead of
+ * silently dropping them (F468). Exported for tests — the public
+ * `list` adds auth on top of the same scan.
+ */
+export async function _exceptionRowsForList(
+	ctx: QueryCtx,
+	args: {
+		organizationId: string;
+		tourId?: Id<"tours">;
+		exceptionType?: string;
+		dateFrom?: string;
+		dateTo?: string;
+	},
+): Promise<{ rows: Doc<"tourExceptionDates">[]; truncated: boolean }> {
+	const MAX_EXCEPTIONS = 500;
+	let q = ctx.db
+		.query("tourExceptionDates")
+		.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId));
+	if (args.tourId) {
+		q = ctx.db
 			.query("tourExceptionDates")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
-		if (args.tourId) {
-			// SECURITY: scope to org even when filtering by tourId.
-			q = ctx.db
-				.query("tourExceptionDates")
-				.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId!))
-				.filter((q) => q.eq(q.field("organizationId"), orgId));
-		}
-		const all = await q.take(MAX_EXCEPTIONS);
-		return all
+			.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId!))
+			.filter((q) =>
+				q.eq(q.field("organizationId"), args.organizationId),
+			);
+	}
+	const probe = await q.take(MAX_EXCEPTIONS + 1);
+	const truncated = probe.length > MAX_EXCEPTIONS;
+	return {
+		rows: probe
+			.slice(0, MAX_EXCEPTIONS)
 			.filter((e) => {
-				if (args.exceptionType && e.exceptionType !== args.exceptionType) return false;
+				if (args.exceptionType && e.exceptionType !== args.exceptionType)
+					return false;
 				if (args.dateFrom && e.date < args.dateFrom) return false;
 				if (args.dateTo && e.date > args.dateTo) return false;
 				return true;
 			})
-			.sort((a, b) => a.date.localeCompare(b.date));
-	},
-});
+			.sort((a, b) => a.date.localeCompare(b.date)),
+		truncated,
+	};
+}
 
 /**
  * F344: exceptions are authoritative like blackouts — the public booking

@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import { _exceptionRowsForList } from "../tourExceptionDates";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -215,5 +216,50 @@ describe("tour exception dates", () => {
 		});
 		const row = await t.run((ctx) => ctx.db.get(id));
 		expect(row).toBeNull();
+	});
+});
+describe("F468 — exception list scan signals truncation", () => {
+	async function seedExceptions(
+		ctx: any,
+		orgId: string,
+		tourId: any,
+		count: number,
+	) {
+		for (let i = 0; i < count; i++) {
+			await ctx.db.insert("tourExceptionDates", {
+				organizationId: orgId,
+				tourId,
+				date: `2026-07-${String((i % 28) + 1).padStart(2, "0")}`,
+				exceptionType: "removed",
+				reason: "",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		}
+	}
+
+	it("returns all rows and truncated:false under the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_excap1";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run((ctx) => seedExceptions(ctx, orgId, tourId, 3));
+		const res = await t.run((ctx) =>
+			_exceptionRowsForList(ctx as any, { organizationId: orgId, tourId }),
+		);
+		expect(res.truncated).toBe(false);
+		expect(res.rows.length).toBe(3);
+	});
+
+	it("returns 500 rows and truncated:true past the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_excap2";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run((ctx) => seedExceptions(ctx, orgId, tourId, 501));
+		const res = await t.run((ctx) =>
+			_exceptionRowsForList(ctx as any, { organizationId: orgId, tourId }),
+		);
+		expect(res.truncated).toBe(true);
+		expect(res.rows.length).toBe(500);
 	});
 });

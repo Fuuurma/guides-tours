@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
 import { internal } from "../_generated/api";
+import { _seasonalRowsForList } from "../tourSeasonalSchedules";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -184,5 +185,54 @@ describe("tour seasonal schedules", () => {
 		});
 		const row = await t.run((ctx) => ctx.db.get(id));
 		expect(row).toBeNull();
+	});
+});
+
+describe("F468 — seasonal list scan signals truncation", () => {
+	async function seedSeasonalRows(
+		ctx: any,
+		orgId: string,
+		tourId: any,
+		count: number,
+	) {
+		for (let i = 0; i < count; i++) {
+			await ctx.db.insert("tourSeasonalSchedules", {
+				organizationId: orgId,
+				tourId,
+				name: `Rule ${i}`,
+				startDate: "2026-06-01",
+				endDate: "2026-08-31",
+				daysOfWeek: [1],
+				isActive: true,
+				priority: 0,
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		}
+	}
+
+	it("returns all rows and truncated:false under the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_sscap1";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run((ctx) => seedSeasonalRows(ctx, orgId, tourId, 3));
+		const res = await t.run((ctx) =>
+			_seasonalRowsForList(ctx as any, { organizationId: orgId, tourId }),
+		);
+		expect(res.truncated).toBe(false);
+		expect(res.rows.length).toBe(3);
+	});
+
+	it("returns 500 rows and truncated:true past the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_sscap2";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run((ctx) => seedSeasonalRows(ctx, orgId, tourId, 501));
+		const res = await t.run((ctx) =>
+			_seasonalRowsForList(ctx as any, { organizationId: orgId, tourId }),
+		);
+		expect(res.truncated).toBe(true);
+		expect(res.rows.length).toBe(500);
 	});
 });

@@ -709,10 +709,12 @@ describe("convex/bookings — internalListBySchedule (schedule roster)", () => {
 				{ name: "Bob", email: "bob@a.com" },
 			]);
 		});
-		const rows = (await t.query(internal.bookings.internalListBySchedule, {
+		const result = (await t.query(internal.bookings.internalListBySchedule, {
 			scheduleId,
 			organizationId: "org_lbs_a",
-		})) as Array<{ customerName: string; customerEmail: string }>;
+		})) as { bookings: Array<{ customerName: string; customerEmail: string }>; truncated: boolean };
+		expect(result.truncated).toBe(false);
+		const rows = result.bookings;
 		expect(rows.length).toBe(2);
 		const names = rows.map((r) => r.customerName).sort();
 		expect(names).toEqual(["Alice", "Bob"]);
@@ -737,10 +739,12 @@ describe("convex/bookings — internalListBySchedule (schedule roster)", () => {
 			await c.db.patch(allBookings[2]._id, { status: "cancelled" });
 			return sid;
 		});
-		const rows = (await t.query(internal.bookings.internalListBySchedule, {
+		const result = (await t.query(internal.bookings.internalListBySchedule, {
 			scheduleId,
 			organizationId: "org_lbs_b",
-		})) as Array<{ customerName: string }>;
+		})) as { bookings: Array<{ customerName: string }>; truncated: boolean };
+		expect(result.truncated).toBe(false);
+		const rows = result.bookings;
 		expect(rows.length).toBe(2);
 		const names = rows.map((r) => r.customerName).sort();
 		expect(names).toEqual(["Active 1", "Active 2"]);
@@ -780,6 +784,60 @@ describe("convex/bookings — internalListBySchedule (schedule roster)", () => {
 			return all;
 		});
 		expect(rows).toEqual([]);
+	});
+
+	it("reports truncated when a schedule has more than 500 bookings (F468)", async () => {
+		const t = convexTest(schema, modules);
+		const scheduleId = await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			const tourId = await seedTour(c, "org_lbs_cap");
+			const sid = await c.db.insert("tourSchedules", {
+				organizationId: "org_lbs_cap",
+				tourId,
+				date: "2026-12-15",
+				startTime: "10:00",
+				endTime: "12:00",
+				capacityTotal: 20,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			const customerId = await seedCustomer(c, "org_lbs_cap");
+			for (let i = 0; i < 501; i++) {
+				await c.db.insert("bookings", {
+					organizationId: "org_lbs_cap",
+					tourId,
+					scheduleId: sid,
+					customerId,
+					date: "2026-12-15",
+					startTime: "10:00",
+					guests: 1,
+					guestNames: `Guest ${i}`,
+					languageRequired: "",
+					notes: "",
+					status: "confirmed",
+					depositAmountCents: 0n,
+					totalAmountCents: 1000n,
+					balanceDueCents: 1000n,
+					paymentMethod: "",
+					checkedInBy: "",
+					netRevenueCents: 1000n,
+					source: "direct",
+					reviewComment: "",
+					createdAt: 0,
+					updatedAt: 0,
+				});
+			}
+			return sid;
+		});
+		const result = (await t.query(
+			internal.bookings.internalListBySchedule,
+			{ scheduleId, organizationId: "org_lbs_cap" },
+		)) as { bookings: unknown[]; truncated: boolean };
+		expect(result.truncated).toBe(true);
+		expect(result.bookings.length).toBe(500);
 	});
 });
 

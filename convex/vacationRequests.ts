@@ -53,6 +53,9 @@ async function assignmentConflictsForVacation(
 		endDate: string;
 	},
 ) {
+	// F468: probe one row past the cap and report `truncated` — a
+	// truncated conflict scan cannot prove the leave window is
+	// clash-free, so the callers refuse rather than approve blind.
 	const guideHits = await ctx.db
 		.query("assignments")
 		.withIndex("by_guide_date", (q) =>
@@ -61,7 +64,7 @@ async function assignmentConflictsForVacation(
 				.gte("date", args.startDate)
 				.lte("date", args.endDate),
 		)
-		.take(500);
+		.take(501);
 	const driverRow = await ctx.db
 		.query("drivers")
 		.withIndex("by_org_user", (q) =>
@@ -77,14 +80,17 @@ async function assignmentConflictsForVacation(
 						.gte("date", args.startDate)
 						.lte("date", args.endDate),
 				)
-				.take(500)
+				.take(501)
 		: [];
-	return [...guideHits, ...driverHits].filter(
-		(a) =>
-			a.organizationId === args.organizationId &&
-			a.status === "scheduled" &&
-			a.deletedAt === undefined,
-	);
+	return {
+		conflicts: [...guideHits.slice(0, 500), ...driverHits.slice(0, 500)].filter(
+			(a) =>
+				a.organizationId === args.organizationId &&
+				a.status === "scheduled" &&
+				a.deletedAt === undefined,
+		),
+		truncated: guideHits.length > 500 || driverHits.length > 500,
+	};
 }
 
 function throwVacationAssignmentConflict(conflicts: { date: string; startTime: string }[]): never {
@@ -395,12 +401,17 @@ export const internalCreate = internalMutation({
 		// and must not bypass it (F348). `force` mirrors approve.
 		const status = args.status ?? "pending";
 		if (status === "approved") {
-			const conflicts = await assignmentConflictsForVacation(ctx, {
+			const { conflicts, truncated } = await assignmentConflictsForVacation(ctx, {
 				organizationId: args.organizationId,
 				userId: args.userId,
 				startDate: args.startDate,
 				endDate: args.endDate,
 			});
+			if (truncated && !args.force) {
+				throw new ConvexError(
+					"Too many assignments in this leave window to verify conflicts — narrow the date range",
+				);
+			}
 			if (conflicts.length > 0 && !args.force) {
 				throwVacationAssignmentConflict(conflicts);
 			}
@@ -487,12 +498,17 @@ export const internalApprove = internalMutation({
 
 		// Block approve when the guide already has scheduled assignments
 		// in the vacation window — unless the operator explicitly forces.
-		const conflicts = await assignmentConflictsForVacation(ctx, {
+		const { conflicts, truncated } = await assignmentConflictsForVacation(ctx, {
 			organizationId: args.organizationId,
 			userId: vr.userId,
 			startDate: vr.startDate,
 			endDate: vr.endDate,
 		});
+		if (truncated && !args.force) {
+			throw new ConvexError(
+				"Too many assignments in this leave window to verify conflicts — narrow the date range",
+			);
+		}
 		if (conflicts.length > 0 && !args.force) {
 			throwVacationAssignmentConflict(conflicts);
 		}

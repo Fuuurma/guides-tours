@@ -143,7 +143,7 @@ function ScheduleDetailPage() {
 			})
 		: null;
 
-	const bookingRows = (bookings ?? []) as ScheduleBooking[];
+	const bookingRows = (bookings?.bookings ?? []) as ScheduleBooking[];
 
 	const onCancelSchedule = async () => {
 		const ok = await confirm({
@@ -389,8 +389,12 @@ function ScheduleDetailPage() {
 			</DetailSection>
 
 			<DetailSection
-				title={`Guests (${bookingRows.length})`}
-				description="Direct and operator bookings on this departure"
+				title={`Guests (${bookingRows.length}${bookings?.truncated ? "+" : ""})`}
+				description={
+					bookings?.truncated
+						? "Direct and operator bookings on this departure — showing the first 500"
+						: "Direct and operator bookings on this departure"
+				}
 			>
 				{bookingsError ? (
 					<Alert variant="destructive">

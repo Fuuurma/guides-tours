@@ -287,11 +287,14 @@ export const list = query({
  * a small number of distinct customers so the savings are real.
  */
 async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">) {
+	// Probe one row past the cap so `truncated` reports a silently
+	// shortened roster instead of dropping it (F468).
 	const all = await ctx.db
 		.query("bookings")
 		.withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId))
-		.take(500);
-	const active = all
+		.take(501);
+	const truncated = all.length > 500;
+	const active = all.slice(0, 500)
 		.filter((b) => b.status !== "cancelled")
 		.sort((a, b) => a.startTime.localeCompare(b.startTime));
 	const uniqueCustomerIds = [
@@ -305,18 +308,21 @@ async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">
 		const c = customerDocs[i];
 		if (c) customerById.set(id, c);
 	}
-	return active.map((b) => {
-		const c = customerById.get(b.customerId);
-		return {
-			_id: b._id,
-			date: b.date,
-			startTime: b.startTime,
-			guests: b.guests,
-			status: b.status,
-			customerName: c?.name ?? "",
-			customerEmail: c?.email ?? "",
-		};
-	});
+	return {
+		bookings: active.map((b) => {
+			const c = customerById.get(b.customerId);
+			return {
+				_id: b._id,
+				date: b.date,
+				startTime: b.startTime,
+				guests: b.guests,
+				status: b.status,
+				customerName: c?.name ?? "",
+				customerEmail: c?.email ?? "",
+			};
+		}),
+		truncated,
+	};
 }
 
 export const listBySchedule = query({
@@ -329,7 +335,7 @@ export const listBySchedule = query({
 		// on scheduleId (defense in depth — a malicious caller can't
 		// read another org's bookings by guessing a scheduleId).
 		const schedule = await ctx.db.get(args.scheduleId);
-		if (!schedule) return [];
+		if (!schedule) return { bookings: [], truncated: false };
 		if (schedule.organizationId !== member.organizationId) {
 			throw new ConvexError(
 				"Forbidden: schedule belongs to a different organization",
@@ -352,7 +358,7 @@ export const internalListBySchedule = internalQuery({
 	},
 	handler: async (ctx, args) => {
 		const schedule = await ctx.db.get(args.scheduleId);
-		if (!schedule) return [];
+		if (!schedule) return { bookings: [], truncated: false };
 		if (schedule.organizationId !== args.organizationId) {
 			throw new ConvexError(
 				"Forbidden: schedule belongs to a different organization",
