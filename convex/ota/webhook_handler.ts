@@ -112,15 +112,18 @@ export function createWebhookHandler(config: WebhookConfig) {
 			);
 		} catch (err) {
 			// A malformed integrationId fails the v.id arg validator
-			// inside the query — map it to 400 so the provider isn't
-			// told to retry a request that can never succeed (F123).
-			// Any other failure is a real internal error and keeps
-			// propagating as a 500.
+			// inside the query — answer identically to an invalid
+			// signature so the error channel can't reveal whether a
+			// well-formed ID exists (F676). Any other failure is a real
+			// internal error and keeps propagating as a 500.
 			if (
 				err instanceof Error &&
 				err.message.includes("Expected ID for table")
 			) {
-				return new Response("invalid integrationId", { status: 400 });
+				logger.warn(
+					`${config.logPrefix} webhook rejected: malformed integrationId`,
+				);
+				return new Response("invalid signature", { status: 401 });
 			}
 			throw err;
 		}
@@ -143,20 +146,22 @@ export function createWebhookHandler(config: WebhookConfig) {
 			return new Response("invalid signature", { status: 401 });
 		}
 		if (!integration.webhookSecret) {
-			return new Response("integration missing webhook secret", {
-				status: 500,
-			});
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: integration missing webhook secret`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 
 		let secret: string;
 		try {
 			secret = await decrypt(integration.webhookSecret);
 		} catch {
-			// Corrupt/rotated secret in storage: fail closed with a 500
-			// instead of an unhandled throw (fleet devin 2026-09-06).
-			return new Response("integration secret undecryptable", {
-				status: 500,
-			});
+			// Corrupt/rotated secret in storage: fail closed uniformly
+			// (F676) instead of an unhandled throw (fleet devin 2026-09-06).
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: integration secret undecryptable`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		const verifyResult = await verifyWebhookSignatureWithTimestamp(
 			rawBody,
