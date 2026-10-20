@@ -4,6 +4,7 @@
 // booking flow can use the same parser when validating dates.
 
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { logger } from "./logger";
 
 /** Fallback zone for operators without organizationSettings.timeZone. */
 export const DEFAULT_TIME_ZONE = "Europe/Madrid";
@@ -101,7 +102,7 @@ export function parseBookingTimeInZone(
 	if (t === null) return null;
 	const fmt = zoneFormatter(timeZone);
 	if (fmt === null) {
-		console.warn(
+		logger.warn(
 			`[time] unknown IANA zone "${timeZone}" — parsing as UTC`,
 		);
 		return parseBookingTime(date, startTime);
@@ -125,7 +126,7 @@ export async function organizationTimeZone(
 	const tz = row?.timeZone;
 	if (tz === undefined) return DEFAULT_TIME_ZONE;
 	if (zoneFormatter(tz) === null) {
-		console.warn(
+		logger.warn(
 			`[time] org ${organizationId} has invalid timeZone "${tz}" — using ${DEFAULT_TIME_ZONE}`,
 		);
 		return DEFAULT_TIME_ZONE;

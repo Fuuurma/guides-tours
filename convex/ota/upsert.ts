@@ -13,6 +13,7 @@ import type { MutationCtx } from "../_generated/server";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { logAudit } from "../lib/audit";
+import { logger } from "../lib/logger";
 import { normalizeCurrency } from "../lib/money";
 
 /**
@@ -105,7 +106,7 @@ export const upsertOtaBooking = internalMutation({
 		}
 		const guests = Math.max(1, Math.floor(event.guests));
 		if (guests !== event.guests) {
-			console.warn(
+			logger.warn(
 				`ota guests: clamping ${event.guests} → ${guests} for ${event.reservationId}`,
 			);
 		}
@@ -122,12 +123,12 @@ export const upsertOtaBooking = internalMutation({
 		// net ≥ 0 invariant holds regardless of source.
 		if (commissionCents !== undefined && paidCents !== undefined) {
 			if (commissionCents < 0n) {
-				console.warn(
+				logger.warn(
 					`ota commission: clamping negative ${commissionCents} → 0 for ${event.reservationId}`,
 				);
 				commissionCents = 0n;
 			} else if (commissionCents > paidCents) {
-				console.warn(
+				logger.warn(
 					`ota commission: clamping ${commissionCents} > paid ${paidCents} → paid for ${event.reservationId}`,
 				);
 				commissionCents = paidCents;
@@ -353,7 +354,7 @@ async function applyOtaCapacity(
 	} else if (guests < 0) {
 		const newBooked = schedule.capacityBooked + guests;
 		if (newBooked < 0) {
-			console.warn(
+			logger.warn(
 				`ota capacity: decrement of ${-guests} exceeds capacityBooked ${schedule.capacityBooked} on schedule ${scheduleId} — flooring at 0`,
 			);
 		}
