@@ -86,6 +86,37 @@ export const add = mutation({
 	},
 });
 
+// F846: the client PUTs the blob to storage before calling `add`, so a
+// rejected add (full gallery, missing tour, permission) leaves a live,
+// unreferenced blob. A failed mutation rolls its own storage writes
+// back, so cleanup can't happen inside `add` — the client calls this
+// after catching the error. Deletes only when nothing references the
+// storageId, which keeps it safe against retries and double-submits:
+// a blob any tourImages or files row points at is left alone.
+export const discard = mutation({
+	args: { storageId: v.id("_storage") },
+	handler: async (ctx, args) => {
+		await requireMembership(ctx);
+		const [galleryRow, fileRow] = await Promise.all([
+			ctx.db
+				.query("tourImages")
+				.withIndex("by_storage_id", (q) =>
+					q.eq("storageId", args.storageId),
+				)
+				.first(),
+			ctx.db
+				.query("files")
+				.withIndex("by_storage_id", (q) =>
+					q.eq("storageId", args.storageId),
+				)
+				.first(),
+		]);
+		if (!galleryRow && !fileRow) {
+			await ctx.storage.delete(args.storageId);
+		}
+	},
+});
+
 export const internalAdd = internalMutation({
 	args: {
 		organizationId: v.string(),
