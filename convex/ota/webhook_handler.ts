@@ -171,14 +171,6 @@ export function createWebhookHandler(config: WebhookConfig) {
 			undefined,
 			{ requireTimestamp: config.requireTimestamp },
 		);
-		if (verifyResult.reason === "skipped") {
-			// Observability: surface providers that don't send a
-			// timestamp header so operators can decide to flip
-			// requireTimestamp on for them.
-			logger.info(
-				`${config.logPrefix} timestamp header absent — replay check skipped (provider compat)`,
-			);
-		}
 		if (!verifyResult.valid) {
 			// Don't echo the failure reason — it tells a caller which
 			// check (signature vs timestamp) failed and aids probing.
