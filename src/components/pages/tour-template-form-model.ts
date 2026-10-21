@@ -98,7 +98,10 @@ export function templateFormToMutationArgs(value: TourTemplateFormValues) {
 	});
 	return {
 		name: value.name.trim(),
-		description: value.description.trim() || undefined,
+		// F840: an explicit clear must reach the server. "" is a real value
+		// (internalCreate already stores "" for an absent description), while
+		// undefined would read as "leave unchanged" and resurrect the stale text.
+		description: value.description.trim(),
 		tourType: value.tourType,
 		durationHours: Number(value.durationHours),
 		capacity: Number(value.capacity),
@@ -113,12 +116,14 @@ export function templateFormToMutationArgs(value: TourTemplateFormValues) {
 		exclusions: splitLines(value.exclusions),
 		highlights: splitLines(value.highlights),
 		requiredGuides: Number(value.requiredGuides) || 1,
-		requiresVehicle: value.staffingOverride ? value.requiresVehicle : undefined,
-		requiresDriver: value.staffingOverride ? value.requiresDriver : undefined,
+		// F840: null is the deletion sentinel — undefined would leave a stale
+		// override on the doc while the switch says it is off.
+		requiresVehicle: value.staffingOverride ? value.requiresVehicle : null,
+		requiresDriver: value.staffingOverride ? value.requiresDriver : null,
 		requiredVehicleType:
 			value.staffingOverride && inferred.requiresVehicle
-				? value.requiredVehicleType || undefined
-				: undefined,
+				? value.requiredVehicleType || null
+				: null,
 	};
 }
 
