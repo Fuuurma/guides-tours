@@ -309,6 +309,18 @@ export const internalRemove = internalMutation({
 		if (existing.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: wrong organization");
 		}
+		// F682: mirror vehicles.internalRemove — a hard delete leaves every
+		// assignment with a dangling driverId, so conflict detection goes
+		// blind for that person and staffing reads the orphan as staffed.
+		const references = await ctx.db
+			.query("assignments")
+			.withIndex("by_driver_date", (q) => q.eq("driverId", args.driverId))
+			.take(1);
+		if (references.length > 0) {
+			throw new ConvexError(
+				"Cannot delete a driver that is referenced by assignments; retire it instead",
+			);
+		}
 		await ctx.db.delete(args.driverId);
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
