@@ -4,6 +4,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import {
+	armOAuthInitiatorFromWindow,
+	withInitiator,
+} from "@/lib/oauth-initiator";
 import { api } from "../../../convex/_generated/api";
 
 // Renders a stable, branded "Continue with Google" button.
@@ -49,8 +53,14 @@ export function GoogleSignInButton({ callbackURL }: { callbackURL: string }) {
 			const absoluteCallback = callbackURL.startsWith("/")
 				? `${window.location.origin}${callbackURL}`
 				: callbackURL;
+			// Browser-bind the flow: the nonce armed here must come back as
+			// `init` on the callback URL, or the one-time token is refused
+			// before any consumer can exchange it (lib/oauth-initiator).
 			const result = await authClient.signIn.social({
-				callbackURL: absoluteCallback,
+				callbackURL: withInitiator(
+					absoluteCallback,
+					armOAuthInitiatorFromWindow(),
+				),
 				provider: "google",
 			});
 			if (result.error) {
