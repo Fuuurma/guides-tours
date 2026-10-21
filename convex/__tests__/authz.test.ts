@@ -76,6 +76,31 @@ describe("declared RBAC matrix (notification resource)", () => {
   })
 })
 
+// F934: the tour write surfaces (schedules, seasonal schedules, blackout
+// dates, exception dates, the public gallery) bind to the declared matrix —
+// the old requireRole literals admitted member writes the matrix denies.
+describe("declared RBAC matrix (tour resource)", () => {
+  const can = (role: string, action: "create" | "read" | "update" | "delete") =>
+    roles[role as keyof typeof roles]?.authorize({ tour: [action] }).success
+
+  it("owner and admin have full tour CRUD", () => {
+    for (const role of ["owner", "admin"]) {
+      for (const action of ["create", "read", "update", "delete"] as const) {
+        expect(can(role, action), `${role}:${action}`).toBe(true)
+      }
+    }
+  })
+
+  it("member, guide and driver are read-only on tours", () => {
+    for (const role of ["member", "guide", "driver"]) {
+      expect(can(role, "read"), `${role}:read`).toBe(true)
+      for (const action of ["create", "update", "delete"] as const) {
+        expect(can(role, action), `${role}:${action}`).toBe(false)
+      }
+    }
+  })
+})
+
 // GT-AUDIT-10: the assignment resource is now permission-bound too
 // (assignments.ts gates via requirePermission("assignment", action)).
 describe("declared RBAC matrix (assignment resource)", () => {

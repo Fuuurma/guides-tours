@@ -13,7 +13,11 @@ import {
 
 import { internal } from "./_generated/api";
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import {
+	requireMembership,
+	requirePermission,
+	requireRole,
+} from "./lib/authz";
 import { logAudit } from "./lib/audit";
 
 // F812: the gallery read caps at this many images per tour; the add
@@ -104,7 +108,7 @@ export const add = mutation({
 		format: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourImages.internalAdd,
 			{
@@ -216,7 +220,7 @@ export const update = mutation({
 		displayOrder: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "update");
 		const { imageId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.tourImages.internalUpdate,
@@ -311,7 +315,7 @@ export const reorder = mutation({
 		orderedImageIds: v.array(v.id("tourImages")),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "update");
 		return await ctx.runMutation(
 			internalRefs.tourImages.internalReorder,
 			{

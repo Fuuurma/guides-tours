@@ -14,7 +14,11 @@ import type { QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import {
+	requireMembership,
+	requirePermission,
+	requireRole,
+} from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { syncTourAvailability } from "./lib/availabilityProjection";
 import { assertFieldWithinLimit } from "./lib/validation";
@@ -110,7 +114,7 @@ export const create = mutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourSeasonalSchedules.internalCreate,
 			{ organizationId: member.organizationId, userId: member.userId, ...args },
@@ -205,7 +209,7 @@ export const update = mutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "update");
 		const { scheduleId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.tourSeasonalSchedules.internalUpdate,
@@ -315,7 +319,7 @@ export const generate = mutation({
 		dateTo: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourSeasonalSchedules.internalGenerate,
 			{

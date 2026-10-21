@@ -15,7 +15,11 @@ import { exceptionForDateHelper } from "./tourExceptionDates";
 
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import {
+	requireMembership,
+	requirePermission,
+	requireRole,
+} from "./lib/authz";
 import { logAudit } from "./lib/audit";
 
 // ---- queries ----
@@ -185,7 +189,7 @@ export const create = mutation({
 		reason: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourBlackoutDates.internalCreate,
 			{ organizationId: member.organizationId, userId: member.userId, ...args },
@@ -248,7 +252,7 @@ export const update = mutation({
 		reason: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "update");
 		const { blackoutId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.tourBlackoutDates.internalUpdate,
