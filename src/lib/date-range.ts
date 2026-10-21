@@ -39,15 +39,17 @@ export function upcomingDateRange(n = 30): { from: string; to: string } {
 }
 
 /**
- * Jan 1 (UTC) through today. Uses UTC throughout so the "Jan 1"
- * boundary is in the same timezone as the rest of the date math —
- * a user west of UTC would otherwise see the previous Dec 31.
+ * Jan 1 through today, in LOCAL calendar days like every other preset
+ * here. F802: this used the UTC clock while lastNDays/upcomingDateRange
+ * use the local calendar, so for zone-dependent hours the YTD window
+ * named the wrong year — Manila at 07:00 on Jan 1 got the entire
+ * previous year, New York at 19:00 on Dec 31 got one day of the next.
  */
 export function yearToDate(): DateRange {
 	const end = new Date();
-	const start = new Date(Date.UTC(end.getUTCFullYear(), 0, 1));
+	const start = new Date(end.getFullYear(), 0, 1);
 	return {
-		startDate: start.toISOString().slice(0, 10),
-		endDate: end.toISOString().slice(0, 10),
+		startDate: localYmd(start),
+		endDate: localYmd(end),
 	};
 }
