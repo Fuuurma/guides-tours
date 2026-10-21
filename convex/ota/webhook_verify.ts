@@ -190,9 +190,6 @@ export function checkWebhookTimestamp(
 		// Skip replay check — the provider doesn't send a timestamp.
 		// The HMAC signature still protects against tampering; only
 		// replay of a captured valid payload is unchecked.
-		if (options?.requireTimestamp) {
-			return { valid: false, reason: "missing" };
-		}
 		return { valid: true, reason: "skipped" };
 	}
 	// Reject anything that isn't a pure integer string. parseInt is
