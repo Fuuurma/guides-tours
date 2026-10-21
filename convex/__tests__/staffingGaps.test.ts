@@ -233,4 +233,49 @@ describe("staffingGaps.formatStaffingDigest", () => {
 		);
 		expect(out.bodyText).toContain("• Blas (guide, 2 assignments)");
 	});
+
+	// F872 — a cut scan must never read as a fully-staffed window. The
+	// zero-gap variant is the dangerous one: before the flag, a window
+	// with 500+ rows and no visible gaps mailed "All departures look
+	// fully staffed" (or was skipped as nothing-to-report).
+	it("a truncated zero-gap window is reported as an incomplete check, not as fully staffed", () => {
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-21",
+			gaps: [],
+			truncated: true,
+			siteUrl: "https://app.example.com",
+		});
+		expect(out.subject).toBe("Staffing check incomplete · 2026-12-20–2026-12-21");
+		expect(out.bodyText).not.toContain("fully staffed");
+		expect(out.bodyText).toContain("the check was cut short");
+		expect(out.bodyText).toContain(
+			"Review in Staffing: https://app.example.com/dashboard/staffing?from=2026-12-20&to=2026-12-21",
+		);
+		expect(out.smsBody).toContain("cut short");
+	});
+
+	it("a truncated gap list marks the count as a floor on every channel", () => {
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-20",
+			gaps: [gap],
+			truncated: true,
+		});
+		expect(out.subject).toBe("1+ staffing gaps (partial check) · 2026-12-20–2026-12-20");
+		expect(out.bodyText).toContain("Partial check: the row cap was hit");
+		expect(out.smsBody).toContain("Partial check.");
+	});
+
+	it("an untruncated digest carries no partial-check copy", () => {
+		const out = formatStaffingDigest({
+			dateFrom: "2026-12-20",
+			dateTo: "2026-12-20",
+			gaps: [gap],
+			truncated: false,
+		});
+		expect(out.subject).toBe("1 staffing gap · 2026-12-20–2026-12-20");
+		expect(out.bodyText).not.toContain("Partial check");
+		expect(out.smsBody).not.toContain("Partial check");
+	});
 });

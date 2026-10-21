@@ -204,16 +204,30 @@ export function formatStaffingDigest(input: {
 	siteUrl?: string;
 	/** Staff on assignments with no phone (SMS won't reach them). */
 	missingPhones?: Array<{ name: string; roles: string[]; assignmentCount: number }>;
+	/**
+	 * The scan hit its row cap, so departures past the cut were never
+	 * checked (F872). The digest must say so — a cut set with no visible
+	 * gaps is not a fully-staffed window.
+	 */
+	truncated?: boolean;
 }): { subject: string; bodyText: string; smsBody: string } {
 	const n = input.gaps.length;
-	const subject =
-		n === 0
+	const partial = input.truncated === true;
+	const subject = partial
+		? n === 0
+			? `Staffing check incomplete · ${input.dateFrom}–${input.dateTo}`
+			: `${n}+ staffing gaps (partial check) · ${input.dateFrom}–${input.dateTo}`
+		: n === 0
 			? `Staffing OK · ${input.dateFrom}–${input.dateTo}`
 			: `${n} staffing gap${n === 1 ? "" : "s"} · ${input.dateFrom}–${input.dateTo}`;
 
 	const base = (input.siteUrl ?? "").replace(/\/$/, "");
 	const staffingPage = base
 		? `${base}/dashboard/staffing?from=${encodeURIComponent(input.dateFrom)}&to=${encodeURIComponent(input.dateTo)}`
+		: "";
+
+	const partialLine = partial
+		? `Partial check: the row cap was hit for ${input.dateFrom} through ${input.dateTo}, so departures past the cut were not checked.${staffingPage ? ` Review in Staffing: ${staffingPage}` : " Review Staffing in the dashboard."}`
 		: "";
 
 	const missing = input.missingPhones ?? [];
@@ -235,9 +249,12 @@ export function formatStaffingDigest(input: {
 
 	if (n === 0) {
 		const ok = [
-			`All departures look fully staffed for ${input.dateFrom} through ${input.dateTo}.`,
+			partial
+				? `No gaps were found in the rows checked for ${input.dateFrom} through ${input.dateTo} — but the check was cut short, so later departures may still need staffing.`
+				: `All departures look fully staffed for ${input.dateFrom} through ${input.dateTo}.`,
+			partialLine,
 			missingBlock,
-			staffingPage && !missingBlock ? `\n${staffingPage}` : "",
+			staffingPage && !missingBlock && !partial ? `\n${staffingPage}` : "",
 		]
 			.filter(Boolean)
 			.join("\n");
@@ -267,15 +284,15 @@ export function formatStaffingDigest(input: {
 		"",
 		...lines,
 		more,
+		partialLine ? `\n${partialLine}` : "",
 		missingBlock,
 	]
 		.filter((x) => x !== null && x !== "")
 		.join("\n");
 
 	const smsExtra =
-		missing.length > 0
-			? ` ${missing.length} missing phone.`
-			: "";
+		(missing.length > 0 ? ` ${missing.length} missing phone.` : "") +
+		(partial ? " Partial check." : "");
 	const smsBody =
 		n <= 3 && !staffingPage
 			? `${n} staffing gap${n === 1 ? "" : "s"}: ${input.gaps

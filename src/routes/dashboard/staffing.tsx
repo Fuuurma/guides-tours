@@ -68,7 +68,7 @@ function StaffingPage() {
 		to: search.to ?? defaultRange().to,
 	}));
 	const {
-		data: gaps,
+		data: gapsResult,
 		isPending,
 		error,
 	} = useQuery(
@@ -93,7 +93,10 @@ function StaffingPage() {
 	const sendPhoneReminders = useMutation(api.phoneReminders.sendReminders);
 	const [remindPending, setRemindPending] = useState(false);
 
-	const items = gaps ?? [];
+	const items = gapsResult?.gaps ?? [];
+	// F872: the scan is capped — past the cap the gaps are unknown, so
+	// the count, the empty state and the readiness copy must say so.
+	const truncated = gapsResult?.truncated === true;
 	const missing = missingPhones ?? [];
 	const summary = useMemo(() => {
 		let needGuides = 0;
@@ -236,9 +239,19 @@ function StaffingPage() {
 				</Alert>
 			)}
 
+			{!isPending && truncated && (
+				<p className="mb-4 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-warning text-xs">
+					This range has more departures and assignments than the staffing check
+					reads at once, so gaps past the first 500 are not listed. Narrow the
+					date range for a complete check.
+				</p>
+			)}
+
 			{!isPending && items.length > 0 && (
 				<p className="text-muted-foreground mb-4 text-sm">
-					{items.length} gap{items.length === 1 ? "" : "s"}
+					{items.length}
+					{truncated ? "+" : ""} gap
+					{items.length === 1 && !truncated ? "" : "s"}
 					{summary.needGuides ? ` · ${summary.needGuides} need guides` : ""}
 					{summary.needVehicle ? ` · ${summary.needVehicle} need vehicle` : ""}
 					{summary.needDriver ? ` · ${summary.needDriver} need driver` : ""}
@@ -254,10 +267,13 @@ function StaffingPage() {
 						<EmptyMedia variant="icon">
 							<Users />
 						</EmptyMedia>
-						<EmptyTitle>No staffing gaps</EmptyTitle>
+						<EmptyTitle>
+							{truncated ? "No gaps in the rows checked" : "No staffing gaps"}
+						</EmptyTitle>
 						<EmptyDescription>
-							Every published departure in this range has the guides and fleet
-							it needs. Open the calendar to assign the next week.
+							{truncated
+								? "The check was cut short by the row cap, so later departures in this range may still need staffing. Narrow the date range to check them."
+								: "Every published departure in this range has the guides and fleet it needs. Open the calendar to assign the next week."}
 						</EmptyDescription>
 					</EmptyHeader>
 					<EmptyContent>

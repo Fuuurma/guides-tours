@@ -156,7 +156,10 @@ function DashboardIndex() {
 		)
 		.slice(0, 4);
 	const totalTours = (tours ?? []).filter((t) => t.isActive).length;
-	const gaps = staffingGaps ?? [];
+	const gaps = staffingGaps?.gaps ?? [];
+	// F872: the 7-day scan is capped, so a cut window's 48h count is a
+	// floor — the pill must carry that instead of reading as complete.
+	const gapsTruncated = staffingGaps?.truncated === true;
 	const topGaps = gaps.slice(0, 5);
 	const missing = missingPhones ?? [];
 	const topMissing = missing.slice(0, 5);
@@ -212,10 +215,12 @@ function DashboardIndex() {
 		// pill is "right now" urgency, not "this week".
 		const horizon = localYmd(addDaysLocal(new Date(), 2));
 		const gaps48h = gaps.filter((g) => g.date >= today && g.date <= horizon);
-		if (gaps48h.length > 0) {
+		if (gaps48h.length > 0 || gapsTruncated) {
 			items.push({
 				key: "gaps48h",
-				label: "Staffing gaps in 48h",
+				label: gapsTruncated
+					? "Staffing gaps in 48h · partial check"
+					: "Staffing gaps in 48h",
 				count: gaps48h.length,
 				to: "/dashboard/staffing",
 				icon: UserCheck,
@@ -268,6 +273,7 @@ function DashboardIndex() {
 		return items;
 	}, [
 		gaps,
+		gapsTruncated,
 		today,
 		pendingBookingPage,
 		pendingBookings.length,

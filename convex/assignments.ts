@@ -284,7 +284,11 @@ export const staffingGaps = query({
 		const orgId = member.organizationId;
 		const MAX = 500;
 
-		const schedules = await ctx.db
+		// F872: probe one past the cap so a full window is reported, not
+		// mistaken for a fully-staffed one — the gaps past the cut are
+		// unknown, and every consumer (readiness page, 48h pill, digest)
+		// must say so instead of reading the cut set as complete.
+		const scheduleWindow = await ctx.db
 			.query("tourSchedules")
 			.withIndex("by_org_date", (q) =>
 				q
@@ -292,9 +296,9 @@ export const staffingGaps = query({
 					.gte("date", args.dateFrom)
 					.lte("date", args.dateTo),
 			)
-			.take(MAX);
+			.take(MAX + 1);
 
-		const assignments = await ctx.db
+		const assignmentWindow = await ctx.db
 			.query("assignments")
 			.withIndex("by_org_date", (q) =>
 				q
@@ -302,7 +306,12 @@ export const staffingGaps = query({
 					.gte("date", args.dateFrom)
 					.lte("date", args.dateTo),
 			)
-			.take(MAX);
+			.take(MAX + 1);
+
+		const truncated =
+			scheduleWindow.length > MAX || assignmentWindow.length > MAX;
+		const schedules = scheduleWindow.slice(0, MAX);
+		const assignments = assignmentWindow.slice(0, MAX);
 
 		const tourIds = new Set<string>();
 		for (const s of schedules) tourIds.add(String(s.tourId));
@@ -338,11 +347,14 @@ export const staffingGaps = query({
 			}
 		}
 
-		return computeStaffingGaps({
-			schedules,
-			assignments,
-			toursById,
-		});
+		return {
+			gaps: computeStaffingGaps({
+				schedules,
+				assignments,
+				toursById,
+			}),
+			truncated,
+		};
 	},
 });
 

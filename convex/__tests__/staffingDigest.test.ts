@@ -302,24 +302,31 @@ describe("convex/staffingDigest — gapsForOrg", () => {
 			}),
 		);
 
-		const gaps = (await t.query(internal.staffingDigest.gapsForOrg, {
-			organizationId: orgId,
-			dateFrom: "2026-09-01",
-			dateTo: "2026-09-07",
-		})) as Array<{
-			tourName: string;
-			date: string;
-			startTime: string;
-			guideCount: number;
-			requiredGuides: number;
-			guidesNeeded: number;
-			requiresVehicle: boolean;
-			requiresDriver: boolean;
-			hasVehicle: boolean;
-			hasDriver: boolean;
-			gaps: string[];
-		}>;
+		const { gaps, truncated } = (await t.query(
+			internal.staffingDigest.gapsForOrg,
+			{
+				organizationId: orgId,
+				dateFrom: "2026-09-01",
+				dateTo: "2026-09-07",
+			},
+		)) as {
+			gaps: Array<{
+				tourName: string;
+				date: string;
+				startTime: string;
+				guideCount: number;
+				requiredGuides: number;
+				guidesNeeded: number;
+				requiresVehicle: boolean;
+				requiresDriver: boolean;
+				hasVehicle: boolean;
+				hasDriver: boolean;
+				gaps: string[];
+			}>;
+			truncated: boolean;
+		};
 
+		expect(truncated).toBe(false);
 		expect(gaps).toHaveLength(1);
 		const gap = gaps[0]!;
 		expect(gap.tourName).toBe("City Car Tour");
@@ -338,7 +345,7 @@ describe("convex/staffingDigest — gapsForOrg", () => {
 		expect(gap.gaps).not.toContain("guides");
 	});
 
-	it("returns an empty array when no assignments (or schedules) exist", async () => {
+	it("returns no gaps (and no truncation) when no assignments (or schedules) exist", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_empty";
 		// A tour exists, but no schedules and no assignments in the window.
@@ -346,13 +353,13 @@ describe("convex/staffingDigest — gapsForOrg", () => {
 			seedTour(ctx as unknown as TestCtx, orgId),
 		);
 
-		const gaps = await t.query(internal.staffingDigest.gapsForOrg, {
+		const result = await t.query(internal.staffingDigest.gapsForOrg, {
 			organizationId: orgId,
 			dateFrom: "2026-09-01",
 			dateTo: "2026-09-07",
 		});
 
-		expect(gaps).toEqual([]);
+		expect(result).toEqual({ gaps: [], truncated: false });
 	});
 
 	it("returns an empty array when all departures are fully staffed", async () => {
@@ -408,19 +415,61 @@ describe("convex/staffingDigest — gapsForOrg", () => {
 			}),
 		);
 
-		const gaps = await t.query(internal.staffingDigest.gapsForOrg, {
+		const result = await t.query(internal.staffingDigest.gapsForOrg, {
 			organizationId: orgId,
 			dateFrom: "2026-09-01",
 			dateTo: "2026-09-07",
 		});
 
-		expect(gaps).toEqual([]);
+		expect(result).toEqual({ gaps: [], truncated: false });
 		// Sanity: the schedule we seeded really exists (guards against a
 		// false pass from a date-range mismatch).
 		const schedules = await t.run(async (ctx) =>
 			ctx.db.get(scheduleId),
 		);
 		expect(schedules).not.toBeNull();
+	});
+
+	// F872: the scan is capped at MAX_ROWS (500) per table. One row past
+	// the cap must flip `truncated` — before the probe, a 501-departure
+	// window reported the first 500 as the whole picture, and a cut set
+	// with no visible gaps read as "fully staffed" on every surface.
+	it("flags truncated when a window holds more schedules than the row cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_capped";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId, {
+				name: "Old Town Walk",
+				tourType: "walking",
+				requiredGuides: 1,
+			}),
+		);
+		// 501 unstaffed departures on one date — every one is a gap, so
+		// the cut set is non-empty AND the window overflows the cap.
+		await t.run(async (ctx) => {
+			for (let i = 0; i < 501; i++) {
+				const hh = String(Math.floor(i / 60)).padStart(2, "0");
+				const mm = String(i % 60).padStart(2, "0");
+				await seedSchedule(ctx as unknown as TestCtx, orgId, tourId, {
+					date: "2026-09-01",
+					startTime: `${hh}:${mm}`,
+				});
+			}
+		});
+
+		const { gaps, truncated } = (await t.query(
+			internal.staffingDigest.gapsForOrg,
+			{
+				organizationId: orgId,
+				dateFrom: "2026-09-01",
+				dateTo: "2026-09-07",
+			},
+		)) as { gaps: unknown[]; truncated: boolean };
+
+		expect(truncated).toBe(true);
+		// The computed set is bounded by the cap — never the 501st row.
+		expect(gaps.length).toBeLessThanOrEqual(500);
+		expect(gaps.length).toBeGreaterThan(0);
 	});
 });
 
