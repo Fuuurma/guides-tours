@@ -811,6 +811,13 @@ export async function buildForTour(
 			.take(MAX_ANALYTICS_SCAN),
 	]);
 
+	// A full window means a scan hit the cap and every count below is a
+	// floor, not the total — the org-wide assignments leg hits it first
+	// for a busy org, corrupting every tour's figures (F858).
+	const truncated =
+		bookings.length >= MAX_ANALYTICS_SCAN ||
+		assignments.length >= MAX_ANALYTICS_SCAN;
+
 	const tourAssignments = assignments.filter(
 		(a) => a.tourId === tour._id && !a.deletedAt,
 	);
@@ -857,6 +864,7 @@ export async function buildForTour(
 		cancelledAssignments: tourAssignments.filter(
 			(a) => a.status === "cancelled",
 		).length,
+		truncated,
 	};
 }
 

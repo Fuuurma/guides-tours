@@ -153,6 +153,9 @@ describe("analytics", () => {
 		expect(stats!.totalAssignments).toBe(1);
 		expect(stats!.completedAssignments).toBe(1);
 		expect(stats!.avgGroupSize).toBe(4);
+		// F858: the flag is part of the contract like every sibling builder —
+		// a small seed reports it present and false; a capped scan flips it.
+		expect(stats!.truncated).toBe(false);
 	});
 
 	it("getDailyStats: fills zeros for empty days", async () => {

@@ -330,6 +330,12 @@ function TourDetailPage() {
 						/>
 					</div>
 					{/* F119: bookings lead the stats row */}
+					{stats.truncated && (
+						<p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-warning text-xs">
+							These figures only cover the first 10,000 matching rows in this
+							window. Narrow the date range for exact totals.
+						</p>
+					)}
 					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 						<MetricCard label="Bookings" value={stats.totalBookings} featured />
 						<MetricCard label="Guests" value={stats.totalGuests} />
