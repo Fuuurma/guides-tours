@@ -101,6 +101,39 @@ describe("declared RBAC matrix (tour resource)", () => {
   })
 })
 
+// F936: checkout minting binds to the declared matrix. createCheckoutSession
+// (PaymentIntent + clientSecret) and createHostedCheckout (hosted payment
+// link) need payment:create — owner/admin only; member/guide/driver keep the
+// read-only grant the matrix always declared (the old requireRole literals
+// admitted member to mint live payment links on bookings it may only view).
+describe("declared RBAC matrix (payment resource)", () => {
+  const can = (role: string, action: "create" | "read" | "refund") =>
+    roles[role as keyof typeof roles]?.authorize({ payment: [action] }).success
+
+  it("owner and admin can create, read and refund payments", () => {
+    for (const role of ["owner", "admin"]) {
+      for (const action of ["create", "read", "refund"] as const) {
+        expect(can(role, action), `${role}:${action}`).toBe(true)
+      }
+    }
+  })
+
+  it("member is read-only on payments", () => {
+    expect(can("member", "read")).toBe(true)
+    for (const action of ["create", "refund"] as const) {
+      expect(can("member", action), `member:${action}`).toBe(false)
+    }
+  })
+
+  it("guide and driver hold no payment grant at all", () => {
+    for (const role of ["guide", "driver"]) {
+      for (const action of ["create", "read", "refund"] as const) {
+        expect(can(role, action), `${role}:${action}`).toBe(false)
+      }
+    }
+  })
+})
+
 // GT-AUDIT-10: the assignment resource is now permission-bound too
 // (assignments.ts gates via requirePermission("assignment", action)).
 describe("declared RBAC matrix (assignment resource)", () => {

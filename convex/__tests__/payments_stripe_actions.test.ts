@@ -80,6 +80,17 @@ vi.mock("../lib/authz", () => ({
 		if (!mockState.member) throw new Error("Unauthorized");
 		return mockState.member;
 	},
+	// F936: the checkout gates bind via requirePermission — same member
+	// contract as requireRole in this mock suite (matrix authorization
+	// itself is pinned in authz.test.ts / paymentMemberWriteGates.test.ts).
+	requirePermission: async (
+		_ctx: unknown,
+		_resource: string,
+		_action: string,
+	) => {
+		if (!mockState.member) throw new Error("Unauthorized");
+		return mockState.member;
+	},
 	getActiveMembership: async () => {
 		if (!mockState.member) throw new Error("Unauthorized");
 		return mockState.member;

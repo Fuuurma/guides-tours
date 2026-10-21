@@ -25,7 +25,7 @@ import {
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { decrypt } from "./lib/crypto";
-import { requireRole } from "./lib/authz";
+import { requirePermission, requireRole } from "./lib/authz";
 import { normalizeEmail } from "./lib/validation";
 import { logger } from "./lib/logger";
 import {
@@ -429,7 +429,9 @@ export const createCheckoutSession = action({
 		currency: string;
 		publishableKey: string;
 	}> => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		// F936: minting a PaymentIntent is a payment write — the matrix
+		// grants create to owner/admin only; member/guide/driver stay read.
+		const member = await requirePermission(ctx, "payment", "create");
 
 		const booking = await ctx.runQuery(
 			internal.payments.getBookingForCheckout,
@@ -677,7 +679,9 @@ export const createHostedCheckout = action({
 		ctx: ActionCtx,
 		args,
 	): Promise<{ url: string; sessionId: string }> => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		// F936: hosted Checkout mints a live payment link — a payment
+		// write the matrix grants to owner/admin only.
+		const member = await requirePermission(ctx, "payment", "create");
 
 		const booking = await ctx.runQuery(
 			internal.payments.getBookingForCheckout,
