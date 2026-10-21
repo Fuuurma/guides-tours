@@ -72,14 +72,5 @@
     "vite": "^8.1.5",
     "vitest": "^4.1.10",
     "wrangler": "^4.115.0"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "lightningcss"
-    ],
-    "overrides": {
-      "js-yaml": ">=4.3.2"
-    }
   }
 }
