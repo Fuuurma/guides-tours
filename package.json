@@ -23,6 +23,7 @@
     "lint": "biome lint",
     "typecheck": "tsc --noEmit",
     "check": "biome check --error-on-warnings",
+    "audit:prod": "node scripts/audit-gate.mjs",
     "deploy:check": "node scripts/deploy-check.mjs",
     "deploy": "pnpm deploy:check && pnpm build && wrangler deploy"
   },
