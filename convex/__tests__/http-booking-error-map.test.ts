@@ -61,6 +61,33 @@ describe("mapBookingError (F758)", () => {
     expect(message).toBe("guests must be a positive integer")
   })
 
+  // F868 — the exception-date refusal names the SLOT and shares the
+  // "not available" substring with the date refusal, so it must map
+  // before that branch: a guest asking for a non-exception start time
+  // on a bookable date was told the whole date was dead.
+  it("passes the time-slot refusal through intact and keeps the date mapping (F868)", () => {
+    const slot =
+      "This time slot is not available for booking. Please pick another time."
+    expect(mapBookingError(refusal(slot))).toEqual({ message: slot, status: 400 })
+    expect(
+      mapBookingError(
+        refusal("This date is not available for booking. Please pick another date."),
+      ),
+    ).toEqual({ message: "This date is not available for booking", status: 400 })
+  })
+
+  // F870 — assertValidCustomerInput length refusals (name, notes, phone)
+  // matched no branch and reached the generic 500. The authored message
+  // names the field and the limit, so it passes through at 400.
+  it.each([
+    "Name must be at least 2 characters",
+    "Name is too long (max 100 characters)",
+    "Notes are too long (max 1000 characters)",
+    "Phone is too long (max 30 characters)",
+  ])("passes the customer-input length refusal through at 400 (%s)", (text) => {
+    expect(mapBookingError(refusal(text))).toEqual({ message: text, status: 400 })
+  })
+
   // Deliberate 500s — server-fault classes, not client input: a broken
   // org record and a customer-resolution failure. Pinned so a future
   // branch collapse into 4xx is a conscious edit, not an accident.

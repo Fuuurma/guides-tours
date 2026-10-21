@@ -304,6 +304,21 @@ export function mapBookingError(err: unknown): {
 			} else if (lower.includes("over capacity")) {
 				message = "This tour is fully booked";
 				status = 400;
+			} else if (lower.includes("time slot")) {
+				// F868: the exception-date refusal names the SLOT, and must
+				// sit before the date branch — "not available" alone would
+				// tell a guest the whole date is dead on a bookable date.
+				message = data;
+				status = 400;
+			} else if (
+				lower.includes("too long (max") ||
+				/at least \d+ characters/.test(lower)
+			) {
+				// F870: assertValidCustomerInput length refusals (name, notes,
+				// phone). The authored message names the field and the limit;
+				// before this branch they fell through to the generic 500.
+				message = data;
+				status = 400;
 			} else if (lower.includes("blacked out") || lower.includes("not available")) {
 				message = "This date is not available for booking";
 				status = 400;
