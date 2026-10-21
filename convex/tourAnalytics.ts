@@ -9,7 +9,6 @@
 import { v, ConvexError } from "convex/values";
 import {
 	query,
-	mutation,
 	internalMutation,
 	internalQuery,
 	type MutationCtx,
@@ -18,8 +17,7 @@ import {
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { requireMembership } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { utcYmd, addDaysYmd } from "./lib/staffingGaps";
 
@@ -113,50 +111,7 @@ export const listInternal = internalQuery({
 	handler: async (ctx, args) => listRows(ctx, args.organizationId, args),
 });
 
-export const get = query({
-	args: {
-		analyticsId: v.id("tourAnalytics"),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const row = await ctx.db.get(args.analyticsId);
-		if (!row) throw new ConvexError("Analytics not found");
-		if (row.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: analytics belongs to a different organization");
-		}
-		return row;
-	},
-});
-
 // ---- mutations ----
-
-export const upsert = mutation({
-	args: {
-		tourId: v.id("tours"),
-		periodDate: v.string(),
-		periodType: v.union(
-			v.literal("daily"),
-			v.literal("weekly"),
-			v.literal("monthly"),
-		),
-		totalBookings: v.number(),
-		totalGuests: v.number(),
-		grossRevenueCents: v.int64(),
-		netRevenueCents: v.int64(),
-		cancellations: v.number(),
-		noShows: v.number(),
-		avgGroupSize: v.number(),
-		utilizationRate: v.number(),
-		totalCapacity: v.number(),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
-		return await ctx.runMutation(
-			internalRefs.tourAnalytics.internalUpsert,
-			{ organizationId: member.organizationId, userId: member.userId, ...args },
-		);
-	},
-});
 
 export const internalUpsert = internalMutation({
 	args: {
@@ -259,17 +214,6 @@ export const internalUpsert = internalMutation({
 			},
 		});
 		return id;
-	},
-});
-
-export const remove = mutation({
-	args: { analyticsId: v.id("tourAnalytics") },
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
-		return await ctx.runMutation(
-			internalRefs.tourAnalytics.internalRemove,
-			{ organizationId: member.organizationId, userId: member.userId, analyticsId: args.analyticsId },
-		);
 	},
 });
 

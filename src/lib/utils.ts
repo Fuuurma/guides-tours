@@ -24,12 +24,6 @@ export function getErrorMessage(err: unknown): string {
 }
 
 /**
- * Return a user-safe error message for display in error banners.
- * ConvexError messages are authored by us and safe to show. Other
- * errors (network failures, internal errors) get a generic message
- * to avoid leaking backend implementation details.
- */
-/**
  * Case-insensitive markers of operational/infra error text that must never
  * reach the UI: Convex request IDs, plan-limit notices, network failures,
  * and JS engine TypeErrors. ConvexError messages are authored by us and

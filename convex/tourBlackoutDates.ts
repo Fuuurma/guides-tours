@@ -73,27 +73,6 @@ export async function _blackoutRowsForList(
 	};
 }
 
-// Returns true if any blackout covers the given (tourId, date).
-/**
- * @internal
- * No FE caller as of 2026-06-29. The public booking flow calls
- * `isBlackoutHelper` server-side via `public_booking.internalCreate`
- * to reject blacked-out dates. The public query is useful for
- * FE pre-flight validation (grey out blackout dates in the date
- * picker) but no UI consumes it yet.
- * See docs/DATA_LAYER_STATUS.md.
- */
-export const isBlackout = query({
-	args: {
-		tourId: v.id("tours"),
-		date: v.string(),
-	},
-	handler: async (ctx, args) => {
-		await requireMembership(ctx);
-		return await isBlackoutHelper(ctx, args.tourId, args.date);
-	},
-});
-
 /**
  * Public version of isBlackout — no auth required. Used by the
  * unauthenticated public booking page to grey out blacked-out dates.
@@ -241,23 +220,6 @@ export const internalCreate = internalMutation({
 			},
 		});
 		return id;
-	},
-});
-
-export const update = mutation({
-	args: {
-		blackoutId: v.id("tourBlackoutDates"),
-		startDate: v.optional(v.string()),
-		endDate: v.optional(v.string()),
-		reason: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requirePermission(ctx, "tour", "update");
-		const { blackoutId, ...rest } = args;
-		return await ctx.runMutation(
-			internalRefs.tourBlackoutDates.internalUpdate,
-			{ organizationId: member.organizationId, userId: member.userId, blackoutId, ...rest },
-		);
 	},
 });
 

@@ -911,23 +911,6 @@ export const internalComplete = internalMutation({
 	},
 });
 
-/** Mark a confirmed booking as no-show. Terminal — the seat was
- *  held, so capacity is NOT released. */
-export const markNoShow = mutation({
-	args: { bookingId: v.id("bookings") },
-	handler: async (ctx, args) => {
-		// Enforce declared RBAC: booking:update (owner/admin only).
-		const member = await requirePermission(ctx, "booking", "update");
-		const booking = await ctx.db.get(args.bookingId);
-		if (!booking) throw new ConvexError("Booking not found");
-		if (booking.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: wrong organization");
-		}
-		await performNoShow(ctx, booking, member.userId);
-		return args.bookingId;
-	},
-});
-
 /** Internal mirror of markNoShow — no auth, used by tests. */
 export const internalNoShow = internalMutation({
 	args: { bookingId: v.id("bookings") },

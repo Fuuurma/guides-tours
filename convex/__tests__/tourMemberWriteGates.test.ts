@@ -26,15 +26,22 @@ const src = (name: string) =>
 // Public write path -> the tour action the matrix must authorize.
 // generate mints concrete schedule rows (create); reorder rewrites
 // gallery order (update).
+//
+// Surfaces with no caller were dropped (dead-code sweep
+// fleet/guides-tours-ponytail): tourSchedules.create (the FE creates
+// schedules through ops.staffDeparture, not this mutation),
+// tourSeasonalSchedules.update, tourBlackoutDates.update and
+// tourExceptionDates.update had no frontend caller. The
+// "no member literal" scan above still covers every file, so a
+// re-added surface that admits member is still caught.
 const EXPECTED: Record<(typeof FILES)[number], Record<string, string>> = {
-	tourSchedules: { create: "create", update: "update" },
+	tourSchedules: { update: "update" },
 	tourSeasonalSchedules: {
 		create: "create",
-		update: "update",
 		generate: "create",
 	},
-	tourBlackoutDates: { create: "create", update: "update" },
-	tourExceptionDates: { create: "create", update: "update" },
+	tourBlackoutDates: { create: "create" },
+	tourExceptionDates: { create: "create" },
 	tourImages: { add: "create", update: "update", reorder: "update" },
 };
 

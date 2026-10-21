@@ -85,19 +85,6 @@ export async function _seasonalRowsForList(
 	};
 }
 
-export const get = query({
-	args: { scheduleId: v.id("tourSeasonalSchedules") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const s = await ctx.db.get(args.scheduleId);
-		if (!s) throw new ConvexError("Schedule not found");
-		if (s.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: schedule belongs to a different organization");
-		}
-		return s;
-	},
-});
-
 // ---- mutations ----
 
 export const create = mutation({
@@ -192,29 +179,6 @@ export const internalCreate = internalMutation({
 			},
 		});
 		return id;
-	},
-});
-
-export const update = mutation({
-	args: {
-		scheduleId: v.id("tourSeasonalSchedules"),
-		name: v.optional(v.string()),
-		startDate: v.optional(v.string()),
-		endDate: v.optional(v.string()),
-		daysOfWeek: v.optional(v.array(v.number())),
-		startTime: v.optional(v.string()),
-		capacityOverride: v.optional(v.number()),
-		isActive: v.optional(v.boolean()),
-		priority: v.optional(v.number()),
-		notes: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requirePermission(ctx, "tour", "update");
-		const { scheduleId, ...rest } = args;
-		return await ctx.runMutation(
-			internalRefs.tourSeasonalSchedules.internalUpdate,
-			{ organizationId: member.organizationId, userId: member.userId, scheduleId, ...rest },
-		);
 	},
 });
 

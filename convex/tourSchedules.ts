@@ -158,24 +158,6 @@ export const get = query({
 
 // ---- mutations ----
 
-export const create = mutation({
-	args: {
-		tourId: v.id("tours"),
-		date: v.string(),
-		startTime: v.string(),
-		endTime: v.string(),
-		capacityTotal: v.number(),
-		notes: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requirePermission(ctx, "tour", "create");
-		return await ctx.runMutation(
-			internalRefs.tourSchedules.internalCreate,
-			{ organizationId: member.organizationId, userId: member.userId, ...args },
-		);
-	},
-});
-
 export const internalCreate = internalMutation({
 	args: {
 		organizationId: v.string(),
