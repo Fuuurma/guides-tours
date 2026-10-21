@@ -457,7 +457,11 @@ export default defineSchema({
 		.index("by_org_guide_date", ["organizationId", "guideId", "date"])
 		.index("by_org_vehicle_date", ["organizationId", "vehicleId", "date"])
 		.index("by_org_driver_date", ["organizationId", "driverId", "date"])
-		.index("by_schedule", ["scheduleId"]),
+		.index("by_schedule", ["scheduleId"])
+		// F834: the retention purge walks soft-deleted rows by deletedAt —
+		// any status, independent of the tour date. Never-deleted rows
+		// index as undefined, which sorts before every number.
+		.index("by_deleted_at", ["deletedAt"]),
 
 	// ----- Bookings -----
 

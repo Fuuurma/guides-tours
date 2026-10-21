@@ -75,8 +75,8 @@ crons.daily(
 
 // Daily at 04:15 UTC — hard-delete assignments archived more than a year
 // ago (F460). Runs after the 03:00 archiver so a freshly archived row is
-// never the target of the same night's purge, and shares the archiver's
-// by_status_date pagination with self-continuation.
+// never the target of the same night's purge; walks by_deleted_at with
+// self-continuation, any status (F834).
 crons.daily(
 	"purge_archived_assignments",
 	{ hourUTC: 4, minuteUTC: 15 },

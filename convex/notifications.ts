@@ -505,12 +505,21 @@ export const cleanupOldAssignments = internalMutation({
 
 
 // F460: archived assignments were soft-deleted forever — no hard-delete
-// purge existed, so the table grew without bound. This walks the same
-// by_status_date pages the archiver walks (completed then cancelled,
-// self-continuing per F49) and HARD-DELETES rows whose deletedAt is
-// older than the retention window.
+// purge existed, so the table grew without bound. This HARD-DELETES rows
+// whose deletedAt is older than the retention window, self-continuing
+// per F49.
+//
+// F834: the walk is by_deleted_at, not by_status_date. The old walk only
+// visited completed/cancelled rows bounded on the tour DATE, while the
+// delete criterion is deletedAt — so a removed `scheduled` row
+// (performRemove soft-deletes any status without flipping it) was never
+// visited at all, and a completed/cancelled row removed while still
+// future-dated escaped until its date also aged. Retention is now exactly
+// deletedAt + ASSIGNMENT_PURGE_AFTER_DAYS for every status.
 export const purgeArchivedAssignments = internalMutation({
 	args: {
+		// No longer a walk key (F834). Kept optional so a continuation
+		// scheduled by the previous shape still validates; ignored.
 		status: v.optional(
 			v.union(v.literal("completed"), v.literal("cancelled")),
 		),
@@ -521,21 +530,21 @@ export const purgeArchivedAssignments = internalMutation({
 			Date.now() - ASSIGNMENT_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000;
 		const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10);
 
-		const status = args.status ?? "completed";
 		const PAGE = 2000;
+		// gt(0) excludes never-deleted rows: an index on an optional field
+		// stores undefined, which sorts before every number.
 		const result = await ctx.db
 			.query("assignments")
-			.withIndex("by_status_date", (q) =>
-				q.eq("status", status).lt("date", cutoffDate),
+			.withIndex("by_deleted_at", (q) =>
+				q.gt("deletedAt", 0).lt("deletedAt", cutoffMs),
 			)
 			.paginate({ numItems: PAGE, cursor: args.cursor ?? null });
 
-		// Only rows archived BEFORE the retention cutoff get deleted; rows
-		// archived after it (or never archived) stay for a later run.
+		// The index range already selects archived-before-cutoff rows; the
+		// filter restates the criterion so a live row can never be deleted
+		// by an index-range mistake.
 		const targets = result.page.filter(
-			(a) =>
-				a.deletedAt !== undefined &&
-				a.deletedAt < Date.now() - ASSIGNMENT_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000,
+			(a) => a.deletedAt !== undefined && a.deletedAt < cutoffMs,
 		);
 		for (const a of targets) {
 			await ctx.db.delete(a._id);
@@ -543,7 +552,7 @@ export const purgeArchivedAssignments = internalMutation({
 
 		if (targets.length > 0) {
 			logger.info(
-				`[cron] purgeArchivedAssignments deleted ${targets.length} ${status} assignments archived before ${cutoffDate}`,
+				`[cron] purgeArchivedAssignments deleted ${targets.length} assignments archived before ${cutoffDate}`,
 			);
 			await logAudit(ctx, {
 				organizationId: "system",
@@ -552,7 +561,7 @@ export const purgeArchivedAssignments = internalMutation({
 				resourceType: "assignment",
 				resourceId: targets[0]?._id ?? "",
 				oldValues: {},
-				newValues: { count: targets.length, status, cutoffDate },
+				newValues: { count: targets.length, cutoffDate },
 			});
 		}
 
@@ -560,19 +569,12 @@ export const purgeArchivedAssignments = internalMutation({
 			await ctx.scheduler.runAfter(
 				0,
 				internal.notifications.purgeArchivedAssignments,
-				{ status, cursor: result.continueCursor },
-			);
-		} else if (status === "completed") {
-			await ctx.scheduler.runAfter(
-				0,
-				internal.notifications.purgeArchivedAssignments,
-				{ status: "cancelled" },
+				{ cursor: result.continueCursor },
 			);
 		}
 
 		return {
 			purged: targets.length,
-			status,
 			done: result.isDone,
 			continueCursor: result.continueCursor,
 			cutoffDate,

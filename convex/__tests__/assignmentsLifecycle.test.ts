@@ -768,12 +768,9 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 		const DAY = 24 * 60 * 60 * 1000;
 		await t.run(async (ctx) => {
 			const tourId = await seedTour(ctx, { orgId: ORG });
-			// The purge queries assignments by the by_status_date index, which
-			// filters on the row's date as well as its status, so a row only
-			// reaches the deletion loop when its date is ALSO past the
-			// retention cutoff. The seeded rows carry a date past the window
-			// so the archived-vs-fresh distinction under test is the archive
-			// date, which is what this case is about.
+			// Rows carry a date past the window; since F834 the purge walks
+			// by_deleted_at so the date is irrelevant — the distinction under
+			// test is the archive date alone (see the future-dated case below).
 			const pastWindow = new Date(now - 400 * DAY).toISOString().slice(0, 10);
 			const oldArchived = await seedAssignment(ctx, {
 				orgId: ORG,
@@ -817,7 +814,7 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 		});
 	});
 
-	it("purges the cancelled pass too", async () => {
+	it("purges cancelled rows in the same single pass", async () => {
 		const t = convexTest(schema, modules);
 		const now = Date.now();
 		const DAY = 24 * 60 * 60 * 1000;
@@ -828,8 +825,6 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_1",
 				status: "cancelled",
-				// Same reason as the completed case above: the purge's
-				// by_status_date index filters on the row's date too.
 				date: new Date(now - 500 * DAY).toISOString().slice(0, 10),
 			});
 			await ctx.db.patch(oldCancelled, {
@@ -837,12 +832,69 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				updatedAt: now - 500 * DAY,
 			});
 
+			// The legacy status arg is still accepted (an in-flight
+			// continuation may carry it) and ignored.
 			await ctx.runMutation(
 				internal.notifications.purgeArchivedAssignments,
 				{ status: "cancelled" },
 			);
 
 			await expect(ctx.db.get(oldCancelled)).resolves.toBeNull();
+		});
+	});
+
+	// F834 — two rows the old by_status_date walk could never reach: a
+	// removed `scheduled` row (performRemove soft-deletes without flipping
+	// status, and the chain only visited completed/cancelled), and a
+	// completed row removed while still future-dated (the walk was bounded
+	// on the tour date, so it waited for max(date, deletedAt) + 365d).
+	// Both purge on deletedAt alone now; a never-deleted scheduled row on
+	// the same key is untouched.
+	it("purges a soft-deleted scheduled row and a future-dated archived row (F834)", async () => {
+		const t = convexTest(schema, modules);
+		const now = Date.now();
+		const DAY = 24 * 60 * 60 * 1000;
+		await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const futureDate = new Date(now + 30 * DAY).toISOString().slice(0, 10);
+
+			const removedScheduled = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				status: "scheduled",
+				date: futureDate,
+			});
+			await ctx.db.patch(removedScheduled, { deletedAt: now - 400 * DAY });
+
+			const futureDatedArchived = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_2",
+				status: "completed",
+				date: futureDate,
+			});
+			await ctx.db.patch(futureDatedArchived, { deletedAt: now - 400 * DAY });
+
+			const liveScheduled = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_3",
+				status: "scheduled",
+				date: futureDate,
+			});
+
+			const out = await ctx.runMutation(
+				internal.notifications.purgeArchivedAssignments,
+				{},
+			);
+
+			expect(out.purged).toBe(2);
+			await expect(ctx.db.get(removedScheduled)).resolves.toBeNull();
+			await expect(ctx.db.get(futureDatedArchived)).resolves.toBeNull();
+			// Never deleted: the gt(0) bound keeps undefined deletedAt out of
+			// the index range, so a live row cannot be purged.
+			await ctx.db.get(liveScheduled).then((row) => expect(row).not.toBeNull());
 		});
 	});
 });
