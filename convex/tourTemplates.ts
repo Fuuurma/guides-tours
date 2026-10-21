@@ -79,9 +79,9 @@ export const create = mutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -111,9 +111,9 @@ export const internalCreate = internalMutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 	},
 	handler: async (ctx, args) => {
 		if (args.name.length > MAX_NAME_LEN) {
@@ -165,9 +165,9 @@ export const internalCreate = internalMutation({
 			maxGuests,
 			bookingCutoffHours: args.bookingCutoffHours ?? 24,
 			requiredGuides,
-			requiresVehicle: args.requiresVehicle,
-			requiresDriver: args.requiresDriver,
-			requiredVehicleType: args.requiredVehicleType,
+			requiresVehicle: args.requiresVehicle ?? undefined,
+			requiresDriver: args.requiresDriver ?? undefined,
+			requiredVehicleType: args.requiredVehicleType ?? undefined,
 			isActive: true,
 			createdAt: now,
 			updatedAt: now,
@@ -203,9 +203,9 @@ export const update = mutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 		// isActive: operator can archive a template (hidden from
 		// new-tour flow) without deleting it.
 		isActive: v.optional(v.boolean()),
@@ -240,9 +240,9 @@ export const internalUpdate = internalMutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
@@ -300,7 +300,10 @@ export const internalUpdate = internalMutation({
 			"isActive",
 		]) {
 			const value = (args as Record<string, unknown>)[field];
-			if (value !== undefined) patch[field] = value;
+			// null = explicit clear (F840): patch the field to undefined so
+			// db.patch deletes it. undefined = not provided, leave unchanged.
+			if (value === null) patch[field] = undefined;
+			else if (value !== undefined) patch[field] = value;
 		}
 		if (typeof patch.requiredGuides === "number") {
 			patch.requiredGuides = Math.floor(patch.requiredGuides);

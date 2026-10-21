@@ -93,6 +93,81 @@ describe("tour templates", () => {
 		).rejects.toThrow(/Forbidden/);
 	});
 
+	describe("explicit clears (F840)", () => {
+		const OVERRIDDEN = {
+			description: "A real description",
+			requiresVehicle: true,
+			requiresDriver: true,
+			requiredVehicleType: "coach",
+		};
+
+		it("update: \"\" clears the description, null removes the overrides", async () => {
+			const t = convexTest(schema, modules);
+			const orgId = "org_clear1";
+			const id = await t.run((ctx) => seedTemplate(ctx, orgId, OVERRIDDEN));
+
+			await t.mutation(internal.tourTemplates.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				templateId: id,
+				description: "",
+				requiresVehicle: null,
+				requiresDriver: null,
+				requiredVehicleType: null,
+			});
+
+			const tmpl = (await t.run((ctx) => ctx.db.get(id))) as any;
+			expect(tmpl?.description).toBe("");
+			expect("requiresVehicle" in (tmpl ?? {})).toBe(false);
+			expect("requiresDriver" in (tmpl ?? {})).toBe(false);
+			expect("requiredVehicleType" in (tmpl ?? {})).toBe(false);
+		});
+
+		it("update: omitted fields stay unchanged", async () => {
+			const t = convexTest(schema, modules);
+			const orgId = "org_clear2";
+			const id = await t.run((ctx) => seedTemplate(ctx, orgId, OVERRIDDEN));
+
+			await t.mutation(internal.tourTemplates.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				templateId: id,
+				name: "Only the name changed",
+			});
+
+			const tmpl = (await t.run((ctx) => ctx.db.get(id))) as any;
+			expect(tmpl?.description).toBe("A real description");
+			expect(tmpl?.requiresVehicle).toBe(true);
+			expect(tmpl?.requiresDriver).toBe(true);
+			expect(tmpl?.requiredVehicleType).toBe("coach");
+		});
+
+		it("instantiate: a cleared template does not leak stale overrides", async () => {
+			const t = convexTest(schema, modules);
+			const orgId = "org_clear3";
+			const id = await t.run((ctx) => seedTemplate(ctx, orgId, OVERRIDDEN));
+			await t.mutation(internal.tourTemplates.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				templateId: id,
+				description: "",
+				requiresVehicle: null,
+				requiresDriver: null,
+				requiredVehicleType: null,
+			});
+
+			const tourId = await t.mutation(internal.tourTemplates.internalInstantiate, {
+				organizationId: orgId,
+				userId: "user-1",
+				templateId: id,
+			});
+			const tour = (await t.run((ctx) => ctx.db.get(tourId))) as any;
+			expect(tour?.description).toBe("");
+			expect("requiresVehicle" in (tour ?? {})).toBe(false);
+			expect("requiredVehicleType" in (tour ?? {})).toBe(false);
+		});
+	});
+
 	it("remove: deletes template and writes audit log", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_t5";
