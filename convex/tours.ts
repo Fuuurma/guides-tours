@@ -308,6 +308,14 @@ export const internalCreate = internalMutation({
 			requiresDriver: args.requiresDriver,
 			requiredVehicleType: args.requiredVehicleType,
 		});
+		// F740: the new-tour form sends no currency — inherit the org's
+		// payment currency instead of fabricating "USD" for a non-US org
+		// (F734 did the same for template instantiation); USD only when
+		// payments are unset.
+		const paymentSettings = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.unique();
 		const tourId = await ctx.db.insert("tours", {
 			organizationId: args.organizationId,
 			name: args.name,
@@ -335,7 +343,7 @@ export const internalCreate = internalMutation({
 			exclusions: args.exclusions ?? [],
 			highlights: args.highlights ?? [],
 			basePriceCents: args.basePriceCents,
-			currency: args.currency ?? "USD",
+			currency: args.currency ?? paymentSettings?.defaultCurrency ?? "USD",
 			createdAt: now,
 			updatedAt: now,
 		});

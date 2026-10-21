@@ -411,3 +411,61 @@ describe("tours — length validation (defense in depth)", () => {
 		expect(id).toBeDefined();
 	});
 });
+
+// F740: the new-tour form sends no currency, and internalCreate
+// fabricated "USD" for every org. It now inherits the org's payment
+// currency the way template instantiation does (F734); USD only when
+// payments are unset; an explicit currency still wins.
+describe("tours — create currency (F740)", () => {
+	async function createFor(
+		orgId: string,
+		opts: { defaultCurrency?: string; currency?: string } = {},
+	) {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			if (opts.defaultCurrency !== undefined) {
+				await ctx.db.insert("paymentSettings", {
+					organizationId: orgId,
+					stripeEnabled: false,
+					stripePublishableKey: "",
+					stripeSecretKey: "",
+					stripeWebhookSecret: "",
+					stripeIsSandbox: true,
+					acceptDeposits: false,
+					depositPercentage: 0,
+					defaultCurrency: opts.defaultCurrency,
+					createdAt: 0,
+					updatedAt: 0,
+				});
+			}
+		});
+		const id = await t.mutation(internal.tours.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			name: "Old Town Walk",
+			durationHours: 2,
+			capacity: 12,
+			tourType: "walking",
+			...(opts.currency ? { currency: opts.currency } : {}),
+		});
+		return (await t.run((ctx) => ctx.db.get(id))) as any;
+	}
+
+	it("inherits the org's payment currency instead of a fabricated USD", async () => {
+		const tour = await createFor("org_cur_eur", { defaultCurrency: "EUR" });
+		expect(tour?.currency).toBe("EUR");
+	});
+
+	it("falls back to USD when the org has no payment settings", async () => {
+		const tour = await createFor("org_cur_none");
+		expect(tour?.currency).toBe("USD");
+	});
+
+	it("an explicit currency still wins over the org default", async () => {
+		const tour = await createFor("org_cur_explicit", {
+			defaultCurrency: "EUR",
+			currency: "GBP",
+		});
+		expect(tour?.currency).toBe("GBP");
+	});
+});
