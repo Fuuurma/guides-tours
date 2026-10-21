@@ -77,6 +77,33 @@ return [...rows, ...prevRows].filter(
 );
 }
 
+/**
+ * Every assignment row on one (tour, date) — the read set behind the
+ * slot guards (requiredGuides cap, same-guide duplicate, vehicle and
+ * driver presence) and slotCompanions.
+ *
+ * F874: this was `take(100)` followed by post-cap filters at three
+ * sites. performCancel only flips status, so cancelled rows stay on the
+ * key for good and the 100-oldest window filled monotonically; once
+ * full, every guard reading it went blind at the same time (an active
+ * row past the window was simply not seen) and slotCompanions reported
+ * an over-staffed slot as under-staffed. A single tour-day is bounded by
+ * its real row count, so read it whole: Convex's document limit throws
+ * (fail-closed) rather than handing back a partial slot. The range read
+ * keeps F453's race property — a concurrent insert into the scanned key
+ * conflicts with this transaction and forces a retry.
+ */
+export async function readTourDay(
+	ctx: QueryCtx | MutationCtx,
+	tourId: Id<"tours">,
+	date: string,
+): Promise<Doc<"assignments">[]> {
+	return ctx.db
+		.query("assignments")
+		.withIndex("by_tour_date", (q) => q.eq("tourId", tourId).eq("date", date))
+		.collect();
+}
+
 export async function checkConflictsHelper(
 	ctx: MutationCtx,
 	args: {

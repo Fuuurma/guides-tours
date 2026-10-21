@@ -34,6 +34,7 @@ import {
 assertGuideAssignable,
 	collectConflictRows,
 	type ConflictIndexName,
+	readTourDay,
 } from "./lib/assignmentsShared";
 import {
 	performCancel,
@@ -215,12 +216,9 @@ export const slotCompanions = query({
 		if (!tour) return null;
 		const rules = resolveTourStaffing(tour);
 
-		const sameDay = await ctx.db
-			.query("assignments")
-			.withIndex("by_tour_date", (q) =>
-				q.eq("tourId", a.tourId).eq("date", a.date),
-			)
-			.take(100);
+		// F874: whole tour-day, not a take(100) window — a crowded key
+		// reported an over-staffed slot as under-staffed here.
+		const sameDay = await readTourDay(ctx, a.tourId, a.date);
 		const siblings = sameDay.filter(
 			(x) =>
 				x.organizationId === member.organizationId &&

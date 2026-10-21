@@ -18,7 +18,7 @@ import {
 } from "./time";
 import { resolveTourStaffing } from "./staffing";
 import { calculateEndTime } from "./assignmentTime";
-import { checkConflictsHelper } from "./assignmentsShared";
+import { checkConflictsHelper, readTourDay } from "./assignmentsShared";
 
 export async function performCreate(
 	ctx: MutationCtx,
@@ -136,10 +136,10 @@ const endTime =
 // with this transaction, forcing an automatic retry that re-evaluates
 // the cap against the committed rows. Two concurrent creates cannot
 // both pass this check.
-const sameDay = await ctx.db
-	.query("assignments")
-	.withIndex("by_tour_date", (q) => q.eq("tourId", tourId).eq("date", date))
-	.take(100);
+//
+// F874: the whole tour-day is read (readTourDay) — a take(100) window
+// here went blind once cancelled rows crowded it.
+const sameDay = await readTourDay(ctx, tourId, date);
 const activeOnSlot = sameDay.filter(
 	(a) =>
 		a.organizationId === args.organizationId &&
@@ -425,13 +425,9 @@ export async function performUpdate(
 
 	// Same tour+date+startTime staffing cap as create.
 	// Fetch same-day assignments once and reuse for both the guide
-	// staffing cap check and the fleet (vehicle/driver) checks.
-	const sameDay = await ctx.db
-		.query("assignments")
-		.withIndex("by_tour_date", (q) =>
-			q.eq("tourId", existing.tourId).eq("date", next.date),
-		)
-		.take(100);
+	// staffing cap check and the fleet (vehicle/driver) checks (F874:
+	// whole tour-day, not a take(100) window).
+	const sameDay = await readTourDay(ctx, existing.tourId, next.date);
 	const activeOnSlot = sameDay.filter(
 		(a) =>
 			a._id !== args.assignmentId &&
