@@ -72,19 +72,6 @@ export const list = query({
 	},
 });
 
-export const get = query({
-	args: { availabilityId: v.id("availabilities") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const a = await ctx.db.get(args.availabilityId);
-		if (!a) throw new ConvexError("Availability not found");
-		if (a.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: availability belongs to a different organization");
-		}
-		return a;
-	},
-});
-
 // ---- mutations ----
 
 export const upsert = mutation({

@@ -184,19 +184,6 @@ export const get = query({
 	},
 });
 
-/**
- * Internal mirror of `get` that skips the authz check. Use only from
- * server-side code that has already verified the caller (e.g. an
- * internal mutation that just inserted the row). Read-only — uses
- * internalQuery (not internalMutation) since it only calls ctx.db.get.
- */
-export const getInternal = internalQuery({
-	args: { requestId: v.id("vacationRequests") },
-	handler: async (ctx, args) => {
-		return await ctx.db.get(args.requestId);
-	},
-});
-
 // Helper — pure aggregation used by both the public query and the
 // internal mirror for tests. Caller is responsible for org-scoping.
 async function _calcStats(

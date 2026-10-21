@@ -70,19 +70,6 @@ export const list = query({
 	},
 });
 
-export const get = query({
-	args: { productId: v.id("otaProducts") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const p = await ctx.db.get(args.productId);
-		if (!p) throw new ConvexError("Product not found");
-		if (p.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: product belongs to a different organization");
-		}
-		return p;
-	},
-});
-
 // ---- mutations ----
 
 export const create = mutation({

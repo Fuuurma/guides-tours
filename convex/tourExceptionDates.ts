@@ -126,19 +126,6 @@ export async function exceptionForDateHelper(
 
 type Function = (...args: any[]) => any;
 
-export const get = query({
-	args: { exceptionId: v.id("tourExceptionDates") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const e = await ctx.db.get(args.exceptionId);
-		if (!e) throw new ConvexError("Exception not found");
-		if (e.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: exception belongs to a different organization");
-		}
-		return e;
-	},
-});
-
 // ---- mutations ----
 
 export const create = mutation({
@@ -249,25 +236,6 @@ export const internalCreate = internalMutation({
 			},
 		});
 		return id;
-	},
-});
-
-export const update = mutation({
-	args: {
-		exceptionId: v.id("tourExceptionDates"),
-		startTime: v.optional(v.string()),
-		endTime: v.optional(v.string()),
-		capacityOverride: v.optional(v.number()),
-		reason: v.optional(v.string()),
-		notes: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requirePermission(ctx, "tour", "update");
-		const { exceptionId, ...rest } = args;
-		return await ctx.runMutation(
-			internalRefs.tourExceptionDates.internalUpdate,
-			{ organizationId: member.organizationId, userId: member.userId, exceptionId, ...rest },
-		);
 	},
 });
 

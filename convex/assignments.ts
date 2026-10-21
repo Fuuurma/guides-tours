@@ -475,44 +475,6 @@ export const checkConflicts = query({
 // this split — it uses a Django `@require_staff` decorator on the
 // view, which the test client can bypass by passing request.user.
 
-const createArgs = {
-	tourId: v.id("tours"),
-	guideId: v.string(),
-	date: v.string(),
-	startTime: v.string(),
-	vehicleId: v.optional(v.id("vehicles")),
-	driverId: v.optional(v.id("drivers")),
-	scheduleId: v.optional(v.id("tourSchedules")),
-};
-
-export const create = mutation({
-	args: createArgs,
-	handler: async (ctx, args) => {
-		const member = await requirePermission(ctx, "assignment", "create");
-
-		// Validate guide has the "guide" role in this organization
-		// (source: assignment_service.py validates role__in=["guide","staff"]).
-		// Shared with update and ops.staffDeparture so the invariant has one
-		// definition — it had drifted into two copies and one hole.
-		await assertGuideAssignable(ctx, member.organizationId, args.guideId);
-
-		return await ctx.runMutation(
-			internalRefs.assignments.internalCreate,
-			{
-				organizationId: member.organizationId,
-				userId: member.userId,
-				tourId: args.tourId,
-				guideId: args.guideId,
-				date: args.date,
-				startTime: args.startTime,
-				vehicleId: args.vehicleId,
-				driverId: args.driverId,
-				scheduleId: args.scheduleId,
-			},
-		);
-	},
-});
-
 /**
  * Internal: create an assignment (no auth). Caller passes
  * organizationId + userId for the audit log. Source:

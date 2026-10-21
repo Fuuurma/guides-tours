@@ -7,7 +7,7 @@ export function uniqueEmail(prefix: string): string {
 }
 
 /** Short random org slug for onboarding. */
-export function uniqueSlug(prefix: string): string {
+function uniqueSlug(prefix: string): string {
 	const stamp = Math.random().toString(36).slice(2, 8);
 	return `${prefix}-${stamp}`;
 }

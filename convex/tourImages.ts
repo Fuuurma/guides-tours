@@ -59,40 +59,6 @@ export const list = query({
 	},
 });
 
-export const get = query({
-	args: { imageId: v.id("tourImages") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const img = await ctx.db.get(args.imageId);
-		if (!img) throw new ConvexError("Image not found");
-		if (img.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: image belongs to a different organization");
-		}
-		const url = await ctx.storage.getUrl(img.storageId);
-		return { ...img, url };
-	},
-});
-
-export const getUrl = query({
-	args: { storageId: v.id("_storage") },
-	handler: async (ctx, args) => {
-		// SECURITY: require membership + verify the storageId is
-		// referenced by one of this org's tourImages rows. Without
-		// this check, any signed-in user could fetch a signed URL
-		// for any blob in Convex storage by guessing/iterating IDs.
-		const member = await requireMembership(ctx);
-		const img = await ctx.db
-			.query("tourImages")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.filter((q) => q.eq(q.field("storageId"), args.storageId))
-			.first();
-		if (!img) return null;
-		return await ctx.storage.getUrl(args.storageId);
-	},
-});
-
 // ---- mutations ----
 
 export const add = mutation({

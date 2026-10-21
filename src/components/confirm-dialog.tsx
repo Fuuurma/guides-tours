@@ -18,7 +18,6 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 
 // Accessible, styled replacement for `window.confirm`.
 //
@@ -139,7 +138,3 @@ export function useConfirm(): ConfirmContextValue {
 	}
 	return ctx;
 }
-
-// Re-exported so call sites that just need the button-label variant can
-// use the component directly without a full dialog.
-export { Button as ConfirmButton };

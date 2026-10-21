@@ -3,7 +3,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
-	internalAction,
 	internalMutation,
 	internalQuery,
 } from "./_generated/server";
@@ -216,16 +215,3 @@ export async function sendTwilioSms(
 
 	return { ok: true, sid: payload.sid, status: payload.status };
 }
-
-/** Test-only action wrapper so vitest can exercise the fetch path. */
-export const sendTwilioSmsAction = internalAction({
-	args: {
-		organizationId: v.string(),
-		to: v.string(),
-		body: v.string(),
-		recipientName: v.string(),
-	},
-	handler: async (ctx, args): Promise<TwilioSendResult> => {
-		return await sendTwilioSms(ctx, args);
-	},
-});

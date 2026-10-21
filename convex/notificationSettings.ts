@@ -274,17 +274,6 @@ export const internalUpsert = internalMutation({
 	},
 });
 
-export const remove = mutation({
-	args: {},
-	handler: async (ctx) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
-		return await ctx.runMutation(
-			internalRefs.notificationSettings.internalRemove,
-			{ organizationId: member.organizationId, userId: member.userId },
-		);
-	},
-});
-
 export const internalRemove = internalMutation({
 	args: {
 		organizationId: v.string(),

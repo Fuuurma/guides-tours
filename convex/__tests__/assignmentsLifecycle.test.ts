@@ -768,11 +768,19 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 		const DAY = 24 * 60 * 60 * 1000;
 		await t.run(async (ctx) => {
 			const tourId = await seedTour(ctx, { orgId: ORG });
+			// The purge queries assignments by the by_status_date index, which
+			// filters on the row's date as well as its status, so a row only
+			// reaches the deletion loop when its date is ALSO past the
+			// retention cutoff. The seeded rows carry a date past the window
+			// so the archived-vs-fresh distinction under test is the archive
+			// date, which is what this case is about.
+			const pastWindow = new Date(now - 400 * DAY).toISOString().slice(0, 10);
 			const oldArchived = await seedAssignment(ctx, {
 				orgId: ORG,
 				tourId,
 				guideId: "guide_1",
 				status: "completed",
+				date: pastWindow,
 			});
 			await ctx.db.patch(oldArchived, {
 				deletedAt: now - 400 * DAY,
@@ -783,6 +791,7 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_2",
 				status: "completed",
+				date: pastWindow,
 			});
 			await ctx.db.patch(freshArchived, {
 				deletedAt: now - 10 * DAY,
@@ -793,13 +802,14 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_3",
 				status: "completed",
+				date: pastWindow,
 			});
 			await ctx.db.patch(live, { updatedAt: now });
 
 			await ctx.runMutation(internal.notifications.purgeArchivedAssignments, {});
 
 			// Past-window archived row: gone.
-			expect(ctx.db.get(oldArchived)).resolves.toBeNull();
+			await expect(ctx.db.get(oldArchived)).resolves.toBeNull();
 			// Freshly archived row: survives (its purge date is next year).
 			await ctx.db.get(freshArchived).then((row) => expect(row).not.toBeNull());
 			// Never-archived row: never touched.
@@ -818,6 +828,9 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				tourId,
 				guideId: "guide_1",
 				status: "cancelled",
+				// Same reason as the completed case above: the purge's
+				// by_status_date index filters on the row's date too.
+				date: new Date(now - 500 * DAY).toISOString().slice(0, 10),
 			});
 			await ctx.db.patch(oldCancelled, {
 				deletedAt: now - 500 * DAY,
@@ -829,7 +842,7 @@ describe("purgeArchivedAssignments (F460 retention)", () => {
 				{ status: "cancelled" },
 			);
 
-			expect(ctx.db.get(oldCancelled)).resolves.toBeNull();
+			await expect(ctx.db.get(oldCancelled)).resolves.toBeNull();
 		});
 	});
 });

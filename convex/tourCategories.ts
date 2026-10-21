@@ -43,19 +43,6 @@ export const list = query({
 	},
 });
 
-export const get = query({
-	args: { categoryId: v.id("tourCategories") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const cat = await ctx.db.get(args.categoryId);
-		if (!cat) throw new ConvexError("Category not found");
-		if (cat.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: category belongs to a different organization");
-		}
-		return cat;
-	},
-});
-
 // ---- mutations ----
 
 export const create = mutation({

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { api } from "../../convex/_generated/api";
 
-export type OrgMemberRow = {
+type OrgMemberRow = {
 	userId: string;
 	name: string;
 	email: string;
