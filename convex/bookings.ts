@@ -445,6 +445,9 @@ export const create = mutation({
 		if (tour.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
 		}
+		if (!tour.isActive || tour.deletedAt !== undefined) {
+			throw new ConvexError("Tour is not active");
+		}
 		if (!customer) throw new ConvexError("Customer not found");
 		if (customer.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: customer belongs to a different organization");
