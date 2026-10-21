@@ -151,14 +151,19 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 					</div>
 				}
 			>
-				{(seasonals?.length ?? 0) === 0 ? (
+				{(seasonals?.seasonals?.length ?? 0) === 0 ? (
 					<SectionEmpty
 						title="No seasonal rules"
 						description="Add a weekday pattern, then generate schedules for a date window."
 					/>
 				) : (
 					<ul className="flex flex-col gap-2">
-						{(seasonals ?? []).map((s) => (
+						{seasonals?.truncated ? (
+							<p className="text-warning text-sm">
+								Showing the first 500 seasonal rules — this tour has more.
+							</p>
+						) : null}
+						{(seasonals?.seasonals ?? []).map((s) => (
 							<li
 								key={s._id}
 								className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
@@ -218,14 +223,19 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 					/>
 				}
 			>
-				{(exceptions?.length ?? 0) === 0 ? (
+				{(exceptions?.exceptions?.length ?? 0) === 0 ? (
 					<SectionEmpty
 						title="No exceptions"
 						description="Override a single date without rewriting the seasonal rule."
 					/>
 				) : (
 					<ul className="flex flex-col gap-2">
-						{(exceptions ?? []).map((e) => (
+						{exceptions?.truncated ? (
+							<p className="text-warning text-sm">
+								Showing the first 500 exception dates — this tour has more.
+							</p>
+						) : null}
+						{(exceptions?.exceptions ?? []).map((e) => (
 							<li
 								key={e._id}
 								className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
@@ -282,14 +292,19 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 					/>
 				}
 			>
-				{(blackouts?.length ?? 0) === 0 ? (
+				{(blackouts?.blackouts?.length ?? 0) === 0 ? (
 					<SectionEmpty
 						title="No blackouts"
 						description="Block a range when this tour cannot run — public booking follows the same rule."
 					/>
 				) : (
 					<ul className="flex flex-col gap-2">
-						{(blackouts ?? []).map((b) => (
+						{blackouts?.truncated ? (
+							<p className="text-warning text-sm">
+								Showing the first 500 blackout windows — this tour has more.
+							</p>
+						) : null}
+						{(blackouts?.blackouts ?? []).map((b) => (
 							<li
 								key={b._id}
 								className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"

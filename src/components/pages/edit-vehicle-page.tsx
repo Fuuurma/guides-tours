@@ -6,7 +6,10 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { VehicleForm } from "./vehicle-form";
-import { vehicleDocToFormValues, vehicleFormToMutationArgs } from "./vehicle-form-model";
+import {
+	vehicleDocToFormValues,
+	vehicleFormToMutationArgs,
+} from "./vehicle-form-model";
 
 interface EditVehiclePageProps {
 	vehicleId: string;

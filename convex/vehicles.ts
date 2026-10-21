@@ -12,7 +12,7 @@ import {
 } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requirePermission } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
 	MAX_LICENSE_LEN,
@@ -125,7 +125,7 @@ export const create = mutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "vehicle", "create");
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalCreate,
 			{
@@ -222,7 +222,7 @@ export const update = mutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "vehicle", "update");
 		const { vehicleId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalUpdate,
@@ -324,7 +324,7 @@ export const setStatus = mutation({
 		),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "vehicle", "update");
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalSetStatus,
 			{
@@ -375,7 +375,7 @@ export const internalSetStatus = internalMutation({
 export const remove = mutation({
 	args: { vehicleId: v.id("vehicles") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
+		const member = await requirePermission(ctx, "vehicle", "delete");
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalRemove,
 			{

@@ -75,6 +75,19 @@ export default defineSchema({
 		.index("by_org_user_date", ["organizationId", "userId", "date"])
 		.index("by_user_date", ["userId", "date"]),
 
+	// Per-org operational settings that aren't notification-channel
+	// config (those live in notificationSettings). Sparse — one row per
+	// org, created on first write.
+	organizationSettings: defineTable({
+		organizationId: orgId,
+		// IANA zone the operator's wall-clock inputs mean ("09:00" on a
+		// schedule = 09:00 in this zone). Absent → Europe/Madrid.
+		timeZone: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_org", ["organizationId"]),
+
 	vacationRequests: defineTable({
 		organizationId: orgId,
 		userId,

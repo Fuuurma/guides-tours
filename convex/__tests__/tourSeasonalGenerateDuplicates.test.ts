@@ -191,4 +191,41 @@ describe("F468 — the seasonal generator must not create duplicate slots", () =
 		expect(again.created).toBe(0);
 		expect(await countTriple(t, tourId, TARGET_DATE, TARGET_TIME)).toBe(1);
 	});
+
+	it("refuses to generate when the seasonal-rules scan truncates (F468)", async () => {
+		// A tour with >500 active seasonal rules cannot be verified —
+		// generating from a truncated ruleset would silently produce a
+		// partial schedule, so the run must fail loudly instead.
+		const t = convexTest(schema, modules);
+		const tourId = await t.run((ctx) => seedTour(ctx));
+
+		await t.run(async (ctx) => {
+			const c = ctx as { db: { insert: Function } };
+			for (let i = 0; i < 501; i++) {
+				await c.db.insert("tourSeasonalSchedules", {
+					organizationId: ORG,
+					tourId,
+					name: `Rule ${i}`,
+					startDate: "2026-01-01",
+					endDate: "2026-12-31",
+					daysOfWeek: [1, 2, 3, 4, 5],
+					isActive: true,
+					priority: 0,
+					notes: "",
+					createdAt: 0,
+					updatedAt: 0,
+				});
+			}
+		});
+
+		await expect(
+			t.mutation(internal.tourSeasonalSchedules.internalGenerate, {
+				organizationId: ORG,
+				userId: "user-1",
+				tourId,
+				dateFrom: TARGET_DATE,
+				dateTo: TARGET_DATE,
+			}),
+		).rejects.toThrow(/more than 500 active seasonal schedules/);
+	}, 60_000);
 });

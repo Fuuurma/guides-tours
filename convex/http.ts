@@ -295,7 +295,13 @@ export function mapBookingError(err: unknown): {
 			} else if (lower.includes("not found")) {
 				message = "Tour, schedule, or organization not found";
 				status = 404;
-			} else if (lower.includes("capacity") || lower.includes("over capacity")) {
+			} else if (lower.includes("cannot be booked online")) {
+				// Authored message already carries the recovery: another date,
+				// or the operator. "capacity" alone would collapse it into the
+				// sold-out copy below (F902).
+				message = data;
+				status = 400;
+			} else if (lower.includes("over capacity")) {
 				message = "This tour is fully booked";
 				status = 400;
 			} else if (lower.includes("blacked out") || lower.includes("not available")) {
@@ -317,7 +323,11 @@ export function mapBookingError(err: unknown): {
 				// Authored message already names the maximum.
 				message = data;
 				status = 400;
-			} else if (lower.includes("guests must be a positive integer")) {
+			} else if (lower.includes("guests must be")) {
+				// F892: the action's own guests validation. The HTTP boundary
+				// rejects the same shape earlier (positive integer <= 200),
+				// so this guards the defense-in-depth copy — before the
+				// branch it fell through to the generic 500.
 				message = data;
 				status = 400;
 			} else if (lower.includes("must be made at least")) {

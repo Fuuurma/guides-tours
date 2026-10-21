@@ -36,7 +36,7 @@ export const staffDeparture = mutation({
 	args: staffDepartureArgs,
 	returns: staffDepartureReturns,
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireRole(ctx, ["owner", "admin"]);
 		if (args.guideId) {
 			await assertGuideAssignable(ctx, member.organizationId, args.guideId);
 		}
@@ -83,22 +83,34 @@ export const internalStaffDeparture = internalMutation({
 			// Use .take() + JS filter instead of .unique() to avoid
 			// crashing when a cancel/re-create cycle produces two
 			// schedules for the same (tourId, date, startTime).
-			const candidates = await ctx.db
-				.query("tourSchedules")
-				.withIndex("by_tour_date_start", (q) =>
-					q
-						.eq("tourId", args.tourId)
-						.eq("date", args.date)
-						.eq("startTime", args.startTime),
-				)
-				.take(20);
-			const existing = candidates.find(
-				(s) =>
-					s.organizationId === args.organizationId &&
-					s.status !== "cancelled",
-			);
-			if (existing) {
-				scheduleId = existing._id;
+			// F876: drain the partition page by page instead of sampling a
+			// .take(20) head — after 21+ cycles the head is all cancelled
+			// debris, the find missed the one live schedule, and the
+			// mutation published another live dupe.
+			let cursor: string | null = null;
+			let resolved: Id<"tourSchedules"> | null = null;
+			do {
+				const page = await ctx.db
+					.query("tourSchedules")
+					.withIndex("by_tour_date_start", (q) =>
+						q
+							.eq("tourId", args.tourId)
+							.eq("date", args.date)
+							.eq("startTime", args.startTime),
+					)
+					.paginate({ numItems: 100, cursor });
+				const existing = page.page.find(
+					(s) =>
+						s.organizationId === args.organizationId &&
+						s.status !== "cancelled",
+				);
+				if (existing) {
+					resolved = existing._id;
+				}
+				cursor = page.isDone ? null : page.continueCursor;
+			} while (cursor !== null && resolved === null);
+			if (resolved) {
+				scheduleId = resolved;
 			}
 		}
 

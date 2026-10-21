@@ -32,7 +32,10 @@ import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requirePermission } from "./lib/authz";
-import { parseBookingTime } from "./lib/time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./lib/time";
 import { logAudit } from "./lib/audit";
 import {
 	MAX_GUEST_NAMES_LEN,
@@ -42,6 +45,7 @@ import {
 	assertFieldWithinLimit,
 } from "./lib/validation";
 import { isBlackoutHelper } from "./tourBlackoutDates";
+import { exceptionForDateHelper } from "./tourExceptionDates";
 import {
 	PENDING_EXPIRY_MS,
 	performCancel,
@@ -50,6 +54,7 @@ import {
 	performExpire,
 	performNoShow,
 	performUpdate,
+	staffCreateExceptionRefusal,
 } from "./lib/bookingsLifecycle";
 import { logger } from "./lib/logger";
 
@@ -282,11 +287,14 @@ export const list = query({
  * a small number of distinct customers so the savings are real.
  */
 async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">) {
+	// Probe one row past the cap so `truncated` reports a silently
+	// shortened roster instead of dropping it (F468).
 	const all = await ctx.db
 		.query("bookings")
 		.withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId))
-		.take(500);
-	const active = all
+		.take(501);
+	const truncated = all.length > 500;
+	const active = all.slice(0, 500)
 		.filter((b) => b.status !== "cancelled")
 		.sort((a, b) => a.startTime.localeCompare(b.startTime));
 	const uniqueCustomerIds = [
@@ -300,18 +308,21 @@ async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">
 		const c = customerDocs[i];
 		if (c) customerById.set(id, c);
 	}
-	return active.map((b) => {
-		const c = customerById.get(b.customerId);
-		return {
-			_id: b._id,
-			date: b.date,
-			startTime: b.startTime,
-			guests: b.guests,
-			status: b.status,
-			customerName: c?.name ?? "",
-			customerEmail: c?.email ?? "",
-		};
-	});
+	return {
+		bookings: active.map((b) => {
+			const c = customerById.get(b.customerId);
+			return {
+				_id: b._id,
+				date: b.date,
+				startTime: b.startTime,
+				guests: b.guests,
+				status: b.status,
+				customerName: c?.name ?? "",
+				customerEmail: c?.email ?? "",
+			};
+		}),
+		truncated,
+	};
 }
 
 export const listBySchedule = query({
@@ -324,7 +335,7 @@ export const listBySchedule = query({
 		// on scheduleId (defense in depth — a malicious caller can't
 		// read another org's bookings by guessing a scheduleId).
 		const schedule = await ctx.db.get(args.scheduleId);
-		if (!schedule) return [];
+		if (!schedule) return { bookings: [], truncated: false };
 		if (schedule.organizationId !== member.organizationId) {
 			throw new ConvexError(
 				"Forbidden: schedule belongs to a different organization",
@@ -347,7 +358,7 @@ export const internalListBySchedule = internalQuery({
 	},
 	handler: async (ctx, args) => {
 		const schedule = await ctx.db.get(args.scheduleId);
-		if (!schedule) return [];
+		if (!schedule) return { bookings: [], truncated: false };
 		if (schedule.organizationId !== args.organizationId) {
 			throw new ConvexError(
 				"Forbidden: schedule belongs to a different organization",
@@ -518,8 +529,12 @@ export const create = mutation({
 		}
 
 		// Reject past dates and dates inside the bookingCutoffHours
-		// window. parseBookingTime returns null on malformed input.
-		const tourTs = parseBookingTime(date, startTime);
+		// window. parseBookingTimeInZone returns null on malformed input.
+		const timeZone = await organizationTimeZone(
+			ctx,
+			tour.organizationId,
+		);
+		const tourTs = parseBookingTimeInZone(date, startTime, timeZone);
 		if (tourTs === null) {
 			throw new ConvexError(`Invalid date or time: "${date} ${startTime}"`);
 		}
@@ -541,6 +556,31 @@ export const create = mutation({
 			throw new ConvexError(
 				"This date is not available for booking. Please pick another date.",
 			);
+		}
+
+		// F878: exception dates gate staff create like blackouts — a
+		// "removed" exception stays unbookable (update + the public path
+		// already refused it; create was the gap), and a capacityOverride
+		// caps the attached slot's sellable seats so a phone booking
+		// cannot oversell an operator-capped date.
+		const dateException = await exceptionForDateHelper(
+			ctx,
+			args.tourId,
+			member.organizationId,
+			date,
+		);
+		let attachedCapacityBooked: number | undefined;
+		if (scheduleId && dateException?.capacityOverride !== undefined) {
+			attachedCapacityBooked = (await ctx.db.get(scheduleId))
+				?.capacityBooked;
+		}
+		const exceptionRefusal = staffCreateExceptionRefusal(dateException, {
+			scheduleId,
+			guests: args.guests,
+			attachedCapacityBooked,
+		});
+		if (exceptionRefusal) {
+			throw new ConvexError(exceptionRefusal.message);
 		}
 
 		// Money-field validation (fleet audit 09-16): every other field

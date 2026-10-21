@@ -12,6 +12,8 @@
 //     hmac.compare_digest(signature, expected)
 // Web Crypto's SubtleCrypto gives us the same primitives.
 
+import { timingSafeEqual } from "../lib/timing";
+
 function getCrypto(): Crypto {
 	const c = (globalThis as { crypto?: Crypto }).crypto;
 	if (!c?.subtle) {
@@ -41,21 +43,6 @@ function fromHex(hex: string): Uint8Array {
 		out[i] = byte;
 	}
 	return out;
-}
-
-function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-	// Compare over the LONGER length so execution time doesn't leak
-	// whether a length mismatch occurred (F466; the RC twin of this fix
-	// landed 2026-09-06). The early return also diverges from the
-	// constant-time contract the OTA docs promise. The extra bytes of the
-	// longer input XOR against 0 and only widen the diff — mismatch still
-	// returns false.
-	const max = Math.max(a.length, b.length);
-	let diff = a.length === b.length ? 0 : 1;
-	for (let i = 0; i < max; i++) {
-		diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-	}
-	return diff === 0;
 }
 
 async function hmacSha256Hex(
@@ -110,7 +97,14 @@ export async function verifyWebhookSignature(
 	secret: string,
 ): Promise<boolean> {
 	const expected = await hmacSha256Hex(payload, secret);
-	if (signature.length !== expected.length) return false;
+	// F852: no length early-return above the compare. timingSafeEqual
+	// already compares over the longer input and seeds the diff with the
+	// length bit, so a wrong-length signature is rejected BY the compare.
+	// Returning early on the length check kept the length-vs-content
+	// timing distinction alive in the public verify path — the one thing
+	// the constant-time contract exists to erase. A malformed signature
+	// still fails: fromHex throws on an odd length or a non-hex
+	// character, and the catch turns that into false.
 	try {
 		return timingSafeEqual(fromHex(signature), fromHex(expected));
 	} catch {

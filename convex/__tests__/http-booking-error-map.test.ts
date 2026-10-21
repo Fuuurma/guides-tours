@@ -35,14 +35,6 @@ describe("mapBookingError (F758)", () => {
     expect(message).toBe("Guest count exceeds tour maximum of 12")
   })
 
-  it("maps invalid guest counts to 400 with the authored refusal", () => {
-    const { message, status } = mapBookingError(
-      refusal("guests must be a positive integer"),
-    )
-    expect(status).toBe(400)
-    expect(message).toBe("guests must be a positive integer")
-  })
-
   it("maps the seats refusal to 400", () => {
     const { message, status } = mapBookingError(
       refusal("Not enough seats left for this tour slot"),
@@ -55,6 +47,28 @@ describe("mapBookingError (F758)", () => {
     const { message, status } = mapBookingError(refusal("Tour is not active"))
     expect(status).toBe(400)
     expect(message).toBe("This tour is not currently accepting bookings")
+  })
+
+  // F892 — the action's own guests validation. The HTTP boundary rejects
+  // the same shape earlier (positive integer <= 200), so this guards the
+  // defense-in-depth copy: before the branch it fell through to the
+  // generic 500.
+  it("maps the guests validation refusal to 400 (F892)", () => {
+    const { message, status } = mapBookingError(
+      refusal("guests must be a positive integer"),
+    )
+    expect(status).toBe(400)
+    expect(message).toBe("guests must be a positive integer")
+  })
+
+  // Deliberate 500s — server-fault classes, not client input: a broken
+  // org record and a customer-resolution failure. Pinned so a future
+  // branch collapse into 4xx is a conscious edit, not an accident.
+  it.each([
+    "organization has no id",
+    "Failed to resolve customer",
+  ])("keeps the server-fault refusal as a 500 (%s)", (text) => {
+    expect(mapBookingError(refusal(text)).status).toBe(500)
   })
 
   it.each([
@@ -78,11 +92,6 @@ describe("mapBookingError (F758)", () => {
     expect(mapBookingError(refusal("rate limit exceeded")).status).toBe(429)
     expect(mapBookingError(refusal("Tour not found")).status).toBe(404)
     expect(
-      mapBookingError(
-        refusal("This date has a limited capacity that cannot be booked online."),
-      ).message,
-    ).toBe("This tour is fully booked")
-    expect(
       mapBookingError(refusal("date is blacked out")).message,
     ).toBe("This date is not available for booking")
     expect(
@@ -91,6 +100,17 @@ describe("mapBookingError (F758)", () => {
     expect(mapBookingError(refusal("Invalid email address")).message).toBe(
       "Invalid email address",
     )
+  })
+
+  it("passes the limited-capacity refusal through intact and keeps the sold-out mapping (F902)", () => {
+    const authored =
+      "This date has a limited capacity that cannot be booked online. " +
+      "Please choose another date or contact the operator."
+    expect(mapBookingError(refusal(authored))).toEqual({ message: authored, status: 400 })
+    expect(mapBookingError(refusal("Schedule over capacity"))).toEqual({
+      message: "This tour is fully booked",
+      status: 400,
+    })
   })
 
   it("falls back to the generic 500 for unknown errors", () => {

@@ -40,7 +40,9 @@ export const statement = {
 	assignment: ["create", "read", "update", "delete"],
 	otaIntegration: ["create", "read", "update", "delete"],
 	payment: ["create", "read", "refund"],
-	notification: ["create", "read", "send"],
+	// F938: "update" is the template-edit action — owner/admin declare it;
+	// member/guide/driver keep read-only notification grants.
+	notification: ["create", "read", "update", "send"],
 	// Per-user self-service: a guide updating their own availability
 	// or vacation request is always allowed regardless of role, but
 	// the API surface for "guide self" lives under these resources.
@@ -62,7 +64,7 @@ const owner = ac.newRole({
 	assignment: ["create", "read", "update", "delete"],
 	otaIntegration: ["create", "read", "update", "delete"],
 	payment: ["create", "read", "refund"],
-	notification: ["create", "read", "send"],
+	notification: ["create", "read", "update", "send"],
 });
 
 const admin = ac.newRole({
@@ -75,7 +77,7 @@ const admin = ac.newRole({
 	assignment: ["create", "read", "update", "delete"],
 	otaIntegration: ["create", "read", "update", "delete"],
 	payment: ["create", "read", "refund"],
-	notification: ["create", "read", "send"],
+	notification: ["create", "read", "update", "send"],
 });
 
 const member = ac.newRole({
@@ -92,7 +94,9 @@ const member = ac.newRole({
 });
 
 // Guide — same read as member, plus can update own availability + file
-// vacation requests. Cannot create tours/bookings.
+// vacation requests, and complete the assignments they are rostered on
+// (field staff close their own task; GT-AUDIT-10 binding migration kept
+// that operational grant). Cannot create tours/bookings.
 const guide = ac.newRole({
 	...memberAc.statements,
 	tour: ["read"],
@@ -100,7 +104,7 @@ const guide = ac.newRole({
 	customer: ["read"],
 	vehicle: ["read"],
 	driver: ["read"],
-	assignment: ["read"],
+	assignment: ["read", "update"],
 	otaIntegration: ["read"],
 	notification: ["read"],
 	ownAvailability: ["read", "update"],

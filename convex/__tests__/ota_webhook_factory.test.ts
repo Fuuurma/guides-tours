@@ -172,7 +172,7 @@ describe("createWebhookHandler — shared factory contract", () => {
 		expect(await res.text()).toBe("missing integrationId");
 	});
 
-	it("rejects a malformed integrationId with 400, not a 500 (F123)", async () => {
+	it("rejects a malformed integrationId identically to an invalid signature (F676)", async () => {
 		const t = convexTest(schema, modules);
 		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
 		const sig = await hmacHex("test-secret", body);
@@ -187,8 +187,52 @@ describe("createWebhookHandler — shared factory contract", () => {
 				},
 			},
 		);
-		expect(res.status).toBe(400);
-		expect(await res.text()).toBe("invalid integrationId");
+		expect(res.status).toBe(401);
+		expect(await res.text()).toBe("invalid signature");
+	});
+
+	it("rejects a missing webhook secret identically to an invalid signature (F676)", async () => {
+		const t = convexTest(schema, modules);
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", ""),
+		);
+		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const sig = await hmacHex("test-secret", body);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(res.status).toBe(401);
+		expect(await res.text()).toBe("invalid signature");
+	});
+
+	it("rejects an undecryptable webhook secret identically to an invalid signature (F676)", async () => {
+		const t = convexTest(schema, modules);
+		const integrationId = await t.run(async (ctx) =>
+			seedIntegration(ctx, "org_a", "viator", "not-ciphertext"),
+		);
+		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const sig = await hmacHex("test-secret", body);
+		const res = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${integrationId}`,
+			{
+				method: "POST",
+				body,
+				headers: {
+					"x-viator-signature": sig,
+					"x-viator-timestamp": String(Date.now()),
+				},
+			},
+		);
+		expect(res.status).toBe(401);
+		expect(await res.text()).toBe("invalid signature");
 	});
 
 	it("rejects when integration's provider doesn't match the route", async () => {
@@ -211,8 +255,8 @@ describe("createWebhookHandler — shared factory contract", () => {
 				},
 			},
 		);
-		expect(res.status).toBe(400);
-		expect(await res.text()).toBe("wrong provider for this route");
+		expect(res.status).toBe(401);
+		expect(await res.text()).toBe("invalid signature");
 	});
 
 	it("rejects when integration is inactive with 410", async () => {
@@ -237,8 +281,48 @@ describe("createWebhookHandler — shared factory contract", () => {
 				},
 			},
 		);
-		expect(res.status).toBe(410);
-		expect(await res.text()).toBe("integration is not active");
+		expect(res.status).toBe(401);
+		expect(await res.text()).toBe("invalid signature");
+	});
+
+	it("rejects an unknown integration identically to an invalid signature", async () => {
+		const t = convexTest(schema, modules);
+		const { encrypt } = await import("../lib/crypto");
+		const secret = await encrypt("test-secret");
+		const [unknownIntegrationId, activeIntegrationId] = await t.run(
+			async (ctx) => [
+				await seedIntegration(ctx, "org_a", "viator", secret),
+				await seedIntegration(ctx, "org_a", "viator", secret),
+			],
+		);
+		await t.run(async (ctx) => ctx.db.delete(unknownIntegrationId));
+
+		const body = JSON.stringify(VIATOR_BOOKING_PAYLOAD);
+		const badSig = await hmacHex("WRONG-SECRET", body);
+		const headers = {
+			"x-viator-signature": badSig,
+			"x-viator-timestamp": String(Date.now()),
+		};
+		const unknownIntegrationResponse = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${unknownIntegrationId}`,
+			{ method: "POST", body, headers },
+		);
+		const invalidSignatureResponse = await t.fetch(
+			`${WEBHOOK_PATH}?integrationId=${activeIntegrationId}`,
+			{ method: "POST", body, headers },
+		);
+		const outcomes = await Promise.all([
+			unknownIntegrationResponse.text(),
+			invalidSignatureResponse.text(),
+		]);
+		expect([unknownIntegrationResponse.status, outcomes[0]]).toEqual([
+			invalidSignatureResponse.status,
+			outcomes[1],
+		]);
+		expect([unknownIntegrationResponse.status, outcomes[0]]).toEqual([
+			401,
+			"invalid signature",
+		]);
 	});
 
 	it("rejects invalid signature with 401", async () => {
@@ -263,6 +347,7 @@ describe("createWebhookHandler — shared factory contract", () => {
 			},
 		);
 		expect(res.status).toBe(401);
+		expect(await res.text()).toBe("invalid signature");
 	});
 
 	it("rejects stale timestamp with 401", async () => {

@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
-import { isBlackoutHelper } from "../tourBlackoutDates";
+import { isBlackoutHelper, _blackoutRowsForList } from "../tourBlackoutDates";
 import {
 	registerBetterAuthMock,
 	resetMockOrgs,
@@ -250,5 +250,64 @@ describe("publicIsBlackout (active-tour gate, no auth)", () => {
 			date: "2026-12-25",
 		});
 		expect(result).toBe(false);
+	});
+});
+
+describe("F468 — blackout scans signal truncation", () => {
+	async function seedBlackouts(
+		ctx: any,
+		orgId: string,
+		tourId: any,
+		count: number,
+	) {
+		for (let i = 0; i < count; i++) {
+			await ctx.db.insert("tourBlackoutDates", {
+				organizationId: orgId,
+				tourId,
+				startDate: `2026-01-${String((i % 28) + 1).padStart(2, "0")}`,
+				endDate: `2026-01-${String((i % 28) + 1).padStart(2, "0")}`,
+				reason: "",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		}
+	}
+
+	it("_blackoutRowsForList returns all rows under the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_bocap1";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run((ctx) => seedBlackouts(ctx, orgId, tourId, 3));
+		const res = await t.run((ctx) =>
+			_blackoutRowsForList(ctx as any, { organizationId: orgId, tourId }),
+		);
+		expect(res.truncated).toBe(false);
+		expect(res.rows.length).toBe(3);
+	});
+
+	it("_blackoutRowsForList reports truncated past the cap", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_bocap2";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		await t.run((ctx) => seedBlackouts(ctx, orgId, tourId, 501));
+		const res = await t.run((ctx) =>
+			_blackoutRowsForList(ctx as any, { organizationId: orgId, tourId }),
+		);
+		expect(res.truncated).toBe(true);
+		expect(res.rows.length).toBe(500);
+	});
+
+	it("isBlackoutHelper fails closed when the candidate scan truncates", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_bocap3";
+		const tourId = await t.run((ctx) => seedTour(ctx, orgId));
+		// 501 windows all ending before the probe date — a truncated
+		// scan cannot prove there is no cover for it.
+		await t.run((ctx) => seedBlackouts(ctx, orgId, tourId, 501));
+		await expect(
+			t.run((ctx) =>
+				isBlackoutHelper(ctx as any, tourId, "2026-06-15"),
+			),
+		).rejects.toThrow(/Too many blackout windows/);
 	});
 });

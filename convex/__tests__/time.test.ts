@@ -11,7 +11,11 @@
 //   - Verifies round-trip (the parsed timestamp decodes back to the same date)
 
 import { describe, expect, test } from "vitest";
-import { parseBookingTime, parseYmd } from "../lib/time";
+import {
+	parseBookingTime,
+	parseBookingTimeInZone,
+	parseYmd,
+} from "../lib/time";
 
 describe("parseBookingTime", () => {
 	test("accepts a valid date and HH:MM", () => {
@@ -141,3 +145,66 @@ describe("parseYmd", () => {
 		expect(parseYmd("2028-02-29")).not.toBeNull();
 	});
 });
+describe("parseBookingTimeInZone — operator-zone parsing", () => {
+	const MADRID = "Europe/Madrid";
+
+	test("resolves wall time in the zone, not UTC", () => {
+		// July: Madrid is CEST (UTC+2) — 14:30 local is 12:30 UTC.
+		expect(parseBookingTimeInZone("2026-07-15", "14:30", MADRID)).toBe(
+			Date.UTC(2026, 6, 15, 12, 30),
+		);
+		// January: Madrid is CET (UTC+1) — 14:30 local is 13:30 UTC.
+		expect(parseBookingTimeInZone("2026-01-15", "14:30", MADRID)).toBe(
+			Date.UTC(2026, 0, 15, 13, 30),
+		);
+	});
+
+	test("DST spring forward (2026-03-29): post-transition reads CEST", () => {
+		// Clocks jump 02:00→03:00 on 2026-03-29; 10:00 local is CEST (+2).
+		expect(parseBookingTimeInZone("2026-03-29", "10:00", MADRID)).toBe(
+			Date.UTC(2026, 2, 29, 8, 0),
+		);
+		// The day before the jump is still CET (+1).
+		expect(parseBookingTimeInZone("2026-03-28", "10:00", MADRID)).toBe(
+			Date.UTC(2026, 2, 28, 9, 0),
+		);
+	});
+
+	test("DST gap (2026-03-29 02:30): nonexistent wall time shifts forward", () => {
+		// 02:30 never happens — Temporal "compatible" pushes by the 1h gap
+		// to 03:30 CEST = 01:30 UTC.
+		expect(parseBookingTimeInZone("2026-03-29", "02:30", MADRID)).toBe(
+			Date.UTC(2026, 2, 29, 1, 30),
+		);
+	});
+
+	test("DST autumn fold (2026-10-25): reads CET after fallback", () => {
+		// Clocks fall back 03:00→02:00 on 2026-10-25; 10:00 local is CET (+1).
+		expect(parseBookingTimeInZone("2026-10-25", "10:00", MADRID)).toBe(
+			Date.UTC(2026, 9, 25, 9, 0),
+		);
+		// Ambiguous 02:30 takes the first occurrence — CEST (+2) = 00:30 UTC.
+		expect(parseBookingTimeInZone("2026-10-25", "02:30", MADRID)).toBe(
+			Date.UTC(2026, 9, 25, 0, 30),
+		);
+	});
+
+	test("explicit UTC matches the legacy parser", () => {
+		expect(parseBookingTimeInZone("2026-07-15", "14:30", "UTC")).toBe(
+			parseBookingTime("2026-07-15", "14:30"),
+		);
+	});
+
+	test("malformed input still returns null", () => {
+		expect(parseBookingTimeInZone("2026-02-31", "10:00", MADRID)).toBeNull();
+		expect(parseBookingTimeInZone("2026-07-15", "25:00", MADRID)).toBeNull();
+		expect(parseBookingTimeInZone("garbage", "10:00", MADRID)).toBeNull();
+	});
+
+	test("unknown zone id falls back to UTC semantics", () => {
+		expect(
+			parseBookingTimeInZone("2026-07-15", "14:30", "Not/AZone"),
+		).toBe(parseBookingTime("2026-07-15", "14:30"));
+	});
+});
+

@@ -724,3 +724,79 @@ describe("vacationRequests — assignment-conflict gate (F347/F348)", () => {
 		).rejects.toThrow(/VACATION_ASSIGNMENT_CONFLICT/);
 	});
 });
+
+describe("F468 — leave-conflict scan fails closed when truncated", () => {
+	async function seedAssignments(
+		ctx: any,
+		orgId: string,
+		tourId: any,
+		guideId: string,
+		count: number,
+	) {
+		for (let i = 0; i < count; i++) {
+			await ctx.db.insert("assignments", {
+				organizationId: orgId,
+				tourId,
+				guideId,
+				date: "2026-07-05",
+				startTime: "09:00",
+				endTime: "11:00",
+				status: "scheduled",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		}
+	}
+
+	it("internalApprove refuses when the conflict scan truncates", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_vcap";
+		const tourId = await t.run(async (ctx) =>
+			ctx.db.insert("tours", {
+				organizationId: orgId,
+				name: "T",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 24,
+				tourType: "walking",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		const requestId = await t.run(async (ctx) =>
+			ctx.db.insert("vacationRequests", {
+				organizationId: orgId,
+				userId: "guide-cap",
+				startDate: "2026-07-01",
+				endDate: "2026-07-14",
+				reason: "",
+				status: "pending",
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		await t.run((ctx) =>
+			seedAssignments(ctx, orgId, tourId, "guide-cap", 501),
+		);
+		await expect(
+			t.mutation(internal.vacationRequests.internalApprove, {
+				organizationId: orgId,
+				userId: "admin-1",
+				requestId,
+			}),
+		).rejects.toThrow(/Too many assignments/);
+	});
+});
