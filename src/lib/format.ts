@@ -36,6 +36,26 @@ const LONG_DATE = new Intl.DateTimeFormat("en-US", {
 	day: "numeric",
 });
 
+// Hoisted per currency, for the same reason USD_CURRENCY is: constructing an
+// Intl.NumberFormat is the expensive part of formatting, and formatPrice runs
+// inside list renders. The map is keyed by currency and holds one formatter
+// per currency the app formats, which is a small fixed set — a tour's currency
+// comes from its own record, not from user input.
+const PRICE_FORMATTERS = new Map<string, Intl.NumberFormat>();
+
+function priceFormatter(currency: string): Intl.NumberFormat {
+	const key = currency || "USD";
+	let formatter = PRICE_FORMATTERS.get(key);
+	if (!formatter) {
+		formatter = new Intl.NumberFormat("en-US", {
+			style: "currency",
+			currency: key,
+		});
+		PRICE_FORMATTERS.set(key, formatter);
+	}
+	return formatter;
+}
+
 /** "Friday, October 10" style heading date (en-US — never host-locale). */
 export function formatLongDate(value: string | number | Date): string {
 	return LONG_DATE.format(new Date(value));
@@ -126,8 +146,5 @@ export function formatSignedPct(
  *   formatPrice(120, "USD")     // "$120.00"
  */
 export function formatPrice(value: number, currency: string): string {
-	return new Intl.NumberFormat("en-US", {
-		style: "currency",
-		currency: currency || "USD",
-	}).format(value);
+	return priceFormatter(currency).format(value);
 }
