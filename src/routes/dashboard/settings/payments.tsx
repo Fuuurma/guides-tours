@@ -3,7 +3,7 @@ import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -91,10 +91,22 @@ function PaymentSettingsForm({
 	const upsert = useMutation(api.payments.upsertSettings);
 	const [submitErr, setSubmitErr] = useState<string | null>(null);
 
-	const stripeWebhookUrl =
-		typeof window !== "undefined"
-			? `${((import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ?? "").replace(/\/$/, "") || window.location.origin}/api/payments/stripe/webhook`
-			: "/api/payments/stripe/webhook";
+	// F750: render the relative path on both server and client, then
+	// upgrade to the absolute origin after mount (the a0b43a2 shape).
+	// Branching on typeof window AT RENDER on an SSR'd route guaranteed a
+	// hydration text mismatch: the server HTML carried the relative path
+	// while the client's first render produced the absolute URL.
+	const [stripeWebhookUrl, setStripeWebhookUrl] = useState(
+		"/api/payments/stripe/webhook",
+	);
+	useEffect(() => {
+		const siteUrl = (
+			import.meta.env.VITE_CONVEX_SITE_URL as string | undefined
+		)?.replace(/\/$/, "");
+		setStripeWebhookUrl(
+			`${siteUrl || window.location.origin}/api/payments/stripe/webhook`,
+		);
+	}, []);
 
 	const form = useForm({
 		defaultValues: {

@@ -89,6 +89,18 @@ function BookingDetailPage() {
 	const [showReviewForm, setShowReviewForm] = useState(false);
 	const [showRefundForm, setShowRefundForm] = useState(false);
 	const [elementsOpen, setElementsOpen] = useState(false);
+	// F750 twin: same pre-image a0b43a2 removed — resolve the absolute
+	// return URL after mount instead of branching on window at render.
+	// The prop reaches confirmPayment post-mount (elementsOpen gates it),
+	// so this was latent, but the render-time branch is the same class.
+	const [paymentReturnUrl, setPaymentReturnUrl] = useState(
+		`/dashboard/bookings/${bookingId}?paid=1`,
+	);
+	useEffect(() => {
+		setPaymentReturnUrl(
+			`${window.location.origin}/dashboard/bookings/${bookingId}?paid=1`,
+		);
+	}, [bookingId]);
 	const [clientSecret, setClientSecret] = useState<string | null>(null);
 	const [publishableKey, setPublishableKey] = useState<string | null>(null);
 
@@ -305,11 +317,7 @@ function BookingDetailPage() {
 						<StripePaymentElement
 							publishableKey={publishableKey}
 							clientSecret={clientSecret}
-							returnUrl={
-								typeof window !== "undefined"
-									? `${window.location.origin}/dashboard/bookings/${bookingId}?paid=1`
-									: `/dashboard/bookings/${bookingId}?paid=1`
-							}
+							returnUrl={paymentReturnUrl}
 							amountLabel={formatCentsCompact(b.balanceDueCents)}
 							onPaid={() => {
 								toast.success(
