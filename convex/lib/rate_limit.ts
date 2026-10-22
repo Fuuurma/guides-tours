@@ -72,7 +72,14 @@ async function collectRecentAttemptsByIp(
 
 /** Records an attempt. Returns the attempt ID + whether it was
  *  allowed. Callers should update the outcome via updateAttemptOutcome
- *  once they know if the booking succeeded or failed. */
+ *  once they know if the booking succeeded or failed.
+ *
+ *  F748: callers with no IP source (Convex actions never see HTTP
+ *  headers) pass emailOnlyGate to OPT OUT of the IP dimension instead
+ *  of silently sharing the "unknown" bucket — the payment path did the
+ *  latter and turned the per-IP spray cap into a deployment-global
+ *  payment cap. Gated rows store ip:"none", a bucket no header-bearing
+ *  read shares. */
 export const recordAttempt = internalMutation({
 	args: {
 		email: v.string(),
@@ -80,6 +87,7 @@ export const recordAttempt = internalMutation({
 		organizationId: v.optional(v.string()),
 		outcome: v.string(),
 		ip: v.optional(v.string()),
+		emailOnlyGate: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
 		const now = Date.now();
@@ -89,10 +97,12 @@ export const recordAttempt = internalMutation({
 		// matched its own lookup and headerless requests escaped the
 		// per-IP cap entirely (F59).
 		const ip = (args.ip ?? "").trim() || "unknown";
-		const recentByIp = await collectRecentAttemptsByIp(ctx, ip, now);
+		const recentByIp = args.emailOnlyGate
+			? null
+			: await collectRecentAttemptsByIp(ctx, ip, now);
 
 		const emailAllowed = recent.length < MAX_ATTEMPTS_PER_EMAIL;
-		const ipAllowed = recentByIp.length < MAX_ATTEMPTS_PER_IP;
+		const ipAllowed = recentByIp === null || recentByIp.length < MAX_ATTEMPTS_PER_IP;
 		const allowed = emailAllowed && ipAllowed;
 
 		// Always record — both successes and rejections — so we can
@@ -100,7 +110,7 @@ export const recordAttempt = internalMutation({
 		const attemptId = await ctx.db.insert("publicBookingAttempts", {
 			organizationId: args.organizationId,
 			email: args.email,
-			ip,
+			ip: args.emailOnlyGate ? "none" : ip,
 			slug: args.slug,
 			outcome: allowed ? args.outcome : "rejected_rate_limit",
 			createdAt: now,
@@ -109,7 +119,10 @@ export const recordAttempt = internalMutation({
 		return {
 			allowed,
 			attempts: Math.min(recent.length + 1, MAX_ATTEMPTS_PER_EMAIL + 1),
-			ipAttempts: Math.min(recentByIp.length + 1, MAX_ATTEMPTS_PER_IP + 1),
+			ipAttempts:
+				recentByIp === null
+					? null
+					: Math.min(recentByIp.length + 1, MAX_ATTEMPTS_PER_IP + 1),
 			attemptId,
 		};
 	},
@@ -159,11 +172,12 @@ export const purgeOld = internalMutation({
 	},
 });
 
-/** Update the outcome of the most recent attempt for an email.
- *  Called after a booking succeeds/fails to record the final result
- *  for audit. The most-recent row is matched by email+slug+createdAt
- *  desc. We update by ID (collected via collectRecentAttempts)
- *  to avoid races where two concurrent attempts exist. */
+/** Update the outcome of a recorded attempt, by the id recordAttempt
+ *  returned. Called after the flow succeeds/fails to record the final
+ *  result for audit. (F748 docstring fix: this patches strictly by
+ *  attemptId — the old "most recent row matched by email+slug+createdAt"
+ *  story described a collect-based concurrency shape the implementation
+ *  never had.) */
 export const updateAttemptOutcome = internalMutation({
 	args: {
 		attemptId: v.id("publicBookingAttempts"),

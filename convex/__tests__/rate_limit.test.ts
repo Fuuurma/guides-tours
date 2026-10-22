@@ -35,10 +35,12 @@ const recordAttempt = (internal as unknown as {
 				organizationId: string | undefined;
 				outcome: string;
 				ip?: string;
+				emailOnlyGate?: boolean;
 			},
 			{
 				allowed: boolean;
 				attempts: number;
+				ipAttempts: number | null;
 				attemptId: import("../_generated/dataModel").Id<"publicBookingAttempts">;
 			}
 		>;
@@ -370,6 +372,96 @@ describe("public booking rate limit", () => {
 		});
 		const row = await t.run(async (ctx) => ctx.db.get(r.attemptId));
 		expect(row?.organizationId).toBe("org_first");
+		expect(row?.outcome).toBe("success");
+	});
+});
+
+// F748 — the payment path has no IP source (Convex actions never see
+// HTTP headers). It passes emailOnlyGate so its rows store ip:"none"
+// and opt out of the IP dimension instead of silently sharing the
+// "unknown" bucket — which turned the per-IP spray cap into a
+// deployment-global payment cap: the 11th payment attempt from ANY
+// guest was rejected even for a never-seen email.
+describe("emailOnlyGate (F748)", () => {
+	test("more than MAX_ATTEMPTS_PER_IP distinct emails are all allowed", async () => {
+		const t = convexTest(schema, modules);
+		for (let i = 0; i < MAX_ATTEMPTS_PER_IP + 2; i++) {
+			const r = await t.mutation(recordAttempt.recordAttempt, {
+				email: `guest-${i}@example.com`,
+				slug: "payment:Res-1",
+				organizationId: undefined,
+				outcome: "pending",
+				emailOnlyGate: true,
+			});
+			expect(r.allowed).toBe(true);
+			expect(r.ipAttempts).toBe(null);
+		}
+	});
+
+	test("a spray from one email still caps under the email dimension", async () => {
+		const t = convexTest(schema, modules);
+		const email = "spray@example.com";
+		for (let i = 0; i < MAX_ATTEMPTS_PER_EMAIL; i++) {
+			const r = await t.mutation(recordAttempt.recordAttempt, {
+				email,
+				slug: "payment:Res-2",
+				organizationId: undefined,
+				outcome: "pending",
+				emailOnlyGate: true,
+			});
+			expect(r.allowed).toBe(true);
+		}
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email,
+			slug: "payment:Res-2",
+			organizationId: undefined,
+			outcome: "pending",
+			emailOnlyGate: true,
+		});
+		expect(r.allowed).toBe(false);
+	});
+
+	test("gated rows store ip:none and never contaminate the unknown bucket", async () => {
+		const t = convexTest(schema, modules);
+		// A payment attempt (gated, ip "none")…
+		await t.mutation(recordAttempt.recordAttempt, {
+			email: "payer@example.com",
+			slug: "payment:Res-3",
+			organizationId: undefined,
+			outcome: "pending",
+			emailOnlyGate: true,
+		});
+		// …then a header-less booking attempt, whose read bucket is
+		// "unknown": the payment row must not count into its IP budget.
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "booker@example.com",
+			slug: "some-tour",
+			organizationId: undefined,
+			outcome: "pending",
+		});
+		expect(r.allowed).toBe(true);
+		expect(r.ipAttempts).toBe(1);
+		const rows = await t.run(async (ctx) =>
+			ctx.db.query("publicBookingAttempts").collect(),
+		);
+		const gated = rows.find((row) => row.email === "payer@example.com");
+		expect(gated?.ip).toBe("none");
+	});
+
+	test("updateAttemptOutcome flips the recorded row by id", async () => {
+		const t = convexTest(schema, modules);
+		const r = await t.mutation(recordAttempt.recordAttempt, {
+			email: "settle@example.com",
+			slug: "payment:Res-4",
+			organizationId: undefined,
+			outcome: "pending",
+			emailOnlyGate: true,
+		});
+		await t.mutation(recordAttempt.updateAttemptOutcome, {
+			attemptId: r.attemptId,
+			outcome: "success",
+		});
+		const row = await t.run(async (ctx) => ctx.db.get(r.attemptId));
 		expect(row?.outcome).toBe("success");
 	});
 });
