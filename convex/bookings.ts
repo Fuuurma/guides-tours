@@ -131,8 +131,10 @@ export const list = query({
 		// Pick the right index based on which filter is present.
 		// by_org_source_date leads with (org, source, date) — push dateFrom/
 		// dateTo into the index range so we don't scan every booking with
-		// the given source. When no filter is present and sorting by
-		// `date`, use by_org_date with .order() to skip the JS sort below.
+		// the given source. Every branch that leads with `date` applies
+		// .order() explicitly: a Convex index scan iterates ascending, so
+		// without it the filtered branches returned oldest-first while the
+		// default sortOrder is 'desc' (F139).
 		// Bound the scan: a single page is at most 100, but the JS filter
 		// (status, tourId, customerId, search) needs every matching row.
 		// Cap at 5000 — the FE paginates, so this is fine for reasonable
@@ -159,6 +161,7 @@ export const list = query({
 						if (args.dateTo) return eq.lte("date", args.dateTo!);
 						return eq;
 					})
+					.order(order)
 					.take(MAX_SCAN)
 			: args.dateFrom || args.dateTo
 				? ctx.db
@@ -172,6 +175,7 @@ export const list = query({
 							if (args.dateTo) return eq.lte("date", args.dateTo);
 							return eq;
 						})
+						.order(order)
 						.take(MAX_SCAN)
 				: canUseDateOrder
 					? ctx.db
@@ -222,7 +226,9 @@ export const list = query({
 		// Skip the JS sort when the index already returns rows in the
 		// requested order. by_org_date and by_org_source_date both lead
 		// with `date`, so sorting by `date` is free when the index order
-		// matches (canUseDateOrder applies .order() explicitly).
+		// matches — every branch that leads with `date` applies .order()
+		// explicitly (F139), so "the index leads with date" and "the rows
+		// are in the requested order" are the same statement.
 		const indexAlreadySorted =
 			canUseDateOrder ||
 			((args.source || args.dateFrom || args.dateTo) && sortBy === "date");
