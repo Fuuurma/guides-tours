@@ -183,8 +183,8 @@ Tour operator SaaS. Tours, schedules, bookings, assignments, customers, vehicles
 | `pnpm build` | Production build (Cloudflare Workers target) |
 | `pnpm lint` | Biome lint |
 | `pnpm check` | Biome lint + format check |
-| `pnpm test` | Vitest run (579 tests) |
-| `pnpm test:e2e` | Playwright smoke (23 tests) |
+| `pnpm test` | Vitest run |
+| `pnpm test:e2e` | Playwright smoke |
 | `pnpm deploy:check` | Report missing deploy env vars |
 | `pnpm deploy` | `deploy:check`, then build + `wrangler deploy` |
 | `npx convex dev` | Convex backend dev |
