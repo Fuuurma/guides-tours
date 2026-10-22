@@ -511,7 +511,14 @@ export const internalCreate = internalMutation({
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
-			const match = await ctx.db
+			// F694: a cancel/re-create cycle leaves TWO schedules for the
+			// same (tourId, date, startTime). .unique() threw Convex's
+			// opaque "unique() query returned more than one result" error
+			// there, so a guest's booking attempt died with an internal
+			// failure instead of the authored refusal. take(2) + a length
+			// check refuses the ambiguous slot with the same friendly
+			// message the schedule helpers use.
+			const matches = await ctx.db
 				.query("tourSchedules")
 				.withIndex("by_tour_date_start", (q) =>
 					q
@@ -519,7 +526,13 @@ export const internalCreate = internalMutation({
 						.eq("date", args.date)
 						.eq("startTime", args.startTime),
 				)
-				.unique();
+				.take(2);
+			if (matches.length > 1) {
+				throw new ConvexError(
+					`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+				);
+			}
+			const match = matches[0];
 			if (match && match.organizationId === args.organizationId) {
 				if (match.status === "cancelled") {
 					throw new ConvexError("Cannot book a cancelled schedule");
