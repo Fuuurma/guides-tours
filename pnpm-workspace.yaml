@@ -5,3 +5,10 @@ onlyBuiltDependencies:
   - "lightningcss"
 overrides:
   "js-yaml": ">=4.3.2"
+  # F822: seroval 1.5.6 sits below both patch floors under
+  # start-server-core 1.169.17 — >=1.6.2 (GHSA-p6vx-979v, thenable
+  # assimilation) and >=1.6.3 (GHSA-jp82-f5mq-hwhp, TypedArray exhaustion).
+  # The installed server-functions-handler runs fromJSON on the GET
+  # ?payload= before any handler, so the deserializer is live attack
+  # surface. pnpm 10+ reads overrides from this file, not package.json.
+  "seroval": ">=1.6.3"
