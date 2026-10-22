@@ -1,5 +1,12 @@
 # Supply-chain: ignore versions younger than 24h (blocks just-published malicious releases)
 minimumReleaseAge: 1440
+
+# Supply-chain: fail installs where a release's trust evidence (provenance,
+# trusted publisher) drops below an earlier-published release of the same
+# package — a takeover signal. The 30d window exempts pre-signing-era
+# releases that would otherwise false-positive.
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 43200
 onlyBuiltDependencies:
   - "esbuild"
   - "lightningcss"
