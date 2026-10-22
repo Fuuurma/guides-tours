@@ -36,6 +36,7 @@ import {
 import {
 	verifyStripeSignature,
 } from "./payments_stripe";
+import { readBodyWithLimit } from "./lib/requestBody";
 
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
 const DEFAULT_SITE_URL = "http://127.0.0.1:3020";
@@ -1091,7 +1092,22 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 		return new Response("missing signature", { status: 400 });
 	}
 
-	const rawBody = await request.text();
+	// F554: the body is unauthenticated until the signature is verified,
+	// and the org that selects the secret is inside the payload — so the
+	// body has to be read (and parsed) before it can be authenticated.
+	// Cap the read so one oversized POST can't cost the process the
+	// platform's request ceiling in memory, and reject it before
+	// JSON.parse. 1 MiB is ~50x a typical Stripe event and far below
+	// Stripe's own 10 MB event ceiling.
+	const MAX_BODY_BYTES = 1024 * 1024;
+	const body = await readBodyWithLimit(request, MAX_BODY_BYTES);
+	if (!body.ok) {
+		if (body.reason === "too-large") {
+			return new Response("payload too large", { status: 413 });
+		}
+		return new Response("failed to read body", { status: 400 });
+	}
+	const rawBody = body.text;
 
 	let parsed: {
 		id?: string;
