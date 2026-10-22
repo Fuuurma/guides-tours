@@ -144,9 +144,11 @@ export interface TimestampCheckResult {
 }
 
 export interface TimestampCheckOptions {
-	/** Reject (reason: "missing") instead of skipping when the
-	 * timestamp header is absent. Opt-in: default false keeps
-	 * providers that never send a timestamp compatible. */
+	/** When true, an absent/empty timestamp header REJECTS the request
+	 * (reason: "missing") instead of skipping the replay check. Opt-in
+	 * per provider — default false keeps providers that never send a
+	 * timestamp compatible, because most real OTAs never send a
+	 * timestamp header and rejecting would break their webhooks (F83). */
 	requireTimestamp?: boolean;
 }
 
@@ -166,14 +168,6 @@ export interface TimestampCheckOptions {
  * defense-in-depth bonus when the header IS present, not a hard
  * requirement.
  */
-export interface TimestampCheckOptions {
-	/** When true, an absent/empty timestamp header REJECTS the request
-	 * (reason: "missing") instead of skipping the replay check. Opt-in
-	 * per provider — default false because most real OTAs never send a
-	 * timestamp header and rejecting would break their webhooks (F83). */
-	requireTimestamp?: boolean;
-}
-
 export function checkWebhookTimestamp(
 	timestampHeader: string | null,
 	nowMs: number = Date.now(),

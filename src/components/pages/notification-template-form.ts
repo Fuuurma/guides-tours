@@ -31,7 +31,10 @@ export function useTemplateEditForm(opts: {
 	}) => Promise<unknown>;
 	/** Runs after a successful save: clear editing state and refetch. */
 	onSaved: () => void;
-	onSaveError: (message: string) => void;
+	/** Receives the failure message, or null to clear a stale one. The
+	 * submit path calls it with null first so a successful retry clears
+	 * the banner left by the failed attempt (pre-split behaviour). */
+	onSaveError: (message: string | null) => void;
 }) {
 	const { template, updateTemplate, onSaved, onSaveError } = opts;
 	const form = useForm({
@@ -44,6 +47,7 @@ export function useTemplateEditForm(opts: {
 			smsBody: template.smsBody ?? "",
 		},
 		onSubmit: async ({ value }) => {
+			onSaveError(null);
 			const nameErr = validateName(value.name);
 			if (nameErr) {
 				form.setFieldMeta("name", (prev) => ({
@@ -81,7 +85,7 @@ export function useTemplateTestForm(opts: {
 		channel: "email" | "sms";
 		to: string;
 	}) => Promise<unknown>;
-	onTestError: (message: string) => void;
+	onTestError: (message: string | null) => void;
 }) {
 	const { template, sendTest, onTestError } = opts;
 	const form = useForm({
@@ -90,6 +94,7 @@ export function useTemplateTestForm(opts: {
 			to: "",
 		},
 		onSubmit: async ({ value }) => {
+			onTestError(null);
 			const to = value.to.trim();
 			if (!to) {
 				form.setFieldMeta("to", (prev) => ({

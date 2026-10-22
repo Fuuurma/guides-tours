@@ -94,7 +94,10 @@ function daysAheadError(value: string, label: string): string | null {
  */
 export function useNotifForm(opts: {
 	upsert: (args: NotifUpsertArgs) => Promise<unknown>;
-	onSubmitError: (message: string) => void;
+	/** Receives the failure message, or null to clear a stale one.
+	 * The submit path calls it with null first so a successful retry
+	 * clears the banner left by the failed attempt (pre-split behaviour). */
+	onSubmitError: (message: string | null) => void;
 	settings: Settings | null;
 }) {
 	const { upsert, onSubmitError, settings } = opts;
@@ -123,6 +126,7 @@ export function useNotifForm(opts: {
 			retryDelayMinutes: String(settings?.retryDelayMinutes ?? 15),
 		} satisfies NotifFormValues,
 		onSubmit: async ({ value }) => {
+			onSubmitError(null);
 			let invalid = false;
 			const fail = (name: keyof NotifFormValues, message: string) => {
 				form.setFieldMeta(name, (prev) => ({
