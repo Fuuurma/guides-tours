@@ -520,7 +520,15 @@ export const create = mutation({
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
-			const match = await ctx.db
+			// F1006: a cancel/re-create cycle leaves TWO schedules in the
+			// same (tourId, date, startTime) partition — see convex/ops.ts,
+			// which reads that partition with take(20) + a JS filter for
+			// exactly this reason. .unique() threw Convex's opaque
+			// "unique() query returned more than one result" error on such
+			// a pair, so a staff booking died with an internal failure
+			// instead of refusing the slot. take(2) + a length check
+			// refuses the ambiguous slot the way F694's sites now do.
+			const matches = await ctx.db
 				.query("tourSchedules")
 				.withIndex("by_tour_date_start", (q) =>
 					q
@@ -528,7 +536,13 @@ export const create = mutation({
 						.eq("date", args.date)
 						.eq("startTime", args.startTime),
 				)
-				.unique();
+				.take(2);
+			if (matches.length > 1) {
+				throw new ConvexError(
+					`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+				);
+			}
+			const match = matches[0];
 			if (match && match.organizationId === member.organizationId) {
 				if (match.status === "cancelled") {
 					throw new ConvexError("Cannot book a cancelled schedule");
