@@ -18,6 +18,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { getSafeDisplayMessage } from "@/lib/utils";
+import { toVehicleStatus, VEHICLE_STATUSES } from "@/lib/vehicle-status";
 import type { Vehicle } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -25,13 +26,6 @@ import type { Id } from "../../../convex/_generated/dataModel";
 export const Route = createFileRoute("/dashboard/vehicles")({
 	component: VehiclesPage,
 });
-
-const STATUS_OPTIONS = [
-	"available",
-	"in_use",
-	"maintenance",
-	"retired",
-] as const;
 
 function VehiclesPage() {
 	const {
@@ -45,11 +39,18 @@ function VehiclesPage() {
 	const [pendingId, setPendingId] = useState<string | null>(null);
 
 	const changeStatus = async (id: string, newStatus: string) => {
+		// The select can hand back any string, so the value is checked against
+		// the status set instead of being cast into it.
+		const status = toVehicleStatus(newStatus);
+		if (!status) {
+			toast.error("Unknown vehicle status");
+			return;
+		}
 		setPendingId(id);
 		try {
 			await setStatus({
 				vehicleId: id as Id<"vehicles">,
-				status: newStatus as "available" | "in_use" | "maintenance" | "retired",
+				status,
 			});
 			toast.success("Status updated");
 		} catch (err) {
@@ -129,7 +130,7 @@ function VehiclesPage() {
 							</SelectTrigger>
 							<SelectContent>
 								<SelectGroup>
-									{STATUS_OPTIONS.map((s) => (
+									{VEHICLE_STATUSES.map((s) => (
 										<SelectItem key={s} value={s}>
 											{s}
 										</SelectItem>

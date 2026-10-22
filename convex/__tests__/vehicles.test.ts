@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "../schema";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 
 const modules = import.meta.glob("../**/*.{ts,tsx}");
 
@@ -259,5 +259,58 @@ describe("vehicles", () => {
 				notes: "N".repeat(1001),
 			}),
 		).rejects.toThrow(/notes is too long/);
+	});
+
+	// F696: update accepted any string for status, bypassing the four-literal
+	// union the schema declares. A status outside the set matched no
+	// by_org_status filter, so the vehicle silently vanished from fleet views
+	// and the booking-path pickers failed closed.
+	it("update: rejects a status outside the vehicle status set (F696)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_v_status";
+		const id = await t.run((ctx) => seedVehicle(ctx, orgId));
+		await expect(
+			t.mutation(internal.vehicles.internalUpdate, {
+				organizationId: orgId,
+				userId: "user-1",
+				vehicleId: id,
+				// Deliberately outside the set: the validator must refuse it, and
+				// the type checker refuses to spell it without this cast — which
+				// is the point.
+				status: "broken" as never,
+			}),
+		).rejects.toThrow();
+		const v = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(v?.status).toBe("available");
+	});
+
+	it("update: the public mutation refuses an out-of-set status at the argument boundary (F696)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_v_status_public";
+		const id = await t.run((ctx) => seedVehicle(ctx, orgId));
+		// The argument validator is the guard. Before the fix the status
+		// argument accepted any string, so the request sailed past validation
+		// and failed on authentication instead — the caller was told it was
+		// unauthenticated for a value the server should never have accepted.
+		await expect(
+			t.mutation(api.vehicles.update, {
+				vehicleId: id,
+				status: "broken" as never,
+			}),
+		).rejects.toThrow(/Validator error/);
+	});
+
+	it("update: a status inside the set still writes (F696)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_v_status_ok";
+		const id = await t.run((ctx) => seedVehicle(ctx, orgId));
+		await t.mutation(internal.vehicles.internalUpdate, {
+			organizationId: orgId,
+			userId: "user-1",
+			vehicleId: id,
+			status: "maintenance",
+		});
+		const v = (await t.run((ctx) => ctx.db.get(id))) as any;
+		expect(v?.status).toBe("maintenance");
 	});
 });
