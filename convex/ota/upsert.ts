@@ -15,7 +15,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { logAudit } from "../lib/audit";
 import { syncTourAvailability } from "../lib/availabilityProjection";
 import { logger } from "../lib/logger";
-import { normalizeCurrency } from "../lib/money";
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 
 /**
  * Upsert an OTA booking. Called by every provider's webhook handler
@@ -39,6 +39,7 @@ export const upsertOtaBooking = internalMutation({
 			tourTime: v.optional(v.string()),
 			guests: v.number(),
 			totalPaidCents: v.optional(v.int64()),
+			totalPaidRaw: v.optional(v.number()),
 			currency: v.optional(v.string()),
 			commissionRate: v.optional(v.number()),
 			commissionCents: v.optional(v.int64()),
@@ -98,7 +99,23 @@ export const upsertOtaBooking = internalMutation({
 		// below zero.
 		const rawRate = event.commissionRate ?? product?.commissionRate ?? 0;
 		const rate = Math.max(0, Math.min(rawRate, 1));
-		const paidCents = event.totalPaidCents;
+
+		// F760: a re-delivery that omits its currency keeps the prior
+		// row's otaCurrency (the conditional spread below never wipes it),
+		// so its amount must be re-converted with THAT currency's exponent.
+		// The parser fell back to exponent 2 without knowing the prior row
+		// — a stored JPY 1200 would be rewritten as 120000c, KWD 1.234 as
+		// 123c. The parsers carry the raw major unit for exactly this.
+		let paidCents = event.totalPaidCents;
+		const priorCurrency = existing?.otaCurrency;
+		if (
+			event.currency === undefined &&
+			priorCurrency !== undefined &&
+			event.totalPaidRaw !== undefined
+		) {
+			paidCents = toMinorUnits(event.totalPaidRaw, priorCurrency);
+		}
+
 		// F361: guests drives capacityBooked — non-positive/fractional
 		// values would take the decrement branch in applyOtaCapacity or
 		// store a fractional seat claim. Floor and floor-at-1.

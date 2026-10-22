@@ -162,6 +162,7 @@ export class ExpediaClient {
 					totalPaid !== undefined
 						? toMinorUnits(totalPaid, currency)
 						: undefined,
+				totalPaidRaw: totalPaid,
 				currency,
 				rawPayload: payload,
 			};

@@ -163,6 +163,7 @@ export class BookingClient {
 					totalPaid !== undefined
 						? toMinorUnits(totalPaid, currency)
 						: undefined,
+				totalPaidRaw: totalPaid,
 				currency,
 				rawPayload: payload,
 			};
