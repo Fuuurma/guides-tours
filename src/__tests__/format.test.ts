@@ -11,7 +11,33 @@ import {
 	formatCents,
 	formatCentsCompact,
 	formatCentsWhole,
+	formatPrice,
 } from "../lib/format";
+
+/**
+ * How many Intl.NumberFormat objects `run` constructs.
+ *
+ * A Proxy's construct trap counts the calls and still builds a real
+ * NumberFormat, so the code under test behaves exactly as it does in
+ * production. The original is restored whatever happens.
+ */
+function countNumberFormatConstructions(run: () => void): number {
+	const original = Intl.NumberFormat;
+	let constructed = 0;
+	const counting = new Proxy(original, {
+		construct(target, args) {
+			constructed += 1;
+			return Reflect.construct(target, args);
+		},
+	});
+	Intl.NumberFormat = counting as typeof Intl.NumberFormat;
+	try {
+		run();
+	} finally {
+		Intl.NumberFormat = original;
+	}
+	return constructed;
+}
 
 describe("formatCents", () => {
 	test("formats integer cents with $X.XX", () => {
@@ -87,5 +113,44 @@ describe("centsToInputValue", () => {
 	test("returns empty string for null or undefined", () => {
 		expect(centsToInputValue(null)).toBe("");
 		expect(centsToInputValue(undefined)).toBe("");
+	});
+});
+
+describe("formatPrice", () => {
+	test("formats an amount in the given currency", () => {
+		expect(formatPrice(49.99, "EUR")).toBe("€49.99");
+		expect(formatPrice(120, "USD")).toBe("$120.00");
+	});
+
+	test("falls back to USD for an empty currency", () => {
+		expect(formatPrice(120, "")).toBe("$120.00");
+	});
+
+	// F754: formatPrice used to construct a fresh Intl.NumberFormat on every
+	// call, which is the expensive part of formatting, inside list renders.
+	// The formatter is now hoisted per currency, so two calls in the same
+	// currency construct one formatter between them.
+	//
+	// The count is taken with a Proxy's construct trap rather than a spy:
+	// `vi.spyOn(Intl, "NumberFormat")` replaces the constructor with a mock
+	// that does not build a NumberFormat, so the call under test would fail
+	// on `.format` instead of counting.
+	test("reuses one formatter per currency instead of constructing per call", () => {
+		const count = countNumberFormatConstructions(() => {
+			// A currency nothing else in this file formats, so the count is
+			// this test's own and not a leftover from an earlier case.
+			formatPrice(10, "SEK");
+			formatPrice(20, "SEK");
+			formatPrice(30, "SEK");
+		});
+		expect(count).toBe(1);
+	});
+
+	test("a different currency gets its own formatter", () => {
+		const count = countNumberFormatConstructions(() => {
+			formatPrice(10, "NOK");
+			formatPrice(20, "DKK");
+		});
+		expect(count).toBe(2);
 	});
 });

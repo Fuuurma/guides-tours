@@ -1,5 +1,13 @@
 import type { Id } from "../../convex/_generated/dataModel";
 
+/**
+ * Reshape `tourAnalytics.list(periodType=daily, dateFrom, dateTo)`
+ * rows into a per-tour daily series. Returns a Map keyed by tourId
+ * so the analytics page can build leaderboard rows in O(n).
+ *
+ * If a tour is missing from the cache (no rows yet), its series is
+ * an empty array — the sparkline will render a placeholder rule.
+ */
 export function buildSparklineByTour(
 	rows: Array<{
 		tourId: Id<"tours">;

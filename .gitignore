@@ -26,3 +26,7 @@ tsconfig.tsbuildinfo
 
 # repowise index cache (tooling artifact)
 .repowise/
+
+# impeccable critique dumps (tooling artifact — a score report for one file,
+# written by the design skill and committed by a pause-merge)
+.impeccable/

@@ -52,7 +52,7 @@ pnpm dev                    # frontend on :3000 (separate terminal for backend)
 - `pnpm build` — Production build (Cloudflare Workers target)
 - `pnpm deploy` — Build + `wrangler deploy`
 - `pnpm test` — Vitest run (579 tests)
-- `pnpm test:e2e` — Playwright smoke (23 tests; requires `pnpm dev` running)
+- `pnpm test:e2e` — Playwright smoke (23 tests; self-starts the dev server)
 - `pnpm lint` — Biome lint
 - `pnpm check` — Biome lint + format check
 - `npx convex dev` — Convex backend dev (separate terminal)
