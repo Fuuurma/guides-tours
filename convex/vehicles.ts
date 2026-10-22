@@ -14,6 +14,7 @@ import {
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requirePermission } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { vehicleStatusValidator } from "./lib/vehicleStatus";
 import {
 	MAX_LICENSE_LEN,
 	MAX_NOTES_LEN,
@@ -40,14 +41,7 @@ const ALLOWED_UPDATE_FIELDS = [
 
 export const list = query({
 	args: {
-		status: v.optional(
-			v.union(
-				v.literal("available"),
-				v.literal("in_use"),
-				v.literal("maintenance"),
-				v.literal("retired"),
-			),
-		),
+		status: v.optional(vehicleStatusValidator),
 		vehicleType: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -218,7 +212,7 @@ export const update = mutation({
 		year: v.optional(v.number()),
 		color: v.optional(v.string()),
 		ownershipType: v.optional(v.string()),
-		status: v.optional(v.string()),
+		status: v.optional(vehicleStatusValidator),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -250,7 +244,7 @@ export const internalUpdate = internalMutation({
 		year: v.optional(v.number()),
 		color: v.optional(v.string()),
 		ownershipType: v.optional(v.string()),
-		status: v.optional(v.string()),
+		status: v.optional(vehicleStatusValidator),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -316,12 +310,7 @@ export const internalUpdate = internalMutation({
 export const setStatus = mutation({
 	args: {
 		vehicleId: v.id("vehicles"),
-		status: v.union(
-			v.literal("available"),
-			v.literal("in_use"),
-			v.literal("maintenance"),
-			v.literal("retired"),
-		),
+		status: vehicleStatusValidator,
 	},
 	handler: async (ctx, args) => {
 		const member = await requirePermission(ctx, "vehicle", "update");
@@ -342,12 +331,7 @@ export const internalSetStatus = internalMutation({
 		organizationId: v.string(),
 		userId: v.string(),
 		vehicleId: v.id("vehicles"),
-		status: v.union(
-			v.literal("available"),
-			v.literal("in_use"),
-			v.literal("maintenance"),
-			v.literal("retired"),
-		),
+		status: vehicleStatusValidator,
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db.get(args.vehicleId);

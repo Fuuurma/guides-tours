@@ -24,6 +24,7 @@
 
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { vehicleStatusValidator } from "./lib/vehicleStatus";
 
 // Better Auth user reference. The `user` table is owned by the
 // @convex-dev/better-auth component, NOT by this app's schema, so we
@@ -388,12 +389,7 @@ export default defineSchema({
 		// OWNED | LEASED | RENTAL ("" when unknown)
 		ownershipType: v.string(),
 		// AVAILABLE | IN_USE | MAINTENANCE | RETIRED
-		status: v.union(
-			v.literal("available"),
-			v.literal("in_use"),
-			v.literal("maintenance"),
-			v.literal("retired"),
-		),
+		status: vehicleStatusValidator,
 		notes: v.string(),
 		createdAt: v.number(),
 		updatedAt: v.number(),
