@@ -24,11 +24,13 @@
 import { spawnSync } from "node:child_process"
 
 // GHSA id → why this advisory is tolerated and what closes it.
+//
+// GHSA-qx66-fv34-fjm8 (TanStack Start reflected XSS) used to be listed
+// here: the floors deliberately left the Start bump alone because a
+// separate finding owned it. That bump has landed (@tanstack/react-start
+// 1.169.3, start-server-core 1.169.44), so the entry is gone and the
+// gate now fails if the Start advisory ever comes back.
 const SANCTIONED = new Map([
-	[
-		"GHSA-qx66-fv34-fjm8",
-		"@tanstack/react-start >= 1.168.60, @tanstack/start-server-core >= 1.169.39 — TanStack Start reflected XSS, owned by its own open finding; the F952 floors deliberately leave the Start bump alone.",
-	],
 	[
 		"GHSA-587h-7wmj-h5pm",
 		"vite >= 8.1.6 — vite reaches the production graph through @cloudflare/vite-plugin.",
