@@ -25,6 +25,7 @@ import { httpAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { decrypt } from "../lib/crypto";
 import { logger } from "../lib/logger";
+import { readBodyWithLimit } from "../lib/requestBody";
 import type { Id } from "../_generated/dataModel";
 import { verifyWebhookSignatureWithTimestamp } from "./webhook_verify";
 import type { NormalizedProviderEvent } from "./types";
@@ -82,16 +83,20 @@ export function createWebhookHandler(config: WebhookConfig) {
 		}
 
 		const timestampHeader = request.headers.get(config.timestampHeader);
-		const rawBody = await request.text();
 		// F341: unauthenticated route — cap the body before JSON.parse,
-		// HMAC, and recordDelivery's rawPayload storage. Measure real
-		// bytes (UTF-16 length lies for multibyte payloads — same F51
-		// contract as the public booking path). 64 KB is generous for a
-		// provider event while still bounding memory per request.
+		// HMAC, and recordDelivery's rawPayload storage. The cap is
+		// applied to the read itself, so the oversized bytes are never
+		// buffered (F554). 64 KB is generous for a provider event while
+		// still bounding memory per request.
 		const MAX_BODY_BYTES = 64 * 1024;
-		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
-			return new Response("payload too large", { status: 413 });
+		const body = await readBodyWithLimit(request, MAX_BODY_BYTES);
+		if (!body.ok) {
+			if (body.reason === "too-large") {
+				return new Response("payload too large", { status: 413 });
+			}
+			return new Response("failed to read body", { status: 400 });
 		}
+		const rawBody = body.text;
 
 		const url = new URL(request.url);
 		const integrationId = url.searchParams.get("integrationId");
