@@ -339,6 +339,8 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		emailConsent: v.optional(v.boolean()),
 		smsConsent: v.optional(v.boolean()),
 		ip: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge. */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Rate-limit check (per-email). Recorded BEFORE the slug
@@ -413,6 +415,8 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 					scheduleId: args.scheduleId,
 					emailConsent: args.emailConsent,
 					smsConsent: args.smsConsent,
+					ipAddress: args.ip,
+					userAgent: args.userAgent,
 				},
 			);
 			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
@@ -453,6 +457,10 @@ export const internalCreate = internalMutation({
 		scheduleId: v.optional(v.id("tourSchedules")),
 		emailConsent: v.optional(v.boolean()),
 		smsConsent: v.optional(v.boolean()),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Normalize + validate email via the shared helper. Rejects
@@ -754,6 +762,8 @@ export const internalCreate = internalMutation({
 					amountCents: totalAmountCents.toString(),
 					stripePaymentIntentId: null,
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 		}
 
@@ -773,6 +783,8 @@ export const internalCreate = internalMutation({
 				guests: args.guests,
 				source: "public_booking",
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 
 		// Customer confirmation and future reminders begin only after the

@@ -276,6 +276,10 @@ export const getPublicSettings = query({
 export const markSucceeded = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 		handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
@@ -313,6 +317,8 @@ export const markSucceeded = internalMutation({
 						chargedCents: p.amountCents.toString(),
 						overpaidCents: overpaid.toString(),
 					},
+					ipAddress: args.ipAddress,
+					userAgent: args.userAgent,
 				});
 			}
 		}
@@ -325,6 +331,8 @@ export const markSucceeded = internalMutation({
 			resourceId: args.paymentId,
 			oldValues: { status: p.status },
 			newValues: { status: "succeeded", processedAt: now },
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return args.paymentId;
 	},
@@ -339,6 +347,10 @@ export const markFailed = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
 		reason: v.optional(v.string()),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
@@ -367,6 +379,8 @@ export const markFailed = internalMutation({
 				reason: args.reason ?? "",
 				processedAt: now,
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return args.paymentId;
 	},
@@ -736,6 +750,10 @@ export const recordFromAction = internalMutation({
 		amountCents: v.int64(),
 		currency: v.string(),
 		stripePaymentIntentId: v.string(),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Same validation as the public record mutation — internal callers
@@ -806,6 +824,8 @@ export const recordFromAction = internalMutation({
 					bookingId: args.bookingId,
 					stripePaymentIntentId: args.stripePaymentIntentId,
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 			return pendingPublicPayment._id;
 		}
@@ -833,6 +853,8 @@ export const recordFromAction = internalMutation({
 				bookingId: args.bookingId,
 				stripePaymentIntentId: args.stripePaymentIntentId,
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return paymentId;
 	},
@@ -865,6 +887,10 @@ export const markRefunded = internalMutation({
 				processedAt: v.optional(v.number()),
 			}),
 		),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
@@ -979,6 +1005,8 @@ export const markRefunded = internalMutation({
 				resourceId: args.paymentId,
 				oldValues: { status: p.status },
 				newValues: { status: fully ? "refunded" : "succeeded" },
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 		}
 		return args.paymentId;

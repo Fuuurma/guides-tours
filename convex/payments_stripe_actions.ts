@@ -36,6 +36,10 @@ import {
 import {
 	verifyStripeSignature,
 } from "./payments_stripe";
+import {
+	extractRequestIdentity,
+	type RequestIdentity,
+} from "./lib/requestIdentity";
 import { readBodyWithLimit } from "./lib/requestBody";
 
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
@@ -156,6 +160,7 @@ async function applyPaymentSuccess(
 	obj: StripeObject | undefined,
 	orgId: string,
 	eventType: string | undefined,
+	identity: RequestIdentity,
 ): Promise<void> {
 	const piId = paymentIntentIdFrom(obj);
 	const bookingId = obj?.metadata?.bookingId;
@@ -187,6 +192,8 @@ async function applyPaymentSuccess(
 			amountCents: BigInt(amountRaw),
 			currency: currencyForDb(currencyRaw),
 			stripePaymentIntentId: piId,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 	}
 
@@ -196,7 +203,11 @@ async function applyPaymentSuccess(
 		);
 		return;
 	}
-	await ctx.runMutation(internal.payments.markSucceeded, { paymentId });
+	await ctx.runMutation(internal.payments.markSucceeded, {
+		paymentId,
+		ipAddress: identity.ipAddress,
+		userAgent: identity.userAgent,
+	});
 }
 
 /** payment_intent.payment_failed: resolve the payment and mark failed.
@@ -206,6 +217,7 @@ async function applyPaymentFailed(
 	ctx: WebhookDispatchCtx,
 	obj: StripeObject | undefined,
 	orgId: string,
+	identity: RequestIdentity,
 ): Promise<Response | null> {
 	const piId = paymentIntentIdFrom(obj);
 	if (!piId) {
@@ -224,6 +236,8 @@ async function applyPaymentFailed(
 	await ctx.runMutation(internal.payments.markFailed, {
 		paymentId,
 		reason: obj?.last_payment_error?.message ?? undefined,
+		ipAddress: identity.ipAddress,
+		userAgent: identity.userAgent,
 	});
 	return null;
 }
@@ -237,6 +251,7 @@ async function applyChargeRefund(
 	ctx: WebhookDispatchCtx,
 	obj: StripeObject | undefined,
 	orgId: string,
+	identity: RequestIdentity,
 ): Promise<void> {
 	const piId = paymentIntentIdFrom(obj);
 	if (!piId) {
@@ -272,12 +287,16 @@ async function applyChargeRefund(
 				reason: r.reason,
 				processedAt: r.created ? r.created * 1000 : undefined,
 			},
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 	}
 	if (refundsData.length === 0) {
 		await ctx.runMutation(internal.payments.markRefunded, {
 			paymentId,
 			fullyRefunded,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 	}
 }
@@ -1121,6 +1140,11 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	if (request.method !== "POST") {
 		return new Response("method not allowed", { status: 405 });
 	}
+	// The caller's identity, captured at the HTTP edge — a Convex
+	// mutation cannot read the request that triggered it, so this is
+	// the only place Stripe's address and user agent can be learned.
+	// Threaded into the audit rows the payment mutations write (F461).
+	const identity = extractRequestIdentity(request);
 	const sigHeader = request.headers.get("stripe-signature");
 	if (!sigHeader) {
 		return new Response("missing signature", { status: 400 });
@@ -1280,16 +1304,16 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 					`[stripe-webhook] ${eventType} awaiting async settlement (payment_status=${obj?.payment_status}, org=${orgId}, session=${obj?.id ?? "?"})`,
 				);
 			} else {
-				await applyPaymentSuccess(ctx, obj, orgId, eventType);
+				await applyPaymentSuccess(ctx, obj, orgId, eventType, identity);
 			}
 		} else if (
 			eventType === "payment_intent.payment_failed" ||
 			eventType === CHECKOUT_SESSION_ASYNC_FAILED
 		) {
-			const earlyResponse = await applyPaymentFailed(ctx, obj, orgId);
+			const earlyResponse = await applyPaymentFailed(ctx, obj, orgId, identity);
 			if (earlyResponse) return earlyResponse;
 		} else if (eventType === "charge.refunded") {
-			await applyChargeRefund(ctx, obj, orgId);
+			await applyChargeRefund(ctx, obj, orgId, identity);
 		}
 
 		if (stripeEventId) {

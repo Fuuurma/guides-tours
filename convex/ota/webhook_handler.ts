@@ -25,6 +25,10 @@ import { httpAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { decrypt } from "../lib/crypto";
 import { logger } from "../lib/logger";
+import {
+	extractRequestIdentity,
+	type RequestIdentity,
+} from "../lib/requestIdentity";
 import { readBodyWithLimit } from "../lib/requestBody";
 import type { Id } from "../_generated/dataModel";
 import { verifyWebhookSignatureWithTimestamp } from "./webhook_verify";
@@ -76,6 +80,13 @@ export function createWebhookHandler(config: WebhookConfig) {
 		if (request.method !== "POST") {
 			return new Response("method not allowed", { status: 405 });
 		}
+
+		// The caller's identity, captured at the HTTP edge — a Convex
+		// mutation cannot read the request that triggered it, so this is
+		// the only place the provider's address and user agent can be
+		// learned. Threaded into the audit rows the upsert mutations
+		// write (F461).
+		const identity = extractRequestIdentity(request);
 
 		const signature = request.headers.get(config.signatureHeader);
 		if (!signature) {
@@ -338,6 +349,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 				integration.organizationId,
 				event,
 				config.provider,
+				identity,
 			);
 			await recordDeliveryOutcome(
 				ctx,
@@ -437,6 +449,7 @@ async function dispatchEvent(
 	organizationId: string,
 	event: NormalizedProviderEvent,
 	provider: string,
+	identity: RequestIdentity,
 ): Promise<DispatchOutcome> {
 	if (event.kind === "booking.created") {
 		await ctx.runMutation(internal.ota.upsert.upsertOtaBooking, {
@@ -445,6 +458,8 @@ async function dispatchEvent(
 			provider,
 			event,
 			rawData: event.rawPayload,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 		return "processed";
 	}
@@ -453,6 +468,8 @@ async function dispatchEvent(
 			integrationId: integrationId as Id<"otaIntegrations">,
 			reservationId: event.reservationId,
 			rawData: event.rawPayload,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 		return "processed";
 	}
@@ -462,6 +479,8 @@ async function dispatchEvent(
 			{
 				integrationId: integrationId as Id<"otaIntegrations">,
 				event,
+				ipAddress: identity.ipAddress,
+				userAgent: identity.userAgent,
 			},
 		);
 		return result === null ? "unmatched_product" : "processed";

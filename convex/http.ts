@@ -6,6 +6,7 @@ import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { logger } from "./lib/logger";
+import { extractRequestIdentity } from "./lib/requestIdentity";
 import { readBodyWithLimit } from "./lib/requestBody";
 import {
 	getSiteUrl,
@@ -220,15 +221,16 @@ http.route({
 			);
 		}
 
-		// Extract client IP for per-IP rate limiting. CF-Connecting-IP
-		// is set by Cloudflare; for X-Forwarded-For the LAST element is
-		// the edge-observed address — the first is client-supplied and
-		// spoofable, letting an attacker pick their own bucket (F65).
-		const xff = request.headers.get("x-forwarded-for");
-		const ip =
-			request.headers.get("cf-connecting-ip") ??
-			xff?.split(",").at(-1)?.trim() ??
-			"";
+		// Capture the caller's identity at the HTTP edge — the only
+		// place a Convex-side path can learn who called. The address
+		// also drives the per-IP rate limit (CF-Connecting-IP is set by
+		// Cloudflare; for X-Forwarded-For the LAST element is the
+		// edge-observed address — the first is client-supplied and
+		// spoofable, letting an attacker pick their own bucket (F65)).
+		// Both are threaded into the booking's audit rows so an abusive
+		// caller can be attributed (F461).
+		const identity = extractRequestIdentity(request);
+		const ip = identity.ipAddress ?? "";
 
 		const { internal } = await import("./_generated/api");
 		try {
@@ -248,6 +250,7 @@ http.route({
 					emailConsent,
 					smsConsent,
 					ip,
+					userAgent: identity.userAgent,
 				},
 			);
 			// F372: createForSlug always returns the full object

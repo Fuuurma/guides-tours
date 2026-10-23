@@ -46,6 +46,10 @@ export const upsertOtaBooking = internalMutation({
 			rawPayload: v.any(),
 		}),
 		rawData: v.any(),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const now = Date.now();
@@ -279,6 +283,8 @@ export const upsertOtaBooking = internalMutation({
 					guests,
 					status: "confirmed",
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 			return { id: existing._id, created: false };
 		}
@@ -310,6 +316,8 @@ export const upsertOtaBooking = internalMutation({
 				guests,
 				status: "confirmed",
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return { id, created: true };
 	},
@@ -426,6 +434,10 @@ export const cancelOtaBooking = internalMutation({
 		integrationId: v.id("otaIntegrations"),
 		reservationId: v.string(),
 		rawData: v.any(),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// SECURITY: same cross-tenant guard as upsertOtaBooking — verify
@@ -482,6 +494,8 @@ export const cancelOtaBooking = internalMutation({
 			resourceId: existing._id,
 			oldValues: { status: existing.status },
 			newValues: { status: "cancelled", reservationId: args.reservationId },
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return existing._id;
 	},
@@ -498,6 +512,10 @@ export const upsertAvailabilityCache = internalMutation({
 			totalSpaces: v.number(),
 			rawPayload: v.any(),
 		}),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const product = await ctx.db
@@ -551,6 +569,8 @@ export const upsertAvailabilityCache = internalMutation({
 					totalSpaces: args.event.totalSpaces,
 					date: args.event.date,
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 			return existing._id;
 		}
@@ -567,6 +587,8 @@ export const upsertAvailabilityCache = internalMutation({
 				totalSpaces: args.event.totalSpaces,
 				date: args.event.date,
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return cacheId;
 	},
