@@ -151,7 +151,10 @@ function PaymentSettingsForm({
 			try {
 				const secretKey = value.stripeSecretKey.trim();
 				const webhookSecret = value.stripeWebhookSecret.trim();
-				await upsert({
+				// Blank secret fields send a no-change sentinel so saving other settings
+			// never wipes the stored keys; fields are cleared after save so secrets
+			// don't linger in the form.
+			await upsert({
 					stripeEnabled: value.stripeEnabled,
 					stripePublishableKey: value.stripePublishableKey.trim(),
 					stripeSecretKey:

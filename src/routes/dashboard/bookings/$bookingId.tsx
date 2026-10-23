@@ -34,6 +34,8 @@ const RATINGS = [1, 2, 3, 4, 5] as const;
 const MAX_CANCEL_REASON_LEN = 500;
 
 /** Safe mailto: href — strips anything that looks like a protocol or newline. */
+/** Safe mailto: href — customer emails render into links, so strip href-breaking
+ * characters and fall back to "#" unless the result is a plausible address. */
 function safeMailto(email: string): string {
 	const clean = email.replace(/[\s<>"'`]/g, "");
 	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return "#";
