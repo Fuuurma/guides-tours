@@ -47,6 +47,12 @@ const ARCHIVE_AFTER_DAYS = 90;
 const ASSIGNMENT_PURGE_AFTER_DAYS = 365;
 const NOTIFICATION_LOG_RETENTION_DAYS = 30;
 
+// F421: per-run cleanup budgets. They sum to 5000 — under Convex's
+// per-transaction write limit — and exported for the sweep's guard test.
+export const CLEANUP_MAX_LOGS = 3000;
+export const CLEANUP_MAX_SCHEDULED = 1000;
+export const CLEANUP_MAX_DEAD = 1000;
+
 /**
  * Used by the notification_dispatch action to load everything it
  * needs to render and send an email/SMS. Returns null if the row
@@ -591,18 +597,20 @@ export const cleanupOldNotifications = internalMutation({
 		// Fetch old logs and scheduled notifications in parallel —
 		// they're independent ranges on different tables. Bound the
 		// scan to prevent OOM on orgs with millions of old artifacts.
-		const MAX_CLEANUP = 5000;
+		const MAX_LOGS = CLEANUP_MAX_LOGS;
+		const MAX_SCHEDULED = CLEANUP_MAX_SCHEDULED;
+		const MAX_DEAD = CLEANUP_MAX_DEAD;
 		const [oldLogs, oldScheduled, deadScheduled] = await Promise.all([
 			ctx.db
 				.query("notificationLogs")
 				.withIndex("by_created_at", (q) => q.lt("createdAt", cutoff))
-				.take(MAX_CLEANUP),
+				.take(MAX_LOGS),
 			ctx.db
 				.query("scheduledNotifications")
 				.withIndex("by_sent_scheduled", (q) =>
 					q.eq("sent", true).lt("scheduledFor", cutoff),
 				)
-				.take(MAX_CLEANUP),
+				.take(MAX_SCHEDULED),
 			// sent:false rows far past their scheduledFor are dead
 			// dispatch intents — the process tick retires them, and this
 			// sweep is the daily backstop so a large backlog can't
@@ -612,7 +620,7 @@ export const cleanupOldNotifications = internalMutation({
 				.withIndex("by_sent_scheduled", (q) =>
 					q.eq("sent", false).lt("scheduledFor", cutoff),
 				)
-				.take(MAX_CLEANUP),
+				.take(MAX_DEAD),
 		]);
 
 		// Deletes on different tables are independent — parallelize.
@@ -642,11 +650,31 @@ export const cleanupOldNotifications = internalMutation({
 			});
 		}
 
+		// F421: production writes up to ~28.8k notificationLogs rows a day
+		// (BATCH_SIZE=100 every 5 minutes) while a once-a-day bounded sweep
+		// deleted at most 5000 — both tables grew without bound. When any
+		// budget filled, there is almost certainly more behind it: chain a
+		// fresh run immediately (a new transaction, fresh budgets) until a
+		// sweep finishes under budget, then the daily cron finds nothing to
+		// do until the backlog rebuilds.
+		const filled =
+			oldLogs.length === MAX_LOGS ||
+			oldScheduled.length === MAX_SCHEDULED ||
+			deadScheduled.length === MAX_DEAD;
+		if (filled) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notifications.cleanupOldNotifications,
+				{},
+			);
+		}
+
 		return {
 			logsDeleted: oldLogs.length,
 			scheduledDeleted: oldScheduled.length,
 			deadPendingDeleted: deadScheduled.length,
 			cutoff,
+			continued: filled,
 		};
 	},
 });
