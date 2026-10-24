@@ -100,3 +100,53 @@ describe("sendTwilioSms", () => {
 		);
 	});
 });
+
+// F684 — real sends passed the stored phone straight to Twilio: stored
+// values like "(555) 123-4567" are valid at rest (light validation) but
+// Twilio rejects non-E.164 with 21211, so every send to such a contact
+// failed and its retries re-failed. The boundary normalizes.
+describe("sendTwilioSms normalization (F684)", () => {
+	function captureFormBody() {
+		let captured: Record<string, string> = {};
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async (_url: string, init: { body: string }) => {
+				captured = Object.fromEntries(new URLSearchParams(init.body));
+				return { ok: true, json: async () => ({ sid: "SMxxx", status: "queued" }) };
+			}),
+		);
+		return () => captured;
+	}
+
+	const configuredCtx = () => ({
+		runQuery: vi.fn(async () => ({
+			accountSid: "ACxxx",
+			authTokenEncrypted: "iv:ct:tag",
+			messagingServiceSid: "MGxxx",
+		})),
+		runMutation: vi.fn(async () => "sms1"),
+	});
+
+	it("normalizes a display-formatted phone to E.164 in the submitted form", async () => {
+		const getBody = captureFormBody();
+		const result = await sendTwilioSms(configuredCtx() as never, {
+			organizationId: "org1",
+			to: "(555) 123-4567",
+			body: "Hello",
+			recipientName: "Ada",
+		});
+		expect(result.ok).toBe(true);
+		expect(getBody()["To"]).toBe("+5551234567");
+	});
+
+	it("leaves an already-normalized phone unchanged", async () => {
+		const getBody = captureFormBody();
+		await sendTwilioSms(configuredCtx() as never, {
+			organizationId: "org1",
+			to: "+15551234567",
+			body: "Hello",
+			recipientName: "Ada",
+		});
+		expect(getBody()["To"]).toBe("+15551234567");
+	});
+});
