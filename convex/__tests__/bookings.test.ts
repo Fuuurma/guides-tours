@@ -112,18 +112,56 @@ async function seedBooking(
 		balanceDueCents: total - deposit,
 		paymentMethod: "",
 		checkedInAt: overrides.checkedInAt,
-		checkedInBy: "",
+		checkedInBy: undefined,
 		completedAt: overrides.completedAt,
 		netRevenueCents: total - deposit,
 		source: "direct",
 		reviewRating: undefined,
-		reviewComment: "",
+		reviewComment: undefined,
 		createdAt: 0,
 		updatedAt: 0,
 	});
 }
 
 describe("convex/bookings — schema invariants", () => {
+	it("a booking can be created without checkedInBy or reviewComment (F465)", async () => {
+		const t = convexTest(schema, modules);
+		const { tourId, customerId } = await t.run(async (ctx) => ({
+			tourId: await seedTour(ctx, "org_f465"),
+			customerId: await seedCustomer(ctx, "org_f465"),
+		}));
+		const id = await t.run(async (ctx) =>
+			ctx.db.insert("bookings", {
+				organizationId: "org_f465",
+				tourId,
+				customerId,
+				date: "2026-07-20",
+				startTime: "10:00",
+				guests: 1,
+				guestNames: "",
+				languageRequired: "",
+				notes: "",
+				status: "pending",
+				depositAmountCents: 0n,
+				totalAmountCents: 5000n,
+				balanceDueCents: 5000n,
+				paymentMethod: "",
+				checkedInAt: undefined,
+				completedAt: undefined,
+				netRevenueCents: 5000n,
+				source: "direct",
+				reviewRating: undefined,
+				createdAt: 0,
+				updatedAt: 0,
+			}),
+		);
+		const row = (await t.run(async (ctx) => ctx.db.get(id))) as any;
+		// The empty-string sentinels are gone: an unchecked-in, un-reviewed
+		// booking simply has no value for either field.
+		expect(row?.checkedInBy).toBeUndefined();
+		expect(row?.reviewComment).toBeUndefined();
+	});
+
 	it("balanceDueCents matches total - deposit", async () => {
 		const t = convexTest(schema, modules);
 		const id = await t.run(async (ctx) => {
