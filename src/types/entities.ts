@@ -48,9 +48,9 @@ export interface BookingDetail extends Booking {
 	guestNames: string;
 	notes: string;
 	reviewRating: number | null;
-	reviewComment: string;
+	reviewComment?: string;
 	checkedInAt: number | null;
-	checkedInBy: string;
+	checkedInBy?: string;
 	completedAt: number | null;
 	tour: { _id: string; name: string } | null;
 	customer: { _id: string; name: string; email: string; phone: string } | null;

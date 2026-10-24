@@ -559,12 +559,12 @@ export default defineSchema({
 		currency: v.optional(currency),
 		paymentMethod: v.string(),
 		checkedInAt: v.optional(v.number()),
-		checkedInBy: v.string(),
+		checkedInBy: v.optional(v.string()),
 		completedAt: v.optional(v.number()),
 		netRevenueCents: v.int64(),
 		source: v.string(), // "direct" | "viator" | etc
 		reviewRating: v.optional(v.number()), // 1..5
-		reviewComment: v.string(),
+		reviewComment: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})

@@ -639,7 +639,7 @@ export const create = mutation({
 			balanceDueCents: balance,
 			paymentMethod: args.paymentMethod ?? "",
 			checkedInAt: undefined,
-			checkedInBy: "",
+			checkedInBy: undefined,
 			completedAt: undefined,
 			// Net revenue = gross minus commission. We don't track
 			// commission on regular (non-OTA) bookings, so this
@@ -648,7 +648,7 @@ export const create = mutation({
 			netRevenueCents: total,
 			source: args.source ?? "direct",
 			reviewRating: undefined,
-			reviewComment: "",
+			reviewComment: undefined,
 			createdAt: now,
 			updatedAt: now,
 		});
@@ -1076,7 +1076,7 @@ export const recordReview = mutation({
 		const now = Date.now();
 		await ctx.db.patch(args.bookingId, {
 			reviewRating: args.rating,
-			reviewComment: args.comment ?? "",
+			reviewComment: args.comment,
 			updatedAt: now,
 		});
 		return args.bookingId;
@@ -1107,7 +1107,7 @@ export const internalRecordReview = internalMutation({
 
 		await ctx.db.patch(args.bookingId, {
 			reviewRating: args.rating,
-			reviewComment: args.comment ?? "",
+			reviewComment: args.comment,
 			updatedAt: Date.now(),
 		});
 		return args.bookingId;
