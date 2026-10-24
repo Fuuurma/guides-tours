@@ -22,6 +22,7 @@ import schema from "../schema";
 import { internal } from "../_generated/api";
 import { checkConflictsHelper,
 } from "../assignments";
+import { readTourDay } from "../lib/assignmentsShared";
 import {
 	calculateEndTime,
 	minutesToTime,
@@ -576,6 +577,71 @@ describe("convex/assignments — create rejects forbidden states", () => {
 		).rejects.toThrow(/already has .*guide/);
 	});
 
+	// F874: the slot guards read the tour-day through a take(100) window.
+	// performCancel only flips status, so cancelled rows stay on the
+	// (tour, date) key for good; 100 of them inserted ahead of the one
+	// live guide pushed that guide out of the window and every guard
+	// went blind — the cap admitted a second guide, the same-guide check
+	// let the same person on twice, and slotCompanions counted the slot
+	// as empty. The read is now the whole tour-day.
+	it("slot guards still see the live guide behind 100 cancelled rows (F874)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_f874";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		await t.run(async (ctx) => {
+			const c = ctx as unknown as TestCtx;
+			for (let i = 0; i < 100; i++) {
+				await seedAssignment(c, orgId, tourId, `gone-${i}`, {
+					date: "2026-11-03",
+					startTime: "09:00",
+					status: "cancelled",
+				});
+			}
+		});
+		// The one live guide on the slot, inserted after the crowd.
+		const liveId = await t.mutation(internal.assignments.internalCreate, {
+			organizationId: orgId,
+			userId: "u1",
+			tourId,
+			guideId: "guide-live",
+			date: "2026-11-03",
+			startTime: "09:00",
+		});
+
+		// requiredGuides is 1 — the cap must refuse a second guide…
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId: "guide-second",
+				date: "2026-11-03",
+				startTime: "09:00",
+			}),
+		).rejects.toThrow(/already has .*guide/);
+		// …and the same-guide check must still see the live row.
+		await expect(
+			t.mutation(internal.assignments.internalCreate, {
+				organizationId: orgId,
+				userId: "u1",
+				tourId,
+				guideId: "guide-live",
+				date: "2026-11-03",
+				startTime: "09:00",
+			}),
+		).rejects.toThrow(/already has .*guide|already assigned/);
+
+		// slotCompanions reads the same key: the live guide is counted.
+		const siblings = await t.run(async (ctx) =>
+			(await readTourDay(ctx as never, tourId, "2026-11-03")).filter(
+				(a) => a.status !== "cancelled" && a.deletedAt === undefined,
+			),
+		);
+		expect(siblings.map((a) => a._id)).toEqual([liveId]);
+	});
+
 	it("rejects guide who is also the driver on same assignment", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_dual";
@@ -761,6 +827,9 @@ describe("convex/assignments — lifecycle", () => {
 		await t.mutation(internal.assignments.internalComplete, {
 			organizationId: orgId,
 			userId: "guide-1",
+			// guide-1 is this assignment's own guide, so the call exercises the
+			// path GT-AUDIT-07 keeps open (a guide may close their own departure).
+			callerRole: "guide",
 			assignmentId: aId,
 		});
 		await expect(

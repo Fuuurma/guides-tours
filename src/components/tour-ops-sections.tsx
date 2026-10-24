@@ -18,11 +18,15 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
 export { TourScheduleRulesSection } from "./tour-schedule-rules";
+
+// Mirrors MAX_IMAGES_PER_TOUR in convex/tourImages.ts; the server-side
+// check stays authoritative, this only avoids starting a doomed upload.
+const GALLERY_IMAGE_CAP = 200;
 
 export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 	const { data: images, isPending } = useQuery(
@@ -30,6 +34,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 	);
 	const generateUploadUrl = useMutation(api.files.generateUploadUrl);
 	const addImage = useMutation(api.tourImages.add);
+	const discardUpload = useMutation(api.tourImages.discard);
 	const updateImage = useMutation(api.tourImages.update);
 	const removeImage = useMutation(api.tourImages.remove);
 	const reorderImages = useMutation(api.tourImages.reorder);
@@ -53,14 +58,21 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 			await reorderImages({ tourId, orderedImageIds: ids });
 			toast.success("Gallery order updated");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setReorderPending(false);
 		}
 	};
 
 	const onUpload = async (file: File) => {
+		if (ordered.length >= GALLERY_IMAGE_CAP) {
+			toast.error(
+				`Gallery is full: a tour can hold at most ${GALLERY_IMAGE_CAP} images`,
+			);
+			return;
+		}
 		setUploading(true);
+		let storageId: Id<"_storage"> | null = null;
 		try {
 			const uploadUrl = await generateUploadUrl({});
 			const res = await fetch(uploadUrl, {
@@ -69,7 +81,8 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 				body: file,
 			});
 			if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-			const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+			storageId = ((await res.json()) as { storageId: Id<"_storage"> })
+				.storageId;
 			const isFirst = (images?.length ?? 0) === 0;
 			await addImage({
 				tourId,
@@ -82,7 +95,12 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 			});
 			toast.success("Image uploaded");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			if (storageId) {
+				// F846: the blob reached storage but no gallery row links it —
+				// discard reclaims it (a no-op if a retry already linked it).
+				await discardUpload({ storageId }).catch(() => undefined);
+			}
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setUploading(false);
 			if (fileRef.current) fileRef.current.value = "";
@@ -108,7 +126,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 					<Button
 						type="button"
 						size="sm"
-						disabled={uploading}
+						disabled={uploading || ordered.length >= GALLERY_IMAGE_CAP}
 						onClick={() => fileRef.current?.click()}
 					>
 						{uploading ? <Spinner data-icon="inline-start" /> : null}
@@ -152,7 +170,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 												});
 												toast.success("Set as primary");
 											} catch (err) {
-												toast.error(getErrorMessage(err));
+												toast.error(getSafeDisplayMessage(err));
 											}
 										}}
 									>
@@ -198,7 +216,7 @@ export function TourGallerySection({ tourId }: { tourId: Id<"tours"> }) {
 														await removeImage({ imageId: img._id });
 														toast.success("Photo deleted");
 													} catch (err) {
-														toast.error(getErrorMessage(err));
+														toast.error(getSafeDisplayMessage(err));
 													}
 												}}
 											>

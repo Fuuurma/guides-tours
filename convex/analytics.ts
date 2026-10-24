@@ -150,23 +150,6 @@ export const getTopTours = query({
 });
 
 /**
- * @internal
- * No FE caller. The analytics page derives source counts from the
- * `getOverview` query instead. The internal mirror is used by tests.
- * See docs/DATA_LAYER_STATUS.md.
- */
-export const getBookingSources = query({
-	args: {
-		startDate: v.string(),
-		endDate: v.string(),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		return await buildBookingSources(ctx, member.organizationId, args.startDate, args.endDate);
-	},
-});
-
-/**
  * Revenue + booking count per source channel for the active org
  * in the date window. Powers the channel-mix horizontal bar on
  * `/dashboard/analytics` — replaces the static `<ul>` bookend

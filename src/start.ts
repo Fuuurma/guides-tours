@@ -38,9 +38,13 @@
 //   - Content-Security-Policy
 //     Restrictive CSP for the dashboard. The public booking page
 //     can override this with a more permissive CSP if needed.
-//     'self' for scripts/styles/connect covers Convex HTTP, fonts,
-//     and the inline styles React renders. No 'unsafe-inline' or
-//     'unsafe-eval' — production builds don't need either.
+//     'unsafe-inline' is REQUIRED in two directives (documented in
+//     the allows list below): script-src — TanStack Start hydration
+//     injects inline scripts — and style-src — React renders inline
+//     styles. 'unsafe-eval' is genuinely absent everywhere:
+//     production builds never eval. (F473: this paragraph used to
+//     claim no unsafe-inline existed, contradicting the shipped
+//     policy.)
 //
 // CSP allows:
 //   - Scripts from self + inline (TanStack Start hydration requires

@@ -75,20 +75,6 @@ export const listInternal = internalQuery({
 	handler: async (ctx, args) => listRows(ctx, args.organizationId, args),
 });
 
-export const get = query({
-	args: { fileId: v.id("files") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const f = await ctx.db.get(args.fileId);
-		if (!f) throw new ConvexError("File not found");
-		if (f.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: file belongs to a different organization");
-		}
-		const url = await ctx.storage.getUrl(f.storageId);
-		return { ...f, url };
-	},
-});
-
 // ---- mutations ----
 
 export const internalTrack = internalMutation({

@@ -5,11 +5,11 @@ import { DetailPage } from "@/components/detail-page";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { TourTemplateForm } from "./tour-template-form";
 import {
-	TourTemplateForm,
 	templateDocToFormValues,
 	templateFormToMutationArgs,
-} from "./tour-template-form";
+} from "./tour-template-form-model";
 
 interface EditTemplatePageProps {
 	templateId: string;

@@ -1,0 +1,157 @@
+/**
+ * F758 — every public_booking.ts refusal maps to an actionable 4xx (or
+ * 429), never the generic 500. The map is the extracted pure function,
+ * so each refusal string is pinned directly.
+ */
+import { ConvexError } from "convex/values"
+import { describe, expect, it } from "vitest"
+import { mapBookingError } from "../http"
+
+function refusal(message: string): ConvexError<string> {
+  return new ConvexError(message)
+}
+
+describe("mapBookingError (F758)", () => {
+  it.each([
+    [
+      "Bookings must be made at least 24h before the tour",
+      "Bookings must be made at least 24h before the tour",
+      400,
+    ],
+  ])(
+    "maps the cutoff refusal to 400 with the authored hours",
+    (refusalText, message, status) => {
+      const { message: m, status: s } = mapBookingError(refusal(refusalText))
+      expect(s).toBe(status)
+      expect(m).toBe(message)
+    },
+  )
+
+  it("maps the guest-maximum refusal to 400 with the authored maximum", () => {
+    const { message, status } = mapBookingError(
+      refusal("Guest count exceeds tour maximum of 12"),
+    )
+    expect(status).toBe(400)
+    expect(message).toBe("Guest count exceeds tour maximum of 12")
+  })
+
+  it("maps the seats refusal to 400", () => {
+    const { message, status } = mapBookingError(
+      refusal("Not enough seats left for this tour slot"),
+    )
+    expect(status).toBe(400)
+    expect(message).toBe("Not enough seats left for this tour slot")
+  })
+
+  it("maps the inactive-tour refusal to 400", () => {
+    const { message, status } = mapBookingError(refusal("Tour is not active"))
+    expect(status).toBe(400)
+    expect(message).toBe("This tour is not currently accepting bookings")
+  })
+
+  // F892 — the action's own guests validation. The HTTP boundary rejects
+  // the same shape earlier (positive integer <= 200), so this guards the
+  // defense-in-depth copy: before the branch it fell through to the
+  // generic 500.
+  it("maps the guests validation refusal to 400 (F892)", () => {
+    const { message, status } = mapBookingError(
+      refusal("guests must be a positive integer"),
+    )
+    expect(status).toBe(400)
+    expect(message).toBe("guests must be a positive integer")
+  })
+
+  // F868 — the exception-date refusal names the SLOT and shares the
+  // "not available" substring with the date refusal, so it must map
+  // before that branch: a guest asking for a non-exception start time
+  // on a bookable date was told the whole date was dead.
+  it("passes the time-slot refusal through intact and keeps the date mapping (F868)", () => {
+    const slot =
+      "This time slot is not available for booking. Please pick another time."
+    expect(mapBookingError(refusal(slot))).toEqual({ message: slot, status: 400 })
+    expect(
+      mapBookingError(
+        refusal("This date is not available for booking. Please pick another date."),
+      ),
+    ).toEqual({ message: "This date is not available for booking", status: 400 })
+  })
+
+  // F870 — assertValidCustomerInput length refusals (name, notes, phone)
+  // matched no branch and reached the generic 500. The authored message
+  // names the field and the limit, so it passes through at 400.
+  it.each([
+    "Name must be at least 2 characters",
+    "Name is too long (max 100 characters)",
+    "Notes are too long (max 1000 characters)",
+    "Phone is too long (max 30 characters)",
+  ])("passes the customer-input length refusal through at 400 (%s)", (text) => {
+    expect(mapBookingError(refusal(text))).toEqual({ message: text, status: 400 })
+  })
+
+  // Deliberate 500s — server-fault classes, not client input: a broken
+  // org record and a customer-resolution failure. Pinned so a future
+  // branch collapse into 4xx is a conscious edit, not an accident.
+  it.each([
+    "organization has no id",
+    "Failed to resolve customer",
+  ])("keeps the server-fault refusal as a 500 (%s)", (text) => {
+    expect(mapBookingError(refusal(text)).status).toBe(500)
+  })
+
+  it.each([
+    "Cannot book a cancelled schedule",
+    "Cannot book cancelled schedule",
+  ])("maps the cancelled-schedule refusal (%s) to 400", (text) => {
+    const { message, status } = mapBookingError(refusal(text))
+    expect(status).toBe(400)
+    expect(message).toBe("This schedule has been cancelled")
+  })
+
+  it("maps the foreign-schedule refusal to 400", () => {
+    const { message, status } = mapBookingError(
+      refusal("Schedule does not belong to the specified tour"),
+    )
+    expect(status).toBe(400)
+    expect(message).toBe("This schedule does not belong to the selected tour")
+  })
+
+  it("keeps the pre-existing mappings working", () => {
+    expect(mapBookingError(refusal("rate limit exceeded")).status).toBe(429)
+    expect(mapBookingError(refusal("Tour not found")).status).toBe(404)
+    expect(
+      mapBookingError(refusal("date is blacked out")).message,
+    ).toBe("This date is not available for booking")
+    expect(
+      mapBookingError(refusal("Cannot book a tour in the past")).message,
+    ).toBe("Cannot book tours in the past or within the cutoff period")
+    expect(mapBookingError(refusal("Invalid email address")).message).toBe(
+      "Invalid email address",
+    )
+  })
+
+  it("passes the limited-capacity refusal through intact and keeps the sold-out mapping (F902)", () => {
+    const authored =
+      "This date has a limited capacity that cannot be booked online. " +
+      "Please choose another date or contact the operator."
+    expect(mapBookingError(refusal(authored))).toEqual({ message: authored, status: 400 })
+    expect(mapBookingError(refusal("Schedule over capacity"))).toEqual({
+      message: "This tour is fully booked",
+      status: 400,
+    })
+  })
+
+  it("falls back to the generic 500 for unknown errors", () => {
+    const { message, status } = mapBookingError(
+      refusal("internal stack trace details"),
+    )
+    expect(status).toBe(500)
+    expect(message).toBe("An error occurred processing your booking")
+  })
+
+  it("maps validator rejections to 400", () => {
+    const { status } = mapBookingError(
+      new Error("Uncaught Error: Validator error at body.guests"),
+    )
+    expect(status).toBe(400)
+  })
+})

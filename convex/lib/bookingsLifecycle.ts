@@ -12,7 +12,10 @@ import { ConvexError } from "convex/values";
 import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { parseBookingTime } from "./time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./time";
 import { logger } from "./logger";
 import { logAudit } from "./audit";
 import {
@@ -52,6 +55,43 @@ export const ALLOWED_UPDATE_FIELDS = new Set([
 	"scheduleId",
 ]);
 
+export type StaffCreateExceptionRefusal = { message: string };
+
+/**
+ * F878 — the staff-create exception gate, pure so the refusals are
+ * pinned without an auth session (requireMembership cannot run under
+ * convex-test; see customers.test.ts).
+ *
+ * A "removed" exception date is unbookable exactly like a blackout
+ * (update and the public path already refuse it). A capacityOverride
+ * caps the ATTACHED slot's sellable seats only — a staff booking with
+ * no concrete slot is the operator's own phone sale, so the public
+ * path's blanket unattached refusal (GT-AUDIT-02) is deliberately not
+ * ported here.
+ */
+export function staffCreateExceptionRefusal(
+	ex: { exceptionType: string; capacityOverride?: number } | null,
+	opts: {
+		scheduleId?: Id<"tourSchedules">;
+		guests: number;
+		attachedCapacityBooked?: number;
+	},
+): StaffCreateExceptionRefusal | null {
+	if (ex?.exceptionType === "removed") {
+		return {
+			message:
+				"This date is not available for booking. Please pick another date.",
+		};
+	}
+	if (opts.scheduleId && ex?.capacityOverride !== undefined) {
+		const booked = opts.attachedCapacityBooked ?? 0;
+		if (booked + opts.guests > ex.capacityOverride) {
+			return { message: "Not enough seats left for this tour slot" };
+		}
+	}
+	return null;
+}
+
 export async function findTargetSchedule(
 	ctx: MutationCtx,
 	args: {
@@ -77,7 +117,14 @@ export async function findTargetSchedule(
 		return schedule;
 	}
 
-	const match = await ctx.db
+	// F1006: a cancel/re-create cycle leaves TWO schedules in the same
+	// (tourId, date, startTime) partition — see convex/ops.ts, which reads
+	// that partition with take(20) + a JS filter for exactly this reason.
+	// .unique() threw Convex's opaque "unique() query returned more than
+	// one result" error on such a pair, so a booking move died with an
+	// internal failure instead of refusing the slot. take(2) + a length
+	// check refuses the ambiguous slot the way F694's sites now do.
+	const matches = await ctx.db
 		.query("tourSchedules")
 		.withIndex("by_tour_date_start", (q) =>
 			q
@@ -85,7 +132,13 @@ export async function findTargetSchedule(
 				.eq("date", args.date)
 				.eq("startTime", args.startTime),
 		)
-		.unique();
+		.take(2);
+	if (matches.length > 1) {
+		throw new ConvexError(
+			`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+		);
+	}
+	const match = matches[0];
 	if (match && match.organizationId !== args.organizationId) return null;
 	if (match?.status === "cancelled") {
 		throw new ConvexError("Cannot move a booking to a cancelled schedule");
@@ -223,7 +276,8 @@ export async function performUpdate(
 	const slotExceptionStart = slotException?.startTime;
 
 	if (rescheduleRequested) {
-		const tourTs = parseBookingTime(nextDate, nextStartTime);
+		const timeZone = await organizationTimeZone(ctx, organizationId);
+		const tourTs = parseBookingTimeInZone(nextDate, nextStartTime, timeZone);
 		if (tourTs === null || tourTs <= Date.now()) {
 			throw new ConvexError("Cannot move a booking into the past");
 		}
@@ -301,6 +355,13 @@ export async function performUpdate(
 
 	const oldScheduleId = booking.scheduleId;
 	const nextScheduleId = targetSchedule?._id;
+	// F-new-unlinked-booking-capacity-release follow-up: the capacity
+	// claim follows the seats. `undefined` means "this booking holds no
+	// seats on any schedule" and must be written as an explicit clear,
+	// so it is seeded to the booking's current claim and only reassigned
+	// by a counter branch that actually moved seats.
+	let nextClaim: Id<"tourSchedules"> | undefined =
+		booking.capacityClaimedScheduleId;
 
 	// Atomic capacity precheck: validate the target BEFORE any counter
 	// moves, so a failed move cannot strand the old schedule
@@ -342,6 +403,12 @@ export async function performUpdate(
 					guests: delta,
 				},
 			);
+			// This booking now holds seats here, so a claim is true from
+			// this point on. Written only where the code actually
+			// incremented — a legacy row that never claimed stays
+			// unclaimed, which is the safe direction (release becomes a
+			// no-op rather than draining someone else's counter).
+			nextClaim = nextScheduleId;
 		} else if (delta < 0 && nextScheduleId) {
 			await ctx.runMutation(
 				internal.tourSchedules.decrementBooked,
@@ -372,9 +439,39 @@ export async function performUpdate(
 					guests: nextGuests,
 				},
 			);
+			// The claim follows the seats across the move.
+			nextClaim = nextScheduleId;
+		} else {
+			// Moved onto a free-time request: this booking now holds no
+			// seats on any schedule, so it must claim nothing. Clearing
+			// (not leaving the old id) is what stops a later
+			// cancel/expiry from releasing the schedule it just left a
+			// second time.
+			nextClaim = undefined;
 		}
 	}
 
+	// Money-field validation (F138): create applies the same checks on
+	// insert (bookings.ts); an unguarded update could write a negative
+	// total/deposit or deposit > total, corrupting balanceDueCents and
+	// silently blocking every later charge.
+	if (
+		patch.totalAmountCents !== undefined ||
+		patch.depositAmountCents !== undefined
+	) {
+		const newTotal =
+			(patch.totalAmountCents as bigint | undefined) ??
+			booking.totalAmountCents;
+		const dep =
+			(patch.depositAmountCents as bigint | undefined) ??
+			booking.depositAmountCents;
+		if (newTotal < 0n || dep < 0n) {
+			throw new ConvexError("Amounts cannot be negative");
+		}
+		if (dep > newTotal) {
+			throw new ConvexError("Deposit cannot exceed total amount");
+		}
+	}
 	// Source: balance_due = total_amount - deposit_amount on total update.
 	if (patch.totalAmountCents !== undefined) {
 		const newTotal = patch.totalAmountCents as bigint;
@@ -390,6 +487,9 @@ export async function performUpdate(
 		patch.netRevenueCents = booking.totalAmountCents;
 	}
 
+	// Commit the claim together with the field patch: one write, so the
+	// claim can never be observed disagreeing with the counter it mirrors.
+	patch.capacityClaimedScheduleId = nextClaim;
 	patch.updatedAt = now;
 	await ctx.db.patch(args.bookingId, patch);
 
@@ -452,43 +552,71 @@ export async function releaseBookingCapacity(
 		organizationId: string;
 		tourId: Id<"tours">;
 		scheduleId?: Id<"tourSchedules">;
+		capacityClaimedScheduleId?: Id<"tourSchedules">;
 		date: string;
 		startTime: string;
 		guests: number;
 	},
 ): Promise<void> {
-	let scheduleId: Id<"tourSchedules"> | undefined = booking.scheduleId;
-	if (!scheduleId) {
-		const schedule = await ctx.db
-			.query("tourSchedules")
-			.withIndex("by_tour_date", (q) =>
-				q.eq("tourId", booking.tourId).eq("date", booking.date),
-			)
-			.filter((q) =>
-				q.and(
-					q.eq(q.field("organizationId"), booking.organizationId),
-					q.eq(q.field("startTime"), booking.startTime),
-				),
-			)
-			.first();
-		// F-new-unlinked-booking-capacity-release: an unlinked booking
-		// (free-time request) never incremented any counter — every
-		// increment path pairs with a scheduleId on the booking — so a
-		// schedule created AFTER the booking cannot hold its seats and
-		// must not be decremented. Legacy compatibility: a schedule
-		// that already existed when the booking was made keeps the old
-		// restore behavior; ties fail open toward release.
-		if (schedule && schedule._creationTime > booking._creationTime) {
-			logger.warn(
-				"[bookingsLifecycle] skip capacity release: schedule postdates unlinked booking",
-				{
-					bookingId: booking._id,
-					scheduleId: schedule._id,
-				},
-			);
-			return;
+	// F-new-unlinked-booking-capacity-release follow-up (2026-10-04):
+	// the c8fc7de guard only covered the scheduleId-absent fallback. A
+	// booking whose scheduleId was patched retroactively WITHOUT a paired
+	// increment (manual repair, backfill) still drained that schedule here
+	// on the explicit path.
+	//
+	// A capacity claim is the only thing a release may undo, so release
+	// targets the claim — never the mutable scheduleId pointer. A booking
+	// with no claim releases nothing, which is correct: it never took
+	// seats, so there is nothing to give back.
+	//
+	// A timestamp heuristic was rejected for this (the finding's own
+	// reasoning): legitimate moves postdate the booking, so "schedule is
+	// older than the booking" cannot distinguish a real claim from a
+	// retroactively-patched pointer.
+	let scheduleId: Id<"tourSchedules"> | undefined;
+
+	if (booking.capacityClaimedScheduleId) {
+		// Authoritative: written only by a paired increment.
+		scheduleId = booking.capacityClaimedScheduleId;
+	} else {
+		// Legacy compatibility. Rows written before the claim field
+		// existed carry no claim and are indistinguishable from an
+		// unclaimed one, so they keep the pre-existing behavior: prefer
+		// scheduleId, else the (tourId, date, startTime) lookup behind
+		// the c8fc7de _creationTime guard.
+		scheduleId = booking.scheduleId;
+		if (!scheduleId) {
+			const schedule = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date", (q) =>
+					q.eq("tourId", booking.tourId).eq("date", booking.date),
+				)
+				.filter((q) =>
+					q.and(
+						q.eq(q.field("organizationId"), booking.organizationId),
+						q.eq(q.field("startTime"), booking.startTime),
+					),
+				)
+				.first();
+			// An unlinked booking (free-time request) never incremented
+			// any counter — every increment path pairs with a scheduleId
+			// on the booking — so a schedule created AFTER the booking
+			// cannot hold its seats and must not be decremented. Legacy
+			// compatibility: a schedule that already existed when the
+			// booking was made keeps the old restore behavior; ties fail
+			// open toward release.
+			if (schedule && schedule._creationTime > booking._creationTime) {
+				logger.warn(
+					"[bookingsLifecycle] skip capacity release: schedule postdates unlinked booking",
+					{
+						bookingId: booking._id,
+						scheduleId: schedule._id,
+					},
+				);
+				return;
+			}
+			scheduleId = schedule?._id;
 		}
-		scheduleId = schedule?._id;
 	}
 	if (scheduleId) {
 		try {

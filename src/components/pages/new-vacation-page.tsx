@@ -20,7 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { getErrorMessage } from "@/lib/utils";
+import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 
@@ -107,7 +107,7 @@ function NewVacationForm({
 					retry: () => submit(value, true),
 				});
 			} else {
-				setSubmitErr(msg);
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		}
 	};

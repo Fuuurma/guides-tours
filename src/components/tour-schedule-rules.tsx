@@ -35,7 +35,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
@@ -121,6 +121,21 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 									dateFrom,
 									dateTo,
 								});
+								// The backend caps a generate window and now says so
+								// (GT-AUDIT-08 / hub F608). Reporting the plain
+								// created/skipped counts made a truncated run
+								// indistinguishable from a complete one, so the
+								// operator was told a season went fine while a whole
+								// tail of dates had no departures at all.
+								if (result.truncated) {
+									toast.warning(
+										`Created ${result.created}, skipped ${result.skipped} — ` +
+											`stopped at ${result.processedTo}. Generate the remaining ` +
+											`dates up to ${result.requestedTo} in a second run.`,
+										{ duration: 12000 },
+									);
+									return;
+								}
 								toast.success(
 									`Created ${result.created}, skipped ${result.skipped}`,
 								);
@@ -136,14 +151,19 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 					</div>
 				}
 			>
-				{(seasonals?.length ?? 0) === 0 ? (
+				{(seasonals?.seasonals?.length ?? 0) === 0 ? (
 					<SectionEmpty
 						title="No seasonal rules"
 						description="Add a weekday pattern, then generate schedules for a date window."
 					/>
 				) : (
 					<ul className="flex flex-col gap-2">
-						{(seasonals ?? []).map((s) => (
+						{seasonals?.truncated ? (
+							<p className="text-warning text-sm">
+								Showing the first 500 seasonal rules — this tour has more.
+							</p>
+						) : null}
+						{(seasonals?.seasonals ?? []).map((s) => (
 							<li
 								key={s._id}
 								className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
@@ -172,7 +192,7 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 												await removeSeasonal({ scheduleId: s._id });
 												toast.success("Rule deleted");
 											} catch (err) {
-												toast.error(getErrorMessage(err));
+												toast.error(getSafeDisplayMessage(err));
 											} finally {
 												setPendingSeasonalId(null);
 											}
@@ -203,14 +223,19 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 					/>
 				}
 			>
-				{(exceptions?.length ?? 0) === 0 ? (
+				{(exceptions?.exceptions?.length ?? 0) === 0 ? (
 					<SectionEmpty
 						title="No exceptions"
 						description="Override a single date without rewriting the seasonal rule."
 					/>
 				) : (
 					<ul className="flex flex-col gap-2">
-						{(exceptions ?? []).map((e) => (
+						{exceptions?.truncated ? (
+							<p className="text-warning text-sm">
+								Showing the first 500 exception dates — this tour has more.
+							</p>
+						) : null}
+						{(exceptions?.exceptions ?? []).map((e) => (
 							<li
 								key={e._id}
 								className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
@@ -237,7 +262,7 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 											await removeException({ exceptionId: e._id });
 											toast.success("Exception deleted");
 										} catch (err) {
-											toast.error(getErrorMessage(err));
+											toast.error(getSafeDisplayMessage(err));
 										} finally {
 											setPendingExceptionId(null);
 										}
@@ -267,14 +292,19 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 					/>
 				}
 			>
-				{(blackouts?.length ?? 0) === 0 ? (
+				{(blackouts?.blackouts?.length ?? 0) === 0 ? (
 					<SectionEmpty
 						title="No blackouts"
 						description="Block a range when this tour cannot run — public booking follows the same rule."
 					/>
 				) : (
 					<ul className="flex flex-col gap-2">
-						{(blackouts ?? []).map((b) => (
+						{blackouts?.truncated ? (
+							<p className="text-warning text-sm">
+								Showing the first 500 blackout windows — this tour has more.
+							</p>
+						) : null}
+						{(blackouts?.blackouts ?? []).map((b) => (
 							<li
 								key={b._id}
 								className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"
@@ -298,7 +328,7 @@ export function TourScheduleRulesSection({ tourId }: { tourId: Id<"tours"> }) {
 											await removeBlackout({ blackoutId: b._id });
 											toast.success("Blackout deleted");
 										} catch (err) {
-											toast.error(getErrorMessage(err));
+											toast.error(getSafeDisplayMessage(err));
 										} finally {
 											setPendingBlackoutId(null);
 										}
@@ -359,7 +389,7 @@ function GenerateDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -523,7 +553,7 @@ function SeasonalDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -766,7 +796,7 @@ function ExceptionDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -977,7 +1007,7 @@ function BlackoutDialog({
 				form.reset();
 				setOpen(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});

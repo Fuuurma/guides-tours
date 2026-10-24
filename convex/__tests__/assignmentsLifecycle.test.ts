@@ -9,7 +9,10 @@
 // the next batch.)
 
 import { convexTest } from "convex-test";
+import { internal } from "../_generated/api";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { seedAssignment, seedSchedule, seedTour } from "./helpers";
 import {
@@ -139,6 +142,7 @@ describe("assignmentsLifecycle.performComplete", () => {
 					assignmentId,
 					organizationId: ORG,
 					userId: "user_1",
+					callerRole: "admin",
 				}),
 			).rejects.toThrow(
 				"Only scheduled assignments can be completed (was cancelled)",
@@ -154,6 +158,7 @@ describe("assignmentsLifecycle.performComplete", () => {
 				assignmentId,
 				organizationId: ORG,
 				userId: "user_1",
+				callerRole: "admin",
 			});
 		});
 		const row = await t.run((ctx) => ctx.db.get(assignmentId));
@@ -286,6 +291,7 @@ describe("assignmentsLifecycle.performCreate — schedule validation", () => {
 
 import { seedDriver, seedVehicle } from "./helpers";
 import { performUpdate } from "../lib/assignmentsLifecycle";
+import { assertGuideAssignable } from "../lib/assignmentsShared";
 
 describe("assignmentsLifecycle.performUpdate — guards", () => {
 	it("refuses deleted, cancelled, completed, and foreign-org updates", async () => {
@@ -530,6 +536,365 @@ describe("driver vacation enforcement (F347)", () => {
 					userId: "user_1",
 				}),
 			).rejects.toThrow("Driver is on approved vacation on this date");
+		});
+	});
+});
+
+// ---- GT-AUDIT-02 / hub F594: cross-tenant guide reassignment ----
+//
+// performUpdate is the write of `guideId` and had no org-membership check:
+// `create` refused a foreign guideId ("Guide is not a member of this
+// organization") while reassignment accepted any caller-chosen id and then
+// notified that user with the org's tour name, date and times.
+//
+// The policy is tested through the injectable lookup rather than through the
+// Better Auth component, because under convex-test there is no auth session —
+// the default lookup throws Unauthorized and would make every assertion here
+// pass for the wrong reason. Two layers instead:
+//   1. the policy (reject non-member, reject wrong role, allow guide) with a
+//      stub lookup — exact messages, no auth dependency;
+//   2. the wiring — performUpdate reaches the check and leaves the row
+//      untouched when it rejects.
+
+describe("assertGuideAssignable — guide membership policy", () => {
+	const ORG_ID = "org_policy";
+	const noopLookup = () => Promise.resolve(null);
+	const asLookup =
+		(role: string) => () =>
+			Promise.resolve({ userId: "u1", role });
+
+	async function ctx() {
+		return {} as never;
+	}
+
+	it("rejects a guideId that is not a member of the org", async () => {
+		await expect(
+			assertGuideAssignable(await ctx(), ORG_ID, "outsider", noopLookup),
+		).rejects.toThrow("Guide is not a member of this organization");
+	});
+
+	it("rejects a member whose role cannot be assigned as guide", async () => {
+		for (const role of ["member", "driver", undefined]) {
+			await expect(
+				assertGuideAssignable(await ctx(), ORG_ID, "u1", asLookup(role as string)),
+			).rejects.toThrow("cannot be assigned as guide");
+		}
+	});
+
+	it("accepts guide, owner and admin", async () => {
+		for (const role of ["guide", "owner", "admin"]) {
+			await expect(
+				assertGuideAssignable(await ctx(), ORG_ID, "u1", asLookup(role)),
+			).resolves.toBeUndefined();
+		}
+	});
+
+	it("scopes the lookup to the caller's organization", async () => {
+		// A member of a DIFFERENT org must not satisfy the check: this is the
+		// whole point, so assert the lookup was given the caller's org id.
+		const seen: string[] = [];
+		await expect(
+			assertGuideAssignable(await ctx(), "org_a", "u1", (_c, orgId) => {
+				seen.push(orgId);
+				return Promise.resolve({ userId: "u1", role: "guide" });
+			}),
+		).resolves.toBeUndefined();
+		expect(seen).toEqual(["org_a"]);
+	});
+});
+
+describe("assignments.update — the public boundary enforces guide membership", () => {
+	// Structural, not behavioural: the public wrapper is the only client-reachable
+	// entry, and it calls requireRole, which needs a Better Auth session that
+	// convex-test cannot provide (the same reason the policy above is tested
+	// through the injectable lookup). So assert the wiring at the source level —
+	// the check present, scoped to the caller's own org, and ahead of the
+	// delegation to internalUpdate — rather than pretending to a runtime test
+	// that would pass for the wrong reason.
+	const src = readFileSync(
+		new URL("../assignments.ts", import.meta.url),
+		"utf8",
+	);
+
+	function updateHandler(): string {
+		const start = src.indexOf("export const update = mutation(");
+		expect(start, "public update mutation not found").toBeGreaterThan(-1);
+		const end = src.indexOf("export const internalUpdate", start);
+		expect(end, "internalUpdate not found after update").toBeGreaterThan(start);
+		return src.slice(start, end);
+	}
+
+	it("calls assertGuideAssignable before delegating to internalUpdate", () => {
+		const handler = updateHandler();
+		const guard = handler.indexOf("assertGuideAssignable");
+		const delegate = handler.indexOf("internalRefs.assignments.internalUpdate");
+		expect(guard, "update does not enforce guide membership").toBeGreaterThan(-1);
+		expect(guard, "check must precede the delegation").toBeLessThan(delegate);
+	});
+
+	it("scopes the check to the caller's organization, not a caller-supplied one", () => {
+		expect(updateHandler()).toContain(
+			"assertGuideAssignable(ctx, member.organizationId, args.guideId)",
+		);
+	});
+
+	it("only checks when a guideId is actually supplied", () => {
+		expect(updateHandler()).toContain("if (args.guideId !== undefined)");
+	});
+
+	it("keeps internalUpdate unguarded for trusted cron/ops callers", () => {
+		// internalUpdate is reachable from cron/ops with no session, so the check
+		// must NOT be duplicated into the lifecycle mutation — that is what made
+		// two unrelated existing tests fail before the check was moved here.
+		const start = src.indexOf("export const internalUpdate");
+		const body = src.slice(start, src.indexOf("export const", start + 10));
+		expect(body).not.toContain("assertGuideAssignable");
+	});
+
+	it("create still refuses a foreign guideId, via the same shared helper", () => {
+		expect(src).toContain(
+			"await assertGuideAssignable(ctx, member.organizationId, args.guideId);",
+		);
+		// one definition, not three
+		const defs = src.match(/assertGuideAssignable\(/g) ?? [];
+		expect(defs.length).toBeLessThanOrEqual(4); // import + update + create (+ comments)
+	});
+});
+
+// ---- GT-AUDIT-06 / hub F604: the deletedAt guard reached only performUpdate ----
+//
+// performUpdate refuses a soft-deleted assignment ("Assignment is deleted"),
+// but performCancel, performComplete and performRemove never read deletedAt.
+// So cancelling an assignment already archived via remove patched status to
+// "cancelled" and emailed the guide AND driver about a departure that no
+// longer existed, and completing one wrote an assignment.completed audit row
+// for a row every read path hides. The FE cannot reach these rows
+// (assignments.list filters !deletedAt, assignments.get returns null) but the
+// BE is reachable by any Convex client.
+
+describe("lifecycle verbs — refuse a soft-deleted assignment", () => {
+	// Each verb keeps its OWN args in a closure rather than sharing a
+	// `{ run, args }` pair: GT-AUDIT-07 gave performComplete a callerRole the
+	// other two do not take, and with a shared pair TypeScript unions the
+	// `args` return types independently of `run`, so the call no longer
+	// typechecks even though every entry is correct.
+	type LifecycleCtx = Parameters<typeof performComplete>[0];
+	const verbs = [
+		{
+			name: "performCancel",
+			call: (ctx: LifecycleCtx, id: Id<"assignments">) =>
+				performCancel(ctx, { assignmentId: id, organizationId: ORG, userId: "user_1" }),
+		},
+		{
+			name: "performComplete",
+			call: (ctx: LifecycleCtx, id: Id<"assignments">) =>
+				performComplete(ctx, {
+					assignmentId: id,
+					organizationId: ORG,
+					userId: "user_1",
+					callerRole: "admin",
+				}),
+		},
+		{
+			name: "performRemove",
+			call: (ctx: LifecycleCtx, id: Id<"assignments">) =>
+				performRemove(ctx, { assignmentId: id, organizationId: ORG, userId: "user_1" }),
+		},
+	] as const;
+
+	for (const verb of verbs) {
+		it(`${verb.name} rejects with "Assignment is deleted" and writes nothing`, async () => {
+			const t = convexTest(schema, modules);
+			const { assignmentId } = await seedAssigned(t);
+			const deletedAt = 1_700_000_000_000;
+			await t.run(async (ctx) => {
+				await ctx.db.patch(assignmentId, { deletedAt });
+			});
+
+			await t.run(async (ctx) => {
+				await expect(verb.call(ctx, assignmentId)).rejects.toThrow(
+					"Assignment is deleted",
+				);
+			});
+
+			// Nothing may have been written: status untouched, deletedAt
+			// unchanged, and no audit row for the verb.
+			const after = await t.run(async (ctx) => {
+				const row = await ctx.db.get(assignmentId);
+				const audits = await ctx.db
+					.query("auditLogs")
+					.withIndex("by_resource", (q) =>
+						q.eq("resourceType", "assignment").eq("resourceId", assignmentId),
+					)
+					.collect();
+				return {
+					status: row?.status,
+					deletedAt: row?.deletedAt,
+					auditActions: audits.map((a) => a.action),
+				};
+			});
+			expect(after.status).toBe("scheduled");
+			expect(after.deletedAt).toBe(deletedAt);
+			expect(after.auditActions).not.toContain("assignment.cancelled");
+			expect(after.auditActions).not.toContain("assignment.completed");
+			expect(after.auditActions).not.toContain("assignment.soft_deleted");
+		});
+	}
+
+	it("still operates normally on a live assignment", async () => {
+		// The guard must not have broken the ordinary path.
+		const t = convexTest(schema, modules);
+		const { assignmentId } = await seedAssigned(t);
+		await t.run(async (ctx) => {
+			await performCancel(ctx, {
+				assignmentId,
+				organizationId: ORG,
+				userId: "user_1",
+			});
+		});
+		const after = await t.run(async (ctx) => (await ctx.db.get(assignmentId))?.status);
+		expect(after).toBe("cancelled");
+	});
+});
+
+// F460: the archived-assignment purge. Pins the retention contract:
+// rows archived within the window survive, rows archived past the
+// window are hard-deleted, never-archived rows are never touched, and
+// the completed→cancelled chaining leaves nothing behind.
+describe("purgeArchivedAssignments (F460 retention)", () => {
+	it("hard-deletes rows archived past the window and spares the rest", async () => {
+		const t = convexTest(schema, modules);
+		const now = Date.now();
+		const DAY = 24 * 60 * 60 * 1000;
+		await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			// Rows carry a date past the window; since F834 the purge walks
+			// by_deleted_at so the date is irrelevant — the distinction under
+			// test is the archive date alone (see the future-dated case below).
+			const pastWindow = new Date(now - 400 * DAY).toISOString().slice(0, 10);
+			const oldArchived = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				status: "completed",
+				date: pastWindow,
+			});
+			await ctx.db.patch(oldArchived, {
+				deletedAt: now - 400 * DAY,
+				updatedAt: now - 400 * DAY,
+			});
+			const freshArchived = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_2",
+				status: "completed",
+				date: pastWindow,
+			});
+			await ctx.db.patch(freshArchived, {
+				deletedAt: now - 10 * DAY,
+				updatedAt: now - 10 * DAY,
+			});
+			const live = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_3",
+				status: "completed",
+				date: pastWindow,
+			});
+			await ctx.db.patch(live, { updatedAt: now });
+
+			await ctx.runMutation(internal.notifications.purgeArchivedAssignments, {});
+
+			// Past-window archived row: gone.
+			await expect(ctx.db.get(oldArchived)).resolves.toBeNull();
+			// Freshly archived row: survives (its purge date is next year).
+			await ctx.db.get(freshArchived).then((row) => expect(row).not.toBeNull());
+			// Never-archived row: never touched.
+			await ctx.db.get(live).then((row) => expect(row).not.toBeNull());
+		});
+	});
+
+	it("purges cancelled rows in the same single pass", async () => {
+		const t = convexTest(schema, modules);
+		const now = Date.now();
+		const DAY = 24 * 60 * 60 * 1000;
+		await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const oldCancelled = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				status: "cancelled",
+				date: new Date(now - 500 * DAY).toISOString().slice(0, 10),
+			});
+			await ctx.db.patch(oldCancelled, {
+				deletedAt: now - 500 * DAY,
+				updatedAt: now - 500 * DAY,
+			});
+
+			// The legacy status arg is still accepted (an in-flight
+			// continuation may carry it) and ignored.
+			await ctx.runMutation(
+				internal.notifications.purgeArchivedAssignments,
+				{ status: "cancelled" },
+			);
+
+			await expect(ctx.db.get(oldCancelled)).resolves.toBeNull();
+		});
+	});
+
+	// F834 — two rows the old by_status_date walk could never reach: a
+	// removed `scheduled` row (performRemove soft-deletes without flipping
+	// status, and the chain only visited completed/cancelled), and a
+	// completed row removed while still future-dated (the walk was bounded
+	// on the tour date, so it waited for max(date, deletedAt) + 365d).
+	// Both purge on deletedAt alone now; a never-deleted scheduled row on
+	// the same key is untouched.
+	it("purges a soft-deleted scheduled row and a future-dated archived row (F834)", async () => {
+		const t = convexTest(schema, modules);
+		const now = Date.now();
+		const DAY = 24 * 60 * 60 * 1000;
+		await t.run(async (ctx) => {
+			const tourId = await seedTour(ctx, { orgId: ORG });
+			const futureDate = new Date(now + 30 * DAY).toISOString().slice(0, 10);
+
+			const removedScheduled = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_1",
+				status: "scheduled",
+				date: futureDate,
+			});
+			await ctx.db.patch(removedScheduled, { deletedAt: now - 400 * DAY });
+
+			const futureDatedArchived = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_2",
+				status: "completed",
+				date: futureDate,
+			});
+			await ctx.db.patch(futureDatedArchived, { deletedAt: now - 400 * DAY });
+
+			const liveScheduled = await seedAssignment(ctx, {
+				orgId: ORG,
+				tourId,
+				guideId: "guide_3",
+				status: "scheduled",
+				date: futureDate,
+			});
+
+			const out = await ctx.runMutation(
+				internal.notifications.purgeArchivedAssignments,
+				{},
+			);
+
+			expect(out.purged).toBe(2);
+			await expect(ctx.db.get(removedScheduled)).resolves.toBeNull();
+			await expect(ctx.db.get(futureDatedArchived)).resolves.toBeNull();
+			// Never deleted: the gt(0) bound keeps undefined deletedAt out of
+			// the index range, so a live row cannot be purged.
+			await ctx.db.get(liveScheduled).then((row) => expect(row).not.toBeNull());
 		});
 	});
 });

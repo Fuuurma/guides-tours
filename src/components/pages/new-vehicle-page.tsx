@@ -2,11 +2,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
+import { VehicleForm } from "./vehicle-form";
 import {
 	EMPTY_VEHICLE_FORM,
-	VehicleForm,
 	vehicleFormToMutationArgs,
-} from "./vehicle-form";
+} from "./vehicle-form-model";
 
 export function NewVehiclePage() {
 	const navigate = useNavigate();

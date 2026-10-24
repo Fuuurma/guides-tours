@@ -5,11 +5,11 @@ import { DetailPage } from "@/components/detail-page";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { VehicleForm } from "./vehicle-form";
 import {
-	VehicleForm,
 	vehicleDocToFormValues,
 	vehicleFormToMutationArgs,
-} from "./vehicle-form";
+} from "./vehicle-form-model";
 
 interface EditVehiclePageProps {
 	vehicleId: string;

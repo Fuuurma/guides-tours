@@ -25,6 +25,11 @@ import { httpAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { decrypt } from "../lib/crypto";
 import { logger } from "../lib/logger";
+import {
+	extractRequestIdentity,
+	type RequestIdentity,
+} from "../lib/requestIdentity";
+import { readBodyWithLimit } from "../lib/requestBody";
 import type { Id } from "../_generated/dataModel";
 import { verifyWebhookSignatureWithTimestamp } from "./webhook_verify";
 import type { NormalizedProviderEvent } from "./types";
@@ -76,22 +81,33 @@ export function createWebhookHandler(config: WebhookConfig) {
 			return new Response("method not allowed", { status: 405 });
 		}
 
+		// The caller's identity, captured at the HTTP edge — a Convex
+		// mutation cannot read the request that triggered it, so this is
+		// the only place the provider's address and user agent can be
+		// learned. Threaded into the audit rows the upsert mutations
+		// write (F461).
+		const identity = extractRequestIdentity(request);
+
 		const signature = request.headers.get(config.signatureHeader);
 		if (!signature) {
 			return new Response("missing signature", { status: 400 });
 		}
 
 		const timestampHeader = request.headers.get(config.timestampHeader);
-		const rawBody = await request.text();
 		// F341: unauthenticated route — cap the body before JSON.parse,
-		// HMAC, and recordDelivery's rawPayload storage. Measure real
-		// bytes (UTF-16 length lies for multibyte payloads — same F51
-		// contract as the public booking path). 64 KB is generous for a
-		// provider event while still bounding memory per request.
+		// HMAC, and recordDelivery's rawPayload storage. The cap is
+		// applied to the read itself, so the oversized bytes are never
+		// buffered (F554). 64 KB is generous for a provider event while
+		// still bounding memory per request.
 		const MAX_BODY_BYTES = 64 * 1024;
-		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
-			return new Response("payload too large", { status: 413 });
+		const body = await readBodyWithLimit(request, MAX_BODY_BYTES);
+		if (!body.ok) {
+			if (body.reason === "too-large") {
+				return new Response("payload too large", { status: 413 });
+			}
+			return new Response("failed to read body", { status: 400 });
 		}
+		const rawBody = body.text;
 
 		const url = new URL(request.url);
 		const integrationId = url.searchParams.get("integrationId");
@@ -112,42 +128,56 @@ export function createWebhookHandler(config: WebhookConfig) {
 			);
 		} catch (err) {
 			// A malformed integrationId fails the v.id arg validator
-			// inside the query — map it to 400 so the provider isn't
-			// told to retry a request that can never succeed (F123).
-			// Any other failure is a real internal error and keeps
-			// propagating as a 500.
+			// inside the query — answer identically to an invalid
+			// signature so the error channel can't reveal whether a
+			// well-formed ID exists (F676). Any other failure is a real
+			// internal error and keeps propagating as a 500.
 			if (
 				err instanceof Error &&
 				err.message.includes("Expected ID for table")
 			) {
-				return new Response("invalid integrationId", { status: 400 });
+				logger.warn(
+					`${config.logPrefix} webhook rejected: malformed integrationId`,
+				);
+				return new Response("invalid signature", { status: 401 });
 			}
 			throw err;
 		}
 		if (!integration) {
-			return new Response("unknown integration", { status: 404 });
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: unknown integration`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		if (integration.provider !== config.provider) {
-			return new Response("wrong provider for this route", { status: 400 });
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: wrong provider for this route`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		if (!integration.isActive) {
-			return new Response("integration is not active", { status: 410 });
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: integration is not active`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		if (!integration.webhookSecret) {
-			return new Response("integration missing webhook secret", {
-				status: 500,
-			});
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: integration missing webhook secret`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 
 		let secret: string;
 		try {
 			secret = await decrypt(integration.webhookSecret);
 		} catch {
-			// Corrupt/rotated secret in storage: fail closed with a 500
-			// instead of an unhandled throw (fleet devin 2026-09-06).
-			return new Response("integration secret undecryptable", {
-				status: 500,
-			});
+			// Corrupt/rotated secret in storage: fail closed uniformly
+			// (F676) instead of an unhandled throw (fleet devin 2026-09-06).
+			logger.warn(
+				`${config.logPrefix} webhook rejected on integration ${integrationId}: integration secret undecryptable`,
+			);
+			return new Response("invalid signature", { status: 401 });
 		}
 		const verifyResult = await verifyWebhookSignatureWithTimestamp(
 			rawBody,
@@ -157,14 +187,6 @@ export function createWebhookHandler(config: WebhookConfig) {
 			undefined,
 			{ requireTimestamp: config.requireTimestamp },
 		);
-		if (verifyResult.reason === "skipped") {
-			// Observability: surface providers that don't send a
-			// timestamp header so operators can decide to flip
-			// requireTimestamp on for them.
-			logger.info(
-				`${config.logPrefix} timestamp header absent — replay check skipped (provider compat)`,
-			);
-		}
 		if (!verifyResult.valid) {
 			// Don't echo the failure reason — it tells a caller which
 			// check (signature vs timestamp) failed and aids probing.
@@ -327,6 +349,7 @@ export function createWebhookHandler(config: WebhookConfig) {
 				integration.organizationId,
 				event,
 				config.provider,
+				identity,
 			);
 			await recordDeliveryOutcome(
 				ctx,
@@ -426,6 +449,7 @@ async function dispatchEvent(
 	organizationId: string,
 	event: NormalizedProviderEvent,
 	provider: string,
+	identity: RequestIdentity,
 ): Promise<DispatchOutcome> {
 	if (event.kind === "booking.created") {
 		await ctx.runMutation(internal.ota.upsert.upsertOtaBooking, {
@@ -434,6 +458,8 @@ async function dispatchEvent(
 			provider,
 			event,
 			rawData: event.rawPayload,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 		return "processed";
 	}
@@ -442,6 +468,8 @@ async function dispatchEvent(
 			integrationId: integrationId as Id<"otaIntegrations">,
 			reservationId: event.reservationId,
 			rawData: event.rawPayload,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 		return "processed";
 	}
@@ -451,6 +479,8 @@ async function dispatchEvent(
 			{
 				integrationId: integrationId as Id<"otaIntegrations">,
 				event,
+				ipAddress: identity.ipAddress,
+				userAgent: identity.userAgent,
 			},
 		);
 		return result === null ? "unmatched_product" : "processed";

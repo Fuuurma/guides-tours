@@ -8,12 +8,18 @@ import {
 	mutation,
 	internalMutation,
 } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { components } from "./_generated/api";
 import { exceptionForDateHelper } from "./tourExceptionDates";
 
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import {
+	requireMembership,
+	requirePermission,
+	requireRole,
+} from "./lib/authz";
 import { logAudit } from "./lib/audit";
 
 // ---- queries ----
@@ -24,48 +30,48 @@ export const list = query({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const orgId = member.organizationId;
-		// Bound the result so an org with hundreds of blackout
-		// windows doesn't OOM the response. The FE page renders at
-		// most a few dozen per tour.
-		const MAX_BLACKOUTS = 500;
-		let q = ctx.db
-			.query("tourBlackoutDates")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
-		if (args.tourId) {
-			// SECURITY: scope to org even when filtering by tourId.
-			q = ctx.db
-				.query("tourBlackoutDates")
-				.withIndex("by_tour_start", (q) =>
-					q.eq("tourId", args.tourId!),
-				)
-				.filter((q) => q.eq(q.field("organizationId"), orgId));
-		}
-		const all = await q.take(MAX_BLACKOUTS);
-		return all.sort((a, b) => a.startDate.localeCompare(b.startDate));
+		const { rows, truncated } = await _blackoutRowsForList(ctx, {
+			organizationId: member.organizationId,
+			tourId: args.tourId,
+		});
+		return { blackouts: rows, truncated };
 	},
 });
 
-// Returns true if any blackout covers the given (tourId, date).
 /**
- * @internal
- * No FE caller as of 2026-06-29. The public booking flow calls
- * `isBlackoutHelper` server-side via `public_booking.internalCreate`
- * to reject blacked-out dates. The public query is useful for
- * FE pre-flight validation (grey out blackout dates in the date
- * picker) but no UI consumes it yet.
- * See docs/DATA_LAYER_STATUS.md.
+ * Org-scoped blackout scan shared by `list`. Probes one row past the
+ * cap so `truncated` says "more rows exist" instead of silently
+ * dropping them (F468). Exported for tests — the public `list` adds
+ * auth on top of the same scan.
  */
-export const isBlackout = query({
-	args: {
-		tourId: v.id("tours"),
-		date: v.string(),
-	},
-	handler: async (ctx, args) => {
-		await requireMembership(ctx);
-		return await isBlackoutHelper(ctx, args.tourId, args.date);
-	},
-});
+export async function _blackoutRowsForList(
+	ctx: QueryCtx,
+	args: { organizationId: string; tourId?: Id<"tours"> },
+): Promise<{ rows: Doc<"tourBlackoutDates">[]; truncated: boolean }> {
+	// Bound the result so an org with hundreds of blackout
+	// windows doesn't OOM the response. The FE page renders at
+	// most a few dozen per tour.
+	const MAX_BLACKOUTS = 500;
+	let q = ctx.db
+		.query("tourBlackoutDates")
+		.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId));
+	if (args.tourId) {
+		q = ctx.db
+			.query("tourBlackoutDates")
+			.withIndex("by_tour_start", (q) => q.eq("tourId", args.tourId!))
+			.filter((q) =>
+				q.eq(q.field("organizationId"), args.organizationId),
+			);
+	}
+	const probe = await q.take(MAX_BLACKOUTS + 1);
+	const truncated = probe.length > MAX_BLACKOUTS;
+	return {
+		rows: probe
+			.slice(0, MAX_BLACKOUTS)
+			.sort((a, b) => a.startDate.localeCompare(b.startDate)),
+		truncated,
+	};
+}
 
 /**
  * Public version of isBlackout — no auth required. Used by the
@@ -128,7 +134,9 @@ export async function isBlackoutHelper(
 ): Promise<boolean> {
 	// Prefer recent overlapping windows: scan startDate <= date in
 	// descending order and keep going until we either find a cover or
-	// exhaust candidates. Caps at 500 to bound worst-case reads.
+	// exhaust candidates. Caps at 500 to bound worst-case reads. A
+	// truncated scan cannot prove "no cover" — fail closed instead of
+	// silently reporting a blacked-out date as open (F468).
 	const MAX_CANDIDATES = 500;
 	const candidates = await ctx.db
 		.query("tourBlackoutDates")
@@ -137,7 +145,12 @@ export async function isBlackoutHelper(
 			q.eq("tourId", tourId).lte("startDate", date),
 		)
 		.order("desc")
-		.take(MAX_CANDIDATES);
+		.take(MAX_CANDIDATES + 1);
+	if (candidates.length > MAX_CANDIDATES) {
+		throw new ConvexError(
+			"Too many blackout windows to verify coverage — narrow the tour's blackout history",
+		);
+	}
 	return candidates.some(
 		(b: { startDate: string; endDate: string }) => b.endDate >= date,
 	);
@@ -155,7 +168,7 @@ export const create = mutation({
 		reason: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourBlackoutDates.internalCreate,
 			{ organizationId: member.organizationId, userId: member.userId, ...args },
@@ -207,23 +220,6 @@ export const internalCreate = internalMutation({
 			},
 		});
 		return id;
-	},
-});
-
-export const update = mutation({
-	args: {
-		blackoutId: v.id("tourBlackoutDates"),
-		startDate: v.optional(v.string()),
-		endDate: v.optional(v.string()),
-		reason: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
-		const { blackoutId, ...rest } = args;
-		return await ctx.runMutation(
-			internalRefs.tourBlackoutDates.internalUpdate,
-			{ organizationId: member.organizationId, userId: member.userId, blackoutId, ...rest },
-		);
 	},
 });
 

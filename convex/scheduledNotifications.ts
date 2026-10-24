@@ -1,6 +1,8 @@
 // Scheduled notifications: queue reminders + post-tour reviews.
-// The cron in convex/notifications.ts picks rows where sent=false
-// and scheduledFor <= now, dispatches via notification_dispatch.ts.
+// The cron (registered in convex/crons.ts) calls
+// internal.notifications.processPendingNotifications, which picks rows
+// where sent=false and scheduledFor <= now and dispatches via
+// notification_dispatch.ts.
 //
 // Source: backend/notifications/service.py::schedule_booking_reminders
 // (the source defines it but doesn't wire it into booking creation —
@@ -11,7 +13,10 @@ import { internalMutation } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { logAudit } from "./lib/audit";
-import { parseBookingTime } from "./lib/time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./lib/time";
 
 // Hours-before-tour that each reminder fires at.
 const REMINDER_OFFSETS = {
@@ -35,8 +40,11 @@ export const scheduleForBooking = internalMutation({
 	handler: async (ctx, args) => {
 		const now = Date.now();
 
-		// Combine booking date + startTime into a UTC timestamp.
-		const tourTs = parseBookingTime(args.date, args.startTime);
+		// Combine booking date + startTime into the start instant in the
+		// operator's zone — the UTC-midnight parse anchored reminders up
+		// to 2h late around DST (Europe/Madrid +1/+2).
+		const timeZone = await organizationTimeZone(ctx, args.organizationId);
+		const tourTs = parseBookingTimeInZone(args.date, args.startTime, timeZone);
 		if (!tourTs) {
 			throw new ConvexError(
 				`Cannot schedule: invalid date/time "${args.date} ${args.startTime}"`,

@@ -16,6 +16,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalRefs } from "./lib/internalRefs";
 import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { parseYmd } from "./lib/time";
 import { MAX_NOTES_LEN } from "./lib/validation";
 
 // ---- helpers ----
@@ -52,6 +53,9 @@ async function assignmentConflictsForVacation(
 		endDate: string;
 	},
 ) {
+	// F468: probe one row past the cap and report `truncated` — a
+	// truncated conflict scan cannot prove the leave window is
+	// clash-free, so the callers refuse rather than approve blind.
 	const guideHits = await ctx.db
 		.query("assignments")
 		.withIndex("by_guide_date", (q) =>
@@ -60,7 +64,7 @@ async function assignmentConflictsForVacation(
 				.gte("date", args.startDate)
 				.lte("date", args.endDate),
 		)
-		.take(500);
+		.take(501);
 	const driverRow = await ctx.db
 		.query("drivers")
 		.withIndex("by_org_user", (q) =>
@@ -76,14 +80,17 @@ async function assignmentConflictsForVacation(
 						.gte("date", args.startDate)
 						.lte("date", args.endDate),
 				)
-				.take(500)
+				.take(501)
 		: [];
-	return [...guideHits, ...driverHits].filter(
-		(a) =>
-			a.organizationId === args.organizationId &&
-			a.status === "scheduled" &&
-			a.deletedAt === undefined,
-	);
+	return {
+		conflicts: [...guideHits.slice(0, 500), ...driverHits.slice(0, 500)].filter(
+			(a) =>
+				a.organizationId === args.organizationId &&
+				a.status === "scheduled" &&
+				a.deletedAt === undefined,
+		),
+		truncated: guideHits.length > 500 || driverHits.length > 500,
+	};
 }
 
 function throwVacationAssignmentConflict(conflicts: { date: string; startTime: string }[]): never {
@@ -174,19 +181,6 @@ export const get = query({
 			return null;
 		}
 		return vr;
-	},
-});
-
-/**
- * Internal mirror of `get` that skips the authz check. Use only from
- * server-side code that has already verified the caller (e.g. an
- * internal mutation that just inserted the row). Read-only — uses
- * internalQuery (not internalMutation) since it only calls ctx.db.get.
- */
-export const getInternal = internalQuery({
-	args: { requestId: v.id("vacationRequests") },
-	handler: async (ctx, args) => {
-		return await ctx.db.get(args.requestId);
 	},
 });
 
@@ -345,6 +339,15 @@ export const internalCreate = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		// Date validation (source: vacation_service.py:119-120).
+		// F710: shape first — ordering-compares alone let unpadded or
+		// non-date strings through, and a stored bad bound later parsed
+		// NaN into calculateVacationDays/usedDays.
+		if (
+			parseYmd(args.startDate) === null ||
+			parseYmd(args.endDate) === null
+		) {
+			throw new ConvexError("Invalid date (expected YYYY-MM-DD)");
+		}
 		if (args.endDate < args.startDate) {
 			throw new ConvexError("endDate must be on or after startDate");
 		}
@@ -385,12 +388,17 @@ export const internalCreate = internalMutation({
 		// and must not bypass it (F348). `force` mirrors approve.
 		const status = args.status ?? "pending";
 		if (status === "approved") {
-			const conflicts = await assignmentConflictsForVacation(ctx, {
+			const { conflicts, truncated } = await assignmentConflictsForVacation(ctx, {
 				organizationId: args.organizationId,
 				userId: args.userId,
 				startDate: args.startDate,
 				endDate: args.endDate,
 			});
+			if (truncated && !args.force) {
+				throw new ConvexError(
+					"Too many assignments in this leave window to verify conflicts — narrow the date range",
+				);
+			}
 			if (conflicts.length > 0 && !args.force) {
 				throwVacationAssignmentConflict(conflicts);
 			}
@@ -477,12 +485,17 @@ export const internalApprove = internalMutation({
 
 		// Block approve when the guide already has scheduled assignments
 		// in the vacation window — unless the operator explicitly forces.
-		const conflicts = await assignmentConflictsForVacation(ctx, {
+		const { conflicts, truncated } = await assignmentConflictsForVacation(ctx, {
 			organizationId: args.organizationId,
 			userId: vr.userId,
 			startDate: vr.startDate,
 			endDate: vr.endDate,
 		});
+		if (truncated && !args.force) {
+			throw new ConvexError(
+				"Too many assignments in this leave window to verify conflicts — narrow the date range",
+			);
+		}
 		if (conflicts.length > 0 && !args.force) {
 			throwVacationAssignmentConflict(conflicts);
 		}

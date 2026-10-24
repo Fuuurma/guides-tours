@@ -12,10 +12,13 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { assertFieldWithinLimit } from "./validation";
 import { logAudit } from "./audit";
-import { parseBookingTime } from "./time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./time";
 import { resolveTourStaffing } from "./staffing";
 import { calculateEndTime } from "./assignmentTime";
-import { checkConflictsHelper } from "./assignmentsShared";
+import { checkConflictsHelper, readTourDay } from "./assignmentsShared";
 
 export async function performCreate(
 	ctx: MutationCtx,
@@ -55,7 +58,8 @@ if (scheduleId) {
 	startTime = schedule.startTime;
 }
 
-if (parseBookingTime(date, startTime) === null) {
+const timeZone = await organizationTimeZone(ctx, args.organizationId);
+if (parseBookingTimeInZone(date, startTime, timeZone) === null) {
 	throw new ConvexError(
 		"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
 	);
@@ -132,10 +136,10 @@ const endTime =
 // with this transaction, forcing an automatic retry that re-evaluates
 // the cap against the committed rows. Two concurrent creates cannot
 // both pass this check.
-const sameDay = await ctx.db
-	.query("assignments")
-	.withIndex("by_tour_date", (q) => q.eq("tourId", tourId).eq("date", date))
-	.take(100);
+//
+// F874: the whole tour-day is read (readTourDay) — a take(100) window
+// here went blind once cancelled rows crowded it.
+const sameDay = await readTourDay(ctx, tourId, date);
 const activeOnSlot = sameDay.filter(
 	(a) =>
 		a.organizationId === args.organizationId &&
@@ -402,7 +406,8 @@ export async function performUpdate(
 		date: args.date ?? existing.date,
 		startTime: args.startTime ?? existing.startTime,
 	};
-	if (parseBookingTime(next.date, next.startTime) === null) {
+	const timeZone = await organizationTimeZone(ctx, tour.organizationId);
+	if (parseBookingTimeInZone(next.date, next.startTime, timeZone) === null) {
 		throw new ConvexError(
 			"Invalid date or start time (expected YYYY-MM-DD and HH:MM)",
 		);
@@ -420,13 +425,9 @@ export async function performUpdate(
 
 	// Same tour+date+startTime staffing cap as create.
 	// Fetch same-day assignments once and reuse for both the guide
-	// staffing cap check and the fleet (vehicle/driver) checks.
-	const sameDay = await ctx.db
-		.query("assignments")
-		.withIndex("by_tour_date", (q) =>
-			q.eq("tourId", existing.tourId).eq("date", next.date),
-		)
-		.take(100);
+	// staffing cap check and the fleet (vehicle/driver) checks (F874:
+	// whole tour-day, not a take(100) window).
+	const sameDay = await readTourDay(ctx, existing.tourId, next.date);
 	const activeOnSlot = sameDay.filter(
 		(a) =>
 			a._id !== args.assignmentId &&
@@ -738,6 +739,13 @@ export async function performCancel(
 	if (a.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: wrong organization");
 	}
+	if (a.deletedAt !== undefined) {
+		// GT-AUDIT-06 / hub F604: performUpdate has always refused a
+		// soft-deleted row; the other three verbs never read deletedAt, so a
+		// cancelled/completed/removed assignment produced real notifications and
+		// audit rows for a departure that no longer exists.
+		throw new ConvexError("Assignment is deleted");
+	}
 	// Cap the cancel reason — it's stored in the audit log's
 	// newValues, so an unbounded reason would bloat every row.
 	const MAX_REASON_LEN = 500;
@@ -809,12 +817,32 @@ export async function performComplete(
 		assignmentId: Id<"assignments">;
 		organizationId: string;
 		userId: string;
-	}
+		callerRole: string;
+	},
 ) {
 	const a = await ctx.db.get(args.assignmentId);
 	if (!a) throw new ConvexError("Assignment not found");
 	if (a.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: wrong organization");
+	}
+	// GT-AUDIT-07: `complete` admits the guide role so a guide can close their
+	// OWN departure, but nothing ever compared the caller against a.guideId, so
+	// any guide could close anyone's — the exact action the declared matrix
+	// withholds from that role (guide holds assignment:["read"]). Checked after
+	// the org boundary so a cross-org probe still answers "wrong organization"
+	// rather than leaking whether the assignment exists. Only the guide role is
+	// scoped: a dispatcher closing a shift on a guide's behalf is a real
+	// workflow, and narrowing owner/admin/member would be a behaviour change
+	// nobody asked for.
+	if (args.callerRole === "guide" && a.guideId !== args.userId) {
+		throw new ConvexError("Forbidden: not your assignment");
+	}
+	if (a.deletedAt !== undefined) {
+		// GT-AUDIT-06 / hub F604: performUpdate has always refused a
+		// soft-deleted row; the other three verbs never read deletedAt, so a
+		// cancelled/completed/removed assignment produced real notifications and
+		// audit rows for a departure that no longer exists.
+		throw new ConvexError("Assignment is deleted");
 	}
 	if (a.status !== "scheduled") {
 		throw new ConvexError(
@@ -850,6 +878,13 @@ export async function performRemove(
 	if (!a) throw new ConvexError("Assignment not found");
 	if (a.organizationId !== args.organizationId) {
 		throw new ConvexError("Forbidden: wrong organization");
+	}
+	if (a.deletedAt !== undefined) {
+		// GT-AUDIT-06 / hub F604: performUpdate has always refused a
+		// soft-deleted row; the other three verbs never read deletedAt, so a
+		// cancelled/completed/removed assignment produced real notifications and
+		// audit rows for a departure that no longer exists.
+		throw new ConvexError("Assignment is deleted");
 	}
 	const now = Date.now();
 	await ctx.db.patch(args.assignmentId, {

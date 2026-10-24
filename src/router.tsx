@@ -3,6 +3,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import { ConvexProvider } from "convex/react";
+import { guardOneTimeTokenInWindow } from "./lib/oauth-initiator";
 import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
@@ -10,6 +11,13 @@ export function getRouter() {
 	if (!convexUrl) {
 		throw new Error("VITE_CONVEX_URL is not set");
 	}
+
+	// Browser-bind the OAuth one-time token BEFORE the router parses the
+	// URL: ConvexBetterAuthProvider exchanges any `ott` it finds at mount
+	// and the /auth/callback loader exchanges its search param, so this is
+	// the one point ahead of both. A token this browser did not initiate
+	// is stripped here and never reaches either (see lib/oauth-initiator).
+	if (typeof window !== "undefined") guardOneTimeTokenInWindow();
 
 	// This app has both protected dashboard queries and anonymous booking
 	// pages. Leaving the socket paused until auth is confirmed would make a

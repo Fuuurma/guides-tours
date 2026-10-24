@@ -206,17 +206,6 @@ export const countFailedSince = query({
 	},
 });
 
-export const get = query({
-	args: { paymentId: v.id("payments") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const p = await ctx.db.get(args.paymentId);
-		if (!p) return null;
-		if (p.organizationId !== member.organizationId) return null;
-		return p;
-	},
-});
-
 /**
  * One-shot backfill (F100): refunds written before the bookingId
  * link was populated never resolve under `by_booking`. Paginates
@@ -279,92 +268,6 @@ export const getPublicSettings = query({
 // ----- Mutations: payments -----
 
 /**
- * Record a new payment (typically PENDING until the Stripe webhook
- * confirms). Idempotent by stripePaymentIntentId — if a row with
- * the same intent already exists, return it.
- *
- * SECURITY: This was previously a public mutation callable by any
- * `member`-role user, which let them create pending payment rows
- * with arbitrary stripePaymentIntentId + amountCents for any booking
- * in their org — a table-pollution / reconciliation-confusion abuse
- * vector. It is now internal; the Stripe flows use `recordFromAction`
- * (which takes organizationId explicitly and is called only by
- * actions that already verified org membership). If a future
- * dashboard "manual payment" feature needs a public entrypoint, it
- * should be a dedicated mutation with tighter validation (e.g.
- * provider != "stripe" for manual/cash payments, no arbitrary
- * stripePaymentIntentId).
- */
-export const record = internalMutation({
-	args: {
-		organizationId: v.string(),
-		bookingId: v.optional(v.id("bookings")),
-		amountCents: v.int64(),
-		currency: v.string(),
-		stripePaymentIntentId: v.string(),
-	},
-	handler: async (ctx, args) => {
-		if (args.bookingId) {
-			const booking = await ctx.db.get(args.bookingId);
-			if (!booking || booking.organizationId !== args.organizationId) {
-				throw new ConvexError("Forbidden: booking belongs to a different organization");
-			}
-		}
-		// Validate currency shape (ISO 4217) and stripe intent id length.
-		if (!CURRENCY_REGEX.test(args.currency)) {
-			throw new ConvexError(
-				`Invalid currency: "${args.currency}" must be 3 uppercase letters`,
-			);
-		}
-		assertFieldWithinLimit(
-			"stripePaymentIntentId",
-			args.stripePaymentIntentId,
-			MAX_STRIPE_INTENT_ID_LEN,
-		);
-		// Idempotency check.
-		const existing = await ctx.db
-			.query("payments")
-			.withIndex("by_stripe_intent", (q) =>
-				q.eq("stripePaymentIntentId", args.stripePaymentIntentId),
-			)
-			.unique();
-		if (existing) {
-			if (existing.organizationId !== args.organizationId) {
-				throw new ConvexError("Payment intent already belongs to another organization");
-			}
-			return existing._id;
-		}
-
-		const now = Date.now();
-		const paymentId = await ctx.db.insert("payments", {
-			organizationId: args.organizationId,
-			bookingId: args.bookingId,
-			amountCents: args.amountCents,
-			currency: args.currency,
-			status: "pending",
-			provider: "stripe",
-			stripePaymentIntentId: args.stripePaymentIntentId,
-			createdAt: now,
-			updatedAt: now,
-		});
-		await logAudit(ctx, {
-			organizationId: args.organizationId,
-			userId: "internal",
-			action: "payment.recorded",
-			resourceType: "payment",
-			resourceId: paymentId,
-			oldValues: {},
-			newValues: {
-				amountCents: args.amountCents.toString(),
-				currency: args.currency,
-				bookingId: args.bookingId ?? null,
-			},
-		});
-		return paymentId;
-	},
-});
-
-/**
  * Mark a payment succeeded (called by Stripe webhook + by manual
  * admin action). Idempotent for already-succeeded rows. Refuses
  * to overwrite failed/refunded rows — Stripe webhooks can re-deliver
@@ -373,6 +276,10 @@ export const record = internalMutation({
 export const markSucceeded = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 		handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
@@ -410,6 +317,8 @@ export const markSucceeded = internalMutation({
 						chargedCents: p.amountCents.toString(),
 						overpaidCents: overpaid.toString(),
 					},
+					ipAddress: args.ipAddress,
+					userAgent: args.userAgent,
 				});
 			}
 		}
@@ -422,6 +331,8 @@ export const markSucceeded = internalMutation({
 			resourceId: args.paymentId,
 			oldValues: { status: p.status },
 			newValues: { status: "succeeded", processedAt: now },
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return args.paymentId;
 	},
@@ -436,6 +347,10 @@ export const markFailed = internalMutation({
 	args: {
 		paymentId: v.id("payments"),
 		reason: v.optional(v.string()),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
@@ -464,88 +379,8 @@ export const markFailed = internalMutation({
 				reason: args.reason ?? "",
 				processedAt: now,
 			},
-		});
-		return args.paymentId;
-	},
-});
-
-/**
- * Local-only refund marker for non-Stripe / already-refunded-in-dashboard
- * edge cases. Dashboard "Refund" must call
- * `payments_stripe_actions.refundViaStripe` so Stripe is refunded first;
- * that action then calls `markRefunded`. Do not use this mutation when a
- * real `pi_` PaymentIntent exists — it would restore balance without
- * returning money in Stripe.
- */
-export const refund = mutation({
-	args: {
-		paymentId: v.id("payments"),
-		reason: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
-		const p = await ctx.db.get(args.paymentId);
-		if (!p) throw new ConvexError("Payment not found");
-		if (p.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: wrong organization");
-		}
-		if (p.status !== "succeeded") {
-			throw new ConvexError(
-				`Only succeeded payments can be refunded (was ${p.status})`,
-			);
-		}
-		if (p.stripePaymentIntentId?.startsWith("pi_")) {
-			throw new ConvexError(
-				"Use Stripe refund (refundViaStripe) for payments with a PaymentIntent",
-			);
-		}
-		const now = Date.now();
-		await ctx.db.patch(args.paymentId, {
-			status: "refunded",
-			updatedAt: now,
-		});
-		// Write a refunds row so the dashboard's refund history is
-		// consistent across manual + webhook-initiated refunds.
-		// Synthesize a stripeRefundId prefixed with "manual_" — this
-		// distinguishes manual refunds from real Stripe ones and
-		// keeps the (source, eventId) idempotency key unique.
-		await ctx.db.insert("refunds", {
-			organizationId: p.organizationId,
-			paymentId: p._id,
-			bookingId: p.bookingId,
-			stripeRefundId: `manual_${now}_${args.paymentId}`,
-			amountCents: p.amountCents,
-			currency: p.currency,
-			status: "succeeded",
-			reason: args.reason,
-			refundedBy: member.userId,
-			refundedAt: now,
-			processedAt: now,
-			metadata: { source: "dashboard_manual_refund" },
-			createdAt: now,
-			updatedAt: now,
-		});
-
-		if (p.bookingId) {
-			await reversePaymentOnBooking(ctx, {
-				organizationId: p.organizationId,
-				bookingId: p.bookingId,
-				amountCents: p.amountCents,
-				now,
-			});
-		}
-
-		await logAudit(ctx, {
-			organizationId: p.organizationId,
-			userId: member.userId,
-			action: "payment.refunded",
-			resourceType: "payment",
-			resourceId: args.paymentId,
-			oldValues: { status: "succeeded" },
-			newValues: {
-				status: "refunded",
-				reason: args.reason ?? "",
-			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return args.paymentId;
 	},
@@ -915,6 +750,10 @@ export const recordFromAction = internalMutation({
 		amountCents: v.int64(),
 		currency: v.string(),
 		stripePaymentIntentId: v.string(),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Same validation as the public record mutation — internal callers
@@ -985,6 +824,8 @@ export const recordFromAction = internalMutation({
 					bookingId: args.bookingId,
 					stripePaymentIntentId: args.stripePaymentIntentId,
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 			return pendingPublicPayment._id;
 		}
@@ -1012,6 +853,8 @@ export const recordFromAction = internalMutation({
 				bookingId: args.bookingId,
 				stripePaymentIntentId: args.stripePaymentIntentId,
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return paymentId;
 	},
@@ -1044,6 +887,10 @@ export const markRefunded = internalMutation({
 				processedAt: v.optional(v.number()),
 			}),
 		),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const p = await ctx.db.get(args.paymentId);
@@ -1158,6 +1005,8 @@ export const markRefunded = internalMutation({
 				resourceId: args.paymentId,
 				oldValues: { status: p.status },
 				newValues: { status: fully ? "refunded" : "succeeded" },
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 		}
 		return args.paymentId;

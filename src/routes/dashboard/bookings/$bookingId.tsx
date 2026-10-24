@@ -23,13 +23,8 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { formatCentsCompact } from "@/lib/format";
-import {
-	cn,
-	getErrorMessage,
-	getSafeDisplayMessage,
-	isStripeCheckoutUrl,
-} from "@/lib/utils";
+import { formatCentsCompact, formatDateTime } from "@/lib/format";
+import { cn, getSafeDisplayMessage, isStripeCheckoutUrl } from "@/lib/utils";
 import { MAX_NOTES_LEN, validateNotesOptional } from "@/lib/validation";
 import type { BookingDetail } from "@/types/entities";
 import { api } from "../../../../convex/_generated/api";
@@ -39,6 +34,8 @@ const RATINGS = [1, 2, 3, 4, 5] as const;
 const MAX_CANCEL_REASON_LEN = 500;
 
 /** Safe mailto: href — strips anything that looks like a protocol or newline. */
+/** Safe mailto: href — customer emails render into links, so strip href-breaking
+ * characters and fall back to "#" unless the result is a plausible address. */
 function safeMailto(email: string): string {
 	const clean = email.replace(/[\s<>"'`]/g, "");
 	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return "#";
@@ -94,6 +91,18 @@ function BookingDetailPage() {
 	const [showReviewForm, setShowReviewForm] = useState(false);
 	const [showRefundForm, setShowRefundForm] = useState(false);
 	const [elementsOpen, setElementsOpen] = useState(false);
+	// F750 twin: same pre-image a0b43a2 removed — resolve the absolute
+	// return URL after mount instead of branching on window at render.
+	// The prop reaches confirmPayment post-mount (elementsOpen gates it),
+	// so this was latent, but the render-time branch is the same class.
+	const [paymentReturnUrl, setPaymentReturnUrl] = useState(
+		`/dashboard/bookings/${bookingId}?paid=1`,
+	);
+	useEffect(() => {
+		setPaymentReturnUrl(
+			`${window.location.origin}/dashboard/bookings/${bookingId}?paid=1`,
+		);
+	}, [bookingId]);
 	const [clientSecret, setClientSecret] = useState<string | null>(null);
 	const [publishableKey, setPublishableKey] = useState<string | null>(null);
 
@@ -116,7 +125,7 @@ function BookingDetailPage() {
 			await fn();
 			toast.success(msg);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -174,7 +183,7 @@ function BookingDetailPage() {
 			}
 			window.location.href = url;
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 			setPending(false);
 		}
 	};
@@ -196,7 +205,7 @@ function BookingDetailPage() {
 			);
 			setElementsOpen(true);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(false);
 		}
@@ -310,11 +319,7 @@ function BookingDetailPage() {
 						<StripePaymentElement
 							publishableKey={publishableKey}
 							clientSecret={clientSecret}
-							returnUrl={
-								typeof window !== "undefined"
-									? `${window.location.origin}/dashboard/bookings/${bookingId}?paid=1`
-									: `/dashboard/bookings/${bookingId}?paid=1`
-							}
+							returnUrl={paymentReturnUrl}
 							amountLabel={formatCentsCompact(b.balanceDueCents)}
 							onPaid={() => {
 								toast.success(
@@ -431,16 +436,14 @@ function BookingDetailPage() {
 					label="Checked in"
 					value={
 						b.checkedInAt
-							? `${new Date(b.checkedInAt).toLocaleString()} by ${b.checkedInBy || "unknown"}`
+							? `${formatDateTime(b.checkedInAt)} by ${b.checkedInBy || "unknown"}`
 							: "(not checked in)"
 					}
 				/>
 				<DetailRow
 					label="Completed at"
 					value={
-						b.completedAt
-							? new Date(b.completedAt).toLocaleString()
-							: "(not completed)"
+						b.completedAt ? formatDateTime(b.completedAt) : "(not completed)"
 					}
 				/>
 			</DetailSection>
@@ -466,8 +469,7 @@ function BookingDetailPage() {
 										{payment.provider}
 									</p>
 									<p className="text-muted-foreground text-xs">
-										{payment.currency} ·{" "}
-										{new Date(payment.createdAt).toLocaleString()}
+										{payment.currency} · {formatDateTime(payment.createdAt)}
 									</p>
 								</div>
 								<StatusBadge status={payment.status} />
@@ -484,9 +486,7 @@ function BookingDetailPage() {
 									</p>
 									<p className="text-muted-foreground text-xs">
 										{refund.currency} ·{" "}
-										{new Date(
-											refund.refundedAt ?? refund.createdAt,
-										).toLocaleString()}
+										{formatDateTime(refund.refundedAt ?? refund.createdAt)}
 										{refund.reason ? ` · ${refund.reason}` : ""}
 									</p>
 								</div>
@@ -587,7 +587,7 @@ function CancelBookingForm({
 				toast.success("Booking cancelled");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -679,7 +679,7 @@ function RefundPaymentForm({
 				toast.success("Payment refunded");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -780,7 +780,7 @@ function RecordReviewForm({
 				toast.success("Review recorded");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});

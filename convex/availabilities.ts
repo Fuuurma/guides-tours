@@ -13,7 +13,7 @@ import {
 } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 
 // ---- queries ----
@@ -72,19 +72,6 @@ export const list = query({
 	},
 });
 
-export const get = query({
-	args: { availabilityId: v.id("availabilities") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const a = await ctx.db.get(args.availabilityId);
-		if (!a) throw new ConvexError("Availability not found");
-		if (a.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: availability belongs to a different organization");
-		}
-		return a;
-	},
-});
-
 // ---- mutations ----
 
 export const upsert = mutation({
@@ -104,6 +91,24 @@ export const upsert = mutation({
 			throw new ConvexError(
 				"Forbidden: only owners and admins can edit another person's availability",
 			);
+		}
+		// F686: role alone is not enough — an owner/admin could write
+		// availability for any foreign or garbage userId, polluting the
+		// by_org_user_date rows that booking availability and vacation
+		// conflict scans consult. The siblings (drivers.create,
+		// vacationRequests.create) verify the target is a member; so does
+		// this path.
+		if (onBehalf) {
+			const target = await findOrgMember(
+				ctx,
+				member.organizationId,
+				args.userIdTarget,
+			);
+			if (!target) {
+				throw new ConvexError(
+					"That person is not a member of this organization",
+				);
+			}
 		}
 		return await ctx.runMutation(
 			internalRefs.availabilities.internalUpsert,

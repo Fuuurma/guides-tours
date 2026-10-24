@@ -5,6 +5,7 @@ import {
 	checkWebhookTimestamp,
 	hmacSha256Hex,
 	WEBHOOK_MAX_AGE_MS,
+	timingSafeEqual,
 } from "../webhook_verify";
 
 // Test helper: compute the signature the same way the OTA would
@@ -198,6 +199,32 @@ describe("convex/ota/webhook_verify", () => {
 				secret,
 			);
 			expect(result).toEqual({ valid: true, signatureOk: true });
+		});
+	});
+
+	// F466: the length-mismatch early return leaked "the signature has the
+	// wrong length" through timing. The compare now runs over the longer
+	// input; these pin the boolean contract (mirrors the RC twin's tests).
+	describe("timingSafeEqual (F466 length-leak fix)", () => {
+		it("accepts identical byte sequences", () => {
+			const a = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+			expect(timingSafeEqual(a, new Uint8Array([0xde, 0xad, 0xbe, 0xef]))).toBe(true);
+		});
+
+		it("rejects differing bytes of the same length", () => {
+			const a = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+			const b = new Uint8Array([0xde, 0xad, 0xbe, 0xee]);
+			expect(timingSafeEqual(a, b)).toBe(false);
+		});
+
+		it("rejects different lengths without a leak path or a throw", () => {
+			const a = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+			expect(timingSafeEqual(a, new Uint8Array([0xde, 0xad]))).toBe(false);
+			expect(timingSafeEqual(new Uint8Array(0), new Uint8Array([0xff]))).toBe(false);
+		});
+
+		it("treats two empty sequences as equal", () => {
+			expect(timingSafeEqual(new Uint8Array(0), new Uint8Array(0))).toBe(true);
 		});
 	});
 });

@@ -12,7 +12,7 @@ export type NotificationVars = {
 	startTime: string;
 };
 
-export type StoredTemplateFields = {
+type StoredTemplateFields = {
 	templateType: string;
 	emailSubject?: string;
 	emailBodyText?: string;

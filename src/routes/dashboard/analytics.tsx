@@ -3,16 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m, useReducedMotion } from "motion/react";
 import { useDeferredValue, useMemo, useState } from "react";
-import {
-	buildSparklineByTour,
-	ChannelMixBar,
-	TopToursLeaderboard,
-} from "@/components/chart-tokens";
+import { ChannelMixBar, TopToursLeaderboard } from "@/components/chart-tokens";
 import { MetricCard } from "@/components/metric-card";
-import {
-	aggregateDailyTourMetrics,
-	TourRevenueBars,
-} from "@/components/tour-revenue-bars";
+import { TourRevenueBars } from "@/components/tour-revenue-bars";
 import { Button } from "@/components/ui/button";
 import {
 	Card,
@@ -32,8 +25,10 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton, Skeleton } from "@/components/ui/skeleton";
 import { useOrgMembers } from "@/hooks/use-org-members";
+import { buildSparklineByTour } from "@/lib/chart-series";
 import { type DateRange, lastNDays, yearToDate } from "@/lib/date-range";
 import { formatCents, formatCentsWhole } from "@/lib/format";
+import { aggregateDailyTourMetrics } from "@/lib/tour-metrics";
 import { api } from "../../../convex/_generated/api";
 
 export const Route = createFileRoute("/dashboard/analytics")({
@@ -560,15 +555,22 @@ function AnalyticsPage() {
 							}
 							isPending={!financialHealth}
 						/>
-						<MetricCard
-							label="Deposit coverage"
-							value={
-								financialHealth
-									? `${financialHealth.depositCoverage}%`
-									: undefined
-							}
-							isPending={!financialHealth}
-						/>
+						<MetricCard label="Deposit coverage" isPending={!financialHealth}>
+							{financialHealth ? (
+								<>
+									<p className="font-display text-2xl font-medium tracking-tight tabular-nums">
+										{financialHealth.depositCoverage}%
+									</p>
+									{/* The percentage only means something against the
+									    bookings that actually require a deposit, so the
+									    denominator is shown rather than implied. */}
+									<p className="mt-1 text-xs text-muted-foreground">
+										{financialHealth.bookingsWithDepositPaid} of{" "}
+										{financialHealth.bookingsRequiringDeposit} with deposit paid
+									</p>
+								</>
+							) : undefined}
+						</MetricCard>
 					</div>
 				</CardContent>
 			</Card>

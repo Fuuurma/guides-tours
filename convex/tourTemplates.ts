@@ -79,9 +79,9 @@ export const create = mutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 	},
 	handler: async (ctx, args) => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
@@ -111,9 +111,9 @@ export const internalCreate = internalMutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 	},
 	handler: async (ctx, args) => {
 		if (args.name.length > MAX_NAME_LEN) {
@@ -165,9 +165,9 @@ export const internalCreate = internalMutation({
 			maxGuests,
 			bookingCutoffHours: args.bookingCutoffHours ?? 24,
 			requiredGuides,
-			requiresVehicle: args.requiresVehicle,
-			requiresDriver: args.requiresDriver,
-			requiredVehicleType: args.requiredVehicleType,
+			requiresVehicle: args.requiresVehicle ?? undefined,
+			requiresDriver: args.requiresDriver ?? undefined,
+			requiredVehicleType: args.requiredVehicleType ?? undefined,
 			isActive: true,
 			createdAt: now,
 			updatedAt: now,
@@ -203,9 +203,9 @@ export const update = mutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 		// isActive: operator can archive a template (hidden from
 		// new-tour flow) without deleting it.
 		isActive: v.optional(v.boolean()),
@@ -240,9 +240,9 @@ export const internalUpdate = internalMutation({
 		maxGuests: v.optional(v.number()),
 		bookingCutoffHours: v.optional(v.number()),
 		requiredGuides: v.optional(v.number()),
-		requiresVehicle: v.optional(v.boolean()),
-		requiresDriver: v.optional(v.boolean()),
-		requiredVehicleType: v.optional(v.string()),
+		requiresVehicle: v.optional(v.union(v.boolean(), v.null())),
+		requiresDriver: v.optional(v.union(v.boolean(), v.null())),
+		requiredVehicleType: v.optional(v.union(v.string(), v.null())),
 		isActive: v.optional(v.boolean()),
 	},
 	handler: async (ctx, args) => {
@@ -300,7 +300,10 @@ export const internalUpdate = internalMutation({
 			"isActive",
 		]) {
 			const value = (args as Record<string, unknown>)[field];
-			if (value !== undefined) patch[field] = value;
+			// null = explicit clear (F840): patch the field to undefined so
+			// db.patch deletes it. undefined = not provided, leave unchanged.
+			if (value === null) patch[field] = undefined;
+			else if (value !== undefined) patch[field] = value;
 		}
 		if (typeof patch.requiredGuides === "number") {
 			patch.requiredGuides = Math.floor(patch.requiredGuides);
@@ -331,11 +334,25 @@ export const internalUpdate = internalMutation({
  */
 export const instantiate = mutation({
 	args: { templateId: v.id("tourTemplates") },
-	handler: async (ctx, args) => {
+	handler: async (ctx, args): Promise<Id<"tours">> => {
 		const member = await requireRole(ctx, ["owner", "admin"]);
+		return await ctx.runMutation(
+			internalRefs.tourTemplates.internalInstantiate,
+			{ organizationId: member.organizationId, userId: member.userId, templateId: args.templateId },
+		);
+	},
+});
+
+export const internalInstantiate = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+		templateId: v.id("tourTemplates"),
+	},
+	handler: async (ctx, args) => {
 		const tmpl = await ctx.db.get(args.templateId);
 		if (!tmpl) throw new ConvexError("Template not found");
-		if (tmpl.organizationId !== member.organizationId) {
+		if (tmpl.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: template belongs to a different organization");
 		}
 		// SECURITY: re-validate categoryId belongs to this org
@@ -343,7 +360,7 @@ export const instantiate = mutation({
 		// but the category could have been deleted or moved since).
 		if (tmpl.categoryId !== undefined) {
 			const cat = await ctx.db.get(tmpl.categoryId);
-			if (cat && cat.organizationId !== member.organizationId) {
+			if (cat && cat.organizationId !== args.organizationId) {
 				throw new ConvexError(
 					"Template's category belongs to a different organization",
 				);
@@ -360,9 +377,16 @@ export const instantiate = mutation({
 		if (tmpl.maxGuests > tmpl.capacity) {
 			throw new ConvexError("Template maxGuests cannot exceed capacity");
 		}
+		// F734: never fabricate "USD" for a non-US org — inherit its payment
+		// currency (the F720 lookup); USD only when payments are unset, as
+		// tours.create does.
+		const paymentSettings = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.unique();
 		const now = Date.now();
 		const tourId: Id<"tours"> = await ctx.db.insert("tours", {
-			organizationId: member.organizationId,
+			organizationId: args.organizationId,
 			name: tmpl.name,
 			description: tmpl.description,
 			durationHours: tmpl.durationHours,
@@ -386,13 +410,13 @@ export const instantiate = mutation({
 			inclusions: tmpl.inclusions,
 			exclusions: tmpl.exclusions,
 			highlights: tmpl.highlights,
-			currency: "USD",
+			currency: paymentSettings?.defaultCurrency ?? "USD",
 			createdAt: now,
 			updatedAt: now,
 		});
 		await logAudit(ctx, {
-			organizationId: member.organizationId,
-			userId: member.userId,
+			organizationId: args.organizationId,
+			userId: args.userId,
 			action: "tour.created_from_template",
 			resourceType: "tour",
 			resourceId: tourId,

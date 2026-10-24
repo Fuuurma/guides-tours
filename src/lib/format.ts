@@ -13,13 +13,65 @@
  *   formatCents(0)         // "$0.00"
  *   formatCents(123456)    // "$1,234.56"
  */
+// Hoisted: constructing an Intl.NumberFormat per call is the expensive part
+// of formatting, and formatCents runs inside hot list renders.
+const USD_CURRENCY = new Intl.NumberFormat("en-US", {
+	style: "currency",
+	currency: "USD",
+});
+
+const COUNT = new Intl.NumberFormat("en-US");
+
+const DATE_TIME = new Intl.DateTimeFormat("en-US", {
+	dateStyle: "medium",
+	timeStyle: "short",
+});
+
+/** Dashboard-standard timestamp rendering (en-US, medium date + short time). */
+export function formatDateTime(value: string | number | Date): string {
+	return DATE_TIME.format(new Date(value));
+}
+
+/** Grouped integer rendering (en-US — never host-locale; F770). */
+export function formatCount(value: number): string {
+	return COUNT.format(value);
+}
+
+const LONG_DATE = new Intl.DateTimeFormat("en-US", {
+	weekday: "long",
+	month: "long",
+	day: "numeric",
+});
+
+// Hoisted per currency, for the same reason USD_CURRENCY is: constructing an
+// Intl.NumberFormat is the expensive part of formatting, and formatPrice runs
+// inside list renders. The map is keyed by currency and holds one formatter
+// per currency the app formats, which is a small fixed set — a tour's currency
+// comes from its own record, not from user input.
+const PRICE_FORMATTERS = new Map<string, Intl.NumberFormat>();
+
+function priceFormatter(currency: string): Intl.NumberFormat {
+	const key = currency || "USD";
+	let formatter = PRICE_FORMATTERS.get(key);
+	if (!formatter) {
+		formatter = new Intl.NumberFormat("en-US", {
+			style: "currency",
+			currency: key,
+		});
+		PRICE_FORMATTERS.set(key, formatter);
+	}
+	return formatter;
+}
+
+/** "Friday, October 10" style heading date (en-US — never host-locale). */
+export function formatLongDate(value: string | number | Date): string {
+	return LONG_DATE.format(new Date(value));
+}
+
 export function formatCents(cents: number | bigint | null | undefined): string {
 	if (cents == null) return "$0.00";
 	const n = typeof cents === "bigint" ? Number(cents) : cents;
-	return new Intl.NumberFormat("en-US", {
-		style: "currency",
-		currency: "USD",
-	}).format(n / 100);
+	return USD_CURRENCY.format(n / 100);
 }
 
 /**
@@ -91,4 +143,15 @@ export function formatSignedPct(
 	if (rounded === 0) return "0%";
 	const sign = rounded > 0 ? "+" : "";
 	return `${sign}${rounded}%`;
+}
+
+/**
+ * Format a unit amount in an arbitrary currency.
+ *
+ * @example
+ *   formatPrice(49.99, "EUR")   // "€49.99"
+ *   formatPrice(120, "USD")     // "$120.00"
+ */
+export function formatPrice(value: number, currency: string): string {
+	return priceFormatter(currency).format(value);
 }

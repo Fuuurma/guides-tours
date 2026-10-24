@@ -10,7 +10,7 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import type { TourTemplate as Template } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -42,7 +42,7 @@ function TemplatesPage() {
 			});
 			toast.success(currentActive ? "Template disabled" : "Template enabled");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -61,7 +61,7 @@ function TemplatesPage() {
 			await removeTemplate({ templateId: id as Id<"tourTemplates"> });
 			toast.success("Template deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}

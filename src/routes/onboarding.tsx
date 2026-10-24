@@ -3,14 +3,15 @@ import { useDebouncedValue } from "@tanstack/react-pacer";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
-import { getErrorMessage } from "@/lib/utils";
+import { AUTH_PANEL } from "@/lib/auth-panel";
+import { getSafeDisplayMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/onboarding")({
 	component: OnboardingPage,
@@ -44,7 +45,7 @@ function OnboardingPage() {
 				keepCurrentActiveOrganization: false,
 			});
 			if (error) {
-				setServerError(getErrorMessage(error));
+				setServerError(getSafeDisplayMessage(error));
 				return;
 			}
 			// Force-refresh so the dashboard's tenant-scoped queries

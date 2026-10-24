@@ -11,7 +11,8 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { getErrorMessage } from "@/lib/utils";
+import { formatCount } from "@/lib/format";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import type { Customer } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -48,7 +49,7 @@ function CustomersPage() {
 			});
 			toast.success(currentVip ? "Removed from VIP" : "Marked as VIP");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -67,7 +68,7 @@ function CustomersPage() {
 			await removeCustomer({ customerId: id as Id<"customers"> });
 			toast.success("Customer deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -140,12 +141,20 @@ function CustomersPage() {
 		},
 	];
 
-	const itemCount = customers?.items?.length ?? 0;
+	// `items` is one page; `total` is the size of the scanned window.
+	// They differ the moment the org holds more than a page, and past
+	// MAX_CUSTOMER_SCAN `total` is a lower bound too — say which.
+	// F770: counts render through the pinned en-US formatter — a bare
+	// locale-less number call resolves under the host locale during SSR
+	// and the browser's during hydration, mismatching the client's text.
+	const windowLabel = customers?.truncated
+		? `most recent ${formatCount(customers.total)} of more`
+		: `${formatCount(customers?.total ?? 0)} customer${customers?.total === 1 ? "" : "s"}`;
 
 	return (
 		<ListPage
 			title="Customers"
-			description={`${itemCount} customer${itemCount === 1 ? "" : "s"} — people you book onto departures`}
+			description={`${windowLabel} — people you book onto departures`}
 			newTo="/dashboard/customers/new"
 			newLabel="+ New customer"
 		>

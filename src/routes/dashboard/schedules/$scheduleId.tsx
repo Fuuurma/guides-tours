@@ -25,7 +25,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { evaluateSlotStaffing, resolveTourStaffing } from "@/lib/staffing";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -143,7 +143,7 @@ function ScheduleDetailPage() {
 			})
 		: null;
 
-	const bookingRows = (bookings ?? []) as ScheduleBooking[];
+	const bookingRows = (bookings?.bookings ?? []) as ScheduleBooking[];
 
 	const onCancelSchedule = async () => {
 		const ok = await confirm({
@@ -166,7 +166,7 @@ function ScheduleDetailPage() {
 			});
 			toast.success("Departure cancelled");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -187,7 +187,7 @@ function ScheduleDetailPage() {
 			toast.success("Departure deleted");
 			void navigate({ to: "/dashboard/schedules" });
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 			setPending(null);
 		}
 	};
@@ -281,8 +281,11 @@ function ScheduleDetailPage() {
 				</div>
 			}
 		>
-			{/* F431: booked/total is the operator KPI — not five equal cards */}
-			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr]">
+			{/* F431: booked/total is the operator KPI — not five equal cards.
+			    Five cards, so five tracks: the grid had four, which wrapped Status
+			    onto a row of its own. The sibling detail pages match their card
+			    count (assignments 3/3, bookings 4/4). */}
+			<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr]">
 				<MetricCard
 					label="Booked / Total"
 					value={`${schedule.capacityBooked} / ${schedule.capacityTotal}`}
@@ -386,8 +389,12 @@ function ScheduleDetailPage() {
 			</DetailSection>
 
 			<DetailSection
-				title={`Guests (${bookingRows.length})`}
-				description="Direct and operator bookings on this departure"
+				title={`Guests (${bookingRows.length}${bookings?.truncated ? "+" : ""})`}
+				description={
+					bookings?.truncated
+						? "Direct and operator bookings on this departure — showing the first 500"
+						: "Direct and operator bookings on this departure"
+				}
 			>
 				{bookingsError ? (
 					<Alert variant="destructive">

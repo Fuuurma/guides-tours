@@ -12,6 +12,24 @@ import { logger } from "./logger";
 // per org row and would spam logs otherwise (F93).
 let warnedMissingSiteUrl = false;
 
+/** True only for an explicit loopback host (localhost, 127.0.0.1). Parses
+ * the URL and compares the hostname exactly — a production hostname that
+ * merely CONTAINS "localhost" or "127.0.0.1" (e.g.
+ * portal-localhost.example.com) must stay classified as production
+ * (F-new-url-loopback-substring-classification-2026-10-03). Unparseable
+ * values count as production: every caller treats "not loopback" as the
+ * fail-closed direction (email verification stays on, origin gate
+ * rejects). */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1"]);
+
+export function isLoopbackUrl(raw: string): boolean {
+	try {
+		return LOOPBACK_HOSTS.has(new URL(raw.trim()).hostname);
+	} catch {
+		return false;
+	}
+}
+
 export function getSiteUrl(): string {
 	const url = process.env.SITE_URL;
 	if (!url) {
@@ -33,7 +51,7 @@ export function getSiteUrl(): string {
 		}
 		return "http://127.0.0.1:3020";
 	}
-	if (url.startsWith("http://") && !url.includes("127.0.0.1") && !url.includes("localhost")) {
+	if (url.startsWith("http://") && !isLoopbackUrl(url)) {
 		logger.warn(
 			`[siteUrl] SITE_URL is HTTP (${url}). Set it to an HTTPS URL in production.`,
 		);
@@ -60,14 +78,14 @@ export function dashboardUrl(path: string, query?: Record<string, string>): stri
  * closed or log loudly, never silently degrade. One shared idiom for
  * auth.ts (SITE_URL fallback signal) and http.ts (trustedOrigins split).
  * Reads CONVEX_SITE_URL, NOT NODE_ENV (unreliable inside the Convex
- * runtime — SITE_URL-fallback policy decision, fleet 2026-09-13). */
+ * runtime — SITE_URL-fallback policy decision, fleet 2026-09-13).
+ * Loopback recognition is hostname-exact (isLoopbackUrl): a production
+ * hostname containing "localhost"/"127.0.0.1" stays configured, so the
+ * public-booking origin gate keeps failing closed when its allowlist is
+ * empty. */
 export function isUnconfiguredDeployment(): boolean {
 	const siteUrl = process.env.CONVEX_SITE_URL?.trim() ?? "";
-	return (
-		siteUrl === "" ||
-		siteUrl.includes("127.0.0.1") ||
-		siteUrl.includes("localhost")
-	);
+	return siteUrl === "" || isLoopbackUrl(siteUrl);
 }
 
 /** trustedOrigins for auth route registration (SITE_URL policy, fleet

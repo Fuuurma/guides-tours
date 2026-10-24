@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageBackLink } from "@/components/detail-page";
-import { Button } from "@/components/ui/button";
+import { FormSubmitActions } from "@/components/forms/form-submit-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
@@ -13,95 +13,20 @@ import {
 	FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { VEHICLE_TYPES } from "@/lib/staffing";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_NAME_LEN,
 	MAX_NOTES_LEN,
 	validateNotesOptional,
 	validatePositiveInteger,
 } from "@/lib/validation";
+import { VEHICLE_STATUSES } from "@/lib/vehicle-status";
+import type { VehicleFormValues } from "./vehicle-form-model";
 
 const OWNERSHIP_TYPES = ["owned", "rented", "leased"] as const;
-const STATUSES = ["available", "in_use", "maintenance", "retired"] as const;
-
-type VehicleFormValues = {
-	name: string;
-	vehicleType: string;
-	capacity: string;
-	licensePlate: string;
-	make: string;
-	model: string;
-	year: string;
-	color: string;
-	ownershipType: string;
-	status: string;
-	notes: string;
-};
-
-export const EMPTY_VEHICLE_FORM: VehicleFormValues = {
-	name: "",
-	vehicleType: "minivan",
-	capacity: "8",
-	licensePlate: "",
-	make: "",
-	model: "",
-	year: "",
-	color: "",
-	ownershipType: "owned",
-	status: "available",
-	notes: "",
-};
-
-type VehicleDoc = {
-	name: string;
-	vehicleType: string;
-	capacity: number;
-	licensePlate?: string;
-	make?: string;
-	model?: string;
-	year?: number;
-	color?: string;
-	ownershipType?: string;
-	status?: string;
-	notes?: string;
-};
-
-export function vehicleDocToFormValues(vehicle: VehicleDoc): VehicleFormValues {
-	return {
-		name: vehicle.name,
-		vehicleType: vehicle.vehicleType,
-		capacity: String(vehicle.capacity),
-		licensePlate: vehicle.licensePlate ?? "",
-		make: vehicle.make ?? "",
-		model: vehicle.model ?? "",
-		year: vehicle.year != null ? String(vehicle.year) : "",
-		color: vehicle.color ?? "",
-		ownershipType: vehicle.ownershipType || "owned",
-		status: vehicle.status || "available",
-		notes: vehicle.notes ?? "",
-	};
-}
-
-export function vehicleFormToMutationArgs(value: VehicleFormValues) {
-	const yr = value.year.trim() ? Number(value.year) : undefined;
-	return {
-		name: value.name.trim(),
-		vehicleType: value.vehicleType,
-		capacity: Number(value.capacity),
-		licensePlate: value.licensePlate.trim() || undefined,
-		make: value.make.trim() || undefined,
-		model: value.model.trim() || undefined,
-		year: yr,
-		color: value.color.trim() || undefined,
-		ownershipType: value.ownershipType,
-		status: value.status,
-		notes: value.notes.trim() || undefined,
-	};
-}
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,
@@ -168,7 +93,7 @@ export function VehicleForm({
 			try {
 				await onSave(value);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -321,7 +246,7 @@ export function VehicleForm({
 												}}
 												className="flex-wrap"
 											>
-												{STATUSES.map((s) => (
+												{VEHICLE_STATUSES.map((s) => (
 													<ToggleGroupItem key={s} value={s}>
 														{s.replace("_", " ")}
 													</ToggleGroupItem>
@@ -432,17 +357,12 @@ export function VehicleForm({
 								}
 							>
 								{([canSubmit, isSubmitting]) => (
-									<div className="flex justify-end gap-2 pt-2">
-										<Button type="button" variant="outline" asChild>
-											<Link to={backTo}>Back</Link>
-										</Button>
-										<Button type="submit" disabled={!canSubmit || isSubmitting}>
-											{isSubmitting ? (
-												<Spinner data-icon="inline-start" />
-											) : null}
-											{isSubmitting ? "Saving…" : submitLabel}
-										</Button>
-									</div>
+									<FormSubmitActions
+										backLink={<Link to={backTo}>Back</Link>}
+										canSubmit={canSubmit}
+										isSubmitting={isSubmitting}
+										submitLabel={submitLabel}
+									/>
 								)}
 							</form.Subscribe>
 						</FieldGroup>

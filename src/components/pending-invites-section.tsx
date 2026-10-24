@@ -3,8 +3,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { organization } from "@/lib/auth-client";
+import { formatLongDate } from "@/lib/format";
 import { isInviteExpired, planInvitationResend } from "@/lib/invitations";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import type { RoleName } from "../../convex/authz";
 
 export type InviteRow = {
@@ -44,7 +45,7 @@ export function PendingInvitesSection() {
 				setInvites(rows.filter((i) => i.status === "pending"));
 			} catch (err) {
 				if (cancelled) return;
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 				setInvites([]);
 			} finally {
 				if (!cancelled) setLoading(false);
@@ -64,7 +65,7 @@ export function PendingInvitesSection() {
 			const rows = (data ?? []) as InviteRow[];
 			setInvites(rows.filter((i) => i.status === "pending"));
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 			setInvites([]);
 		} finally {
 			setLoading(false);
@@ -79,7 +80,7 @@ export function PendingInvitesSection() {
 			toast.success("Invitation cancelled");
 			await refresh();
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setRowPending(invitationId, null);
 		}
@@ -118,7 +119,7 @@ export function PendingInvitesSection() {
 				description: "Invite email delivery is best-effort.",
 			});
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setRowPending(inv.id, null);
 			await refresh();
@@ -162,7 +163,7 @@ export function PendingInvitesSection() {
 									{inv.expiresAt
 										? isInviteExpired(inv)
 											? " · expired"
-											: ` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`
+											: ` · expires ${formatLongDate(inv.expiresAt)}`
 										: ""}
 								</p>
 							</div>

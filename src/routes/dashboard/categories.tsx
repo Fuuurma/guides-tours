@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { MAX_NAME_LEN, validateName } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -109,7 +109,7 @@ function CategoriesPage() {
 			});
 			toast.success(currentActive ? "Category disabled" : "Category enabled");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -128,7 +128,7 @@ function CategoriesPage() {
 			await removeCategory({ categoryId: id as Id<"tourCategories"> });
 			toast.success("Category deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -255,8 +255,8 @@ function NewCategoryForm() {
 				form.reset();
 				setSlugTouched(false);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-				toast.error(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});

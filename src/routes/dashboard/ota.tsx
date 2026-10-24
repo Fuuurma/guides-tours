@@ -38,7 +38,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { validateNonNegativeNumber } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -60,6 +61,10 @@ export const Route = createFileRoute("/dashboard/ota")({
 	component: OtaIntegrationsPage,
 });
 
+// OTA command deck: provider connections (toggle/delete with per-row pending),
+// product mapping to tours, new-integration form, and recent webhook deliveries.
+// Each provider verifies its own webhook signature server-side; this page only
+// surfaces the delivery log (`webhookDeliveries.listRecent`, last 40).
 function OtaIntegrationsPage() {
 	const reduceMotion = useReducedMotion();
 	const {
@@ -86,7 +91,7 @@ function OtaIntegrationsPage() {
 				currentActive ? "Integration disabled" : "Integration enabled",
 			);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -105,7 +110,7 @@ function OtaIntegrationsPage() {
 			await removeIntegration({ integrationId: id as Id<"otaIntegrations"> });
 			toast.success("Integration deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -180,7 +185,7 @@ function OtaIntegrationsPage() {
 											<p className="text-muted-foreground text-xs">
 												Sync every {i.syncIntervalMinutes}m
 												{i.lastSyncAt
-													? ` · last sync ${new Date(i.lastSyncAt).toLocaleString()}`
+													? ` · last sync ${formatDateTime(i.lastSyncAt)}`
 													: ""}
 											</p>
 										</div>
@@ -415,7 +420,7 @@ function OtaProductsSection({
 												await removeProduct({ productId: p._id });
 												toast.success("Product deleted");
 											} catch (err) {
-												toast.error(getErrorMessage(err));
+												toast.error(getSafeDisplayMessage(err));
 											} finally {
 												setDeletingId(null);
 											}
@@ -520,8 +525,8 @@ function OtaProductForm({
 				}
 				onClose();
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-				toast.error(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -737,8 +742,8 @@ function NewIntegrationForm({ available }: { available: readonly string[] }) {
 				toast.success("Integration created");
 				form.reset();
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
-				toast.error(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -923,7 +928,7 @@ function WebhookDeliveriesSection() {
 								<div className="flex shrink-0 items-center gap-2">
 									<StatusBadge status={d.status} />
 									<span className="font-mono text-muted-foreground text-xs">
-										{new Date(d.receivedAt).toLocaleString()}
+										{formatDateTime(d.receivedAt)}
 									</span>
 								</div>
 							</li>

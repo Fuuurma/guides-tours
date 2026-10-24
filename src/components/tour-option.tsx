@@ -1,3 +1,4 @@
+import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export interface TourOptionTour {
@@ -18,13 +19,6 @@ interface TourOptionProps {
 	checked: boolean;
 	onSelect: () => void;
 	onBlur: () => void;
-}
-
-export function formatPrice(value: number, currency: string): string {
-	return new Intl.NumberFormat("en-US", {
-		style: "currency",
-		currency: currency || "USD",
-	}).format(value);
 }
 
 /**

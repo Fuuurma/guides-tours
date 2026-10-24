@@ -19,8 +19,6 @@ export const ALL_PROVIDERS = [
 	{ id: "expedia", label: "Expedia" },
 ] as const;
 
-export type OtaProviderId = (typeof ALL_PROVIDERS)[number]["id"];
-
 /** Human-readable label for a provider id. Falls back to the raw id. */
 export function providerLabel(id: string): string {
 	return ALL_PROVIDERS.find((p) => p.id === id)?.label ?? id;

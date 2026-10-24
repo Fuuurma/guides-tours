@@ -3,7 +3,7 @@ import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-dialog";
 import { DetailPage, DetailSection } from "@/components/detail-page";
@@ -31,7 +31,7 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { resolveTourStaffing } from "@/lib/staffing";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -87,6 +87,18 @@ function AssignmentDetailPage() {
 	const [editing, setEditing] = useState(false);
 	const [resendPending, setResendPending] = useState(false);
 
+	// F772: the route component is reused across $assignmentId navigations,
+	// so without this reset an open edit form (or an armed destructive
+	// action) can carry over from the previous assignment.
+	// The reset trigger is assignmentId itself, not a value the body reads
+	// — resetting on every entity change is the entire purpose (F772).
+	// biome-ignore lint/correctness/useExhaustiveDependencies: assignmentId is the reset trigger, not a read value
+	useEffect(() => {
+		setEditing(false);
+		setAction(null);
+		setResendPending(false);
+	}, [assignmentId]);
+
 	const staffing = tour
 		? resolveTourStaffing({
 				tourType: tour.tourType,
@@ -115,7 +127,7 @@ function AssignmentDetailPage() {
 			await complete({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment marked complete");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setAction(null);
 		}
@@ -138,7 +150,7 @@ function AssignmentDetailPage() {
 			});
 			toast.success("Assignment cancelled");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setAction(null);
 		}
@@ -157,7 +169,7 @@ function AssignmentDetailPage() {
 			await remove({ assignmentId: assignmentId as Id<"assignments"> });
 			toast.success("Assignment deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setAction(null);
 		}
@@ -178,7 +190,7 @@ function AssignmentDetailPage() {
 					: "Nothing queued",
 			);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setResendPending(false);
 		}
@@ -540,7 +552,7 @@ function AssignmentStaffingForm({
 				toast.success("Assignment updated");
 				onDismiss();
 			} catch (err) {
-				toast.error(getErrorMessage(err));
+				toast.error(getSafeDisplayMessage(err));
 			}
 		},
 	});

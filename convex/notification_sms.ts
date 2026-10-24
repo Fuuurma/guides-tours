@@ -3,7 +3,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
-	internalAction,
 	internalMutation,
 	internalQuery,
 } from "./_generated/server";
@@ -11,7 +10,7 @@ import { decrypt } from "./lib/crypto";
 import { logAudit } from "./lib/audit";
 import { logger } from "./lib/logger";
 
-export type TwilioSendResult = {
+type TwilioSendResult = {
 	ok: boolean;
 	sid?: string;
 	status?: string;
@@ -97,6 +96,18 @@ export const recordSmsMessage = internalMutation({
 });
 
 /**
+ * Normalize a stored phone to E.164 for the Twilio API (F684). Customer
+ * phones are only length-checked and staff phones accept spaces, parens
+ * and dashes at rest — values like "(555) 123-4567" are valid stored
+ * numbers that Twilio rejects with 21211. Keep the digits, prefix `+`;
+ * an already-prefixed value is idempotent.
+ */
+export function normalizeToE164(phone: string): string {
+	const digits = phone.replace(/\D/g, "");
+	return digits ? `+${digits}` : phone;
+}
+
+/**
  * Send an SMS via Twilio Messages API. Prefer Messaging Service SID
  * when set; otherwise use From phone number.
  */
@@ -133,7 +144,11 @@ export async function sendTwilioSms(
 	}
 
 	const form = new URLSearchParams();
-	form.set("To", params.to);
+	// F684: stored phones pass light validation only (spaces, parens,
+	// dashes are legal at rest) and Twilio rejects anything that is not
+	// E.164 with error 21211 — every send to such a contact failed and
+	// its retries re-failed. Normalize at the boundary.
+	form.set("To", normalizeToE164(params.to));
 	form.set("Body", params.body);
 	if (config.messagingServiceSid) {
 		form.set("MessagingServiceSid", config.messagingServiceSid);
@@ -216,16 +231,3 @@ export async function sendTwilioSms(
 
 	return { ok: true, sid: payload.sid, status: payload.status };
 }
-
-/** Test-only action wrapper so vitest can exercise the fetch path. */
-export const sendTwilioSmsAction = internalAction({
-	args: {
-		organizationId: v.string(),
-		to: v.string(),
-		body: v.string(),
-		recipientName: v.string(),
-	},
-	handler: async (ctx, args): Promise<TwilioSendResult> => {
-		return await sendTwilioSms(ctx, args);
-	},
-});

@@ -2,7 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
-import { EMPTY_TOUR_FORM, TourForm, tourFormToMutationArgs } from "./tour-form";
+import { TourForm } from "./tour-form";
+import { EMPTY_TOUR_FORM, tourFormToMutationArgs } from "./tour-form-model";
 
 export function NewTourPage() {
 	const navigate = useNavigate();

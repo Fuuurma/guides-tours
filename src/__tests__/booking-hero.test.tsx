@@ -4,8 +4,8 @@
 //   - stats derive from real tour data only (min price, max group,
 //     count) with no invented proof
 //   - unpriced tours yield "Prices vary", not a fabricated number
-//   - the photo band is aria-hidden decor (placeholder photography,
-//     not the operator's own)
+//   - the photo band is aria-hidden decor showing the operator cover
+//     when a tour carries one, placeholder photography otherwise
 //   - the metric strip hides when there are no tours (nothing honest
 //     to show)
 
@@ -20,10 +20,8 @@ vi.mock("motion/react", () => ({
 	useReducedMotion: () => true,
 }));
 
-import {
-	BookingHero,
-	deriveBookingHeroStats,
-} from "../components/booking-hero";
+import { deriveBookingHeroStats } from "@/lib/booking-hero-stats";
+import { BookingHero } from "../components/booking-hero";
 import { TrustMetric } from "../components/trust-metric";
 
 const TOURS = [
@@ -33,6 +31,7 @@ const TOURS = [
 		maxGuests: 12,
 		currency: "EUR",
 		basePriceCents: 4500,
+		primaryImageUrl: null,
 	},
 	{
 		_id: "t2",
@@ -40,6 +39,7 @@ const TOURS = [
 		maxGuests: 8,
 		currency: "EUR",
 		basePriceCents: 6000,
+		primaryImageUrl: null,
 	},
 ];
 
@@ -47,7 +47,7 @@ describe("deriveBookingHeroStats", () => {
 	it("derives count, min price, and max group from real tours", () => {
 		expect(deriveBookingHeroStats(TOURS)).toEqual({
 			tourCount: 2,
-			fromPrice: "€45",
+			fromPrice: "€45.00",
 			maxGroup: 12,
 		});
 	});
@@ -69,6 +69,7 @@ describe("deriveBookingHeroStats", () => {
 					maxGuests: 4,
 					currency: "EUR",
 					basePriceCents: undefined,
+					primaryImageUrl: null,
 				},
 			]),
 		).toEqual({ tourCount: 1, fromPrice: null, maxGroup: 4 });
@@ -83,9 +84,16 @@ describe("deriveBookingHeroStats", () => {
 					maxGuests: 6,
 					currency: "USD",
 					basePriceCents: 2500n,
+					primaryImageUrl: null,
 				},
 			]),
-		).toEqual({ tourCount: 1, fromPrice: "$25", maxGroup: 6 });
+		).toEqual({ tourCount: 1, fromPrice: "$25.00", maxGroup: 6 });
+	});
+
+	it("keeps cents so the hero agrees with the tour cards below it (F908)", () => {
+		expect(
+			deriveBookingHeroStats([{ ...TOURS[0], basePriceCents: 4950 }]).fromPrice,
+		).toBe("€49.50");
 	});
 });
 
@@ -100,11 +108,31 @@ describe("BookingHero", () => {
 		);
 		expect(screen.getByRole("heading", { name: /Costa Brava Tours/ })); // throws when missing
 		expect(screen.getByText("tours offered")); // throws when missing
-		expect(screen.getByText("€45")); // throws when missing
+		expect(screen.getByText("€45.00")); // throws when missing
 		expect(screen.getByText("largest group welcome")); // throws when missing
 	});
 
-	it("hides the photo band from assistive tech (placeholder art)", () => {
+	it("uses the operator cover photo when a tour carries one", () => {
+		const { container } = render(
+			<BookingHero
+				organizationName="Costa Brava Tours"
+				slug="cbt"
+				tours={[
+					{
+						...TOURS[0],
+						primaryImageUrl: "https://storage.example/covers/harbor.jpg",
+					},
+					TOURS[1],
+				]}
+			/>,
+		);
+		const band = container.querySelector('[aria-hidden="true"] img');
+		expect(band?.getAttribute("src")).toBe(
+			"https://storage.example/covers/harbor.jpg",
+		);
+	});
+
+	it("falls back to placeholder art when no tour carries a cover", () => {
 		const { container } = render(
 			<BookingHero
 				organizationName="Costa Brava Tours"
@@ -130,6 +158,7 @@ describe("BookingHero", () => {
 						maxGuests: 4,
 						currency: "EUR",
 						basePriceCents: undefined,
+						primaryImageUrl: null,
 					},
 				]}
 			/>,

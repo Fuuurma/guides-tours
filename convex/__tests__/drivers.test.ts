@@ -169,6 +169,69 @@ describe("drivers", () => {
 		expect(logs.some((l: any) => l.action === "driver.deleted")).toBe(true);
 	});
 
+	// F682: a hard delete would leave the assignment with a dangling
+	// driverId — conflict detection (by_org_driver_date) goes blind for
+	// that person and staffing reads the orphan as staffed. Mirror the
+	// vehicles guard: refuse while referenced, point at retire (isActive).
+	it("remove: refuses a driver referenced by an assignment (retire instead)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_d7_ref";
+		const driverId = await t.run((ctx) => seedDriver(ctx, orgId));
+		await t.run(async (ctx) => {
+			const tourId = await ctx.db.insert("tours", {
+				organizationId: orgId,
+				name: "City Car Tour",
+				description: "",
+				durationHours: 2,
+				isActive: true,
+				recurrenceType: "none",
+				recurrenceDaysOfWeek: [],
+				capacity: 10,
+				bufferMinutes: 15,
+				minGuests: 1,
+				maxGuests: 10,
+				bookingCutoffHours: 24,
+				tourType: "car",
+				languages: ["en"],
+				requiredGuides: 1,
+				inclusions: [],
+				exclusions: [],
+				highlights: [],
+				currency: "USD",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+			await ctx.db.insert("assignments", {
+				organizationId: orgId,
+				tourId,
+				guideId: "guide-1",
+				driverId,
+				date: "2026-09-01",
+				startTime: "09:00",
+				endTime: "11:00",
+				status: "scheduled",
+				createdAt: 0,
+				updatedAt: 0,
+			});
+		});
+
+		await expect(
+			t.mutation(internal.drivers.internalRemove, {
+				organizationId: orgId,
+				userId: "user-1",
+				driverId,
+			}),
+		).rejects.toThrow(/referenced by assignments; retire it instead/);
+
+		// The row survives and no deletion was audited.
+		const d = await t.run((ctx) => ctx.db.get(driverId));
+		expect(d).not.toBeNull();
+		const logs = (await t.run((ctx) =>
+			ctx.db.query("auditLogs").collect(),
+		)) as any;
+		expect(logs.some((l: any) => l.action === "driver.deleted")).toBe(false);
+	});
+
 	it("create: rejects licenseInfo over MAX_LICENSE_LEN", async () => {
 		const t = convexTest(schema, modules);
 		await expect(

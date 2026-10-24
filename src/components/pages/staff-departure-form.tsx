@@ -6,6 +6,7 @@ import { useMutation } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageBackLink } from "@/components/detail-page";
+import { FormSubmitActions } from "@/components/forms/form-submit-actions";
 import { MemberSelect } from "@/components/member-select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -30,13 +31,12 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { resolveTourStaffing } from "@/lib/staffing";
 import { addHours } from "@/lib/time";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_NOTES_LEN,
 	validateNotesOptional,
@@ -46,6 +46,12 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 type Intent = "publish" | "assign";
+
+// One form, two intents: "publish" creates + publishes a departure in one step,
+// "assign" staffs an existing draft. Departures crossing midnight can't publish
+// (overnight crew rules are unresolved) — the error says so plainly (F64).
+// `ConflictChecker` live-queries assignment overlaps as times/staff change, so
+// double-bookings surface before submit, not after.
 
 type Tour = {
 	_id: string;
@@ -277,7 +283,7 @@ export function StaffDepartureForm({
 					params: { assignmentId: result.assignmentId },
 				});
 			} catch (err) {
-				const message = getErrorMessage(err);
+				const message = getSafeDisplayMessage(err);
 				setSubmitErr(message);
 				toast.error(message);
 			}
@@ -787,17 +793,12 @@ export function StaffDepartureForm({
 								}
 							>
 								{([canSubmit, isSubmitting]) => (
-									<div className="flex justify-end gap-2 pt-2">
-										<Button type="button" variant="outline" asChild>
-											<Link to={backTo}>Back</Link>
-										</Button>
-										<Button type="submit" disabled={!canSubmit || isSubmitting}>
-											{isSubmitting ? (
-												<Spinner data-icon="inline-start" />
-											) : null}
-											{isSubmitting ? "Saving…" : submitLabel}
-										</Button>
-									</div>
+									<FormSubmitActions
+										backLink={<Link to={backTo}>Back</Link>}
+										canSubmit={canSubmit}
+										isSubmitting={isSubmitting}
+										submitLabel={submitLabel}
+									/>
 								)}
 							</form.Subscribe>
 						</FieldGroup>

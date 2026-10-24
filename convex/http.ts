@@ -6,6 +6,8 @@ import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { logger } from "./lib/logger";
+import { extractRequestIdentity } from "./lib/requestIdentity";
+import { readBodyWithLimit } from "./lib/requestBody";
 import {
 	getSiteUrl,
 	isUnconfiguredDeployment,
@@ -140,22 +142,19 @@ http.route({
 
 		// Cap the request body at 8 KB — the booking payload is tiny
 		// (~6 fields). Anything larger is either an attacker probing
-		// for memory exhaustion or a buggy client. We check the actual
-		// body length, not the Content-Length header (which can be
-		// spoofed or omitted).
+		// for memory exhaustion or a buggy client. The cap is applied
+		// to the read itself, so the oversized bytes are never
+		// buffered (F51, F554). We measure the actual body size, not
+		// the Content-Length header (which can be spoofed or omitted).
 		const MAX_BODY_BYTES = 8 * 1024;
-		let rawBody: string;
-		try {
-			rawBody = await request.text();
-		} catch {
+		const body = await readBodyWithLimit(request, MAX_BODY_BYTES);
+		if (!body.ok) {
+			if (body.reason === "too-large") {
+				return bookingResponse("payload too large", 413, request);
+			}
 			return bookingResponse("failed to read body", 400, request);
 		}
-		// String length is UTF-16 code units, not bytes — a 4 KB body of
-		// multibyte chars is ~8+ KB on the wire. Measure the real byte
-		// size so the cap means what it says (F51).
-		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
-			return bookingResponse("payload too large", 413, request);
-		}
+		const rawBody = body.text;
 
 		let payload: unknown;
 		try {
@@ -222,15 +221,16 @@ http.route({
 			);
 		}
 
-		// Extract client IP for per-IP rate limiting. CF-Connecting-IP
-		// is set by Cloudflare; for X-Forwarded-For the LAST element is
-		// the edge-observed address — the first is client-supplied and
-		// spoofable, letting an attacker pick their own bucket (F65).
-		const xff = request.headers.get("x-forwarded-for");
-		const ip =
-			request.headers.get("cf-connecting-ip") ??
-			xff?.split(",").at(-1)?.trim() ??
-			"";
+		// Capture the caller's identity at the HTTP edge — the only
+		// place a Convex-side path can learn who called. The address
+		// also drives the per-IP rate limit (CF-Connecting-IP is set by
+		// Cloudflare; for X-Forwarded-For the LAST element is the
+		// edge-observed address — the first is client-supplied and
+		// spoofable, letting an attacker pick their own bucket (F65)).
+		// Both are threaded into the booking's audit rows so an abusive
+		// caller can be attributed (F461).
+		const identity = extractRequestIdentity(request);
+		const ip = identity.ipAddress ?? "";
 
 		const { internal } = await import("./_generated/api");
 		try {
@@ -250,6 +250,7 @@ http.route({
 					emailConsent,
 					smsConsent,
 					ip,
+					userAgent: identity.userAgent,
 				},
 			);
 			// F372: createForSlug always returns the full object
@@ -259,43 +260,7 @@ http.route({
 		} catch (err) {
 			// Log full error server-side for debugging.
 			logger.error("[public-booking] Error:", err);
-			// Return only safe, user-facing error messages to the
-			// client — internal details could aid attackers.
-			let message = "An error occurred processing your booking";
-			let status = 500;
-			if (err instanceof ConvexError) {
-				const data = err.data as string;
-				if (typeof data === "string") {
-					const lower = data.toLowerCase();
-					if (lower.includes("rate limit")) {
-						message = "Too many booking attempts. Please try again later.";
-						status = 429;
-					} else if (lower.includes("not found")) {
-						message = "Tour, schedule, or organization not found";
-						status = 404;
-					} else if (lower.includes("capacity") || lower.includes("over capacity")) {
-						message = "This tour is fully booked";
-						status = 400;
-					} else if (lower.includes("blacked out") || lower.includes("not available")) {
-						message = "This date is not available for booking";
-						status = 400;
-					} else if (lower.includes("past") || lower.includes("cutoff")) {
-						message = "Cannot book tours in the past or within the cutoff period";
-						status = 400;
-					} else if (lower.includes("invalid email")) {
-						message = "Invalid email address";
-						status = 400;
-					} else if (lower.includes("missing") || lower.includes("invalid")) {
-						message = data;
-						status = 400;
-					}
-				}
-			} else if (err instanceof Error && err.message.includes("Validator error")) {
-				// Convex args validator rejected the input — this is a
-				// client-side error, not a server fault.
-				message = "Invalid request data";
-				status = 400;
-			}
+			const { message, status } = mapBookingError(err);
 			return bookingResponse(
 				JSON.stringify({ error: message }),
 				status,
@@ -305,6 +270,108 @@ http.route({
 		}
 	}),
 });
+
+
+/**
+ * F758 — the public-booking catch-map, extracted so the refusal strings
+ * and their mappings are unit-testable. Every branch returns a SAFE,
+ * authored message: internal details never reach the client. The
+ * public_booking.ts refusals that fall through to the 500 here were the
+ * finding's failure — guests saw a generic server error instead of an
+ * actionable 4xx.
+ */
+export function mapBookingError(err: unknown): {
+	message: string;
+	status: number;
+} {
+	let message = "An error occurred processing your booking";
+	let status = 500;
+	if (err instanceof ConvexError) {
+		const data = err.data as string;
+		if (typeof data === "string") {
+			const lower = data.toLowerCase();
+			if (lower.includes("rate limit")) {
+				message = "Too many booking attempts. Please try again later.";
+				status = 429;
+			} else if (lower.includes("not found")) {
+				message = "Tour, schedule, or organization not found";
+				status = 404;
+			} else if (lower.includes("cannot be booked online")) {
+				// Authored message already carries the recovery: another date,
+				// or the operator. "capacity" alone would collapse it into the
+				// sold-out copy below (F902).
+				message = data;
+				status = 400;
+			} else if (lower.includes("over capacity")) {
+				message = "This tour is fully booked";
+				status = 400;
+			} else if (lower.includes("time slot")) {
+				// F868: the exception-date refusal names the SLOT, and must
+				// sit before the date branch — "not available" alone would
+				// tell a guest the whole date is dead on a bookable date.
+				message = data;
+				status = 400;
+			} else if (
+				lower.includes("too long (max") ||
+				/at least \d+ characters/.test(lower)
+			) {
+				// F870: assertValidCustomerInput length refusals (name, notes,
+				// phone). The authored message names the field and the limit;
+				// before this branch they fell through to the generic 500.
+				message = data;
+				status = 400;
+			} else if (lower.includes("blacked out") || lower.includes("not available")) {
+				message = "This date is not available for booking";
+				status = 400;
+			} else if (lower.includes("cancelled")) {
+				// F758: matches both "Cannot book a cancelled schedule" and
+				// the twin spelling in tourSchedules.incrementBooked.
+				message = "This schedule has been cancelled";
+				status = 400;
+			} else if (lower.includes("not active")) {
+				message = "This tour is not currently accepting bookings";
+				status = 400;
+			} else if (lower.includes("not enough seats")) {
+				// Authored message already names the slot.
+				message = data;
+				status = 400;
+			} else if (lower.includes("exceeds tour maximum")) {
+				// Authored message already names the maximum.
+				message = data;
+				status = 400;
+			} else if (lower.includes("guests must be")) {
+				// F892: the action's own guests validation. The HTTP boundary
+				// rejects the same shape earlier (positive integer <= 200),
+				// so this guards the defense-in-depth copy — before the
+				// branch it fell through to the generic 500.
+				message = data;
+				status = 400;
+			} else if (lower.includes("must be made at least")) {
+				// Authored message already names the cutoff hours.
+				message = data;
+				status = 400;
+			} else if (lower.includes("does not belong")) {
+				message = "This schedule does not belong to the selected tour";
+				status = 400;
+			} else if (lower.includes("past") || lower.includes("cutoff")) {
+				message = "Cannot book tours in the past or within the cutoff period";
+				status = 400;
+			} else if (lower.includes("invalid email")) {
+				message = "Invalid email address";
+				status = 400;
+			} else if (lower.includes("missing") || lower.includes("invalid")) {
+				message = data;
+				status = 400;
+			}
+		}
+	} else if (err instanceof Error && err.message.includes("Validator error")) {
+		// Convex args validator rejected the input — this is a
+		// client-side error, not a server fault.
+		message = "Invalid request data";
+		status = 400;
+	}
+	return { message, status };
+}
 
 export default http;
 

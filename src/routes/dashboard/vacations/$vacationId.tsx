@@ -13,7 +13,8 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -67,7 +68,7 @@ function VacationDetailPage() {
 			await approve({ requestId: vacation._id, force: force || undefined });
 			toast.success("Vacation approved");
 		} catch (err) {
-			const msg = getErrorMessage(err);
+			const msg = getSafeDisplayMessage(err);
 			setErrorMsg(msg);
 			toast.error(msg);
 		} finally {
@@ -90,7 +91,7 @@ function VacationDetailPage() {
 			await reject({ requestId: vacation._id });
 			toast.success("Vacation rejected");
 		} catch (err) {
-			const msg = getErrorMessage(err);
+			const msg = getSafeDisplayMessage(err);
 			setErrorMsg(msg);
 			toast.error(msg);
 		} finally {
@@ -174,7 +175,7 @@ function VacationDetailPage() {
 					{vacation.reviewedAt && (
 						<DetailRow
 							label="Reviewed at"
-							value={new Date(vacation.reviewedAt).toLocaleString()}
+							value={formatDateTime(vacation.reviewedAt)}
 						/>
 					)}
 				</DetailSection>

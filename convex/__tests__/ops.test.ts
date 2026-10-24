@@ -114,6 +114,82 @@ describe("ops.internalStaffDeparture", () => {
 		expect(result.assignmentId).toBeTruthy();
 	});
 
+	// F876 — the resolver used .take(20) + find, so after 21+ rows in the
+	// same (tour, date, startTime) partition the 20 oldest are all
+	// cancelled debris from cancel/re-create cycles, the find missed the
+	// one live schedule, and the mutation published ANOTHER live dupe.
+	// The resolver must drain the partition, not sample its head.
+	it("finds the live schedule beyond the 20 oldest cancelled rows (F876)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_deep_partition";
+		const tourId = await t.run(async (ctx) =>
+			seedTour(ctx as unknown as TestCtx, orgId),
+		);
+		// 20 cancelled debris rows first (the take(20) head), then the
+		// one live schedule the resolver must still find. All inserted
+		// directly: assertScheduleSlotFree's .unique() cannot create in a
+		// partition that already holds rows, which is exactly the crash
+		// the defect-path falls into past the blind spot.
+		const liveId = await t.run(async (ctx) => {
+			for (let i = 0; i < 20; i++) {
+				await ctx.db.insert("tourSchedules", {
+					organizationId: orgId,
+					tourId,
+					date: "2026-09-05",
+					startTime: "11:00",
+					endTime: "13:00",
+					capacityTotal: 6,
+					capacityBooked: 0,
+					status: "cancelled",
+					notes: "",
+					createdAt: i,
+					updatedAt: i,
+				});
+			}
+			return ctx.db.insert("tourSchedules", {
+				organizationId: orgId,
+				tourId,
+				date: "2026-09-05",
+				startTime: "11:00",
+				endTime: "13:00",
+				capacityTotal: 6,
+				capacityBooked: 0,
+				status: "available",
+				notes: "",
+				createdAt: 20,
+				updatedAt: 20,
+			});
+		});
+
+		const result = await t.mutation(internal.ops.internalStaffDeparture, {
+			organizationId: orgId,
+			userId: "owner-1",
+			tourId,
+			date: "2026-09-05",
+			startTime: "11:00",
+			endTime: "13:00",
+			capacityTotal: 6,
+			publish: true,
+			guideId: "guide-deep",
+		});
+
+		// The live schedule is reused, not duplicated.
+		expect(result.scheduleId).toBe(liveId);
+		const liveCount = await t.run(async (ctx) => {
+			const rows = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date_start", (q) =>
+					q
+						.eq("tourId", tourId)
+						.eq("date", "2026-09-05")
+						.eq("startTime", "11:00"),
+				)
+				.collect();
+			return rows.filter((s) => s.status !== "cancelled").length;
+		});
+		expect(liveCount).toBe(1);
+	});
+
 	it("can assign without publishing a departure", async () => {
 		const t = convexTest(schema, modules);
 		const orgId = "org_assign_only";

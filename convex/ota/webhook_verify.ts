@@ -12,6 +12,8 @@
 //     hmac.compare_digest(signature, expected)
 // Web Crypto's SubtleCrypto gives us the same primitives.
 
+import { timingSafeEqual } from "../lib/timing";
+
 function getCrypto(): Crypto {
 	const c = (globalThis as { crypto?: Crypto }).crypto;
 	if (!c?.subtle) {
@@ -41,15 +43,6 @@ function fromHex(hex: string): Uint8Array {
 		out[i] = byte;
 	}
 	return out;
-}
-
-function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-	if (a.length !== b.length) return false;
-	let diff = 0;
-	for (let i = 0; i < a.length; i++) {
-		diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
-	}
-	return diff === 0;
 }
 
 async function hmacSha256Hex(
@@ -87,7 +80,7 @@ async function hmacSha256Hex(
  * Compute the HMAC-SHA256 hex signature for a payload. Exposed so
  * tests + provider-specific helpers can use it.
  */
-export { hmacSha256Hex, fromHex };
+export { hmacSha256Hex, fromHex, timingSafeEqual };
 
 /**
  * Verify a webhook signature.
@@ -104,7 +97,14 @@ export async function verifyWebhookSignature(
 	secret: string,
 ): Promise<boolean> {
 	const expected = await hmacSha256Hex(payload, secret);
-	if (signature.length !== expected.length) return false;
+	// F852: no length early-return above the compare. timingSafeEqual
+	// already compares over the longer input and seeds the diff with the
+	// length bit, so a wrong-length signature is rejected BY the compare.
+	// Returning early on the length check kept the length-vs-content
+	// timing distinction alive in the public verify path — the one thing
+	// the constant-time contract exists to erase. A malformed signature
+	// still fails: fromHex throws on an odd length or a non-hex
+	// character, and the catch turns that into false.
 	try {
 		return timingSafeEqual(fromHex(signature), fromHex(expected));
 	} catch {
@@ -144,9 +144,11 @@ export interface TimestampCheckResult {
 }
 
 export interface TimestampCheckOptions {
-	/** Reject (reason: "missing") instead of skipping when the
-	 * timestamp header is absent. Opt-in: default false keeps
-	 * providers that never send a timestamp compatible. */
+	/** When true, an absent/empty timestamp header REJECTS the request
+	 * (reason: "missing") instead of skipping the replay check. Opt-in
+	 * per provider — default false keeps providers that never send a
+	 * timestamp compatible, because most real OTAs never send a
+	 * timestamp header and rejecting would break their webhooks (F83). */
 	requireTimestamp?: boolean;
 }
 
@@ -166,14 +168,6 @@ export interface TimestampCheckOptions {
  * defense-in-depth bonus when the header IS present, not a hard
  * requirement.
  */
-export interface TimestampCheckOptions {
-	/** When true, an absent/empty timestamp header REJECTS the request
-	 * (reason: "missing") instead of skipping the replay check. Opt-in
-	 * per provider — default false because most real OTAs never send a
-	 * timestamp header and rejecting would break their webhooks (F83). */
-	requireTimestamp?: boolean;
-}
-
 export function checkWebhookTimestamp(
 	timestampHeader: string | null,
 	nowMs: number = Date.now(),
@@ -190,9 +184,6 @@ export function checkWebhookTimestamp(
 		// Skip replay check — the provider doesn't send a timestamp.
 		// The HMAC signature still protects against tampering; only
 		// replay of a captured valid payload is unchecked.
-		if (options?.requireTimestamp) {
-			return { valid: false, reason: "missing" };
-		}
 		return { valid: true, reason: "skipped" };
 	}
 	// Reject anything that isn't a pure integer string. parseInt is

@@ -10,14 +10,25 @@ import {
 	mutation,
 	internalMutation,
 } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import {
+	requireMembership,
+	requirePermission,
+	requireRole,
+} from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { syncTourAvailability } from "./lib/availabilityProjection";
 import { assertFieldWithinLimit } from "./lib/validation";
 
 // ---- queries ----
+
+// Bounds on one `internalGenerate` run. EXISTING_SCAN_CAP is the existing-
+// schedule scan; MAX_DAYS (below) is the generated window. Kept distinct
+// because hitting one does not imply the other.
+const EXISTING_SCAN_CAP = 5000;
 
 export const list = query({
 	args: {
@@ -26,42 +37,53 @@ export const list = query({
 	},
 	handler: async (ctx, args) => {
 		const member = await requireMembership(ctx);
-		const orgId = member.organizationId;
-		let q = ctx.db
-			.query("tourSeasonalSchedules")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
-		if (args.tourId) {
-			// SECURITY: scope to org even when filtering by tourId.
-			q = ctx.db
-				.query("tourSeasonalSchedules")
-				.withIndex("by_tour_active", (q) =>
-					q.eq("tourId", args.tourId!),
-				)
-				.filter((q) => q.eq(q.field("organizationId"), orgId));
-		}
-		// Bound the result so an org with thousands of seasonal
-		// schedules doesn't OOM the response. Previously used
-		// .collect() (unbounded).
-		const MAX_SEASONAL = 500;
-		const all = await q.take(MAX_SEASONAL);
-		return all
-			.filter((s) => args.isActive === undefined || s.isActive === args.isActive)
-			.sort((a, b) => a.startDate.localeCompare(b.startDate));
+		const { rows, truncated } = await _seasonalRowsForList(ctx, {
+			organizationId: member.organizationId,
+			tourId: args.tourId,
+			isActive: args.isActive,
+		});
+		return { seasonals: rows, truncated };
 	},
 });
 
-export const get = query({
-	args: { scheduleId: v.id("tourSeasonalSchedules") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const s = await ctx.db.get(args.scheduleId);
-		if (!s) throw new ConvexError("Schedule not found");
-		if (s.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: schedule belongs to a different organization");
-		}
-		return s;
+/**
+ * Org-scoped seasonal-schedule scan shared by `list`. Probes one row
+ * past the cap so `truncated` says "more rows exist" instead of
+ * silently dropping them (F468). Exported for tests — the public
+ * `list` adds auth on top of the same scan.
+ */
+export async function _seasonalRowsForList(
+	ctx: QueryCtx,
+	args: {
+		organizationId: string;
+		tourId?: Id<"tours">;
+		isActive?: boolean;
 	},
-});
+): Promise<{ rows: Doc<"tourSeasonalSchedules">[]; truncated: boolean }> {
+	let q = ctx.db
+		.query("tourSeasonalSchedules")
+		.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId));
+	if (args.tourId) {
+		q = ctx.db
+			.query("tourSeasonalSchedules")
+			.withIndex("by_tour_active", (q) => q.eq("tourId", args.tourId!))
+			.filter((q) =>
+				q.eq(q.field("organizationId"), args.organizationId),
+			);
+	}
+	const MAX_SEASONAL = 500;
+	const probe = await q.take(MAX_SEASONAL + 1);
+	const truncated = probe.length > MAX_SEASONAL;
+	return {
+		rows: probe
+			.slice(0, MAX_SEASONAL)
+			.filter(
+				(s) => args.isActive === undefined || s.isActive === args.isActive,
+			)
+			.sort((a, b) => a.startDate.localeCompare(b.startDate)),
+		truncated,
+	};
+}
 
 // ---- mutations ----
 
@@ -79,7 +101,7 @@ export const create = mutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourSeasonalSchedules.internalCreate,
 			{ organizationId: member.organizationId, userId: member.userId, ...args },
@@ -157,29 +179,6 @@ export const internalCreate = internalMutation({
 			},
 		});
 		return id;
-	},
-});
-
-export const update = mutation({
-	args: {
-		scheduleId: v.id("tourSeasonalSchedules"),
-		name: v.optional(v.string()),
-		startDate: v.optional(v.string()),
-		endDate: v.optional(v.string()),
-		daysOfWeek: v.optional(v.array(v.number())),
-		startTime: v.optional(v.string()),
-		capacityOverride: v.optional(v.number()),
-		isActive: v.optional(v.boolean()),
-		priority: v.optional(v.number()),
-		notes: v.optional(v.string()),
-	},
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
-		const { scheduleId, ...rest } = args;
-		return await ctx.runMutation(
-			internalRefs.tourSeasonalSchedules.internalUpdate,
-			{ organizationId: member.organizationId, userId: member.userId, scheduleId, ...rest },
-		);
 	},
 });
 
@@ -284,7 +283,7 @@ export const generate = mutation({
 		dateTo: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourSeasonalSchedules.internalGenerate,
 			{
@@ -315,13 +314,21 @@ export const internalGenerate = internalMutation({
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
 		}
 
+		// F468: each generator input is probed one row past the cap —
+		// a truncated ruleset would silently generate a partial/wrong
+		// schedule, so the run refuses instead.
 		const seasonals = await ctx.db
 			.query("tourSeasonalSchedules")
 			.withIndex("by_tour_active", (q) =>
 				q.eq("tourId", args.tourId).eq("isActive", true),
 			)
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(500);
+			.take(501);
+		if (seasonals.length > 500) {
+			throw new ConvexError(
+				"Tour has more than 500 active seasonal schedules — generation cannot verify them all",
+			);
+		}
 		const activeSeasonals = seasonals.sort(
 			(a, b) => (b.priority ?? 0) - (a.priority ?? 0),
 		);
@@ -330,7 +337,12 @@ export const internalGenerate = internalMutation({
 			.query("tourExceptionDates")
 			.withIndex("by_tour_date", (q) => q.eq("tourId", args.tourId))
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(500);
+			.take(501);
+		if (exceptions.length > 500) {
+			throw new ConvexError(
+				"Tour has more than 500 exception dates — generation cannot verify them all",
+			);
+		}
 		const exceptionByDate = new Map(exceptions.map((e) => [e.date, e]));
 
 		// Load only schedules in the generate window (indexed range) so
@@ -344,10 +356,36 @@ export const internalGenerate = internalMutation({
 					.lte("date", args.dateTo),
 			)
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(5000);
+			.take(EXISTING_SCAN_CAP);
 		const existingKeys = new Set(
 			existingInRange.map((s) => `${s.date}|${s.startTime}`),
 		);
+
+		// F468: `by_tour_date` orders by date ascending, so a capped scan keeps
+		// the EARLIEST in-window schedules and silently drops everything after
+		// the cap. Absence from `existingKeys` then stops meaning "does not
+		// exist" — and the generator inserts a second row for the same
+		// (tourId, date, startTime). That is worse than a list that truncates:
+		// from then on every `.unique()` on the triple throws Convex's raw
+		// multi-document error instead of the intended ConvexError
+		// (tourSchedules.ts, bookings.ts, public_booking.ts).
+		//
+		// So the batch stays the fast path, and only a scan that actually hit
+		// the cap pays for an indexed point check per candidate.
+		const scanTruncated = existingInRange.length >= EXISTING_SCAN_CAP;
+		const slotExists = async (date: string, startTime: string) => {
+			const hit = await ctx.db
+				.query("tourSchedules")
+				.withIndex("by_tour_date_start", (q) =>
+					q
+						.eq("tourId", args.tourId)
+						.eq("date", date)
+						.eq("startTime", startTime),
+				)
+				.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
+				.first();
+			return hit !== null;
+		};
 
 		// Load all blackouts for this tour once — avoids the per-day
 		// take(100) truncation in isBlackoutHelper for long-lived tours.
@@ -355,7 +393,12 @@ export const internalGenerate = internalMutation({
 			.query("tourBlackoutDates")
 			.withIndex("by_tour_start", (q) => q.eq("tourId", args.tourId))
 			.filter((q) => q.eq(q.field("organizationId"), args.organizationId))
-			.take(500);
+			.take(501);
+		if (blackouts.length > 500) {
+			throw new ConvexError(
+				"Tour has more than 500 blackout windows — generation cannot verify them all",
+			);
+		}
 
 		let created = 0;
 		let skipped = 0;
@@ -365,12 +408,19 @@ export const internalGenerate = internalMutation({
 		// rebuilt once each after the loop, inside this same mutation.
 		const touchedDates = new Set<string>();
 
+		// GT-AUDIT-08 / hub F608: MAX_DAYS silently truncated a >1-year window.
+		// Nothing compared the requested span to the cap and the result said
+		// nothing about it, so the caller could not tell a complete run from a
+		// cut-off one. Track the last date actually handled so the caller can.
+		let lastProcessed: string | null = null;
+
 		for (
 			let cursor = args.dateFrom;
 			cursor <= args.dateTo && dayCount < MAX_DAYS;
 			dayCount++
 		) {
 			const date = cursor;
+			lastProcessed = date;
 			cursor = nextIsoDate(cursor);
 
 			const blackedOut = blackouts.some(
@@ -423,13 +473,15 @@ export const internalGenerate = internalMutation({
 				skipped++;
 				continue;
 			}
-
-			// Note: no per-day unique() check here — the
-			// existingInRange batch above covers all schedules in the
-			// window, and Convex mutations are serialized so no race
-			// can occur within this mutation. The previous per-day
-			// unique() added 366 queries for a year-long window with
-			// no additional safety.
+			// When the scan hit its cap, absence from the set is not evidence.
+			// This is the per-day check the old comment claimed was redundant —
+			// it is redundant only while the batch actually covers the window.
+			// Convex mutations are still serialized, so no intra-run race is
+			// possible; this is about what the truncated scan failed to see.
+			if (scanTruncated && (await slotExists(date, startTime))) {
+				skipped++;
+				continue;
+			}
 
 			const now = Date.now();
 			const id = await ctx.db.insert("tourSchedules", {
@@ -472,6 +524,11 @@ export const internalGenerate = internalMutation({
 			});
 		}
 
+		// ISO dates compare correctly as strings, so "reached before the end"
+		// is a plain `<`. A window inside the cap lands exactly on dateTo.
+		const processedTo = lastProcessed ?? args.dateFrom;
+		const truncated = processedTo < args.dateTo;
+
 		await logAudit(ctx, {
 			organizationId: args.organizationId,
 			userId: args.userId,
@@ -484,10 +541,24 @@ export const internalGenerate = internalMutation({
 				dateTo: args.dateTo,
 				created,
 				skipped,
+				truncated,
+				processedTo,
+				scanTruncated,
+				maxDays: MAX_DAYS,
 			},
 		});
 
-		return { created, skipped };
+		return {
+			created,
+			skipped,
+			truncated,
+			processedTo,
+			requestedTo: args.dateTo,
+			// Distinct from `truncated`, which is the DAY window hitting
+			// MAX_DAYS. This one says the existing-schedule scan was capped, so
+			// every slot beyond it was verified by point read instead.
+			scanTruncated,
+		};
 	},
 });
 

@@ -22,7 +22,7 @@ import { addDaysLocal, localYmd } from "@/lib/calendar-date";
 import { lastNDays } from "@/lib/date-range";
 import { formatCents } from "@/lib/format";
 import { resolveTourStaffing } from "@/lib/staffing";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -95,7 +95,7 @@ function TourDetailPage() {
 			toast.success("Tour deleted");
 			void navigate({ to: "/dashboard/tours" });
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 			setDeleting(false);
 		}
 	};
@@ -330,6 +330,12 @@ function TourDetailPage() {
 						/>
 					</div>
 					{/* F119: bookings lead the stats row */}
+					{stats.truncated && (
+						<p className="mb-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-warning text-xs">
+							These figures only cover the first 10,000 matching rows in this
+							window. Narrow the date range for exact totals.
+						</p>
+					)}
 					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
 						<MetricCard label="Bookings" value={stats.totalBookings} featured />
 						<MetricCard label="Guests" value={stats.totalGuests} />

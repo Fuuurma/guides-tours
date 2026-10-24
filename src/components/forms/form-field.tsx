@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
-export type FormFieldVm = {
+type FormFieldVm = {
 	name: string;
 	state: {
 		value: unknown;

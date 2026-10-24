@@ -15,7 +15,7 @@ import {
 } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { requireRole } from "./lib/authz";
+import { requirePermission, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import { sendTemplatedEmail } from "./lib/sendEmail";
 import { sendTwilioSms } from "./notification_sms";
@@ -508,7 +508,7 @@ export const resend = mutation({
 		),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "notification", "send");
 		const a = await ctx.db.get(args.assignmentId);
 		if (!a || a.deletedAt) throw new ConvexError("Assignment not found");
 		if (a.organizationId !== member.organizationId) {

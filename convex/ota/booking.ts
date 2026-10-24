@@ -15,6 +15,7 @@
 // source's parse_webhook_event anticipates — matches the rest of
 // the family.
 
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 import { OTAHttpClient, HttpError } from "./http_client";
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
@@ -127,6 +128,7 @@ export class BookingClient {
 			const totalPaid = numberOrUndefined(
 				data.totalAmount ?? data.total_amount,
 			);
+			const currency = normalizeCurrency(stringOrUndefined(data.currency));
 			return {
 				kind: "booking.created",
 				reservationId: stringOrThrow(data.id, "data.id"),
@@ -157,10 +159,12 @@ export class BookingClient {
 					data.guestCount ?? data.guest_count,
 					"data.guestCount",
 				),
-				totalPaidCents: totalPaid !== undefined
-					? BigInt(Math.round(totalPaid * 100))
-					: undefined,
-				currency: stringOrUndefined(data.currency),
+				totalPaidCents:
+					totalPaid !== undefined
+						? toMinorUnits(totalPaid, currency)
+						: undefined,
+				totalPaidRaw: totalPaid,
+				currency,
 				rawPayload: payload,
 			};
 		}
@@ -210,7 +214,11 @@ function numberOrThrow(v: unknown, label: string): number {
 }
 
 function numberOrUndefined(v: unknown): number | undefined {
-	if (typeof v === "number") return v;
+	// F410: non-finite numbers (1e999 → Infinity) must normalize to
+	// undefined like bad strings, or they sail to upsert's finite guard
+	// and land as a 500 rethrow instead of the 400 malformed-payload
+	// path.
+	if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
 	if (typeof v === "string") {
 		const n = Number(v);
 		return Number.isFinite(n) ? n : undefined;

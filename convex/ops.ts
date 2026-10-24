@@ -10,7 +10,8 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import { internalRefs } from "./lib/internalRefs";
 import type { Id } from "./_generated/dataModel";
-import { findOrgMember, requireRole } from "./lib/authz";
+import { requireRole } from "./lib/authz";
+import { assertGuideAssignable } from "./lib/assignmentsShared";
 
 const staffDepartureArgs = {
 	tourId: v.id("tours"),
@@ -31,31 +32,11 @@ const staffDepartureReturns = v.object({
 	assignmentId: v.union(v.id("assignments"), v.null()),
 });
 
-async function assertGuideAssignable(
-	ctx: Parameters<typeof requireRole>[0],
-	organizationId: string,
-	guideId: string,
-): Promise<void> {
-	const guideMember = await findOrgMember(ctx, organizationId, guideId);
-	if (!guideMember) {
-		throw new ConvexError("Guide is not a member of this organization");
-	}
-	if (
-		guideMember.role !== "guide" &&
-		guideMember.role !== "owner" &&
-		guideMember.role !== "admin"
-	) {
-		throw new ConvexError(
-			`User with role "${guideMember.role}" cannot be assigned as guide`,
-		);
-	}
-}
-
 export const staffDeparture = mutation({
 	args: staffDepartureArgs,
 	returns: staffDepartureReturns,
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requireRole(ctx, ["owner", "admin"]);
 		if (args.guideId) {
 			await assertGuideAssignable(ctx, member.organizationId, args.guideId);
 		}
@@ -102,22 +83,34 @@ export const internalStaffDeparture = internalMutation({
 			// Use .take() + JS filter instead of .unique() to avoid
 			// crashing when a cancel/re-create cycle produces two
 			// schedules for the same (tourId, date, startTime).
-			const candidates = await ctx.db
-				.query("tourSchedules")
-				.withIndex("by_tour_date_start", (q) =>
-					q
-						.eq("tourId", args.tourId)
-						.eq("date", args.date)
-						.eq("startTime", args.startTime),
-				)
-				.take(20);
-			const existing = candidates.find(
-				(s) =>
-					s.organizationId === args.organizationId &&
-					s.status !== "cancelled",
-			);
-			if (existing) {
-				scheduleId = existing._id;
+			// F876: drain the partition page by page instead of sampling a
+			// .take(20) head — after 21+ cycles the head is all cancelled
+			// debris, the find missed the one live schedule, and the
+			// mutation published another live dupe.
+			let cursor: string | null = null;
+			let resolved: Id<"tourSchedules"> | null = null;
+			do {
+				const page = await ctx.db
+					.query("tourSchedules")
+					.withIndex("by_tour_date_start", (q) =>
+						q
+							.eq("tourId", args.tourId)
+							.eq("date", args.date)
+							.eq("startTime", args.startTime),
+					)
+					.paginate({ numItems: 100, cursor });
+				const existing = page.page.find(
+					(s) =>
+						s.organizationId === args.organizationId &&
+						s.status !== "cancelled",
+				);
+				if (existing) {
+					resolved = existing._id;
+				}
+				cursor = page.isDone ? null : page.continueCursor;
+			} while (cursor !== null && resolved === null);
+			if (resolved) {
+				scheduleId = resolved;
 			}
 		}
 

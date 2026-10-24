@@ -13,6 +13,9 @@ import type { MutationCtx } from "../_generated/server";
 import { internalMutation, internalQuery } from "../_generated/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import { logAudit } from "../lib/audit";
+import { syncTourAvailability } from "../lib/availabilityProjection";
+import { logger } from "../lib/logger";
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 
 /**
  * Upsert an OTA booking. Called by every provider's webhook handler
@@ -36,12 +39,17 @@ export const upsertOtaBooking = internalMutation({
 			tourTime: v.optional(v.string()),
 			guests: v.number(),
 			totalPaidCents: v.optional(v.int64()),
+			totalPaidRaw: v.optional(v.number()),
 			currency: v.optional(v.string()),
 			commissionRate: v.optional(v.number()),
 			commissionCents: v.optional(v.int64()),
 			rawPayload: v.any(),
 		}),
 		rawData: v.any(),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const now = Date.now();
@@ -95,7 +103,23 @@ export const upsertOtaBooking = internalMutation({
 		// below zero.
 		const rawRate = event.commissionRate ?? product?.commissionRate ?? 0;
 		const rate = Math.max(0, Math.min(rawRate, 1));
-		const paidCents = event.totalPaidCents;
+
+		// F760: a re-delivery that omits its currency keeps the prior
+		// row's otaCurrency (the conditional spread below never wipes it),
+		// so its amount must be re-converted with THAT currency's exponent.
+		// The parser fell back to exponent 2 without knowing the prior row
+		// — a stored JPY 1200 would be rewritten as 120000c, KWD 1.234 as
+		// 123c. The parsers carry the raw major unit for exactly this.
+		let paidCents = event.totalPaidCents;
+		const priorCurrency = existing?.otaCurrency;
+		if (
+			event.currency === undefined &&
+			priorCurrency !== undefined &&
+			event.totalPaidRaw !== undefined
+		) {
+			paidCents = toMinorUnits(event.totalPaidRaw, priorCurrency);
+		}
+
 		// F361: guests drives capacityBooked — non-positive/fractional
 		// values would take the decrement branch in applyOtaCapacity or
 		// store a fractional seat claim. Floor and floor-at-1.
@@ -104,7 +128,7 @@ export const upsertOtaBooking = internalMutation({
 		}
 		const guests = Math.max(1, Math.floor(event.guests));
 		if (guests !== event.guests) {
-			console.warn(
+			logger.warn(
 				`ota guests: clamping ${event.guests} → ${guests} for ${event.reservationId}`,
 			);
 		}
@@ -121,12 +145,12 @@ export const upsertOtaBooking = internalMutation({
 		// net ≥ 0 invariant holds regardless of source.
 		if (commissionCents !== undefined && paidCents !== undefined) {
 			if (commissionCents < 0n) {
-				console.warn(
+				logger.warn(
 					`ota commission: clamping negative ${commissionCents} → 0 for ${event.reservationId}`,
 				);
 				commissionCents = 0n;
 			} else if (commissionCents > paidCents) {
-				console.warn(
+				logger.warn(
 					`ota commission: clamping ${commissionCents} > paid ${paidCents} → paid for ${event.reservationId}`,
 				);
 				commissionCents = paidCents;
@@ -139,6 +163,11 @@ export const upsertOtaBooking = internalMutation({
 					: paidCents
 				: undefined;
 
+		// F708: never fabricate "USD" when the provider omits a currency —
+		// store only what was actually sent (normalized to ISO uppercase).
+		// Conditional spread keeps a currency-less re-delivery from wiping
+		// a previously stored code via patch's undefined-means-delete.
+		const currency = normalizeCurrency(event.currency);
 		const patch = {
 			organizationId,
 			integrationId,
@@ -156,7 +185,7 @@ export const upsertOtaBooking = internalMutation({
 			otaTourTime: event.tourTime,
 			otaGuests: guests,
 			otaTotalPaidCents: paidCents,
-			otaCurrency: event.currency ?? "USD",
+			...(currency !== undefined ? { otaCurrency: currency } : {}),
 			commissionRate: rate,
 			commissionAmountCents: commissionCents,
 			netRevenueCents,
@@ -254,6 +283,8 @@ export const upsertOtaBooking = internalMutation({
 					guests,
 					status: "confirmed",
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 			return { id: existing._id, created: false };
 		}
@@ -285,6 +316,8 @@ export const upsertOtaBooking = internalMutation({
 				guests,
 				status: "confirmed",
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return { id, created: true };
 	},
@@ -347,7 +380,7 @@ async function applyOtaCapacity(
 	} else if (guests < 0) {
 		const newBooked = schedule.capacityBooked + guests;
 		if (newBooked < 0) {
-			console.warn(
+			logger.warn(
 				`ota capacity: decrement of ${-guests} exceeds capacityBooked ${schedule.capacityBooked} on schedule ${scheduleId} — flooring at 0`,
 			);
 		}
@@ -361,6 +394,15 @@ async function applyOtaCapacity(
 			updatedAt: Date.now(),
 		});
 	}
+	// F702: the projection mirrors capacityBooked/status per slot — the
+	// patch above changed both, so rebuild it in the same mutation or the
+	// public page reads stale seats after every OTA create, cancel,
+	// guest-count change and schedule move.
+	await syncTourAvailability(ctx, {
+		organizationId,
+		tourId: schedule.tourId,
+		date: schedule.date,
+	});
 }
 
 /**
@@ -392,6 +434,10 @@ export const cancelOtaBooking = internalMutation({
 		integrationId: v.id("otaIntegrations"),
 		reservationId: v.string(),
 		rawData: v.any(),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// SECURITY: same cross-tenant guard as upsertOtaBooking — verify
@@ -448,6 +494,8 @@ export const cancelOtaBooking = internalMutation({
 			resourceId: existing._id,
 			oldValues: { status: existing.status },
 			newValues: { status: "cancelled", reservationId: args.reservationId },
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return existing._id;
 	},
@@ -464,6 +512,10 @@ export const upsertAvailabilityCache = internalMutation({
 			totalSpaces: v.number(),
 			rawPayload: v.any(),
 		}),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const product = await ctx.db
@@ -517,6 +569,8 @@ export const upsertAvailabilityCache = internalMutation({
 					totalSpaces: args.event.totalSpaces,
 					date: args.event.date,
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 			return existing._id;
 		}
@@ -533,6 +587,8 @@ export const upsertAvailabilityCache = internalMutation({
 				totalSpaces: args.event.totalSpaces,
 				date: args.event.date,
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 		return cacheId;
 	},

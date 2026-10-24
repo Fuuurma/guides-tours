@@ -130,6 +130,82 @@ describe("OTA webhook upsert — Airbnb", () => {
 		expect(String(row.otaTotalPaidCents)).toBe("8950"); // 89.5 → 8950 cents
 		expect(row.otaCurrency).toBe("EUR");
 	});
+
+	test("never fabricates USD when the provider omits currency (F708)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ab3";
+		const integrationId = await t.run((ctx) =>
+			seedIntegration(ctx, orgId, "airbnb"),
+		);
+		const raw = {
+			event_type: "reservationConfirmed",
+			data: {
+				reservation_id: "AB-003",
+				guest: { first_name: "Fin", email: "f@e.com" },
+				number_of_guests: 2,
+				start_date: "2026-12-03",
+				totalAmount: 89.5,
+				// no currency field at all
+			},
+		};
+		await upsertNormalized(t, integrationId, orgId, "airbnb", raw);
+		const row = (await t.run((ctx) =>
+			ctx.db.query("otaBookings").first(),
+		)) as any;
+		expect(row.otaCurrency).toBeUndefined();
+	});
+
+	test("lowercase currency normalizes to ISO uppercase (F708)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ab4";
+		const integrationId = await t.run((ctx) =>
+			seedIntegration(ctx, orgId, "airbnb"),
+		);
+		const raw = {
+			event_type: "reservationConfirmed",
+			data: {
+				reservation_id: "AB-004",
+				guest: { first_name: "Gia", email: "g@e.com" },
+				number_of_guests: 1,
+				start_date: "2026-12-04",
+				totalAmount: 42,
+				currency: "eur",
+			},
+		};
+		await upsertNormalized(t, integrationId, orgId, "airbnb", raw);
+		const row = (await t.run((ctx) =>
+			ctx.db.query("otaBookings").first(),
+		)) as any;
+		expect(row.otaCurrency).toBe("EUR");
+	});
+
+	test("currency-less re-delivery keeps the stored code (F708)", async () => {
+		const t = convexTest(schema, modules);
+		const orgId = "org_ab5";
+		const integrationId = await t.run((ctx) =>
+			seedIntegration(ctx, orgId, "airbnb"),
+		);
+		const base = {
+			event_type: "reservationConfirmed",
+			data: {
+				reservation_id: "AB-005",
+				guest: { first_name: "Hal", email: "h@e.com" },
+				number_of_guests: 1,
+				start_date: "2026-12-05",
+				totalAmount: 42,
+			},
+		};
+		await upsertNormalized(t, integrationId, orgId, "airbnb", {
+			...base,
+			data: { ...base.data, currency: "EUR" },
+		});
+		// Re-delivered without a currency: patch must not wipe EUR.
+		await upsertNormalized(t, integrationId, orgId, "airbnb", base);
+		const row = (await t.run((ctx) =>
+			ctx.db.query("otaBookings").first(),
+		)) as any;
+		expect(row.otaCurrency).toBe("EUR");
+	});
 });
 
 describe("OTA webhook upsert — Klook", () => {

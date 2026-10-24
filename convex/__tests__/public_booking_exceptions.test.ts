@@ -285,3 +285,128 @@ describe("tourSchedules — reschedule guard on booked departures (F346)", () =>
 		expect(ok).toBe(freeId);
 	});
 });
+
+// ---- GT-AUDIT-02 / hub F602: capacityOverride on the free-text path ----
+//
+// The listing honours the cap — listAvailableSlots drops a slot once
+// capacityBooked reaches capacityOf(capacityTotal) (public_booking.ts:255) and
+// reports the capped seatsLeft (:267). But create's guard was
+// `if (scheduleId && ex?.capacityOverride !== undefined)`, and the free-text
+// start-time branch leaves scheduleId undefined. So the cap was never read
+// there, and because incrementBooked is also gated on `if (scheduleId)`, NO
+// capacity was enforced at all: a guest could book 8 seats on a date the
+// operator had capped at 2.
+//
+// The cap is defined against a materialized slot (capacityBooked lives on the
+// schedule), so with no slot there is nothing to compare against and the
+// bookings table has no index on (tourId, date) to count unmaterialized
+// bookings. Rather than add an unbounded scan, the path must fail safe: refuse
+// rather than silently oversell an operator's cap.
+
+describe("public_booking — capacityOverride when no schedule materializes (GT-AUDIT-02)", () => {
+	const ORG = "org_cap_free_text";
+
+	async function seedCappedDate(t: ReturnType<typeof convexTest>) {
+		const date = futureDate(9);
+		const tourId = await t.run(async (ctx) => {
+			const id = await seedTour(ctx, ORG);
+			await seedException(ctx, {
+				orgId: ORG,
+				tourId: id,
+				date,
+				exceptionType: "modified",
+				startTime: "18:00",
+				capacityOverride: 2,
+			});
+			return id;
+		});
+		return { date, tourId };
+	}
+
+	it("refuses an oversized free-text booking instead of silently overselling", async () => {
+		const t = convexTest(schema, modules);
+		const { date, tourId } = await seedCappedDate(t);
+
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: ORG,
+				tourId,
+				customerName: "Alice Visitor",
+				customerEmail: "alice@example.com",
+				date,
+				// Free-text time, matching the exception's slot. No scheduleId:
+				// the date has no materialized schedules.
+				startTime: "18:00",
+				guests: 8,
+			}),
+		).rejects.toThrow();
+	});
+
+	it("writes no booking when it refuses", async () => {
+		const t = convexTest(schema, modules);
+		const { date, tourId } = await seedCappedDate(t);
+
+		await t
+			.mutation(internal.public_booking.internalCreate, {
+				organizationId: ORG,
+				tourId,
+				customerName: "Alice Visitor",
+				customerEmail: "alice@example.com",
+				date,
+				startTime: "18:00",
+				guests: 8,
+			})
+			.catch(() => undefined);
+
+		const bookings = await t.run(async (ctx) =>
+			ctx.db
+				.query("bookings")
+				.withIndex("by_org")
+				.filter((q) => q.eq(q.field("organizationId"), ORG))
+				.collect(),
+		);
+		expect(bookings).toHaveLength(0);
+	});
+
+	// A deliberate trade-off, asserted so it cannot be "fixed" by accident:
+	// a request UNDER the cap is refused too. Accepting it would look safe but
+	// is not — with no materialized slot nothing knows how many seats are
+	// already booked, so three accepted 2-guest requests would still oversell a
+	// cap of 2. Honouring the operator's ceiling means refusing the whole
+	// unmaterialized path on a capped date and sending the guest to the
+	// operator, who can materialize a slot and book it properly.
+	it("refuses even a within-cap free-text booking, and says why", async () => {
+		const t = convexTest(schema, modules);
+		const { date, tourId } = await seedCappedDate(t);
+
+		await expect(
+			t.mutation(internal.public_booking.internalCreate, {
+				organizationId: ORG,
+				tourId,
+				customerName: "Bob Visitor",
+				customerEmail: "bob@example.com",
+				date,
+				startTime: "18:00",
+				guests: 2,
+			}),
+		).rejects.toThrow(/limited capacity.*cannot be booked online/);
+	});
+
+	it("leaves a free-text booking untouched when no override is set", async () => {
+		// No cap on the date -> nothing to enforce, so the path must keep working.
+		const t = convexTest(schema, modules);
+		const date = futureDate(11);
+		const tourId = await t.run((ctx) => seedTour(ctx, ORG));
+
+		const bookingId = await t.mutation(internal.public_booking.internalCreate, {
+			organizationId: ORG,
+			tourId,
+			customerName: "Cara Visitor",
+			customerEmail: "cara@example.com",
+			date,
+			startTime: "09:00",
+			guests: 8,
+		});
+		expect(bookingId).toBeTruthy();
+	});
+});

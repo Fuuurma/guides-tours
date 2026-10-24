@@ -5,21 +5,41 @@
  * in convex/analytics.ts — the client-facing api surface is identical.
  */
 import { authComponent, createAuth } from "../auth";
+import { ConvexError } from "convex/values";
 import type { GenericQueryCtx } from "convex/server";
 import type { DataModel, Doc, Id } from "../_generated/dataModel";
 import { logger } from "../lib/logger";
+import { parseYmd } from "../lib/time";
 
 type QCtx = GenericQueryCtx<DataModel>;
 type Booking = Doc<"bookings">;
 
+// F722: every date-bounded builder validates its bounds before the
+// first scan — an unpadded "2026-1-1" sorts ahead of "2026-10-…"
+// lexicographically and Date.parse(`${s}T00:00:00Z`) yields NaN, so a
+// malformed bound silently widened the booking set (a cleared picker
+// sends ""). Same reject shape as dateRange (F710).
+function assertYmdRange(start: string, end: string): [number, number] {
+	const startTs = parseYmd(start);
+	const endTs = parseYmd(end);
+	if (startTs === null || endTs === null) {
+		throw new ConvexError(
+			"Invalid date range bound (expected YYYY-MM-DD)",
+		);
+	}
+	return [startTs, endTs];
+}
+
 export function dateRange(start: string, end: string): string[] {
+	// F710: bounds are caller-supplied bare strings — validate the
+	// YYYY-MM-DD shape before iterating. An unpadded "2026-1-1" used to
+	// pass the lexicographic compare below and inflate a 2-month window
+	// into ~365 zero-filled rows; a non-date string walked Date.parse
+	// into NaN and looped "NaN-NaN-NaN" forever.
+	const [startTs, endTs] = assertYmdRange(start, end);
 	const dates: string[] = [];
-	let d = start;
-	while (d <= end) {
-		dates.push(d);
-		// advance by 1 day
-		const next = new Date(Date.parse(d) + 86_400_000);
-		d = next.toISOString().slice(0, 10);
+	for (let ts = startTs; ts <= endTs; ts += 86_400_000) {
+		dates.push(new Date(ts).toISOString().slice(0, 10));
 	}
 	return dates;
 }
@@ -147,6 +167,7 @@ export async function buildTourStats(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scans to prevent OOM on large orgs.
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const [tours, assignments] = await Promise.all([
@@ -208,6 +229,7 @@ export async function buildGuideStats(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scan to prevent OOM on large orgs. Hitting the cap
 	// means the org has more rows than were read — reported as
 	// truncated (fleet needs-work 09-08, silent take(N) caps).
@@ -305,6 +327,7 @@ export async function buildRevenueSummary(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Range-scan within the org + date window to avoid a full-table
 	// collect. by_org_date is leading (orgId, date) so gte/lte work.
 	// Bound the scan to prevent OOM on large orgs. Hitting the cap
@@ -377,6 +400,7 @@ export async function buildChannelRevenue(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const bookings = await ctx.db
 		.query("bookings")
@@ -433,9 +457,22 @@ export async function buildChannelRevenue(
  *   2. Outstanding       — sum of balanceDueCents for active
  *                          bookings created in the window.
  *   3. Deposit coverage  — share of bookings in the window that
- *                          have a deposit paid. Tells the operator
- *                          whether their deposit policy is being
- *                          honored.
+ *                          REQUIRE a deposit and have actually PAID
+ *                          it (successful payments applied to the
+ *                          booking, net of succeeded refunds).
+ *                          Tells the operator whether their deposit
+ *                          policy is being honored.
+ *
+ * Note on (3): `bookings.depositAmountCents` is NOT the configured
+ * deposit. It is seeded with the required deposit at creation and then
+ * incremented by every payment applied to the booking
+ * (payments.ts applyPaymentToBooking) and decremented by refunds
+ * (reversePaymentOnBooking) — a running total of retained money. So
+ * `depositAmountCents > 0` is true for any booking that merely *had* a
+ * deposit configured, and also for a no-deposit booking that was paid in
+ * full. Required deposit is therefore reconstructed by subtracting what has
+ * actually been collected, and coverage is only credited when collection
+ * reaches it.
  *
  * Bound to MAX_ANALYTICS_SCAN per query (10K) so a busy org
  * doesn't OOM. All three scans run in parallel since they
@@ -447,6 +484,7 @@ export async function buildFinancialHealth(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const [payments, refunds, bookings] = await Promise.all([
 		ctx.db
@@ -478,11 +516,37 @@ export async function buildFinancialHealth(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+	// Deposit attribution needs payments for the org as a whole, not just
+	// those created inside the window: a booking dated in the window is
+	// routinely deposited weeks earlier, and a window-scoped scan would
+	// report every one of those as unpaid. These two scans feed coverage
+	// only — gross/refund-rate keep the window semantics above.
+	const [depositPayments, depositRefunds] = await Promise.all([
+		ctx.db
+			.query("payments")
+			.withIndex("by_org_status", (q) =>
+				q.eq("organizationId", orgId).eq("status", "succeeded"),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+		ctx.db
+			.query("refunds")
+			.withIndex("by_org_status", (q) =>
+				q.eq("organizationId", orgId).eq("status", "succeeded"),
+			)
+			.take(MAX_ANALYTICS_SCAN),
+	]);
+
 	// Hitting any cap means the org has more rows than were read —
-	// reported as truncated (fleet needs-work 09-13 P3).
-	const truncated = [payments, refunds, bookings].some(
-		(rows) => rows.length >= MAX_ANALYTICS_SCAN,
-	);
+	// reported as truncated (fleet needs-work 09-13 P3). A capped payment
+	// scan understates collection, so it also understates coverage; the
+	// operator is told rather than shown a quietly wrong percentage.
+	const truncated = [
+		payments,
+		refunds,
+		bookings,
+		depositPayments,
+		depositRefunds,
+	].some((rows) => rows.length >= MAX_ANALYTICS_SCAN);
 
 	// Gross = originally captured payments: "succeeded" + fully-refunded.
 	// A full refund flips payments.status to "refunded" AFTER capture
@@ -506,17 +570,44 @@ export async function buildFinancialHealth(
 	const refundRate =
 		grossCents > 0 ? round1((refundCents / grossCents) * 100) : 0;
 
+	// Net money actually retained per booking. Refunds are attributed
+	// through their payment first — `refunds.bookingId` is optional and is
+	// absent on rows created by the generic refund path.
+	const bookingOfPayment = new Map<string, string>();
+	const collected = new Map<string, number>();
+	for (const p of depositPayments) {
+		if (!p.bookingId) continue;
+		const key = String(p.bookingId);
+		bookingOfPayment.set(String(p._id), key);
+		collected.set(key, (collected.get(key) ?? 0) + Number(p.amountCents));
+	}
+	for (const r of depositRefunds) {
+		const key = bookingOfPayment.get(String(r.paymentId)) ?? (r.bookingId ? String(r.bookingId) : null);
+		if (!key) continue;
+		collected.set(key, (collected.get(key) ?? 0) - Number(r.amountCents));
+	}
+
 	const activeBookings = bookings.filter((b) => b.status !== "cancelled");
 	const outstandingCents = activeBookings.reduce(
 		(s, b) => s + Number(b.balanceDueCents),
 		0,
 	);
-	const bookingsWithDeposit = activeBookings.filter(
-		(b) => Number(b.depositAmountCents) > 0,
-	).length;
+
+	// Required deposit = what the row says is held MINUS what we can see was
+	// actually collected, since the field carries both. Clamped at 0 so a
+	// refund larger than the charge cannot invent a negative requirement.
+	let bookingsRequiringDeposit = 0;
+	let bookingsWithDepositPaid = 0;
+	for (const b of activeBookings) {
+		const net = Math.max(0, collected.get(String(b._id)) ?? 0);
+		const required = Math.max(0, Number(b.depositAmountCents) - net);
+		if (required <= 0) continue;
+		bookingsRequiringDeposit++;
+		if (net >= required) bookingsWithDepositPaid++;
+	}
 	const depositCoverage =
-		activeBookings.length > 0
-			? round1((bookingsWithDeposit / activeBookings.length) * 100)
+		bookingsRequiringDeposit > 0
+			? round1((bookingsWithDepositPaid / bookingsRequiringDeposit) * 100)
 			: 0;
 
 	return {
@@ -527,7 +618,8 @@ export async function buildFinancialHealth(
 		refundRate,
 		outstandingCents,
 		bookingsTotal: activeBookings.length,
-		bookingsWithDeposit,
+		bookingsRequiringDeposit,
+		bookingsWithDepositPaid,
 		depositCoverage,
 		truncated,
 	};
@@ -635,6 +727,7 @@ export async function buildTopTours(
 	endDate: string,
 	limit: number,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scans to prevent OOM on large orgs. Hitting either
 	// cap means the org has more rows than were read — reported as
 	// truncated (fleet needs-work 09-08/09-13, silent take(N) caps).
@@ -700,6 +793,7 @@ export async function buildForTour(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const tour = await ctx.db.get(tourId as Id<"tours">);
 	if (!tour || tour.organizationId !== orgId || tour.deletedAt !== undefined) {
@@ -726,6 +820,13 @@ export async function buildForTour(
 			)
 			.take(MAX_ANALYTICS_SCAN),
 	]);
+
+	// A full window means a scan hit the cap and every count below is a
+	// floor, not the total — the org-wide assignments leg hits it first
+	// for a busy org, corrupting every tour's figures (F858).
+	const truncated =
+		bookings.length >= MAX_ANALYTICS_SCAN ||
+		assignments.length >= MAX_ANALYTICS_SCAN;
 
 	const tourAssignments = assignments.filter(
 		(a) => a.tourId === tour._id && !a.deletedAt,
@@ -773,6 +874,7 @@ export async function buildForTour(
 		cancelledAssignments: tourAssignments.filter(
 			(a) => a.status === "cancelled",
 		).length,
+		truncated,
 	};
 }
 
@@ -782,6 +884,7 @@ export async function buildBookingSources(
 	startDate: string,
 	endDate: string,
 ) {
+	assertYmdRange(startDate, endDate);
 	// Bound the scan to prevent OOM on large orgs.
 	const MAX_ANALYTICS_SCAN = 10_000;
 	const bookings = await ctx.db

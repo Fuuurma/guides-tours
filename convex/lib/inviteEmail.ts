@@ -21,7 +21,7 @@
 import { sendTemplatedEmail } from "./sendEmail";
 import { logger } from "./logger";
 
-export type InvitationEmailData = {
+type InvitationEmailData = {
 	id: string;
 	email: string;
 	organization: { name: string };

@@ -30,7 +30,8 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { useTodayYmd } from "@/hooks/use-today-ymd";
-import { getErrorMessage } from "@/lib/utils";
+import { formatCount } from "@/lib/format";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_GUEST_NAMES_LEN,
 	MAX_NOTES_LEN,
@@ -223,7 +224,7 @@ export function NewBookingPage() {
 					params: { bookingId: id },
 				});
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -394,7 +395,13 @@ export function NewBookingPage() {
 													Add a customer first
 												</Link>
 											) : customerItems.length === 0 ? (
-												"No matches — try a different name or email."
+												customers?.truncated ? (
+													// The scan is capped, so "no matches" can mean
+													// "past the cap", not "not on file".
+													`No match in the ${formatCount(customers.maxScan)} most recent customers — check the CRM list.`
+												) : (
+													"No matches — try a different name or email."
+												)
 											) : (
 												"Must already be in this organization."
 											)}

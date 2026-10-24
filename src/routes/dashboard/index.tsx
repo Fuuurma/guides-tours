@@ -41,8 +41,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { useOrgMembers } from "@/hooks/use-org-members";
 import { addDaysLocal, localYmd } from "@/lib/calendar-date";
-import { formatCentsWhole, formatSignedPct } from "@/lib/format";
-import { cn, getErrorMessage } from "@/lib/utils";
+import {
+	formatCentsWhole,
+	formatLongDate,
+	formatSignedPct,
+} from "@/lib/format";
+import { cn, getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -78,9 +82,6 @@ function DashboardIndex() {
 	);
 	const { data: assignments, error: assignmentsError } = useQuery(
 		convexQuery(api.assignments.list, { dateFrom: today }),
-	);
-	const { data: customers, error: customersError } = useQuery(
-		convexQuery(api.customers.list, {}),
 	);
 	const {
 		data: tours,
@@ -130,7 +131,6 @@ function DashboardIndex() {
 		bookingsError ??
 		pendingBookingsError ??
 		assignmentsError ??
-		customersError ??
 		toursError ??
 		staffingError ??
 		missingPhoneError ??
@@ -138,9 +138,6 @@ function DashboardIndex() {
 
 	const tourNameById = new Map<string, string>(
 		(tours ?? []).map((t) => [String(t._id), t.name]),
-	);
-	const customerNameById = new Map<string, string>(
-		(customers?.items ?? []).map((c) => [String(c._id), c.name]),
 	);
 
 	const todaysBookings = (bookings?.items ?? []).filter(
@@ -159,7 +156,10 @@ function DashboardIndex() {
 		)
 		.slice(0, 4);
 	const totalTours = (tours ?? []).filter((t) => t.isActive).length;
-	const gaps = staffingGaps ?? [];
+	const gaps = staffingGaps?.gaps ?? [];
+	// F872: the 7-day scan is capped, so a cut window's 48h count is a
+	// floor — the pill must carry that instead of reading as complete.
+	const gapsTruncated = staffingGaps?.truncated === true;
 	const topGaps = gaps.slice(0, 5);
 	const missing = missingPhones ?? [];
 	const topMissing = missing.slice(0, 5);
@@ -215,10 +215,12 @@ function DashboardIndex() {
 		// pill is "right now" urgency, not "this week".
 		const horizon = localYmd(addDaysLocal(new Date(), 2));
 		const gaps48h = gaps.filter((g) => g.date >= today && g.date <= horizon);
-		if (gaps48h.length > 0) {
+		if (gaps48h.length > 0 || gapsTruncated) {
 			items.push({
 				key: "gaps48h",
-				label: "Staffing gaps in 48h",
+				label: gapsTruncated
+					? "Staffing gaps in 48h · partial check"
+					: "Staffing gaps in 48h",
 				count: gaps48h.length,
 				to: "/dashboard/staffing",
 				icon: UserCheck,
@@ -271,6 +273,7 @@ function DashboardIndex() {
 		return items;
 	}, [
 		gaps,
+		gapsTruncated,
 		today,
 		pendingBookingPage,
 		pendingBookings.length,
@@ -296,7 +299,7 @@ function DashboardIndex() {
 				}`,
 			);
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setRemindPending(false);
 		}
@@ -306,7 +309,7 @@ function DashboardIndex() {
 		<div className="flex flex-col gap-6">
 			{firstError && (
 				<ErrorBanner
-					message={`Some data failed to load: ${firstError.message}`}
+					message={`Some data failed to load: ${getSafeDisplayMessage(firstError)}`}
 					hint="Cards below may show stale or empty data. Refresh to retry."
 				/>
 			)}
@@ -322,11 +325,7 @@ function DashboardIndex() {
 						This week
 					</h1>
 					<p className="mt-0.5 text-sm text-muted-foreground">
-						{new Date().toLocaleDateString(undefined, {
-							weekday: "long",
-							month: "long",
-							day: "numeric",
-						})}
+						{formatLongDate(new Date())}
 						{" · "}
 						{org?.name ?? "your workspace"}
 					</p>
@@ -447,8 +446,7 @@ function DashboardIndex() {
 											>
 												<div className="min-w-0 flex-1">
 													<p className="truncate font-medium">
-														{customerNameById.get(String(booking.customerId)) ??
-															"Customer request"}
+														{booking.customerName ?? "Customer request"}
 													</p>
 													<p className="text-xs text-muted-foreground">
 														{tourNameById.get(String(booking.tourId)) ??
@@ -552,9 +550,7 @@ function DashboardIndex() {
 									<ul className="flex flex-col gap-2">
 										{todaysBookings.slice(0, 6).map((b) => {
 											const tourName = tourNameById.get(String(b.tourId));
-											const customerName = b.customerId
-												? customerNameById.get(String(b.customerId))
-												: null;
+											const customerName = b.customerName;
 											return (
 												<li
 													key={b._id}

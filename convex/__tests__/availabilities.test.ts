@@ -252,3 +252,66 @@ describe("availabilities.remove — public authz", () => {
 		expect(await t.run((ctx) => ctx.db.get(id))).toBeNull();
 	});
 });
+
+// F686 — the on-behalf path role-gated but never verified the TARGET is a
+// member of the org, so an owner/admin could write availability rows for
+// any foreign or garbage userId, polluting the by_org_user_date rows that
+// booking availability and vacation conflict scans consult. The siblings
+// (drivers.create, vacationRequests.create) verify the target; this pins
+// the same refusal here.
+describe("availabilities.upsert — on-behalf target membership", () => {
+	const ORG: MockOrg = {
+		id: "org_behalf",
+		name: "OnBehalf Org",
+		slug: "onbehalf-org",
+		createdAt: 1,
+		members: [
+			{ userId: "u_owner", role: "owner" },
+			{ userId: "u_guide", role: "guide" },
+		],
+	};
+
+	function signIn(userId: string) {
+		mockState.user = {
+			_id: userId,
+			name: userId,
+			email: `${userId}@example.com`,
+		};
+		mockState.session = { activeOrganizationId: ORG.id };
+		mockState.orgs = [ORG];
+	}
+
+	it("owner cannot write availability for a user outside the org", async () => {
+		const t = convexTest(schema, modules);
+		signIn("u_owner");
+		await expect(
+			t.mutation(api.availabilities.upsert, {
+				userIdTarget: "foreign-user",
+				date: "2026-08-12",
+				isAvailable: true,
+			}),
+		).rejects.toThrow(/not a member of this organization/);
+		// No polluted row may survive the refusal.
+		const rows = (await t.run((ctx) =>
+			ctx.db.query("availabilities").collect(),
+		)) as Array<{ userId: string }>;
+		expect(rows.find((r) => r.userId === "foreign-user")).toBeUndefined();
+	});
+
+	it("owner still writes availability for an org member on request", async () => {
+		const t = convexTest(schema, modules);
+		signIn("u_owner");
+		await t.mutation(api.availabilities.upsert, {
+			userIdTarget: "u_guide",
+			date: "2026-08-12",
+			isAvailable: false,
+		});
+		const row = (await t.run((ctx) =>
+			ctx.db
+				.query("availabilities")
+				.filter((q) => q.eq(q.field("userId"), "u_guide"))
+				.first(),
+		)) as any;
+		expect(row?.isAvailable).toBe(false);
+	});
+});

@@ -32,7 +32,10 @@ import type { QueryCtx } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireMembership, requirePermission } from "./lib/authz";
-import { parseBookingTime } from "./lib/time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./lib/time";
 import { logAudit } from "./lib/audit";
 import {
 	MAX_GUEST_NAMES_LEN,
@@ -42,6 +45,7 @@ import {
 	assertFieldWithinLimit,
 } from "./lib/validation";
 import { isBlackoutHelper } from "./tourBlackoutDates";
+import { exceptionForDateHelper } from "./tourExceptionDates";
 import {
 	PENDING_EXPIRY_MS,
 	performCancel,
@@ -50,10 +54,41 @@ import {
 	performExpire,
 	performNoShow,
 	performUpdate,
+	staffCreateExceptionRefusal,
 } from "./lib/bookingsLifecycle";
 import { logger } from "./lib/logger";
 
 // ----- Queries -----
+
+/**
+ * Resolve customer names for a set of bookings, one `.get()` per UNIQUE
+ * customer instead of one per row.
+ *
+ * `list` is already org-scoped by `requireMembership`, and every booking it
+ * returns belongs to the caller's org, so each resolved customer belongs to
+ * that org too. `bookings.listBySchedule` goes through its own org check
+ * before calling this. Ids that resolve to nothing are simply absent from the
+ * map — callers render their own fallback for a missing name, which is also
+ * what a booking with no `customerId` gets.
+ */
+export async function batchCustomerNames(
+	ctx: QueryCtx,
+	bookings: readonly { customerId?: Id<"customers"> }[],
+): Promise<Map<Id<"customers">, string>> {
+	const ids = [
+		...new Set(
+			bookings
+				.map((b) => b.customerId)
+				.filter((id): id is Id<"customers"> => id !== undefined),
+		),
+	];
+	const out = new Map<Id<"customers">, string>();
+	for (const id of ids) {
+		const customer = await ctx.db.get(id);
+		if (customer) out.set(id, customer.name);
+	}
+	return out;
+}
 
 export const list = query({
 	args: {
@@ -96,8 +131,10 @@ export const list = query({
 		// Pick the right index based on which filter is present.
 		// by_org_source_date leads with (org, source, date) — push dateFrom/
 		// dateTo into the index range so we don't scan every booking with
-		// the given source. When no filter is present and sorting by
-		// `date`, use by_org_date with .order() to skip the JS sort below.
+		// the given source. Every branch that leads with `date` applies
+		// .order() explicitly: a Convex index scan iterates ascending, so
+		// without it the filtered branches returned oldest-first while the
+		// default sortOrder is 'desc' (F139).
 		// Bound the scan: a single page is at most 100, but the JS filter
 		// (status, tourId, customerId, search) needs every matching row.
 		// Cap at 5000 — the FE paginates, so this is fine for reasonable
@@ -124,6 +161,7 @@ export const list = query({
 						if (args.dateTo) return eq.lte("date", args.dateTo!);
 						return eq;
 					})
+					.order(order)
 					.take(MAX_SCAN)
 			: args.dateFrom || args.dateTo
 				? ctx.db
@@ -137,6 +175,7 @@ export const list = query({
 							if (args.dateTo) return eq.lte("date", args.dateTo);
 							return eq;
 						})
+						.order(order)
 						.take(MAX_SCAN)
 				: canUseDateOrder
 					? ctx.db
@@ -187,7 +226,9 @@ export const list = query({
 		// Skip the JS sort when the index already returns rows in the
 		// requested order. by_org_date and by_org_source_date both lead
 		// with `date`, so sorting by `date` is free when the index order
-		// matches (canUseDateOrder applies .order() explicitly).
+		// matches — every branch that leads with `date` applies .order()
+		// explicitly (F139), so "the index leads with date" and "the rows
+		// are in the requested order" are the same statement.
 		const indexAlreadySorted =
 			canUseDateOrder ||
 			((args.source || args.dateFrom || args.dateTo) && sortBy === "date");
@@ -206,11 +247,25 @@ export const list = query({
 
 		const total = filtered.length;
 		const offset = (page - 1) * pageSize;
-		const items = filtered.slice(offset, offset + pageSize);
+		const pageRows = filtered.slice(offset, offset + pageSize);
 		const hasNext = offset + pageSize < total;
 
+		// Hydrate customerName server-side. The three callers that render a
+		// customer name (bookings.tsx, dashboard/index.tsx x2) used to build
+		// their own name dictionary from ONE default page of
+		// customers.list, so any customer outside those 20 rows rendered as
+		// "Unknown customer". The ids are already on these rows; resolving
+		// them here is O(unique customers on the page) and cannot drift
+		// from the rows being rendered. Same batching as _listByScheduleRaw.
+		const nameByCustomer = await batchCustomerNames(ctx, pageRows);
+
 		return {
-			items,
+			items: pageRows.map((b) => ({
+				...b,
+				customerName: b.customerId
+					? (nameByCustomer.get(b.customerId) ?? null)
+					: null,
+			})),
 			total,
 			page,
 			pageSize,
@@ -238,11 +293,14 @@ export const list = query({
  * a small number of distinct customers so the savings are real.
  */
 async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">) {
+	// Probe one row past the cap so `truncated` reports a silently
+	// shortened roster instead of dropping it (F468).
 	const all = await ctx.db
 		.query("bookings")
 		.withIndex("by_schedule", (q) => q.eq("scheduleId", scheduleId))
-		.take(500);
-	const active = all
+		.take(501);
+	const truncated = all.length > 500;
+	const active = all.slice(0, 500)
 		.filter((b) => b.status !== "cancelled")
 		.sort((a, b) => a.startTime.localeCompare(b.startTime));
 	const uniqueCustomerIds = [
@@ -256,18 +314,21 @@ async function _listByScheduleRaw(ctx: QueryCtx, scheduleId: Id<"tourSchedules">
 		const c = customerDocs[i];
 		if (c) customerById.set(id, c);
 	}
-	return active.map((b) => {
-		const c = customerById.get(b.customerId);
-		return {
-			_id: b._id,
-			date: b.date,
-			startTime: b.startTime,
-			guests: b.guests,
-			status: b.status,
-			customerName: c?.name ?? "",
-			customerEmail: c?.email ?? "",
-		};
-	});
+	return {
+		bookings: active.map((b) => {
+			const c = customerById.get(b.customerId);
+			return {
+				_id: b._id,
+				date: b.date,
+				startTime: b.startTime,
+				guests: b.guests,
+				status: b.status,
+				customerName: c?.name ?? "",
+				customerEmail: c?.email ?? "",
+			};
+		}),
+		truncated,
+	};
 }
 
 export const listBySchedule = query({
@@ -280,7 +341,7 @@ export const listBySchedule = query({
 		// on scheduleId (defense in depth — a malicious caller can't
 		// read another org's bookings by guessing a scheduleId).
 		const schedule = await ctx.db.get(args.scheduleId);
-		if (!schedule) return [];
+		if (!schedule) return { bookings: [], truncated: false };
 		if (schedule.organizationId !== member.organizationId) {
 			throw new ConvexError(
 				"Forbidden: schedule belongs to a different organization",
@@ -303,7 +364,7 @@ export const internalListBySchedule = internalQuery({
 	},
 	handler: async (ctx, args) => {
 		const schedule = await ctx.db.get(args.scheduleId);
-		if (!schedule) return [];
+		if (!schedule) return { bookings: [], truncated: false };
 		if (schedule.organizationId !== args.organizationId) {
 			throw new ConvexError(
 				"Forbidden: schedule belongs to a different organization",
@@ -390,6 +451,9 @@ export const create = mutation({
 		if (tour.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
 		}
+		if (!tour.isActive || tour.deletedAt !== undefined) {
+			throw new ConvexError("Tour is not active");
+		}
 		if (!customer) throw new ConvexError("Customer not found");
 		if (customer.organizationId !== member.organizationId) {
 			throw new ConvexError("Forbidden: customer belongs to a different organization");
@@ -456,7 +520,15 @@ export const create = mutation({
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
-			const match = await ctx.db
+			// F1006: a cancel/re-create cycle leaves TWO schedules in the
+			// same (tourId, date, startTime) partition — see convex/ops.ts,
+			// which reads that partition with take(20) + a JS filter for
+			// exactly this reason. .unique() threw Convex's opaque
+			// "unique() query returned more than one result" error on such
+			// a pair, so a staff booking died with an internal failure
+			// instead of refusing the slot. take(2) + a length check
+			// refuses the ambiguous slot the way F694's sites now do.
+			const matches = await ctx.db
 				.query("tourSchedules")
 				.withIndex("by_tour_date_start", (q) =>
 					q
@@ -464,7 +536,13 @@ export const create = mutation({
 						.eq("date", args.date)
 						.eq("startTime", args.startTime),
 				)
-				.unique();
+				.take(2);
+			if (matches.length > 1) {
+				throw new ConvexError(
+					`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+				);
+			}
+			const match = matches[0];
 			if (match && match.organizationId === member.organizationId) {
 				if (match.status === "cancelled") {
 					throw new ConvexError("Cannot book a cancelled schedule");
@@ -474,8 +552,12 @@ export const create = mutation({
 		}
 
 		// Reject past dates and dates inside the bookingCutoffHours
-		// window. parseBookingTime returns null on malformed input.
-		const tourTs = parseBookingTime(date, startTime);
+		// window. parseBookingTimeInZone returns null on malformed input.
+		const timeZone = await organizationTimeZone(
+			ctx,
+			tour.organizationId,
+		);
+		const tourTs = parseBookingTimeInZone(date, startTime, timeZone);
 		if (tourTs === null) {
 			throw new ConvexError(`Invalid date or time: "${date} ${startTime}"`);
 		}
@@ -497,6 +579,31 @@ export const create = mutation({
 			throw new ConvexError(
 				"This date is not available for booking. Please pick another date.",
 			);
+		}
+
+		// F878: exception dates gate staff create like blackouts — a
+		// "removed" exception stays unbookable (update + the public path
+		// already refused it; create was the gap), and a capacityOverride
+		// caps the attached slot's sellable seats so a phone booking
+		// cannot oversell an operator-capped date.
+		const dateException = await exceptionForDateHelper(
+			ctx,
+			args.tourId,
+			member.organizationId,
+			date,
+		);
+		let attachedCapacityBooked: number | undefined;
+		if (scheduleId && dateException?.capacityOverride !== undefined) {
+			attachedCapacityBooked = (await ctx.db.get(scheduleId))
+				?.capacityBooked;
+		}
+		const exceptionRefusal = staffCreateExceptionRefusal(dateException, {
+			scheduleId,
+			guests: args.guests,
+			attachedCapacityBooked,
+		});
+		if (exceptionRefusal) {
+			throw new ConvexError(exceptionRefusal.message);
 		}
 
 		// Money-field validation (fleet audit 09-16): every other field
@@ -532,7 +639,7 @@ export const create = mutation({
 			balanceDueCents: balance,
 			paymentMethod: args.paymentMethod ?? "",
 			checkedInAt: undefined,
-			checkedInBy: "",
+			checkedInBy: undefined,
 			completedAt: undefined,
 			// Net revenue = gross minus commission. We don't track
 			// commission on regular (non-OTA) bookings, so this
@@ -541,7 +648,7 @@ export const create = mutation({
 			netRevenueCents: total,
 			source: args.source ?? "direct",
 			reviewRating: undefined,
-			reviewComment: "",
+			reviewComment: undefined,
 			createdAt: now,
 			updatedAt: now,
 		});
@@ -558,6 +665,12 @@ export const create = mutation({
 					guests: args.guests,
 				},
 			);
+			// Record the capacity claim only after the increment
+			// succeeded, so releaseBookingCapacity can never be handed a
+			// claim this booking does not hold.
+			await ctx.db.patch(bookingId, {
+				capacityClaimedScheduleId: scheduleId,
+			});
 		}
 
 		// Source pattern: unconditionally set customer.nextBookingDate
@@ -821,23 +934,6 @@ export const internalComplete = internalMutation({
 	},
 });
 
-/** Mark a confirmed booking as no-show. Terminal — the seat was
- *  held, so capacity is NOT released. */
-export const markNoShow = mutation({
-	args: { bookingId: v.id("bookings") },
-	handler: async (ctx, args) => {
-		// Enforce declared RBAC: booking:update (owner/admin only).
-		const member = await requirePermission(ctx, "booking", "update");
-		const booking = await ctx.db.get(args.bookingId);
-		if (!booking) throw new ConvexError("Booking not found");
-		if (booking.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: wrong organization");
-		}
-		await performNoShow(ctx, booking, member.userId);
-		return args.bookingId;
-	},
-});
-
 /** Internal mirror of markNoShow — no auth, used by tests. */
 export const internalNoShow = internalMutation({
 	args: { bookingId: v.id("bookings") },
@@ -857,12 +953,36 @@ export const internalNoShow = internalMutation({
  */
 export const internalExpire = internalMutation({
 	args: { bookingId: v.id("bookings") },
-	handler: async (ctx, args) => {
+	// Returns whether the row actually transitioned, so the cron does not
+	// count a deliberately-skipped booking as expired. Callers that only want
+	// the side effect can ignore it.
+	handler: async (
+		ctx,
+		args,
+	): Promise<{ expired: boolean; skipped: "not-pending" | "paid" | null }> => {
 		const booking = await ctx.db.get(args.bookingId);
 		if (!booking) throw new ConvexError("Booking not found");
-		if (booking.status !== "pending") return args.bookingId; // already transitioned
+		if (booking.status !== "pending") {
+			return { expired: false, skipped: "not-pending" }; // already transitioned
+		}
+		// GT-AUDIT-03: never expire a booking that has been paid for.
+		// applyPaymentToBooking reduces balanceDueCents but never leaves
+		// "pending", so the 15-minute cron used to sweep fully-paid requests:
+		// seats released and resold, and the row left unconfirmable while the
+		// guest had already paid. The check lives here, at the chokepoint every
+		// expiry path goes through, rather than in the cron scan filter — a
+		// direct internalExpire must not be able to sweep a paid row either.
+		//
+		// Only SUCCEEDED counts. A FAILED or CANCELLED payment leaves the guest
+		// owing the balance, so those rows must still expire unattended.
+		const paid = await ctx.db
+			.query("payments")
+			.withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
+			.filter((q) => q.eq(q.field("status"), "SUCCEEDED"))
+			.first();
+		if (paid) return { expired: false, skipped: "paid" };
 		await performExpire(ctx, booking, "system:cron");
-		return args.bookingId;
+		return { expired: true, skipped: null };
 	},
 });
 
@@ -888,12 +1008,19 @@ export const expireStalePending = internalMutation({
 			)
 			.take(MAX_BATCH);
 		let expired = 0;
+		let keptPaid = 0;
 		for (const booking of stale) {
 			try {
-				await ctx.runMutation(internal.bookings.internalExpire, {
-					bookingId: booking._id,
-				});
-				expired++;
+				// internalExpire reports whether the row actually transitioned:
+				// a paid booking is deliberately left pending, and counting it
+				// as expired would report a clean sweep while customer money
+				// sits in an unconfirmable row.
+				const r = await ctx.runMutation(
+					internal.bookings.internalExpire,
+					{ bookingId: booking._id },
+				);
+				if (r.expired) expired++;
+				else if (r.skipped === "paid") keptPaid++;
 			} catch (err) {
 				logger.error("[bookings] internalExpire failed", {
 					bookingId: booking._id,
@@ -901,7 +1028,14 @@ export const expireStalePending = internalMutation({
 				});
 			}
 		}
-		return { scanned: stale.length, expired };
+		if (keptPaid > 0) {
+			// Surfaced rather than swallowed: these rows need an operator to
+			// confirm, and a silent skip looks identical to "nothing to do".
+			logger.warn("[bookings] kept paid bookings pending for confirmation", {
+				count: keptPaid,
+			});
+		}
+		return { scanned: stale.length, expired, keptPaid };
 	},
 });
 
@@ -942,7 +1076,7 @@ export const recordReview = mutation({
 		const now = Date.now();
 		await ctx.db.patch(args.bookingId, {
 			reviewRating: args.rating,
-			reviewComment: args.comment ?? "",
+			reviewComment: args.comment,
 			updatedAt: now,
 		});
 		return args.bookingId;
@@ -973,7 +1107,7 @@ export const internalRecordReview = internalMutation({
 
 		await ctx.db.patch(args.bookingId, {
 			reviewRating: args.rating,
-			reviewComment: args.comment ?? "",
+			reviewComment: args.comment,
 			updatedAt: Date.now(),
 		});
 		return args.bookingId;

@@ -17,7 +17,7 @@ import {
 
 import { internal } from "./_generated/api";
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requirePermission, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
 import {
 	MAX_EMAIL_BODY_LEN,
@@ -121,7 +121,7 @@ export const create = mutation({
 		retryCount: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "notification", "create");
 		return await ctx.runMutation(
 			internalRefs.notificationTemplates.internalCreate,
 			{ organizationId: member.organizationId, createdBy: member.userId, ...args },
@@ -237,7 +237,7 @@ export const update = mutation({
 		retryCount: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "notification", "update");
 		const { templateId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.notificationTemplates.internalUpdate,

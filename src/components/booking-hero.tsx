@@ -1,58 +1,15 @@
 // Public booking hero: org identity masthead above the booking form.
-// Photography leads (DESIGN.md) — the band is deterministic placeholder
-// photography per org slug until operators can upload cover photos, so
-// it is aria-hidden decor, never captioned as the operator's own.
+// Photography leads (DESIGN.md) — the band shows the operator's own
+// cover photo (first tour carrying one) when the payload has it, and
+// falls back to deterministic placeholder photography per org slug
+// otherwise. Either way it is aria-hidden decor, never captioned.
 // The metric strip reuses TrustMetric with numbers derived from the
 // org's real tour list — no invented proof.
 import { TrustMetric } from "@/components/trust-metric";
-
-export type BookingHeroTour = {
-	_id: string;
-	name: string;
-	maxGuests: number;
-	currency: string;
-	basePriceCents: bigint | number | undefined;
-};
-
-export type BookingHeroStats = {
-	tourCount: number;
-	/** "from" price across priced tours, or null when none are priced. */
-	fromPrice: string | null;
-	/** Largest party any tour accepts, or null when no tours. */
-	maxGroup: number | null;
-};
-
-export function deriveBookingHeroStats(
-	tours: BookingHeroTour[],
-): BookingHeroStats {
-	let minCents: number | null = null;
-	let minCurrency = "USD";
-	let maxGroup: number | null = null;
-	for (const tour of tours) {
-		if (tour.basePriceCents !== undefined) {
-			const cents = Number(tour.basePriceCents);
-			if (minCents === null || cents < minCents) {
-				minCents = cents;
-				minCurrency = tour.currency || "USD";
-			}
-		}
-		if (maxGroup === null || tour.maxGuests > maxGroup) {
-			maxGroup = tour.maxGuests;
-		}
-	}
-	return {
-		tourCount: tours.length,
-		fromPrice:
-			minCents === null
-				? null
-				: new Intl.NumberFormat("en-US", {
-						style: "currency",
-						currency: minCurrency,
-						maximumFractionDigits: 0,
-					}).format(minCents / 100),
-		maxGroup,
-	};
-}
+import {
+	type BookingHeroTour,
+	deriveBookingHeroStats,
+} from "@/lib/booking-hero-stats";
 
 export function BookingHero({
 	organizationName,
@@ -64,6 +21,10 @@ export function BookingHero({
 	tours: BookingHeroTour[];
 }) {
 	const stats = deriveBookingHeroStats(tours);
+	const cover = tours.find((t) => t.primaryImageUrl)?.primaryImageUrl ?? null;
+	const bandSrc =
+		cover ??
+		`https://picsum.photos/seed/guides-tours-${encodeURIComponent(slug)}/1600/500`;
 	return (
 		<header className="mb-8">
 			<div
@@ -71,7 +32,7 @@ export function BookingHero({
 				className="relative mb-6 overflow-hidden rounded-2xl border"
 			>
 				<img
-					src={`https://picsum.photos/seed/guides-tours-${encodeURIComponent(slug)}/1600/500`}
+					src={bandSrc}
 					alt=""
 					loading="eager"
 					className="h-44 w-full object-cover sm:h-56"

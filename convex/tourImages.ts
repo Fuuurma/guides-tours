@@ -13,8 +13,17 @@ import {
 
 import { internal } from "./_generated/api";
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import {
+	requireMembership,
+	requirePermission,
+	requireRole,
+} from "./lib/authz";
 import { logAudit } from "./lib/audit";
+
+// F812: the gallery read caps at this many images per tour; the add
+// path enforces the same cap so rows beyond it could never exist
+// (invisible AND unbounded before this).
+const MAX_IMAGES_PER_TOUR = 200;
 
 // ---- queries ----
 
@@ -28,7 +37,6 @@ export const list = query({
 		// Bound the result so a tour with thousands of images
 		// doesn't OOM the response. The FE gallery renders at most
 		// a few dozen per tour.
-		const MAX_IMAGES = 200;
 		let q = ctx.db
 			.query("tourImages")
 			.withIndex("by_org", (q) => q.eq("organizationId", orgId));
@@ -39,7 +47,7 @@ export const list = query({
 				.withIndex("by_tour", (q) => q.eq("tourId", args.tourId!))
 				.filter((q) => q.eq(q.field("organizationId"), orgId));
 		}
-		const rows = await q.take(MAX_IMAGES);
+		const rows = await q.take(MAX_IMAGES_PER_TOUR);
 		const sorted = rows.sort((a, b) => a.displayOrder - b.displayOrder);
 		// Attach signed URLs for the gallery UI.
 		return await Promise.all(
@@ -48,40 +56,6 @@ export const list = query({
 				url: await ctx.storage.getUrl(img.storageId),
 			})),
 		);
-	},
-});
-
-export const get = query({
-	args: { imageId: v.id("tourImages") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const img = await ctx.db.get(args.imageId);
-		if (!img) throw new ConvexError("Image not found");
-		if (img.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: image belongs to a different organization");
-		}
-		const url = await ctx.storage.getUrl(img.storageId);
-		return { ...img, url };
-	},
-});
-
-export const getUrl = query({
-	args: { storageId: v.id("_storage") },
-	handler: async (ctx, args) => {
-		// SECURITY: require membership + verify the storageId is
-		// referenced by one of this org's tourImages rows. Without
-		// this check, any signed-in user could fetch a signed URL
-		// for any blob in Convex storage by guessing/iterating IDs.
-		const member = await requireMembership(ctx);
-		const img = await ctx.db
-			.query("tourImages")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.filter((q) => q.eq(q.field("storageId"), args.storageId))
-			.first();
-		if (!img) return null;
-		return await ctx.storage.getUrl(args.storageId);
 	},
 });
 
@@ -100,7 +74,7 @@ export const add = mutation({
 		format: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "create");
 		return await ctx.runMutation(
 			internalRefs.tourImages.internalAdd,
 			{
@@ -109,6 +83,37 @@ export const add = mutation({
 				...args,
 			},
 		);
+	},
+});
+
+// F846: the client PUTs the blob to storage before calling `add`, so a
+// rejected add (full gallery, missing tour, permission) leaves a live,
+// unreferenced blob. A failed mutation rolls its own storage writes
+// back, so cleanup can't happen inside `add` — the client calls this
+// after catching the error. Deletes only when nothing references the
+// storageId, which keeps it safe against retries and double-submits:
+// a blob any tourImages or files row points at is left alone.
+export const discard = mutation({
+	args: { storageId: v.id("_storage") },
+	handler: async (ctx, args) => {
+		await requireMembership(ctx);
+		const [galleryRow, fileRow] = await Promise.all([
+			ctx.db
+				.query("tourImages")
+				.withIndex("by_storage_id", (q) =>
+					q.eq("storageId", args.storageId),
+				)
+				.first(),
+			ctx.db
+				.query("files")
+				.withIndex("by_storage_id", (q) =>
+					q.eq("storageId", args.storageId),
+				)
+				.first(),
+		]);
+		if (!galleryRow && !fileRow) {
+			await ctx.storage.delete(args.storageId);
+		}
 	},
 });
 
@@ -131,6 +136,18 @@ export const internalAdd = internalMutation({
 		if (!tour) throw new ConvexError("Tour not found");
 		if (tour.organizationId !== args.organizationId) {
 			throw new ConvexError("Forbidden: tour belongs to a different organization");
+		}
+		// F812: enforce the gallery cap at the write. The read takes at
+		// most MAX_IMAGES_PER_TOUR rows, so images beyond it were both
+		// invisible and unbounded.
+		const existing = await ctx.db
+			.query("tourImages")
+			.withIndex("by_tour", (q) => q.eq("tourId", args.tourId))
+			.take(MAX_IMAGES_PER_TOUR);
+		if (existing.length >= MAX_IMAGES_PER_TOUR) {
+			throw new ConvexError(
+				`Gallery is full: a tour can hold at most ${MAX_IMAGES_PER_TOUR} images`,
+			);
 		}
 		// If isPrimary is set, demote any existing primary for this tour.
 		// Use by_tour_primary to fetch only primary images (small set)
@@ -200,7 +217,7 @@ export const update = mutation({
 		displayOrder: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "update");
 		const { imageId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.tourImages.internalUpdate,
@@ -295,7 +312,7 @@ export const reorder = mutation({
 		orderedImageIds: v.array(v.id("tourImages")),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "tour", "update");
 		return await ctx.runMutation(
 			internalRefs.tourImages.internalReorder,
 			{

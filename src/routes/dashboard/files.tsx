@@ -17,7 +17,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -82,7 +83,7 @@ function FilesPage() {
 			await removeFile({ fileId: id });
 			toast.success("File deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPendingId(null);
 		}
@@ -130,9 +131,7 @@ function FilesPage() {
 			key: "created",
 			header: "Uploaded",
 			render: (f) => (
-				<span className="font-mono text-xs">
-					{new Date(f.createdAt).toLocaleString()}
-				</span>
+				<span className="font-mono text-xs">{formatDateTime(f.createdAt)}</span>
 			),
 		},
 		{

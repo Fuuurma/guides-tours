@@ -2,7 +2,7 @@ import { useForm, useStore } from "@tanstack/react-form";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageBackLink } from "@/components/detail-page";
-import { Button } from "@/components/ui/button";
+import { FormSubmitActions } from "@/components/forms/form-submit-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
@@ -15,10 +15,9 @@ import {
 	FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { getErrorMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_EMAIL_LEN,
 	MAX_NAME_LEN,
@@ -29,54 +28,7 @@ import {
 	validateNotesOptional,
 	validatePhoneOptional,
 } from "@/lib/validation";
-
-type CustomerFormValues = {
-	name: string;
-	email: string;
-	phone: string;
-	preferredLanguage: string;
-	notes: string;
-	vipStatus: boolean;
-	emailConsent: boolean;
-	smsConsent: boolean;
-};
-
-export const EMPTY_CUSTOMER_FORM: CustomerFormValues = {
-	name: "",
-	email: "",
-	phone: "",
-	preferredLanguage: "en",
-	notes: "",
-	vipStatus: false,
-	emailConsent: false,
-	smsConsent: false,
-};
-
-type CustomerDoc = {
-	name: string;
-	email: string;
-	phone?: string;
-	preferredLanguage?: string;
-	notes?: string;
-	vipStatus?: boolean;
-	emailConsent?: boolean;
-	smsConsent?: boolean;
-};
-
-export function customerDocToFormValues(
-	customer: CustomerDoc,
-): CustomerFormValues {
-	return {
-		name: customer.name,
-		email: customer.email,
-		phone: customer.phone ?? "",
-		preferredLanguage: customer.preferredLanguage ?? "en",
-		notes: customer.notes ?? "",
-		vipStatus: Boolean(customer.vipStatus),
-		emailConsent: customer.emailConsent === true,
-		smsConsent: customer.smsConsent === true,
-	};
-}
+import type { CustomerFormValues } from "./customer-form-model";
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,
@@ -145,7 +97,7 @@ export function CustomerForm({
 			try {
 				await onSave(value);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -349,17 +301,12 @@ export function CustomerForm({
 								}
 							>
 								{([canSubmit, isSubmitting]) => (
-									<div className="flex justify-end gap-2 pt-2">
-										<Button type="button" variant="outline" asChild>
-											<Link to={backTo}>Back</Link>
-										</Button>
-										<Button type="submit" disabled={!canSubmit || isSubmitting}>
-											{isSubmitting ? (
-												<Spinner data-icon="inline-start" />
-											) : null}
-											{isSubmitting ? "Saving…" : submitLabel}
-										</Button>
-									</div>
+									<FormSubmitActions
+										backLink={<Link to={backTo}>Back</Link>}
+										canSubmit={canSubmit}
+										isSubmitting={isSubmitting}
+										submitLabel={submitLabel}
+									/>
 								)}
 							</form.Subscribe>
 						</FieldGroup>

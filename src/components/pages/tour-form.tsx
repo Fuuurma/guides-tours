@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageBackLink } from "@/components/detail-page";
+import { FormSubmitActions } from "@/components/forms/form-submit-actions";
+import type { TourFormValues } from "@/components/pages/tour-form-model";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -27,13 +28,10 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { centsToInputValue } from "@/lib/format";
-import { resolveTourStaffing, TOUR_TYPES, VEHICLE_TYPES } from "@/lib/staffing";
-import { getErrorMessage } from "@/lib/utils";
+import { resolveTourStaffing, VEHICLE_TYPES } from "@/lib/staffing";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import {
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
@@ -43,132 +41,9 @@ import {
 	validatePositiveNumber,
 } from "@/lib/validation";
 import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { TourTypeField } from "./tour-type-field";
 
 const NONE = "__none__";
-
-type TourFormValues = {
-	name: string;
-	description: string;
-	tourType: string;
-	categoryId: string;
-	durationHours: string;
-	capacity: string;
-	minGuests: string;
-	maxGuests: string;
-	priceUsd: string;
-	languages: string;
-	requiredGuides: string;
-	requiresVehicle: boolean;
-	requiresDriver: boolean;
-	requiredVehicleType: string;
-	staffingOverride: boolean;
-	isActive: boolean;
-};
-
-export const EMPTY_TOUR_FORM: TourFormValues = {
-	name: "",
-	description: "",
-	tourType: "walking",
-	categoryId: "",
-	durationHours: "2",
-	capacity: "10",
-	minGuests: "1",
-	maxGuests: "10",
-	priceUsd: "",
-	languages: "en",
-	requiredGuides: "1",
-	requiresVehicle: false,
-	requiresDriver: false,
-	requiredVehicleType: "",
-	staffingOverride: false,
-	isActive: true,
-};
-
-type TourDoc = {
-	name: string;
-	description?: string;
-	tourType: string;
-	categoryId?: string;
-	durationHours: number;
-	capacity: number;
-	minGuests: number;
-	maxGuests: number;
-	isActive: boolean;
-	basePriceCents?: number | bigint;
-	languages: string[];
-	requiredGuides?: number;
-	requiresVehicle?: boolean;
-	requiresDriver?: boolean;
-	requiredVehicleType?: string;
-};
-
-export function tourDocToFormValues(tour: TourDoc): TourFormValues {
-	const inferred = resolveTourStaffing(tour);
-	const hasOverride =
-		tour.requiresVehicle !== undefined ||
-		tour.requiresDriver !== undefined ||
-		Boolean(tour.requiredVehicleType);
-	return {
-		name: tour.name,
-		description: tour.description ?? "",
-		tourType: tour.tourType === "walkable" ? "walking" : tour.tourType,
-		categoryId: tour.categoryId ?? "",
-		durationHours: String(tour.durationHours),
-		capacity: String(tour.capacity),
-		minGuests: String(tour.minGuests),
-		maxGuests: String(tour.maxGuests),
-		priceUsd: centsToInputValue(tour.basePriceCents),
-		languages: (tour.languages ?? ["en"]).join(", "),
-		requiredGuides: String(tour.requiredGuides ?? 1),
-		staffingOverride: hasOverride,
-		requiresVehicle: tour.requiresVehicle ?? inferred.requiresVehicle,
-		requiresDriver: tour.requiresDriver ?? inferred.requiresDriver,
-		requiredVehicleType:
-			tour.requiredVehicleType ?? inferred.requiredVehicleType ?? "",
-		isActive: tour.isActive,
-	};
-}
-
-export function tourFormToMutationArgs(value: TourFormValues) {
-	const inferred = resolveTourStaffing({
-		tourType: value.tourType,
-		requiredGuides: Number(value.requiredGuides) || 1,
-		requiresVehicle: value.staffingOverride ? value.requiresVehicle : undefined,
-		requiresDriver: value.staffingOverride ? value.requiresDriver : undefined,
-		requiredVehicleType: value.staffingOverride
-			? value.requiredVehicleType || undefined
-			: undefined,
-	});
-	const priceCents = value.priceUsd.trim()
-		? parseUsdToCents(value.priceUsd)
-		: null;
-	return {
-		name: value.name.trim(),
-		description: value.description.trim() || undefined,
-		tourType: value.tourType,
-		categoryId: value.categoryId
-			? (value.categoryId as Id<"tourCategories">)
-			: undefined,
-		durationHours: Number(value.durationHours),
-		capacity: Number(value.capacity),
-		minGuests: Number(value.minGuests),
-		maxGuests: Number(value.maxGuests),
-		basePriceCents: priceCents ?? undefined,
-		languages: value.languages
-			.split(",")
-			.map((s) => s.trim())
-			.filter(Boolean),
-		requiredGuides: Number(value.requiredGuides) || 1,
-		requiresVehicle: value.staffingOverride ? value.requiresVehicle : undefined,
-		requiresDriver: value.staffingOverride ? value.requiresDriver : undefined,
-		requiredVehicleType:
-			value.staffingOverride && inferred.requiresVehicle
-				? value.requiredVehicleType || undefined
-				: undefined,
-		isActive: value.isActive,
-	};
-}
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,
@@ -254,7 +129,7 @@ export function TourForm({
 			try {
 				await onSave(value);
 			} catch (err) {
-				setSubmitErr(getErrorMessage(err));
+				setSubmitErr(getSafeDisplayMessage(err));
 			}
 		},
 	});
@@ -337,31 +212,7 @@ export function TourForm({
 							</form.Field>
 
 							<form.Field name="tourType">
-								{(field) => (
-									<Field>
-										<FieldLabel htmlFor={id("type")}>Type</FieldLabel>
-										<ToggleGroup
-											id={id("type")}
-											type="single"
-											variant="outline"
-											size="sm"
-											value={field.state.value}
-											onValueChange={(v) => {
-												if (v) field.handleChange(v);
-											}}
-											className="flex-wrap"
-										>
-											{TOUR_TYPES.map((t) => (
-												<ToggleGroupItem key={t} value={t}>
-													{t}
-												</ToggleGroupItem>
-											))}
-										</ToggleGroup>
-										<FieldDescription>
-											Transport types default to needing a vehicle and driver.
-										</FieldDescription>
-									</Field>
-								)}
+								{(field) => <TourTypeField field={field} id={id} />}
 							</form.Field>
 
 							<FieldGroup className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -701,17 +552,12 @@ export function TourForm({
 								}
 							>
 								{([canSubmit, isSubmitting]) => (
-									<div className="flex justify-end gap-2 pt-2">
-										<Button type="button" variant="outline" asChild>
-											<Link to={backTo}>Back</Link>
-										</Button>
-										<Button type="submit" disabled={!canSubmit || isSubmitting}>
-											{isSubmitting ? (
-												<Spinner data-icon="inline-start" />
-											) : null}
-											{isSubmitting ? "Saving…" : submitLabel}
-										</Button>
-									</div>
+									<FormSubmitActions
+										backLink={<Link to={backTo}>Back</Link>}
+										canSubmit={canSubmit}
+										isSubmitting={isSubmitting}
+										submitLabel={submitLabel}
+									/>
 								)}
 							</form.Subscribe>
 						</FieldGroup>

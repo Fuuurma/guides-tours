@@ -11,6 +11,7 @@
  */
 
 import { v, ConvexError } from "convex/values";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import {
 	internalAction,
 	internalMutation,
@@ -36,6 +37,11 @@ import {
 } from "./lib/phoneRemindCooldown";
 
 const MAX_RECIPIENTS = 50;
+
+// F680: how long a claim on a user's reminder send stays live. Must
+// exceed the worst-case SES/Twilio stall (the finding cites >5 min) so
+// an overlapping cron tick inside the stall sees the claim and skips.
+const CLAIM_TTL_MS = 15 * 60 * 1000;
 
 export function formatPhoneReminder(input: {
 	name: string;
@@ -98,7 +104,10 @@ export const markUserSent = internalMutation({
 			)
 			.unique();
 		if (existing) {
-			await ctx.db.patch(existing._id, { lastSentAt: now });
+			await ctx.db.patch(existing._id, {
+				lastSentAt: now,
+				claimedAt: undefined,
+			});
 			return existing._id;
 		}
 		return await ctx.db.insert("phoneReminderSends", {
@@ -109,15 +118,121 @@ export const markUserSent = internalMutation({
 	},
 });
 
-export const lastSentMapForOrg = internalQuery({
-	args: { organizationId: v.string() },
-	handler: async (ctx, args) => {
-		const rows = await ctx.db
-			.query("phoneReminderSends")
-			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-			.take(500);
-		return rows.map((r) => ({ userId: r.userId, lastSentAt: r.lastSentAt }));
+// F680: claim a user's reminder send BEFORE dispatching. The claim is
+// the race fix: an overlapping cron tick (Convex does not skip ticks) or
+// a queued action re-scanning during a 5-min SES stall previously
+// re-sent the same reminder because the cooldown stamp only landed after
+// success. claimUserSend is an internalMutation — Convex mutations are
+// serializable, so the read-check-write inside it is atomic against
+// other mutations. Returns whether the caller owns the send.
+export const claimUserSend = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
 	},
+	handler: async (ctx, args) => {
+		const now = Date.now();
+		const existing = await ctx.db
+			.query("phoneReminderSends")
+			.withIndex("by_org_user", (q) =>
+				q.eq("organizationId", args.organizationId).eq("userId", args.userId),
+			)
+			.unique();
+		if (existing) {
+			// Inside the 7d cooldown — the reminder already went out.
+			if (now - existing.lastSentAt < USER_COOLDOWN_MS) {
+				return { claimed: false, reason: "cooldown" as const };
+			}
+			// A live claim from another tick — let it own the send.
+			if (
+				existing.claimedAt !== undefined &&
+				now - existing.claimedAt < CLAIM_TTL_MS
+			) {
+				return { claimed: false, reason: "claimed" as const };
+			}
+			await ctx.db.patch(existing._id, { claimedAt: now });
+			return { claimed: true };
+		}
+		await ctx.db.insert("phoneReminderSends", {
+			organizationId: args.organizationId,
+			userId: args.userId,
+			lastSentAt: 0,
+			claimedAt: now,
+		});
+		return { claimed: true };
+	},
+});
+
+/** Release a dead claim so a retry is never blocked by it. */
+export const clearUserClaim = internalMutation({
+	args: {
+		organizationId: v.string(),
+		userId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const existing = await ctx.db
+			.query("phoneReminderSends")
+			.withIndex("by_org_user", (q) =>
+				q.eq("organizationId", args.organizationId).eq("userId", args.userId),
+			)
+			.unique();
+		if (existing?.claimedAt !== undefined) {
+			await ctx.db.patch(existing._id, { claimedAt: undefined });
+		}
+	},
+});
+
+// GT-AUDIT-01: resolve lastSentAt per candidate through the by_org_user
+// index instead of reading one page of by_org. `by_org` returns rows in
+// creation order, so a .take(500) page keeps the 500 OLDEST sends — the
+// most recently reminded staff are exactly the ones dropped, and absence
+// was read as "never reminded". Duplicate reminders therefore went out
+// inside the 7-day window, and cooldownStatus reported the bypassed state
+// as correct. markUserSent keeps exactly one row per (org, user), so a
+// point read on that index is the whole answer.
+//
+// Sequential on purpose: candidate lists are staff-sized, and a single
+// indexed point read each is both cheaper and more predictable than the
+// fan-out a parallel map would produce.
+//
+// Exported so the truncation scenario can be tested directly: the decision
+// that consumes this map is three mutations deep behind auth and schedule
+// seeding, which is not where this contract is worth pinning.
+export async function lastSentAtByUserId(
+	ctx: QueryCtx | MutationCtx,
+	organizationId: string,
+	userIds: Iterable<string>,
+): Promise<Map<string, number>> {
+	const out = new Map<string, number>();
+	for (const userId of new Set(userIds)) {
+		const row = await ctx.db
+			.query("phoneReminderSends")
+			.withIndex("by_org_user", (q) =>
+				q.eq("organizationId", organizationId).eq("userId", userId),
+			)
+			.unique();
+		if (row) out.set(userId, row.lastSentAt);
+	}
+	return out;
+}
+
+/**
+ * Action-facing seam for `lastSentAtByUserId`. Actions cannot touch the
+ * database directly, and this is the same lookup the query/mutation paths
+ * call — one implementation, so the cooldown rule cannot drift between
+ * them.
+ */
+// The explicit return type is load-bearing, not decoration: without it the
+// inference chain runForOrg -> internal.phoneReminders.lastSentForUsers ->
+// typeof phoneReminders -> runForOrg is circular, TS7022s runForOrg to `any`,
+// and that `any` poisons the whole module type — api.d.ts imports
+// `typeof phoneReminders`, so every Convex query in the app loses its return
+// type and the repo fails with ~588 unrelated errors.
+export const lastSentForUsers = internalQuery({
+	args: { organizationId: v.string(), userIds: v.array(v.string()) },
+	handler: async (ctx, args): Promise<Array<[string, number]>> => [
+		...(await lastSentAtByUserId(ctx, args.organizationId, args.userIds)),
+	],
 });
 
 /**
@@ -146,12 +261,10 @@ export const cooldownStatus = query({
 		);
 		const withEmail = missing.filter((p) => p.email.trim());
 
-		const sendRows = await ctx.db
-			.query("phoneReminderSends")
-			.withIndex("by_org", (q) => q.eq("organizationId", orgId))
-			.take(500);
-		const lastSentByUserId = new Map(
-			sendRows.map((r) => [r.userId, r.lastSentAt] as const),
+		const lastSentByUserId = await lastSentAtByUserId(
+			ctx,
+			orgId,
+			withEmail.map((p) => p.userId),
 		);
 		const { eligible, coolingDown } = partitionByUserCooldown(
 			withEmail,
@@ -194,6 +307,10 @@ export const sendForPerson = internalAction({
 	},
 	handler: async (ctx, args) => {
 		if (!args.email.trim()) {
+			await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+			});
 			await ctx.runMutation(internal.phoneReminders.recordLog, {
 				organizationId: args.organizationId,
 				recipient: args.userId,
@@ -204,42 +321,70 @@ export const sendForPerson = internalAction({
 			return { skipped: true as const, reason: "no_email" as const };
 		}
 
-		const profileUrl = dashboardUrl(`/dashboard/guides/${args.userId}`);
-		const { subject, bodyText } = formatPhoneReminder({
-			name: args.name,
-			profileUrl,
-			roles: args.roles,
-			assignmentCount: args.assignmentCount,
-			dateFrom: args.dateFrom,
-			dateTo: args.dateTo,
-		});
+		let sent: Awaited<ReturnType<typeof sendTemplatedEmail>>;
+		try {
+			const profileUrl = dashboardUrl(`/dashboard/guides/${args.userId}`);
+			const { subject, bodyText } = formatPhoneReminder({
+				name: args.name,
+				profileUrl,
+				roles: args.roles,
+				assignmentCount: args.assignmentCount,
+				dateFrom: args.dateFrom,
+				dateTo: args.dateTo,
+			});
 
-		const sent = await sendTemplatedEmail({
-			to: args.email,
-			subject,
-			bodyText,
-			from: args.emailFromEmail,
-		});
-		await ctx.runMutation(internal.phoneReminders.recordLog, {
-			organizationId: args.organizationId,
-			recipient: args.email,
-			status: sent.status === "sent" ? "sent" : sent.status,
-			userId: args.userId,
-			errorMessage:
-				sent.status === "failed"
-					? sent.error
-					: sent.status === "skipped"
-						? sent.reason
-						: undefined,
-		});
+			// The email helper returns transport errors as results; a thrown
+			// error here happens before a request is sent, so release the claim
+			// for an immediate retry.
+			sent = await sendTemplatedEmail({
+				to: args.email,
+				subject,
+				bodyText,
+				from: args.emailFromEmail,
+			});
+		} catch (error) {
+			await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+			});
+			throw error;
+		}
 
-		// Only start the 7d clock after a real delivery — failed/skipped
-		// must remain retryable (manual or next digest).
+		// Persist delivery state before the best-effort log write. Failed or
+		// skipped sends release the claim; a real delivery starts the 7d clock.
 		if (sent.status === "sent") {
 			await ctx.runMutation(internal.phoneReminders.markUserSent, {
 				organizationId: args.organizationId,
 				userId: args.userId,
 			});
+		} else {
+			await ctx.runMutation(internal.phoneReminders.clearUserClaim, {
+				organizationId: args.organizationId,
+				userId: args.userId,
+			});
+		}
+
+		try {
+			await ctx.runMutation(internal.phoneReminders.recordLog, {
+				organizationId: args.organizationId,
+				recipient: args.email,
+				status: sent.status === "sent" ? "sent" : sent.status,
+				userId: args.userId,
+				errorMessage:
+					sent.status === "failed"
+						? sent.error
+						: sent.status === "skipped"
+							? sent.reason
+							: undefined,
+			});
+		} catch (error) {
+			logger.error(
+				"[phoneReminders] could not record a delivery log",
+				error instanceof Error ? error.name : "unknown error",
+			);
+		}
+
+		if (sent.status === "sent") {
 			return { skipped: false as const, email: "sent" as const };
 		}
 
@@ -261,7 +406,26 @@ export const runForOrg = internalAction({
 		emailFromEmail: v.optional(v.string()),
 		source: v.optional(v.union(v.literal("manual"), v.literal("digest"))),
 	},
-	handler: async (ctx, args) => {
+	// The explicit return type breaks an inference cycle and is load-bearing.
+	// This action's result is consumed through `internal.runForOrg`, whose
+	// type is derived from `typeof phoneReminders` — the module that contains
+	// it. Unannotated, TypeScript reports TS7022, types the action as `any`,
+	// and because api.d.ts imports the module type directly, every Convex
+	// query in the app loses its return type and the repo fails with hundreds
+	// of unrelated errors. `lastSentForUsers` carries the same annotation for
+	// the same reason on the other end of the cycle.
+	handler: async (
+		ctx,
+		args,
+	): Promise<{
+		source: string;
+		candidates: number;
+		withEmail: number;
+		coolingDown: number;
+		queued: number;
+		sent: number;
+		skipped: number;
+	}> => {
 		const missing = (await ctx.runQuery(
 			internal.userProfiles.missingStaffPhonesInternal,
 			{
@@ -272,12 +436,13 @@ export const runForOrg = internalAction({
 		)) as MissingStaffPhone[];
 
 		const withEmail = missing.filter((p) => p.email.trim());
-		const lastRows = (await ctx.runQuery(
-			internal.phoneReminders.lastSentMapForOrg,
-			{ organizationId: args.organizationId },
-		)) as Array<{ userId: string; lastSentAt: number }>;
+		// runForOrg is an ACTION — its ctx carries no `db` — so the point
+		// reads happen behind an internal query rather than inline.
 		const lastSentByUserId = new Map(
-			lastRows.map((r) => [r.userId, r.lastSentAt] as const),
+			(await ctx.runQuery(internal.phoneReminders.lastSentForUsers, {
+				organizationId: args.organizationId,
+				userIds: withEmail.map((p) => p.userId),
+			})) as Array<[string, number]>,
 		);
 		const { eligible, coolingDown } = partitionByUserCooldown(
 			withEmail,
@@ -288,20 +453,44 @@ export const runForOrg = internalAction({
 		let sent = 0;
 		let skipped = 0;
 		for (const p of targets) {
-			const result = await ctx.runAction(
-				internal.phoneReminders.sendForPerson,
-				{
-					organizationId: args.organizationId,
-					userId: p.userId,
-					name: p.name,
-					email: p.email,
-					roles: p.roles,
-					assignmentCount: p.assignmentCount,
-					dateFrom: args.dateFrom,
-					dateTo: args.dateTo,
-					emailFromEmail: args.emailFromEmail,
-				},
+			// F680: claim the send BEFORE dispatching. An overlapping cron
+			// tick re-scanning during a slow SES call now loses the race
+			// here instead of double-sending the email.
+			const claim = await ctx.runMutation(
+				internal.phoneReminders.claimUserSend,
+				{ organizationId: args.organizationId, userId: p.userId },
 			);
+			if (!claim.claimed) {
+				skipped += 1;
+				continue;
+			}
+			let result: { skipped: boolean };
+			try {
+				result = await ctx.runAction(
+					internal.phoneReminders.sendForPerson,
+					{
+						organizationId: args.organizationId,
+						userId: p.userId,
+						name: p.name,
+						email: p.email,
+						roles: p.roles,
+						assignmentCount: p.assignmentCount,
+						dateFrom: args.dateFrom,
+						dateTo: args.dateTo,
+						emailFromEmail: args.emailFromEmail,
+					},
+				);
+			} catch (error) {
+				// Pre-delivery failures release their claim in sendForPerson.
+				// For remaining errors the delivery outcome may be unknown, so do
+				// not clear a live claim; keep later recipients moving regardless.
+				logger.warn(
+					"[phoneReminders] recipient send failed; continuing batch",
+					error instanceof Error ? error.name : "unknown error",
+				);
+				skipped += 1;
+				continue;
+			}
 			if (result.skipped) skipped += 1;
 			else sent += 1;
 		}
@@ -369,14 +558,10 @@ export const sendReminders = mutation({
 			);
 		}
 
-		const sendRows = await ctx.db
-			.query("phoneReminderSends")
-			.withIndex("by_org", (q) =>
-				q.eq("organizationId", member.organizationId),
-			)
-			.take(500);
-		const lastSentByUserId = new Map(
-			sendRows.map((r) => [r.userId, r.lastSentAt] as const),
+		const lastSentByUserId = await lastSentAtByUserId(
+			ctx,
+			member.organizationId,
+			withEmail.map((p) => p.userId),
 		);
 		const { eligible, coolingDown } = partitionByUserCooldown(
 			withEmail,

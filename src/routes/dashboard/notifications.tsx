@@ -10,7 +10,8 @@ import { ListPage } from "@/components/list-page";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { getErrorMessage } from "@/lib/utils";
+import { formatDateTime } from "@/lib/format";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import type { NotificationTemplate } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -42,7 +43,7 @@ function NotificationTemplatesPage() {
 			});
 			toast.success(currentActive ? "Template disabled" : "Template enabled");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -62,7 +63,7 @@ function NotificationTemplatesPage() {
 			await removeTemplate({ templateId: id as Id<"notificationTemplates"> });
 			toast.success("Template deleted");
 		} catch (err) {
-			toast.error(getErrorMessage(err));
+			toast.error(getSafeDisplayMessage(err));
 		} finally {
 			setPending(null);
 		}
@@ -227,7 +228,7 @@ function DeliveryLogsSection() {
 							<div className="flex items-center gap-2 shrink-0">
 								<StatusBadge status={log.status} />
 								<span className="text-muted-foreground text-xs font-mono">
-									{new Date(log.sentAt ?? log.createdAt).toLocaleString()}
+									{formatDateTime(log.sentAt ?? log.createdAt)}
 								</span>
 							</div>
 						</li>

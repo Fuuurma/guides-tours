@@ -23,7 +23,6 @@ export const VEHICLE_TYPES = [
 	"other",
 ] as const;
 
-export type TourType = (typeof TOUR_TYPES)[number];
 export type VehicleType = (typeof VEHICLE_TYPES)[number];
 
 /** Normalize legacy "walkable" → "walking". */

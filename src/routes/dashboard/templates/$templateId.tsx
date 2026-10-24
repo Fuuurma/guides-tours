@@ -11,7 +11,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { DetailSkeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { resolveTourStaffing } from "@/lib/staffing";
-import { getErrorMessage, getSafeDisplayMessage } from "@/lib/utils";
+import { getSafeDisplayMessage } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
@@ -74,7 +74,7 @@ function TemplateDetailPage() {
 				params: { tourId },
 			});
 		} catch (err) {
-			setInstantiateErr(getErrorMessage(err));
+			setInstantiateErr(getSafeDisplayMessage(err));
 		} finally {
 			setCreating(false);
 		}

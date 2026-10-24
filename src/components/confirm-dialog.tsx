@@ -1,3 +1,4 @@
+import { useLocation } from "@tanstack/react-router";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import type * as React from "react";
 import {
@@ -18,7 +19,6 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 
 // Accessible, styled replacement for `window.confirm`.
 //
@@ -86,13 +86,35 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 		}, 0);
 	}, []);
 
-	useEffect(() => {
-		return () => {
-			if (nextTimeoutRef.current) clearTimeout(nextTimeoutRef.current);
-			activeRef.current?.resolve(false);
-			for (const pending of queueRef.current) pending.resolve(false);
-		};
+	// Settle everything armed or queued as cancelled and close.
+	const cancelAll = useCallback(() => {
+		if (nextTimeoutRef.current) {
+			clearTimeout(nextTimeoutRef.current);
+			nextTimeoutRef.current = null;
+		}
+		const active = activeRef.current;
+		activeRef.current = null;
+		active?.resolve(false);
+		for (const pending of queueRef.current) pending.resolve(false);
+		queueRef.current = [];
+		closingRef.current = false;
+		setOpen(false);
 	}, []);
+
+	// F848: a confirm closes over the entity it was raised for (the
+	// caller's render-time id). This provider lives above every route, so
+	// a dialog armed on assignment A used to survive the navigation to B
+	// and fire against A. A pathname change settles it as cancelled —
+	// search-param changes (filters, tabs) are not a navigation away.
+	const { pathname } = useLocation();
+	const armedPathRef = useRef(pathname);
+	useEffect(() => {
+		if (armedPathRef.current === pathname) return;
+		armedPathRef.current = pathname;
+		cancelAll();
+	}, [pathname, cancelAll]);
+
+	useEffect(() => cancelAll, [cancelAll]);
 
 	const isDestructive = options.variant === "destructive";
 
@@ -139,7 +161,3 @@ export function useConfirm(): ConfirmContextValue {
 	}
 	return ctx;
 }
-
-// Re-exported so call sites that just need the button-label variant can
-// use the component directly without a full dialog.
-export { Button as ConfirmButton };

@@ -1,8 +1,8 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { z } from "zod";
-import { AUTH_PANEL, AuthShell } from "@/components/auth/auth-shell";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { FormField } from "@/components/forms/form-field";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,11 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { FieldGroup } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
 import { authClient } from "@/lib/auth-client";
+import { AUTH_PANEL } from "@/lib/auth-panel";
+import {
+	OAUTH_REFUSED_MESSAGE,
+	takeOAuthRefusalFromWindow,
+} from "@/lib/oauth-initiator";
 
 export const Route = createFileRoute("/sign-in")({
 	validateSearch: (search: Record<string, unknown>) => {
@@ -40,6 +45,12 @@ function SignInPage() {
 	const navigate = useNavigate();
 	const { redirect, invitationId } = Route.useSearch();
 	const [serverError, setServerError] = useState<string | null>(null);
+
+	// A one-time token refused by the browser-binding guard lands here
+	// with nothing exchanged; say why instead of a silent bounce.
+	useEffect(() => {
+		if (takeOAuthRefusalFromWindow()) setServerError(OAUTH_REFUSED_MESSAGE);
+	}, []);
 
 	const form = useForm({
 		defaultValues: { email: "", password: "" } satisfies SignInForm,

@@ -12,6 +12,7 @@
 // Webhook auth: HMAC-SHA256 over raw body, hex digest in
 //               x-airbnb-signature header (no `sha256=` prefix).
 
+import { normalizeCurrency, toMinorUnits } from "../lib/money";
 import { OTAHttpClient, HttpError } from "./http_client";
 import type { DecryptedCredentials, NormalizedProviderEvent } from "./types";
 
@@ -153,12 +154,21 @@ export class AirbnbClient {
 						.filter((s): s is string => typeof s === "string" && s.length > 0)
 						.join(" ")
 				: undefined;
+			const currency = normalizeCurrency(
+				stringOrUndefined(
+					isRecord(data.total_price)
+						? data.total_price.currency
+						: data.currency,
+				),
+			);
 			// Currency-aware total. Airbnb's documented wrapper is
 			// { total_price: { amount, currency } } where amount is
 			// already in cents (matches Stripe-like partner API
 			// conventions and source's behavior of dividing by 100).
-			// Flat fields (totalAmount) are dollars, like other providers.
+			// Flat fields (totalAmount) are major units, like other
+			// providers — converted with the currency's exponent.
 			let totalPaidCents: bigint | undefined;
+			let totalPaidRaw: number | undefined;
 			if (isRecord(data.total_price)) {
 				const cents = numberOrUndefined(data.total_price.amount);
 				if (cents !== undefined) totalPaidCents = BigInt(Math.round(cents));
@@ -167,14 +177,12 @@ export class AirbnbClient {
 					data.totalAmount ?? data.total_amount,
 				);
 				if (dollars !== undefined) {
-					totalPaidCents = BigInt(Math.round(dollars * 100));
+					totalPaidCents = toMinorUnits(dollars, currency);
+					// F760: upsert re-converts against the prior row's
+					// currency when a re-delivery omits its own.
+					totalPaidRaw = dollars;
 				}
 			}
-			const currency = stringOrUndefined(
-				isRecord(data.total_price)
-					? data.total_price.currency
-					: data.currency,
-			);
 			return {
 				kind: "booking.created",
 				reservationId: stringOrThrow(
@@ -206,6 +214,7 @@ export class AirbnbClient {
 					"data.number_of_guests",
 				),
 				totalPaidCents,
+				totalPaidRaw,
 				currency,
 				rawPayload: payload,
 			};
@@ -256,7 +265,11 @@ function numberOrThrow(v: unknown, label: string): number {
 }
 
 function numberOrUndefined(v: unknown): number | undefined {
-	if (typeof v === "number") return v;
+	// F410: non-finite numbers (1e999 → Infinity) must normalize to
+	// undefined like bad strings, or they sail to upsert's finite guard
+	// and land as a 500 rethrow instead of the 400 malformed-payload
+	// path.
+	if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
 	if (typeof v === "string") {
 		const n = Number(v);
 		return Number.isFinite(n) ? n : undefined;

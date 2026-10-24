@@ -24,7 +24,10 @@ import type { ActionCtx } from "./_generated/server";
 import { components, internal } from "./_generated/api";
 import type { FunctionReference } from "convex/server";
 import type { Id } from "./_generated/dataModel";
-import { parseBookingTime } from "./lib/time";
+import {
+	organizationTimeZone,
+	parseBookingTimeInZone,
+} from "./lib/time";
 import { logAudit } from "./lib/audit";
 import { isBlackoutHelper } from "./tourBlackoutDates";
 import { exceptionForDateHelper } from "./tourExceptionDates";
@@ -247,13 +250,18 @@ export const listAvailableSlots = query({
 
 		const nowMs = Date.now();
 		const cutoffMs = (tour.bookingCutoffHours ?? 0) * 3_600_000;
+		const timeZone = await organizationTimeZone(ctx, organizationId);
 
 		return slots
 			.filter((s) => {
 				if (s.status !== "available") return false;
 				if (exceptionTime !== undefined && s.startTime !== exceptionTime) return false;
 				if (s.capacityBooked >= capacityOf(s.capacityTotal)) return false;
-				const tourTs = parseBookingTime(args.date, s.startTime);
+				const tourTs = parseBookingTimeInZone(
+					args.date,
+					s.startTime,
+					timeZone,
+				);
 				if (tourTs === null || tourTs <= nowMs) return false;
 				if (cutoffMs > 0 && tourTs - nowMs < cutoffMs) return false;
 				return true;
@@ -331,6 +339,8 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		emailConsent: v.optional(v.boolean()),
 		smsConsent: v.optional(v.boolean()),
 		ip: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge. */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Rate-limit check (per-email). Recorded BEFORE the slug
@@ -405,6 +415,8 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 					scheduleId: args.scheduleId,
 					emailConsent: args.emailConsent,
 					smsConsent: args.smsConsent,
+					ipAddress: args.ip,
+					userAgent: args.userAgent,
 				},
 			);
 			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
@@ -445,6 +457,10 @@ export const internalCreate = internalMutation({
 		scheduleId: v.optional(v.id("tourSchedules")),
 		emailConsent: v.optional(v.boolean()),
 		smsConsent: v.optional(v.boolean()),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Normalize + validate email via the shared helper. Rejects
@@ -503,7 +519,14 @@ export const internalCreate = internalMutation({
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
-			const match = await ctx.db
+			// F694: a cancel/re-create cycle leaves TWO schedules for the
+			// same (tourId, date, startTime). .unique() threw Convex's
+			// opaque "unique() query returned more than one result" error
+			// there, so a guest's booking attempt died with an internal
+			// failure instead of the authored refusal. take(2) + a length
+			// check refuses the ambiguous slot with the same friendly
+			// message the schedule helpers use.
+			const matches = await ctx.db
 				.query("tourSchedules")
 				.withIndex("by_tour_date_start", (q) =>
 					q
@@ -511,7 +534,13 @@ export const internalCreate = internalMutation({
 						.eq("date", args.date)
 						.eq("startTime", args.startTime),
 				)
-				.unique();
+				.take(2);
+			if (matches.length > 1) {
+				throw new ConvexError(
+					`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+				);
+			}
+			const match = matches[0];
 			if (match && match.organizationId === args.organizationId) {
 				if (match.status === "cancelled") {
 					throw new ConvexError("Cannot book a cancelled schedule");
@@ -522,7 +551,8 @@ export const internalCreate = internalMutation({
 
 		// Reject past dates and dates that fall inside the
 		// bookingCutoffHours window (operator-defined lead time).
-		const tourTs = parseBookingTime(date, startTime);
+		const timeZone = await organizationTimeZone(ctx, args.organizationId);
+		const tourTs = parseBookingTimeInZone(date, startTime, timeZone);
 		if (tourTs === null) {
 			throw new ConvexError(`Invalid date or time: "${date} ${startTime}"`);
 		}
@@ -566,6 +596,24 @@ export const internalCreate = internalMutation({
 		) {
 			throw new ConvexError(
 				"This time slot is not available for booking. Please pick another time.",
+			);
+		}
+		// GT-AUDIT-02 / hub F602: the cap is enforced against the schedule's own
+		// capacityBooked, so it only works when a slot materialized. The
+		// free-text start-time branch leaves scheduleId undefined — the guard
+		// below never read the override there, and because incrementBooked is
+		// gated on the same `if (scheduleId)` nothing enforced capacity at all,
+		// so a guest could book 8 seats on a date the operator capped at 2.
+		//
+		// Fail safe: with no slot there is nothing to compare against, and
+		// bookings carries no index on (tourId, date) to count unmaterialized
+		// bookings without an unbounded scan. Refuse rather than oversell an
+		// operator's cap. Counting precisely (and keeping the sale) needs that
+		// index — tracked as follow-up, not smuggled in here.
+		if (!scheduleId && ex?.capacityOverride !== undefined) {
+			throw new ConvexError(
+				"This date has a limited capacity that cannot be booked online. " +
+					"Please choose another date or contact the operator.",
 			);
 		}
 		if (scheduleId && ex?.capacityOverride !== undefined) {
@@ -662,12 +710,12 @@ export const internalCreate = internalMutation({
 			balanceDueCents: totalAmountCents,
 			paymentMethod: "",
 			checkedInAt: undefined,
-			checkedInBy: "",
+			checkedInBy: undefined,
 			completedAt: undefined,
 			netRevenueCents: totalAmountCents,
 			source: "public_booking",
 			reviewRating: undefined,
-			reviewComment: "",
+			reviewComment: undefined,
 			createdAt: now,
 			updatedAt: now,
 		});
@@ -681,6 +729,10 @@ export const internalCreate = internalMutation({
 				scheduleId,
 				guests: args.guests,
 			});
+			// Record the claim only once the increment has actually
+			// succeeded, so releaseBookingCapacity can never be handed a
+			// claim this booking does not hold.
+			await ctx.db.patch(bookingId, { capacityClaimedScheduleId: scheduleId });
 		}
 
 		if (totalAmountCents > 0n) {
@@ -710,6 +762,8 @@ export const internalCreate = internalMutation({
 					amountCents: totalAmountCents.toString(),
 					stripePaymentIntentId: null,
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 		}
 
@@ -729,6 +783,8 @@ export const internalCreate = internalMutation({
 				guests: args.guests,
 				source: "public_booking",
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 
 		// Customer confirmation and future reminders begin only after the

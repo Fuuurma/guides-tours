@@ -75,6 +75,22 @@ describe("auth security configuration", () => {
 		expect(devOptions.emailAndPassword?.requireEmailVerification).toBe(false);
 	});
 
+	it("misleading non-loopback hostnames keep email verification (no substring local-dev)", () => {
+		// F-new-url-loopback-substring-classification-2026-10-03: a
+		// production hostname that merely CONTAINS a loopback token must
+		// not classify as local dev and skip email verification.
+		for (const url of [
+			"https://portal-localhost.example.com",
+			"https://127.0.0.1.example.com",
+		]) {
+			process.env.SITE_URL = url;
+			const misleadingOptions = createAuthOptions({} as any);
+			expect(
+				misleadingOptions.emailAndPassword?.requireEmailVerification,
+			).toBe(true);
+		}
+	});
+
 	it("requireEmailVerificationOnInvitation is true in the organization plugin", () => {
 		// The organization plugin is the first plugin in the tuple.
 		const orgPlugin = options.plugins?.[0] as {
@@ -141,6 +157,14 @@ describe("isUnconfiguredDeployment", () => {
 
 	it("treats a non-local CONVEX_SITE_URL as configured", () => {
 		process.env.CONVEX_SITE_URL = "https://guides-tours.fuurma.tech";
+		expect(isUnconfiguredDeployment()).toBe(false);
+	});
+
+	it("treats a hostname containing loopback tokens as configured (origin gate stays fail-closed)", () => {
+		// F-new-url-loopback-substring-classification-2026-10-03:
+		// classification parses the hostname — substring matching would
+		// let a production URL open the empty-allowlist booking gate.
+		process.env.CONVEX_SITE_URL = "https://portal-localhost.convex.site";
 		expect(isUnconfiguredDeployment()).toBe(false);
 	});
 });

@@ -1,3 +1,5 @@
+import type { VehicleStatus } from "@/lib/vehicle-status";
+
 // Shared entity types for the dashboard.
 //
 // These mirror the shape of the Convex query return values (not the
@@ -17,8 +19,6 @@ type BookingStatus =
 	| "expired"
 	| "no_show";
 
-type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
-
 type VacationStatus = "pending" | "approved" | "rejected";
 
 export interface Booking {
@@ -31,6 +31,13 @@ export interface Booking {
 	status: BookingStatus;
 	source: string;
 	totalAmountCents: bigint | number;
+	/**
+	 * Resolved server-side by `bookings.list` from the row's own
+	 * `customerId`, so a list never has to guess a name from some other
+	 * query's page. Absent/null when the booking has no customer or the
+	 * customer was deleted.
+	 */
+	customerName?: string | null;
 }
 
 export interface BookingDetail extends Booking {
@@ -41,9 +48,9 @@ export interface BookingDetail extends Booking {
 	guestNames: string;
 	notes: string;
 	reviewRating: number | null;
-	reviewComment: string;
+	reviewComment?: string;
 	checkedInAt: number | null;
-	checkedInBy: string;
+	checkedInBy?: string;
 	completedAt: number | null;
 	tour: { _id: string; name: string } | null;
 	customer: { _id: string; name: string; email: string; phone: string } | null;

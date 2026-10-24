@@ -20,7 +20,7 @@ import {
 } from "./awsSigV4";
 import { logger } from "./logger";
 
-export type SendEmailResult =
+type SendEmailResult =
 	| { status: "sent" }
 	| { status: "skipped"; reason: string }
 	| { status: "failed"; error: string };

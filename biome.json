@@ -15,7 +15,7 @@
 			"**/biome.json",
 			"!**/src/routeTree.gen.ts",
 			"!**/src/styles.css",
-   "!**/skills-lock.json"
+			"!**/skills-lock.json"
 		]
 	},
 	"formatter": {

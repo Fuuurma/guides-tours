@@ -885,3 +885,173 @@ describe("purgeExpiredAvailabilityCache (F452)", () => {
 		expect(remaining[0]?.date).toBe("2026-09-02")
 	})
 })
+
+// F760 — a re-delivery that omits its currency keeps the prior row's
+// otaCurrency, so its amount must be re-converted with THAT currency's
+// exponent. The parser converts with an exponent-2 fallback (it cannot
+// see the prior row) and carries the raw major unit for exactly this
+// recompute. JPY 1200 stored as 120000c under JPY — or KWD 1.234 as
+// 123c — is corrupt accounting.
+describe("convex/ota/upsert — currency-less re-delivery keeps the stored currency's exponent (F760)", () => {
+	async function upsertFor(
+		t: ReturnType<typeof convexTest>,
+		organizationId: string,
+		integrationId: Id<"otaIntegrations">,
+		event: Record<string, unknown>,
+	) {
+		return (await t.mutation(internal.ota.upsert.upsertOtaBooking, {
+			integrationId,
+			organizationId,
+			provider: "viator",
+			event: event as never,
+			rawData: {},
+		})) as { id: Id<"otaBookings">; created: boolean };
+	}
+
+	it("re-converts a currency-less JPY re-delivery with the stored JPY exponent", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_f760_jpy";
+		await t.run(async (ctx) => {
+			await seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-1", 0.1);
+		});
+		const integrationId = (await t.run(async (ctx) =>
+			(await ctx.db.query("otaIntegrations").first())!._id,
+		)) as Id<"otaIntegrations">;
+
+		// First delivery: JPY, 1200 (zero-decimal → 1200 minor units).
+		const first = await upsertFor(t, organizationId, integrationId, {
+			kind: "booking.created",
+			reservationId: "RES-JPY",
+			customerName: "Alice",
+			customerEmail: "alice@example.com",
+			tourDate: "2026-08-15",
+			guests: 2,
+			totalPaidCents: 1200n,
+			totalPaidRaw: 1200,
+			currency: "JPY",
+			commissionRate: 0.1,
+			rawPayload: {},
+		});
+		const firstRow = (await t.run(async (ctx) =>
+			ctx.db.get(first.id),
+		)) as any;
+		expect(firstRow?.otaCurrency).toBe("JPY");
+		expect(firstRow?.otaTotalPaidCents).toBe(1200n);
+
+		// Re-delivery WITHOUT a currency: the parser's exponent-2 fallback
+		// produced 120000n; upsert must re-convert the raw major unit with
+		// the stored JPY instead.
+		const second = await upsertFor(t, organizationId, integrationId, {
+			kind: "booking.created",
+			reservationId: "RES-JPY",
+			customerName: "Alice",
+			customerEmail: "alice@example.com",
+			tourDate: "2026-08-15",
+			guests: 2,
+			totalPaidCents: 120000n,
+			totalPaidRaw: 1200,
+			commissionRate: 0.1,
+			rawPayload: {},
+		});
+		expect(second.created).toBe(false);
+		const secondRow = (await t.run(async (ctx) =>
+			ctx.db.get(second.id),
+		)) as any;
+		expect(secondRow?.otaCurrency).toBe("JPY");
+		expect(secondRow?.otaTotalPaidCents).toBe(1200n);
+	});
+
+	it("re-converts a currency-less KWD re-delivery with the stored three-decimal exponent", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_f760_kwd";
+		await t.run(async (ctx) => {
+			await seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-1", 0.1);
+		});
+		const integrationId = (await t.run(async (ctx) =>
+			(await ctx.db.query("otaIntegrations").first())!._id,
+		)) as Id<"otaIntegrations">;
+
+		const first = await upsertFor(t, organizationId, integrationId, {
+			kind: "booking.created",
+			reservationId: "RES-KWD",
+			customerName: "Bob",
+			customerEmail: "bob@example.com",
+			tourDate: "2026-08-15",
+			guests: 2,
+			totalPaidCents: 1234n,
+			totalPaidRaw: 1.234,
+			currency: "KWD",
+			commissionRate: 0.1,
+			rawPayload: {},
+		});
+		const firstRow = (await t.run(async (ctx) =>
+			ctx.db.get(first.id),
+		)) as any;
+		expect(firstRow?.otaCurrency).toBe("KWD");
+		expect(firstRow?.otaTotalPaidCents).toBe(1234n);
+
+		const second = await upsertFor(t, organizationId, integrationId, {
+			kind: "booking.created",
+			reservationId: "RES-KWD",
+			customerName: "Bob",
+			customerEmail: "bob@example.com",
+			tourDate: "2026-08-15",
+			guests: 2,
+			totalPaidCents: 123n,
+			totalPaidRaw: 1.234,
+			commissionRate: 0.1,
+			rawPayload: {},
+		});
+		expect(second.created).toBe(false);
+		const secondRow = (await t.run(async (ctx) =>
+			ctx.db.get(second.id),
+		)) as any;
+		expect(secondRow?.otaCurrency).toBe("KWD");
+		expect(secondRow?.otaTotalPaidCents).toBe(1234n);
+	});
+
+	it("an explicit currency on the re-delivery still wins over the prior row", async () => {
+		const t = convexTest(schema, modules);
+		const organizationId = "org_f760_switch";
+		await t.run(async (ctx) => {
+			await seedOtaProductLookup(ctx as TestCtx, organizationId, "PROD-1", 0.1);
+		});
+		const integrationId = (await t.run(async (ctx) =>
+			(await ctx.db.query("otaIntegrations").first())!._id,
+		)) as Id<"otaIntegrations">;
+
+		await upsertFor(t, organizationId, integrationId, {
+			kind: "booking.created",
+			reservationId: "RES-SW",
+			customerName: "Carol",
+			customerEmail: "carol@example.com",
+			tourDate: "2026-08-15",
+			guests: 2,
+			totalPaidCents: 1200n,
+			totalPaidRaw: 1200,
+			currency: "JPY",
+			commissionRate: 0.1,
+			rawPayload: {},
+		});
+
+		// The provider corrected itself: USD now, with USD-exponent cents.
+		const second = await upsertFor(t, organizationId, integrationId, {
+			kind: "booking.created",
+			reservationId: "RES-SW",
+			customerName: "Carol",
+			customerEmail: "carol@example.com",
+			tourDate: "2026-08-15",
+			guests: 2,
+			totalPaidCents: 1200n,
+			totalPaidRaw: 12,
+			currency: "USD",
+			commissionRate: 0.1,
+			rawPayload: {},
+		});
+		const secondRow = (await t.run(async (ctx) =>
+			ctx.db.get(second.id),
+		)) as any;
+		expect(secondRow?.otaCurrency).toBe("USD");
+		expect(secondRow?.otaTotalPaidCents).toBe(1200n);
+	});
+});

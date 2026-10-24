@@ -67,7 +67,9 @@ export const gapsForOrg = internalQuery({
 		dateTo: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const schedules = await ctx.db
+		// F872: probe one past the cap — a cut window must reach the digest
+		// as "partial", never as "fully staffed" (see sendForOrg below).
+		const scheduleWindow = await ctx.db
 			.query("tourSchedules")
 			.withIndex("by_org_date", (q) =>
 				q
@@ -75,9 +77,9 @@ export const gapsForOrg = internalQuery({
 					.gte("date", args.dateFrom)
 					.lte("date", args.dateTo),
 			)
-			.take(MAX_ROWS);
+			.take(MAX_ROWS + 1);
 
-		const assignments = await ctx.db
+		const assignmentWindow = await ctx.db
 			.query("assignments")
 			.withIndex("by_org_date", (q) =>
 				q
@@ -85,7 +87,12 @@ export const gapsForOrg = internalQuery({
 					.gte("date", args.dateFrom)
 					.lte("date", args.dateTo),
 			)
-			.take(MAX_ROWS);
+			.take(MAX_ROWS + 1);
+
+		const truncated =
+			scheduleWindow.length > MAX_ROWS || assignmentWindow.length > MAX_ROWS;
+		const schedules = scheduleWindow.slice(0, MAX_ROWS);
+		const assignments = assignmentWindow.slice(0, MAX_ROWS);
 
 		const tourIds = new Set<string>();
 		for (const s of schedules) tourIds.add(String(s.tourId));
@@ -125,7 +132,10 @@ export const gapsForOrg = internalQuery({
 			}
 		}
 
-		return computeStaffingGaps({ schedules, assignments, toursById });
+		return {
+			gaps: computeStaffingGaps({ schedules, assignments, toursById }),
+			truncated,
+		};
 	},
 });
 
@@ -168,11 +178,14 @@ export const sendForOrg = internalAction({
 	handler: async (ctx, args) => {
 		const dateFrom = utcYmd();
 		const dateTo = addDaysYmd(dateFrom, Math.max(0, args.daysAhead - 1));
-		const gaps = (await ctx.runQuery(internal.staffingDigest.gapsForOrg, {
-			organizationId: args.organizationId,
-			dateFrom,
-			dateTo,
-		})) as StaffingGapRow[];
+		const { gaps, truncated } = (await ctx.runQuery(
+			internal.staffingDigest.gapsForOrg,
+			{
+				organizationId: args.organizationId,
+				dateFrom,
+				dateTo,
+			},
+		)) as { gaps: StaffingGapRow[]; truncated: boolean };
 
 		const missingPhones = (await ctx.runQuery(
 			internal.userProfiles.missingStaffPhonesInternal,
@@ -187,7 +200,15 @@ export const sendForOrg = internalAction({
 			assignmentCount: number;
 		}>;
 
-		if (gaps.length === 0 && missingPhones.length === 0 && !args.force) {
+		// F872: a cut window with zero visible gaps is NOT "nothing to
+		// report" — the unchecked rows may hold gaps, so the digest goes
+		// out and says the check was partial.
+		if (
+			gaps.length === 0 &&
+			missingPhones.length === 0 &&
+			!truncated &&
+			!args.force
+		) {
 			return {
 				skipped: true,
 				gapCount: 0,
@@ -201,6 +222,7 @@ export const sendForOrg = internalAction({
 			dateFrom,
 			dateTo,
 			gaps,
+			truncated,
 			siteUrl: getSiteUrl(),
 			missingPhones,
 		});

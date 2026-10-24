@@ -24,6 +24,7 @@
 
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { vehicleStatusValidator } from "./lib/vehicleStatus";
 
 // Better Auth user reference. The `user` table is owned by the
 // @convex-dev/better-auth component, NOT by this app's schema, so we
@@ -74,6 +75,19 @@ export default defineSchema({
 	})
 		.index("by_org_user_date", ["organizationId", "userId", "date"])
 		.index("by_user_date", ["userId", "date"]),
+
+	// Per-org operational settings that aren't notification-channel
+	// config (those live in notificationSettings). Sparse — one row per
+	// org, created on first write.
+	organizationSettings: defineTable({
+		organizationId: orgId,
+		// IANA zone the operator's wall-clock inputs mean ("09:00" on a
+		// schedule = 09:00 in this zone). Absent → Europe/Madrid.
+		timeZone: v.optional(v.string()),
+		createdAt: v.number(),
+		updatedAt: v.number(),
+	})
+		.index("by_org", ["organizationId"]),
 
 	vacationRequests: defineTable({
 		organizationId: orgId,
@@ -375,12 +389,7 @@ export default defineSchema({
 		// OWNED | LEASED | RENTAL ("" when unknown)
 		ownershipType: v.string(),
 		// AVAILABLE | IN_USE | MAINTENANCE | RETIRED
-		status: v.union(
-			v.literal("available"),
-			v.literal("in_use"),
-			v.literal("maintenance"),
-			v.literal("retired"),
-		),
+		status: vehicleStatusValidator,
 		notes: v.string(),
 		createdAt: v.number(),
 		updatedAt: v.number(),
@@ -444,7 +453,11 @@ export default defineSchema({
 		.index("by_org_guide_date", ["organizationId", "guideId", "date"])
 		.index("by_org_vehicle_date", ["organizationId", "vehicleId", "date"])
 		.index("by_org_driver_date", ["organizationId", "driverId", "date"])
-		.index("by_schedule", ["scheduleId"]),
+		.index("by_schedule", ["scheduleId"])
+		// F834: the retention purge walks soft-deleted rows by deletedAt —
+		// any status, independent of the tour date. Never-deleted rows
+		// index as undefined, which sorts before every number.
+		.index("by_deleted_at", ["deletedAt"]),
 
 	// ----- Bookings -----
 
@@ -477,7 +490,14 @@ export default defineSchema({
 		.index("by_org", ["organizationId"])
 		.index("by_org_email", ["organizationId", "email"])
 		.index("by_org_vip", ["organizationId", "vipStatus"])
-		.index("by_org_next_booking", ["organizationId", "nextBookingDate"]),
+		.index("by_org_next_booking", ["organizationId", "nextBookingDate"])
+		// Time-tailed twins of by_org / by_org_vip. customers.list used the
+		// bare by_org range, whose ordering falls back to _creationTime, so
+		// .take(MAX_CUSTOMER_SCAN) kept the OLDEST 5000 customers and every
+		// newer one was unreachable in every sort, filter and page (F468).
+		// Same fix as files.by_org_created (F57).
+		.index("by_org_created", ["organizationId", "createdAt"])
+		.index("by_org_vip_created", ["organizationId", "vipStatus", "createdAt"]),
 
 	bookings: defineTable({
 		organizationId: orgId,
@@ -489,6 +509,21 @@ export default defineSchema({
 		// unset — they fall back to the (tourId, date, startTime) lookup
 		// at cancel time.
 		scheduleId: v.optional(v.id("tourSchedules")),
+		// F-new-unlinked-booking-capacity-release follow-up (2026-10-04):
+		// the schedule this booking ACTUALLY claimed seats on, written
+		// only by a paired increment. `scheduleId` above is a mutable
+		// pointer — a manual repair or backfill can set it without ever
+		// incrementing, and cancel/expiry then drains a schedule whose
+		// seats were never this booking's. Release targets THIS field
+		// instead, so an unclaimed booking releases nothing.
+		//
+		// Undefined means "claimed nothing" for rows written after this
+		// field shipped. Legacy rows (created before it) are
+		// indistinguishable from that case, so they keep the pre-existing
+		// scheduleId/date-fallback behavior — see
+		// releaseBookingCapacity and the backfill mutation
+		// internal.backfills.claimLinkedBookings.
+		capacityClaimedScheduleId: v.optional(v.id("tourSchedules")),
 		customerId: v.id("customers"),
 		date: v.string(),
 		startTime: v.string(),
@@ -524,12 +559,12 @@ export default defineSchema({
 		currency: v.optional(currency),
 		paymentMethod: v.string(),
 		checkedInAt: v.optional(v.number()),
-		checkedInBy: v.string(),
+		checkedInBy: v.optional(v.string()),
 		completedAt: v.optional(v.number()),
 		netRevenueCents: v.int64(),
 		source: v.string(), // "direct" | "viator" | etc
 		reviewRating: v.optional(v.number()), // 1..5
-		reviewComment: v.string(),
+		reviewComment: v.optional(v.string()),
 		createdAt: v.number(),
 		updatedAt: v.number(),
 	})
@@ -637,7 +672,9 @@ export default defineSchema({
 		otaTourTime: v.optional(v.string()),
 		otaGuests: v.number(),
 		otaTotalPaidCents: v.optional(v.int64()),
-		otaCurrency: v.string(),
+		// Optional: providers that omit a currency code must not have one
+		// fabricated (was silently "USD" — F708).
+		otaCurrency: v.optional(v.string()),
 		commissionRate: v.optional(v.number()),
 		commissionAmountCents: v.optional(v.int64()),
 		netRevenueCents: v.optional(v.int64()),
@@ -1080,6 +1117,11 @@ export default defineSchema({
 		organizationId: orgId,
 		userId: v.string(),
 		lastSentAt: v.number(),
+		// F680: claim stamp taken BEFORE the SES send dispatches — an
+		// overlapping cron tick sees a fresh claim and skips, so a 5-min
+		// SES stall can't produce a second email. Cleared on failure/skip
+		// so a retry is never blocked by a dead claim.
+		claimedAt: v.optional(v.number()),
 	})
 		.index("by_org_user", ["organizationId", "userId"])
 		.index("by_org", ["organizationId"])

@@ -32,9 +32,13 @@ beforeAll(() => {
 	window.ResizeObserver =
 		ResizeObserverStub as unknown as typeof ResizeObserver;
 	// Radix Select touches scroll/pointer-capture APIs jsdom lacks.
-	window.HTMLElement.prototype.scrollIntoView = () => {};
+	window.HTMLElement.prototype.scrollIntoView = () => {
+		// jsdom stub — no-op
+	};
 	window.HTMLElement.prototype.hasPointerCapture = () => false;
-	window.HTMLElement.prototype.releasePointerCapture = () => {};
+	window.HTMLElement.prototype.releasePointerCapture = () => {
+		// jsdom stub — no-op
+	};
 });
 
 const mocks = vi.hoisted(() => ({

@@ -12,8 +12,9 @@ import {
 } from "./_generated/server";
 
 import { internalRefs } from "./lib/internalRefs";
-import { requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requirePermission } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { vehicleStatusValidator } from "./lib/vehicleStatus";
 import {
 	MAX_LICENSE_LEN,
 	MAX_NOTES_LEN,
@@ -40,14 +41,7 @@ const ALLOWED_UPDATE_FIELDS = [
 
 export const list = query({
 	args: {
-		status: v.optional(
-			v.union(
-				v.literal("available"),
-				v.literal("in_use"),
-				v.literal("maintenance"),
-				v.literal("retired"),
-			),
-		),
+		status: v.optional(vehicleStatusValidator),
 		vehicleType: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -125,7 +119,7 @@ export const create = mutation({
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "vehicle", "create");
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalCreate,
 			{
@@ -218,11 +212,11 @@ export const update = mutation({
 		year: v.optional(v.number()),
 		color: v.optional(v.string()),
 		ownershipType: v.optional(v.string()),
-		status: v.optional(v.string()),
+		status: v.optional(vehicleStatusValidator),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "vehicle", "update");
 		const { vehicleId, ...rest } = args;
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalUpdate,
@@ -250,7 +244,7 @@ export const internalUpdate = internalMutation({
 		year: v.optional(v.number()),
 		color: v.optional(v.string()),
 		ownershipType: v.optional(v.string()),
-		status: v.optional(v.string()),
+		status: v.optional(vehicleStatusValidator),
 		notes: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
@@ -316,15 +310,10 @@ export const internalUpdate = internalMutation({
 export const setStatus = mutation({
 	args: {
 		vehicleId: v.id("vehicles"),
-		status: v.union(
-			v.literal("available"),
-			v.literal("in_use"),
-			v.literal("maintenance"),
-			v.literal("retired"),
-		),
+		status: vehicleStatusValidator,
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "vehicle", "update");
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalSetStatus,
 			{
@@ -342,12 +331,7 @@ export const internalSetStatus = internalMutation({
 		organizationId: v.string(),
 		userId: v.string(),
 		vehicleId: v.id("vehicles"),
-		status: v.union(
-			v.literal("available"),
-			v.literal("in_use"),
-			v.literal("maintenance"),
-			v.literal("retired"),
-		),
+		status: vehicleStatusValidator,
 	},
 	handler: async (ctx, args) => {
 		const existing = await ctx.db.get(args.vehicleId);
@@ -375,7 +359,7 @@ export const internalSetStatus = internalMutation({
 export const remove = mutation({
 	args: { vehicleId: v.id("vehicles") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
+		const member = await requirePermission(ctx, "vehicle", "delete");
 		return await ctx.runMutation(
 			internalRefs.vehicles.internalRemove,
 			{

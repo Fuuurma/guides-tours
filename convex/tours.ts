@@ -9,6 +9,7 @@ import { ConvexError } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import {
+	CURRENCY_REGEX,
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
 	assertFieldWithinLimit,
@@ -225,6 +226,18 @@ export const internalCreate = internalMutation({
 				`Name is too long (max ${MAX_NAME_LEN} characters)`,
 			);
 		}
+		// F550: the currency reaches Intl.NumberFormat on the public
+		// booking page — a malformed code ("Euro") throws RangeError there
+		// and crashes the page for the whole org. Same CURRENCY_REGEX the
+		// payment paths enforce; absent keeps the F740 inherit.
+		if (
+			args.currency !== undefined &&
+			!CURRENCY_REGEX.test(args.currency)
+		) {
+			throw new ConvexError(
+				"Invalid currency: must be 3 uppercase letters (e.g. USD)",
+			);
+		}
 		if (args.description !== undefined) {
 			assertFieldWithinLimit(
 				"description",
@@ -308,6 +321,14 @@ export const internalCreate = internalMutation({
 			requiresDriver: args.requiresDriver,
 			requiredVehicleType: args.requiredVehicleType,
 		});
+		// F740: the new-tour form sends no currency — inherit the org's
+		// payment currency instead of fabricating "USD" for a non-US org
+		// (F734 did the same for template instantiation); USD only when
+		// payments are unset.
+		const paymentSettings = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.unique();
 		const tourId = await ctx.db.insert("tours", {
 			organizationId: args.organizationId,
 			name: args.name,
@@ -335,7 +356,7 @@ export const internalCreate = internalMutation({
 			exclusions: args.exclusions ?? [],
 			highlights: args.highlights ?? [],
 			basePriceCents: args.basePriceCents,
-			currency: args.currency ?? "USD",
+			currency: args.currency ?? paymentSettings?.defaultCurrency ?? "USD",
 			createdAt: now,
 			updatedAt: now,
 		});

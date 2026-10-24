@@ -411,3 +411,80 @@ describe("tours — length validation (defense in depth)", () => {
 		expect(id).toBeDefined();
 	});
 });
+
+// F740: the new-tour form sends no currency, and internalCreate
+// fabricated "USD" for every org. It now inherits the org's payment
+// currency the way template instantiation does (F734); USD only when
+// payments are unset; an explicit currency still wins.
+describe("tours — create currency (F740)", () => {
+	async function createFor(
+		orgId: string,
+		opts: { defaultCurrency?: string; currency?: string } = {},
+	) {
+		const t = convexTest(schema, modules);
+		await t.run(async (ctx) => {
+			if (opts.defaultCurrency !== undefined) {
+				await ctx.db.insert("paymentSettings", {
+					organizationId: orgId,
+					stripeEnabled: false,
+					stripePublishableKey: "",
+					stripeSecretKey: "",
+					stripeWebhookSecret: "",
+					stripeIsSandbox: true,
+					acceptDeposits: false,
+					depositPercentage: 0,
+					defaultCurrency: opts.defaultCurrency,
+					createdAt: 0,
+					updatedAt: 0,
+				});
+			}
+		});
+		const id = await t.mutation(internal.tours.internalCreate, {
+			organizationId: orgId,
+			userId: "user-1",
+			name: "Old Town Walk",
+			durationHours: 2,
+			capacity: 12,
+			tourType: "walking",
+			...(opts.currency ? { currency: opts.currency } : {}),
+		});
+		return (await t.run((ctx) => ctx.db.get(id))) as any;
+	}
+
+	it("inherits the org's payment currency instead of a fabricated USD", async () => {
+		const tour = await createFor("org_cur_eur", { defaultCurrency: "EUR" });
+		expect(tour?.currency).toBe("EUR");
+	});
+
+	it("falls back to USD when the org has no payment settings", async () => {
+		const tour = await createFor("org_cur_none");
+		expect(tour?.currency).toBe("USD");
+	});
+
+	it("an explicit currency still wins over the org default", async () => {
+		const tour = await createFor("org_cur_explicit", {
+			defaultCurrency: "EUR",
+			currency: "GBP",
+		});
+		expect(tour?.currency).toBe("GBP");
+	});
+
+	// F550 — the stored currency reaches Intl.NumberFormat on the public
+	// booking page; a malformed code ("Euro") throws RangeError there and
+	// crashes the page for the whole org. Only a direct owner/admin
+	// api.tours.create can plant one, so the create boundary rejects it.
+	it("rejects a malformed currency at the create boundary (F550)", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.tours.internalCreate, {
+				organizationId: "org_cur_bad",
+				userId: "user-1",
+				name: "Old Town Walk",
+				durationHours: 2,
+				capacity: 12,
+				tourType: "walking",
+				currency: "Euro",
+			}),
+		).rejects.toThrow(/must be 3 uppercase letters/);
+	});
+});

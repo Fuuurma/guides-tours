@@ -41,7 +41,17 @@ const NOTIFICATION_CUTOFF_MINUTES = 10;
 const RETRY_BACKOFF_BASE_MINUTES = 5;
 
 const ARCHIVE_AFTER_DAYS = 90;
+// F460: soft-deleted (archived) assignments are hard-deleted one year
+// after their archive date — bounded history for audits/undo-window
+// questions, bounded table growth forever.
+const ASSIGNMENT_PURGE_AFTER_DAYS = 365;
 const NOTIFICATION_LOG_RETENTION_DAYS = 30;
+
+// F421: per-run cleanup budgets. They sum to 5000 — under Convex's
+// per-transaction write limit — and exported for the sweep's guard test.
+export const CLEANUP_MAX_LOGS = 3000;
+export const CLEANUP_MAX_SCHEDULED = 1000;
+export const CLEANUP_MAX_DEAD = 1000;
 
 /**
  * Used by the notification_dispatch action to load everything it
@@ -499,6 +509,85 @@ export const cleanupOldAssignments = internalMutation({
 	},
 });
 
+
+// F460: archived assignments were soft-deleted forever — no hard-delete
+// purge existed, so the table grew without bound. This HARD-DELETES rows
+// whose deletedAt is older than the retention window, self-continuing
+// per F49.
+//
+// F834: the walk is by_deleted_at, not by_status_date. The old walk only
+// visited completed/cancelled rows bounded on the tour DATE, while the
+// delete criterion is deletedAt — so a removed `scheduled` row
+// (performRemove soft-deletes any status without flipping it) was never
+// visited at all, and a completed/cancelled row removed while still
+// future-dated escaped until its date also aged. Retention is now exactly
+// deletedAt + ASSIGNMENT_PURGE_AFTER_DAYS for every status.
+export const purgeArchivedAssignments = internalMutation({
+	args: {
+		// No longer a walk key (F834). Kept optional so a continuation
+		// scheduled by the previous shape still validates; ignored.
+		status: v.optional(
+			v.union(v.literal("completed"), v.literal("cancelled")),
+		),
+		cursor: v.optional(v.string()),
+	},
+	handler: async (ctx, args) => {
+		const cutoffMs =
+			Date.now() - ASSIGNMENT_PURGE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+		const cutoffDate = new Date(cutoffMs).toISOString().slice(0, 10);
+
+		const PAGE = 2000;
+		// gt(0) excludes never-deleted rows: an index on an optional field
+		// stores undefined, which sorts before every number.
+		const result = await ctx.db
+			.query("assignments")
+			.withIndex("by_deleted_at", (q) =>
+				q.gt("deletedAt", 0).lt("deletedAt", cutoffMs),
+			)
+			.paginate({ numItems: PAGE, cursor: args.cursor ?? null });
+
+		// The index range already selects archived-before-cutoff rows; the
+		// filter restates the criterion so a live row can never be deleted
+		// by an index-range mistake.
+		const targets = result.page.filter(
+			(a) => a.deletedAt !== undefined && a.deletedAt < cutoffMs,
+		);
+		for (const a of targets) {
+			await ctx.db.delete(a._id);
+		}
+
+		if (targets.length > 0) {
+			logger.info(
+				`[cron] purgeArchivedAssignments deleted ${targets.length} assignments archived before ${cutoffDate}`,
+			);
+			await logAudit(ctx, {
+				organizationId: "system",
+				userId: "system",
+				action: "assignments.bulk_purged",
+				resourceType: "assignment",
+				resourceId: targets[0]?._id ?? "",
+				oldValues: {},
+				newValues: { count: targets.length, cutoffDate },
+			});
+		}
+
+		if (!result.isDone) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notifications.purgeArchivedAssignments,
+				{ cursor: result.continueCursor },
+			);
+		}
+
+		return {
+			purged: targets.length,
+			done: result.isDone,
+			continueCursor: result.continueCursor,
+			cutoffDate,
+		};
+	},
+});
+
 export const cleanupOldNotifications = internalMutation({
 	args: {},
 	handler: async (ctx) => {
@@ -508,18 +597,20 @@ export const cleanupOldNotifications = internalMutation({
 		// Fetch old logs and scheduled notifications in parallel —
 		// they're independent ranges on different tables. Bound the
 		// scan to prevent OOM on orgs with millions of old artifacts.
-		const MAX_CLEANUP = 5000;
+		const MAX_LOGS = CLEANUP_MAX_LOGS;
+		const MAX_SCHEDULED = CLEANUP_MAX_SCHEDULED;
+		const MAX_DEAD = CLEANUP_MAX_DEAD;
 		const [oldLogs, oldScheduled, deadScheduled] = await Promise.all([
 			ctx.db
 				.query("notificationLogs")
 				.withIndex("by_created_at", (q) => q.lt("createdAt", cutoff))
-				.take(MAX_CLEANUP),
+				.take(MAX_LOGS),
 			ctx.db
 				.query("scheduledNotifications")
 				.withIndex("by_sent_scheduled", (q) =>
 					q.eq("sent", true).lt("scheduledFor", cutoff),
 				)
-				.take(MAX_CLEANUP),
+				.take(MAX_SCHEDULED),
 			// sent:false rows far past their scheduledFor are dead
 			// dispatch intents — the process tick retires them, and this
 			// sweep is the daily backstop so a large backlog can't
@@ -529,7 +620,7 @@ export const cleanupOldNotifications = internalMutation({
 				.withIndex("by_sent_scheduled", (q) =>
 					q.eq("sent", false).lt("scheduledFor", cutoff),
 				)
-				.take(MAX_CLEANUP),
+				.take(MAX_DEAD),
 		]);
 
 		// Deletes on different tables are independent — parallelize.
@@ -559,11 +650,31 @@ export const cleanupOldNotifications = internalMutation({
 			});
 		}
 
+		// F421: production writes up to ~28.8k notificationLogs rows a day
+		// (BATCH_SIZE=100 every 5 minutes) while a once-a-day bounded sweep
+		// deleted at most 5000 — both tables grew without bound. When any
+		// budget filled, there is almost certainly more behind it: chain a
+		// fresh run immediately (a new transaction, fresh budgets) until a
+		// sweep finishes under budget, then the daily cron finds nothing to
+		// do until the backlog rebuilds.
+		const filled =
+			oldLogs.length === MAX_LOGS ||
+			oldScheduled.length === MAX_SCHEDULED ||
+			deadScheduled.length === MAX_DEAD;
+		if (filled) {
+			await ctx.scheduler.runAfter(
+				0,
+				internal.notifications.cleanupOldNotifications,
+				{},
+			);
+		}
+
 		return {
 			logsDeleted: oldLogs.length,
 			scheduledDeleted: oldScheduled.length,
 			deadPendingDeleted: deadScheduled.length,
 			cutoff,
+			continued: filled,
 		};
 	},
 });

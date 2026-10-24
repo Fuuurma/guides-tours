@@ -2,7 +2,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../convex/_generated/api";
-import { CustomerForm, EMPTY_CUSTOMER_FORM } from "./customer-form";
+import { CustomerForm } from "./customer-form";
+import { EMPTY_CUSTOMER_FORM } from "./customer-form-model";
 
 export function NewCustomerPage() {
 	const navigate = useNavigate();

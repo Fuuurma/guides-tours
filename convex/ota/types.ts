@@ -36,11 +36,19 @@ export type NormalizedProviderEvent =
 			tourTime?: string;
 			guests: number;
 			totalPaidCents?: bigint;
+			/**
+			 * The major-unit amount the provider sent, before any exponent
+			 * was applied. F760: a currency-less re-delivery is converted
+			 * again in upsert against the PRIOR row's otaCurrency — the
+			 * parser's exponent-2 fallback would corrupt a stored JPY/KWD
+			 * amount.
+			 */
+			totalPaidRaw?: number;
 			currency?: string;
 			commissionRate?: number;
 			commissionCents?: bigint;
 			rawPayload: unknown;
-	  }
+		  }
 	| {
 			kind: "booking.cancelled";
 			reservationId: string;

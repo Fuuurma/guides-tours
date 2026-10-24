@@ -19,20 +19,22 @@
 //
 // Tour duration lookup: tour.durationHours (number).
 
-import { v, ConvexError } from "convex/values";
+import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 
 import type { Id, Doc } from "./_generated/dataModel";
 import { internalRefs } from "./lib/internalRefs";
-import { findOrgMember, requireMembership, requireRole } from "./lib/authz";
+import { requireMembership, requirePermission } from "./lib/authz";
 
 import { resolveTourStaffing, evaluateSlotStaffing } from "./lib/staffing";
 import { computeStaffingGaps } from "./lib/staffingGaps";
 
 import { timeToMinutes } from "./lib/assignmentTime";
 import {
+assertGuideAssignable,
 	collectConflictRows,
 	type ConflictIndexName,
+	readTourDay,
 } from "./lib/assignmentsShared";
 import {
 	performCancel,
@@ -214,12 +216,9 @@ export const slotCompanions = query({
 		if (!tour) return null;
 		const rules = resolveTourStaffing(tour);
 
-		const sameDay = await ctx.db
-			.query("assignments")
-			.withIndex("by_tour_date", (q) =>
-				q.eq("tourId", a.tourId).eq("date", a.date),
-			)
-			.take(100);
+		// F874: whole tour-day, not a take(100) window — a crowded key
+		// reported an over-staffed slot as under-staffed here.
+		const sameDay = await readTourDay(ctx, a.tourId, a.date);
 		const siblings = sameDay.filter(
 			(x) =>
 				x.organizationId === member.organizationId &&
@@ -283,7 +282,11 @@ export const staffingGaps = query({
 		const orgId = member.organizationId;
 		const MAX = 500;
 
-		const schedules = await ctx.db
+		// F872: probe one past the cap so a full window is reported, not
+		// mistaken for a fully-staffed one — the gaps past the cut are
+		// unknown, and every consumer (readiness page, 48h pill, digest)
+		// must say so instead of reading the cut set as complete.
+		const scheduleWindow = await ctx.db
 			.query("tourSchedules")
 			.withIndex("by_org_date", (q) =>
 				q
@@ -291,9 +294,9 @@ export const staffingGaps = query({
 					.gte("date", args.dateFrom)
 					.lte("date", args.dateTo),
 			)
-			.take(MAX);
+			.take(MAX + 1);
 
-		const assignments = await ctx.db
+		const assignmentWindow = await ctx.db
 			.query("assignments")
 			.withIndex("by_org_date", (q) =>
 				q
@@ -301,7 +304,12 @@ export const staffingGaps = query({
 					.gte("date", args.dateFrom)
 					.lte("date", args.dateTo),
 			)
-			.take(MAX);
+			.take(MAX + 1);
+
+		const truncated =
+			scheduleWindow.length > MAX || assignmentWindow.length > MAX;
+		const schedules = scheduleWindow.slice(0, MAX);
+		const assignments = assignmentWindow.slice(0, MAX);
 
 		const tourIds = new Set<string>();
 		for (const s of schedules) tourIds.add(String(s.tourId));
@@ -337,11 +345,14 @@ export const staffingGaps = query({
 			}
 		}
 
-		return computeStaffingGaps({
-			schedules,
-			assignments,
-			toursById,
-		});
+		return {
+			gaps: computeStaffingGaps({
+				schedules,
+				assignments,
+				toursById,
+			}),
+			truncated,
+		};
 	},
 });
 
@@ -468,63 +479,11 @@ export const checkConflicts = query({
 
 // ----- Mutations -----
 //
-// Pattern: each public mutation does requireRole + delegates to an
+// Pattern: each public mutation gates via requirePermission and delegates to an
 // internal* mutation that takes (organizationId, userId) directly.
 // Tests call internal* and skip the auth layer. Source doesn't have
 // this split — it uses a Django `@require_staff` decorator on the
 // view, which the test client can bypass by passing request.user.
-
-const createArgs = {
-	tourId: v.id("tours"),
-	guideId: v.string(),
-	date: v.string(),
-	startTime: v.string(),
-	vehicleId: v.optional(v.id("vehicles")),
-	driverId: v.optional(v.id("drivers")),
-	scheduleId: v.optional(v.id("tourSchedules")),
-};
-
-export const create = mutation({
-	args: createArgs,
-	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
-
-		// Validate guide has the "guide" role in this organization
-		// (source: assignment_service.py validates role__in=["guide","staff"]).
-		const guideMember = await findOrgMember(
-			ctx,
-			member.organizationId,
-			args.guideId,
-		);
-		if (!guideMember) {
-			throw new ConvexError("Guide is not a member of this organization");
-		}
-		if (
-			guideMember.role !== "guide" &&
-			guideMember.role !== "owner" &&
-			guideMember.role !== "admin"
-		) {
-			throw new ConvexError(
-				`User with role "${guideMember.role}" cannot be assigned as guide`,
-			);
-		}
-
-		return await ctx.runMutation(
-			internalRefs.assignments.internalCreate,
-			{
-				organizationId: member.organizationId,
-				userId: member.userId,
-				tourId: args.tourId,
-				guideId: args.guideId,
-				date: args.date,
-				startTime: args.startTime,
-				vehicleId: args.vehicleId,
-				driverId: args.driverId,
-				scheduleId: args.scheduleId,
-			},
-		);
-	},
-});
 
 /**
  * Internal: create an assignment (no auth). Caller passes
@@ -560,7 +519,21 @@ export const update = mutation({
 		startTime: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "assignment", "update");
+
+		// GT-AUDIT-02 / hub F594: reassignment took any caller-chosen guideId
+		// with no membership check, while `create` has always refused one
+		// (below). A foreign id therefore got assigned and then notified with
+		// this org's tour name, date and start/end times, and a nonexistent id
+		// still consumed a requiredGuides slot so the departure read fully
+		// staffed with nobody assigned. Enforce the same invariant `create`
+		// does, at the same layer: this is the client-reachable boundary, and
+		// internalUpdate is also called by cron/ops with no session, so the
+		// check cannot live in the lifecycle mutation.
+		if (args.guideId !== undefined) {
+			await assertGuideAssignable(ctx, member.organizationId, args.guideId);
+		}
+
 		return await ctx.runMutation(
 			internalRefs.assignments.internalUpdate,
 			{
@@ -597,7 +570,7 @@ export const cancel = mutation({
 		reason: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin", "member"]);
+		const member = await requirePermission(ctx, "assignment", "update");
 		return await ctx.runMutation(
 			internalRefs.assignments.internalCancel,
 			{
@@ -625,17 +598,16 @@ export const internalCancel = internalMutation({
 export const complete = mutation({
 	args: { assignmentId: v.id("assignments") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, [
-			"owner",
-			"admin",
-			"member",
-			"guide",
-		]);
+		const member = await requirePermission(ctx, "assignment", "update");
 		return await ctx.runMutation(
 			internalRefs.assignments.internalComplete,
 			{
 				organizationId: member.organizationId,
 				userId: member.userId,
+				// GT-AUDIT-07: performComplete scopes guide-role callers to their
+				// own assignment, so it has to know the caller's role. member.role
+				// is the resolved role in the active org.
+				callerRole: member.role,
 				assignmentId: args.assignmentId,
 			},
 		);
@@ -647,6 +619,7 @@ export const internalComplete = internalMutation({
 		assignmentId: v.id("assignments"),
 		organizationId: v.string(),
 		userId: v.string(),
+		callerRole: v.string(),
 	},
 	handler: async (ctx, args) => performComplete(ctx, args),
 });
@@ -657,7 +630,7 @@ export const internalComplete = internalMutation({
 export const remove = mutation({
 	args: { assignmentId: v.id("assignments") },
 	handler: async (ctx, args) => {
-		const member = await requireRole(ctx, ["owner", "admin"]);
+		const member = await requirePermission(ctx, "assignment", "delete");
 		return await ctx.runMutation(
 			internalRefs.assignments.internalRemove,
 			{

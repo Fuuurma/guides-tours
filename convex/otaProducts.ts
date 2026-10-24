@@ -13,6 +13,7 @@ import {
 import { internalRefs } from "./lib/internalRefs";
 import { requireMembership, requireRole } from "./lib/authz";
 import { logAudit } from "./lib/audit";
+import { normalizeCurrency } from "./lib/money";
 
 // ---- queries ----
 
@@ -66,19 +67,6 @@ export const list = query({
 		const MAX_OTA_PRODUCTS = 1000;
 		const all = await q.take(MAX_OTA_PRODUCTS);
 		return all.sort((a, b) => a.otaProductId.localeCompare(b.otaProductId));
-	},
-});
-
-export const get = query({
-	args: { productId: v.id("otaProducts") },
-	handler: async (ctx, args) => {
-		const member = await requireMembership(ctx);
-		const p = await ctx.db.get(args.productId);
-		if (!p) throw new ConvexError("Product not found");
-		if (p.organizationId !== member.organizationId) {
-			throw new ConvexError("Forbidden: product belongs to a different organization");
-		}
-		return p;
 	},
 });
 
@@ -174,6 +162,13 @@ export const internalCreate = internalMutation({
 				`OTA product ${args.otaProductId} is already linked to this integration`,
 			);
 		}
+		// F720: never fabricate "USD" — schema requires a code, so an
+		// omitted/unparseable one inherits the org's payment currency,
+		// then the tour's (same fallback chain as public_booking).
+		const paymentSettings = await ctx.db
+			.query("paymentSettings")
+			.withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+			.unique();
 		const now = Date.now();
 		const id = await ctx.db.insert("otaProducts", {
 			organizationId: args.organizationId,
@@ -189,7 +184,10 @@ export const internalCreate = internalMutation({
 			otaDurationMinutes: args.otaDurationMinutes,
 			otaPriceOriginalCents: args.otaPriceOriginalCents,
 			otaPriceSellingCents: args.otaPriceSellingCents,
-			otaCurrency: args.otaCurrency ?? "USD",
+			otaCurrency:
+				normalizeCurrency(args.otaCurrency) ??
+				paymentSettings?.defaultCurrency ??
+				tour.currency.toUpperCase(),
 			basePriceCents: args.basePriceCents,
 			commissionRate: args.commissionRate,
 			commissionAmountCents: args.commissionAmountCents,
