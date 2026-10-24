@@ -19,11 +19,29 @@ interface AuditLogEntry {
 	resourceId: string;
 	oldValues: Record<string, unknown>;
 	newValues: Record<string, unknown>;
+	/**
+	 * The caller's address, when the path that ran this mutation was
+	 * able to see it. A Convex mutation cannot read the originating
+	 * request, so the HTTP edges capture the identity and thread it
+	 * down through the args (see convex/lib/requestIdentity.ts).
+	 * Undefined for client-initiated (dashboard) mutations.
+	 */
+	ipAddress?: string;
+	/**
+	 * The caller's user agent. Same availability as `ipAddress`.
+	 */
+	userAgent?: string;
 }
 
 /**
  * Insert an audit log row. Call this after every significant mutation
  * so the audit trail is always up to date.
+ *
+ * `ipAddress` / `userAgent` attribute the row to a caller. They stay
+ * undefined when the mutation ran without a readable request — a
+ * Convex mutation cannot see the request that triggered it, so only
+ * the paths that capture the identity at the HTTP edge can supply it
+ * (convex/lib/requestIdentity.ts).
  *
  * @example
  *   await logAudit(ctx, {
@@ -48,6 +66,8 @@ export async function logAudit(
 		resourceId: entry.resourceId,
 		oldValues: entry.oldValues,
 		newValues: entry.newValues,
+		ipAddress: entry.ipAddress,
+		userAgent: entry.userAgent,
 		timestamp: Date.now(),
 	});
 }

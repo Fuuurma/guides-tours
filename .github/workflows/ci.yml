@@ -29,6 +29,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # F952: the production dependency graph must not gain advisories. This
+      # runs `pnpm audit --prod` against this repo's own manifests and fails
+      # on any advisory outside the sanctioned list in scripts/audit-gate.mjs.
+      - run: pnpm audit:prod
       - run: pnpm check
       - run: pnpm typecheck
       - run: pnpm test

@@ -1,3 +1,5 @@
+import type { VehicleStatus } from "@/lib/vehicle-status";
+
 // Shared entity types for the dashboard.
 //
 // These mirror the shape of the Convex query return values (not the
@@ -16,8 +18,6 @@ type BookingStatus =
 	| "cancelled"
 	| "expired"
 	| "no_show";
-
-type VehicleStatus = "available" | "in_use" | "maintenance" | "retired";
 
 type VacationStatus = "pending" | "approved" | "rejected";
 

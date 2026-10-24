@@ -175,6 +175,7 @@ export class TripAdvisorClient {
 					totalPaid !== undefined
 						? toMinorUnits(totalPaid, currency)
 						: undefined,
+				totalPaidRaw: totalPaid,
 				currency,
 				rawPayload: payload,
 			};

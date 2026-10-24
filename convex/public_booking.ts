@@ -339,6 +339,8 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 		emailConsent: v.optional(v.boolean()),
 		smsConsent: v.optional(v.boolean()),
 		ip: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge. */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Rate-limit check (per-email). Recorded BEFORE the slug
@@ -413,6 +415,8 @@ export const createForSlug: ReturnType<typeof internalAction> = internalAction({
 					scheduleId: args.scheduleId,
 					emailConsent: args.emailConsent,
 					smsConsent: args.smsConsent,
+					ipAddress: args.ip,
+					userAgent: args.userAgent,
 				},
 			);
 			await ctx.runMutation(rateLimitRefs.updateAttemptOutcome, {
@@ -453,6 +457,10 @@ export const internalCreate = internalMutation({
 		scheduleId: v.optional(v.id("tourSchedules")),
 		emailConsent: v.optional(v.boolean()),
 		smsConsent: v.optional(v.boolean()),
+		/** The caller's address, captured at the HTTP edge (F461). */
+		ipAddress: v.optional(v.string()),
+		/** The caller's user agent, captured at the HTTP edge (F461). */
+		userAgent: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		// Normalize + validate email via the shared helper. Rejects
@@ -511,7 +519,14 @@ export const internalCreate = internalMutation({
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
-			const match = await ctx.db
+			// F694: a cancel/re-create cycle leaves TWO schedules for the
+			// same (tourId, date, startTime). .unique() threw Convex's
+			// opaque "unique() query returned more than one result" error
+			// there, so a guest's booking attempt died with an internal
+			// failure instead of the authored refusal. take(2) + a length
+			// check refuses the ambiguous slot with the same friendly
+			// message the schedule helpers use.
+			const matches = await ctx.db
 				.query("tourSchedules")
 				.withIndex("by_tour_date_start", (q) =>
 					q
@@ -519,7 +534,13 @@ export const internalCreate = internalMutation({
 						.eq("date", args.date)
 						.eq("startTime", args.startTime),
 				)
-				.unique();
+				.take(2);
+			if (matches.length > 1) {
+				throw new ConvexError(
+					`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+				);
+			}
+			const match = matches[0];
 			if (match && match.organizationId === args.organizationId) {
 				if (match.status === "cancelled") {
 					throw new ConvexError("Cannot book a cancelled schedule");
@@ -741,6 +762,8 @@ export const internalCreate = internalMutation({
 					amountCents: totalAmountCents.toString(),
 					stripePaymentIntentId: null,
 				},
+				ipAddress: args.ipAddress,
+				userAgent: args.userAgent,
 			});
 		}
 
@@ -760,6 +783,8 @@ export const internalCreate = internalMutation({
 				guests: args.guests,
 				source: "public_booking",
 			},
+			ipAddress: args.ipAddress,
+			userAgent: args.userAgent,
 		});
 
 		// Customer confirmation and future reminders begin only after the

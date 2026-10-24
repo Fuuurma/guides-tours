@@ -168,6 +168,7 @@ export class AirbnbClient {
 			// Flat fields (totalAmount) are major units, like other
 			// providers — converted with the currency's exponent.
 			let totalPaidCents: bigint | undefined;
+			let totalPaidRaw: number | undefined;
 			if (isRecord(data.total_price)) {
 				const cents = numberOrUndefined(data.total_price.amount);
 				if (cents !== undefined) totalPaidCents = BigInt(Math.round(cents));
@@ -177,6 +178,9 @@ export class AirbnbClient {
 				);
 				if (dollars !== undefined) {
 					totalPaidCents = toMinorUnits(dollars, currency);
+					// F760: upsert re-converts against the prior row's
+					// currency when a re-delivery omits its own.
+					totalPaidRaw = dollars;
 				}
 			}
 			return {
@@ -210,6 +214,7 @@ export class AirbnbClient {
 					"data.number_of_guests",
 				),
 				totalPaidCents,
+				totalPaidRaw,
 				currency,
 				rawPayload: payload,
 			};

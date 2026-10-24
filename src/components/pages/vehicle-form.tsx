@@ -23,10 +23,10 @@ import {
 	validateNotesOptional,
 	validatePositiveInteger,
 } from "@/lib/validation";
+import { VEHICLE_STATUSES } from "@/lib/vehicle-status";
 import type { VehicleFormValues } from "./vehicle-form-model";
 
 const OWNERSHIP_TYPES = ["owned", "rented", "leased"] as const;
-const STATUSES = ["available", "in_use", "maintenance", "retired"] as const;
 
 function metaErrors(
 	errors: ReadonlyArray<unknown>,
@@ -246,7 +246,7 @@ export function VehicleForm({
 												}}
 												className="flex-wrap"
 											>
-												{STATUSES.map((s) => (
+												{VEHICLE_STATUSES.map((s) => (
 													<ToggleGroupItem key={s} value={s}>
 														{s.replace("_", " ")}
 													</ToggleGroupItem>

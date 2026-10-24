@@ -20,6 +20,8 @@ const USD_CURRENCY = new Intl.NumberFormat("en-US", {
 	currency: "USD",
 });
 
+const COUNT = new Intl.NumberFormat("en-US");
+
 const DATE_TIME = new Intl.DateTimeFormat("en-US", {
 	dateStyle: "medium",
 	timeStyle: "short",
@@ -28,6 +30,11 @@ const DATE_TIME = new Intl.DateTimeFormat("en-US", {
 /** Dashboard-standard timestamp rendering (en-US, medium date + short time). */
 export function formatDateTime(value: string | number | Date): string {
 	return DATE_TIME.format(new Date(value));
+}
+
+/** Grouped integer rendering (en-US — never host-locale; F770). */
+export function formatCount(value: number): string {
+	return COUNT.format(value);
 }
 
 const LONG_DATE = new Intl.DateTimeFormat("en-US", {

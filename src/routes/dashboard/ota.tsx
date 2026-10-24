@@ -61,6 +61,10 @@ export const Route = createFileRoute("/dashboard/ota")({
 	component: OtaIntegrationsPage,
 });
 
+// OTA command deck: provider connections (toggle/delete with per-row pending),
+// product mapping to tours, new-integration form, and recent webhook deliveries.
+// Each provider verifies its own webhook signature server-side; this page only
+// surfaces the delivery log (`webhookDeliveries.listRecent`, last 40).
 function OtaIntegrationsPage() {
 	const reduceMotion = useReducedMotion();
 	const {

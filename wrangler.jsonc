@@ -10,5 +10,6 @@
 		"ip": "127.0.0.1",
 		"port": 4320
 	},
-	"main": "@tanstack/react-start/server-entry"
+	"main": "@tanstack/react-start/server-entry",
+	"limits": { "cpu_ms": 50 }
 }

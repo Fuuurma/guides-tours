@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { formatCount } from "@/lib/format";
 import { getSafeDisplayMessage } from "@/lib/utils";
 import type { Customer } from "@/types/entities";
 import { api } from "../../../convex/_generated/api";
@@ -143,9 +144,12 @@ function CustomersPage() {
 	// `items` is one page; `total` is the size of the scanned window.
 	// They differ the moment the org holds more than a page, and past
 	// MAX_CUSTOMER_SCAN `total` is a lower bound too — say which.
+	// F770: counts render through the pinned en-US formatter — a bare
+	// locale-less number call resolves under the host locale during SSR
+	// and the browser's during hydration, mismatching the client's text.
 	const windowLabel = customers?.truncated
-		? `most recent ${customers.total.toLocaleString()} of more`
-		: `${(customers?.total ?? 0).toLocaleString()} customer${customers?.total === 1 ? "" : "s"}`;
+		? `most recent ${formatCount(customers.total)} of more`
+		: `${formatCount(customers?.total ?? 0)} customer${customers?.total === 1 ? "" : "s"}`;
 
 	return (
 		<ListPage

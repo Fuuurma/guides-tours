@@ -36,6 +36,11 @@ import {
 import {
 	verifyStripeSignature,
 } from "./payments_stripe";
+import {
+	extractRequestIdentity,
+	type RequestIdentity,
+} from "./lib/requestIdentity";
+import { readBodyWithLimit } from "./lib/requestBody";
 
 const STRIPE_API_BASE = "https://api.stripe.com/v1";
 const DEFAULT_SITE_URL = "http://127.0.0.1:3020";
@@ -155,6 +160,7 @@ async function applyPaymentSuccess(
 	obj: StripeObject | undefined,
 	orgId: string,
 	eventType: string | undefined,
+	identity: RequestIdentity,
 ): Promise<void> {
 	const piId = paymentIntentIdFrom(obj);
 	const bookingId = obj?.metadata?.bookingId;
@@ -186,6 +192,8 @@ async function applyPaymentSuccess(
 			amountCents: BigInt(amountRaw),
 			currency: currencyForDb(currencyRaw),
 			stripePaymentIntentId: piId,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 	}
 
@@ -195,7 +203,11 @@ async function applyPaymentSuccess(
 		);
 		return;
 	}
-	await ctx.runMutation(internal.payments.markSucceeded, { paymentId });
+	await ctx.runMutation(internal.payments.markSucceeded, {
+		paymentId,
+		ipAddress: identity.ipAddress,
+		userAgent: identity.userAgent,
+	});
 }
 
 /** payment_intent.payment_failed: resolve the payment and mark failed.
@@ -205,6 +217,7 @@ async function applyPaymentFailed(
 	ctx: WebhookDispatchCtx,
 	obj: StripeObject | undefined,
 	orgId: string,
+	identity: RequestIdentity,
 ): Promise<Response | null> {
 	const piId = paymentIntentIdFrom(obj);
 	if (!piId) {
@@ -223,6 +236,8 @@ async function applyPaymentFailed(
 	await ctx.runMutation(internal.payments.markFailed, {
 		paymentId,
 		reason: obj?.last_payment_error?.message ?? undefined,
+		ipAddress: identity.ipAddress,
+		userAgent: identity.userAgent,
 	});
 	return null;
 }
@@ -236,6 +251,7 @@ async function applyChargeRefund(
 	ctx: WebhookDispatchCtx,
 	obj: StripeObject | undefined,
 	orgId: string,
+	identity: RequestIdentity,
 ): Promise<void> {
 	const piId = paymentIntentIdFrom(obj);
 	if (!piId) {
@@ -271,12 +287,16 @@ async function applyChargeRefund(
 				reason: r.reason,
 				processedAt: r.created ? r.created * 1000 : undefined,
 			},
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 	}
 	if (refundsData.length === 0) {
 		await ctx.runMutation(internal.payments.markRefunded, {
 			paymentId,
 			fullyRefunded,
+			ipAddress: identity.ipAddress,
+			userAgent: identity.userAgent,
 		});
 	}
 }
@@ -337,24 +357,54 @@ function intentMatchesBalance(
 }
 
 /** Per-email sliding-window gate on the unauthenticated payment
- *  actions (F375). Shares the publicBookingAttempts machinery with
- *  booking submissions — a legit guest spends ~1 booking attempt +
- *  1-2 payment attempts, well inside the 5/15min cap, while spray is
- *  bounded. slug records the payment target for audit. */
+ *  actions (F375). Convex actions receive no HTTP headers, so there is
+ *  no IP to gate on: the gate is email-only (F748's emailOnlyGate —
+ *  the payment rows store ip:"none", a bucket no header-bearing read
+ *  shares), 5 attempts per 15 minutes per email, while a guest's
+ *  booking attempt plus its payment attempts still fit. slug records
+ *  the payment target for audit. Returns the attempt id — callers
+ *  settle its outcome via settlePaymentAttempt (F748: rows no longer
+ *  stay outcome:"pending" until the purge). */
 async function rateLimitPublicPayment(
 	ctx: ActionCtx,
 	email: string,
 	bookingId: string,
-): Promise<void> {
+): Promise<string> {
 	const rl = await ctx.runMutation(internal.lib.rate_limit.recordAttempt, {
 		email,
 		slug: `payment:${bookingId}`,
 		outcome: "pending",
+		emailOnlyGate: true,
 	});
 	if (!rl.allowed) {
 		throw new ConvexError(
 			"Too many payment attempts — please try again in a few minutes",
 		);
+	}
+	return rl.attemptId;
+}
+
+/** Settle a payment attempt's audit row: success when the flow
+ *  returns, failure when it throws (the error still propagates). The
+ *  rate-limit row is the audit record — without this, attempts stayed
+ *  outcome:"pending" until the 30-min purge (F748). */
+async function settlePaymentAttempt<T>(
+	ctx: ActionCtx,
+	attemptId: string,
+	flow: () => Promise<T>,
+): Promise<T> {
+	const settle = (outcome: string) =>
+		ctx.runMutation(internal.lib.rate_limit.updateAttemptOutcome, {
+			attemptId: attemptId as import("./_generated/dataModel").Id<"publicBookingAttempts">,
+			outcome,
+		});
+	try {
+		const result = await flow();
+		await settle("success");
+		return result;
+	} catch (err) {
+		await settle("failed").catch(() => {});
+		throw err;
 	}
 }
 
@@ -564,102 +614,104 @@ export const createPublicPaymentIntent = action({
 	}> => {
 		const email = normalizeEmail(args.customerEmail);
 		if (!email) throw new ConvexError("Invalid email address");
-		await rateLimitPublicPayment(ctx, email, args.bookingId);
+		const attemptId = await rateLimitPublicPayment(ctx, email, args.bookingId);
+		return settlePaymentAttempt(ctx, attemptId, async () => {
 
-		const booking = await ctx.runQuery(
-			internal.payments.getBookingForCheckout,
-			{ bookingId: args.bookingId },
-		);
-		if (!booking) throw new ConvexError("Booking not found");
-		if (!booking.customerEmail || booking.customerEmail !== email) {
-			throw new ConvexError("Email does not match this booking");
-		}
+			const booking = await ctx.runQuery(
+				internal.payments.getBookingForCheckout,
+				{ bookingId: args.bookingId },
+			);
+			if (!booking) throw new ConvexError("Booking not found");
+			if (!booking.customerEmail || booking.customerEmail !== email) {
+				throw new ConvexError("Email does not match this booking");
+			}
 
-		const balance = booking.balanceDueCents ?? 0n;
-		await assertBookingCheckoutAllowed(ctx, args.bookingId, booking.organizationId, {
-			amountCents: balance,
-			balanceDueCents: balance,
-			status: booking.status,
-		});
+			const balance = booking.balanceDueCents ?? 0n;
+			await assertBookingCheckoutAllowed(ctx, args.bookingId, booking.organizationId, {
+				amountCents: balance,
+				balanceDueCents: balance,
+				status: booking.status,
+			});
 
-		const settings = await ctx.runQuery(
-			internal.payments.getStripeSecrets,
-			{ organizationId: booking.organizationId },
-		);
-		if (!settings?.stripeSecretKey || !settings.stripeEnabled) {
-			throw new ConvexError("Online payment is not available for this operator");
-		}
-		if (!settings.stripePublishableKey) {
-			throw new ConvexError("Stripe publishable key is not configured");
-		}
-		const stripeSecret = await decrypt(settings.stripeSecretKey);
-		const currencyDb = currencyForDb(settings.defaultCurrency);
-		const currencyStripe = currencyForStripe(currencyDb);
+			const settings = await ctx.runQuery(
+				internal.payments.getStripeSecrets,
+				{ organizationId: booking.organizationId },
+			);
+			if (!settings?.stripeSecretKey || !settings.stripeEnabled) {
+				throw new ConvexError("Online payment is not available for this operator");
+			}
+			if (!settings.stripePublishableKey) {
+				throw new ConvexError("Stripe publishable key is not configured");
+			}
+			const stripeSecret = await decrypt(settings.stripeSecretKey);
+			const currencyDb = currencyForDb(settings.defaultCurrency);
+			const currencyStripe = currencyForStripe(currencyDb);
 
-		// F375 dedup: re-open the booking's existing pending intent when
-		// it is still usable instead of minting a fresh one per call —
-		// abandoned sessions left unlimited pending rows and a guest
-		// completing two of them got double-charged.
-		const reusable = await findReusableIntent(
-			ctx,
-			stripeSecret,
-			args.bookingId,
-			balance,
-			currencyDb,
-		);
-		if (reusable?.client_secret && reusable.id) {
+			// F375 dedup: re-open the booking's existing pending intent when
+			// it is still usable instead of minting a fresh one per call —
+			// abandoned sessions left unlimited pending rows and a guest
+			// completing two of them got double-charged.
+			const reusable = await findReusableIntent(
+				ctx,
+				stripeSecret,
+				args.bookingId,
+				balance,
+				currencyDb,
+			);
+			if (reusable?.client_secret && reusable.id) {
+				return {
+					stripePaymentIntentId: reusable.id,
+					clientSecret: reusable.client_secret,
+					amountCents: balance,
+					currency: currencyDb,
+					publishableKey: settings.stripePublishableKey,
+				};
+			}
+
+			const params = new URLSearchParams();
+			params.append("amount", balance.toString());
+			params.append("currency", currencyStripe);
+			params.append("automatic_payment_methods[enabled]", "true");
+			params.append("receipt_email", email);
+			params.append("metadata[bookingId]", args.bookingId);
+			params.append("metadata[organizationId]", booking.organizationId);
+			params.append("description", `Tour booking ${args.bookingId}`);
+
+			const res = await fetch(`${STRIPE_API_BASE}/payment_intents`, {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${stripeSecret}`,
+					"Content-Type": "application/x-www-form-urlencoded",
+				},
+				body: params.toString(),
+			});
+			if (!res.ok) {
+				const errText = await res.text();
+				throw new ConvexError(
+					`Stripe error: ${res.status} ${errText.slice(0, 200)}`,
+				);
+			}
+			const intent = (await res.json()) as {
+				id: string;
+				client_secret: string;
+			};
+
+			await ctx.runMutation(internal.payments.recordFromAction, {
+				organizationId: booking.organizationId,
+				bookingId: args.bookingId,
+				amountCents: balance,
+				currency: currencyDb,
+				stripePaymentIntentId: intent.id,
+			});
+
 			return {
-				stripePaymentIntentId: reusable.id,
-				clientSecret: reusable.client_secret,
+				stripePaymentIntentId: intent.id,
+				clientSecret: intent.client_secret,
 				amountCents: balance,
 				currency: currencyDb,
 				publishableKey: settings.stripePublishableKey,
 			};
-		}
-
-		const params = new URLSearchParams();
-		params.append("amount", balance.toString());
-		params.append("currency", currencyStripe);
-		params.append("automatic_payment_methods[enabled]", "true");
-		params.append("receipt_email", email);
-		params.append("metadata[bookingId]", args.bookingId);
-		params.append("metadata[organizationId]", booking.organizationId);
-		params.append("description", `Tour booking ${args.bookingId}`);
-
-		const res = await fetch(`${STRIPE_API_BASE}/payment_intents`, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${stripeSecret}`,
-				"Content-Type": "application/x-www-form-urlencoded",
-			},
-			body: params.toString(),
 		});
-		if (!res.ok) {
-			const errText = await res.text();
-			throw new ConvexError(
-				`Stripe error: ${res.status} ${errText.slice(0, 200)}`,
-			);
-		}
-		const intent = (await res.json()) as {
-			id: string;
-			client_secret: string;
-		};
-
-		await ctx.runMutation(internal.payments.recordFromAction, {
-			organizationId: booking.organizationId,
-			bookingId: args.bookingId,
-			amountCents: balance,
-			currency: currencyDb,
-			stripePaymentIntentId: intent.id,
-		});
-
-		return {
-			stripePaymentIntentId: intent.id,
-			clientSecret: intent.client_secret,
-			amountCents: balance,
-			currency: currencyDb,
-			publishableKey: settings.stripePublishableKey,
-		};
 	},
 });
 
@@ -844,146 +896,148 @@ export const createPublicHostedCheckout = action({
 	): Promise<{ url: string; sessionId: string }> => {
 		const email = normalizeEmail(args.customerEmail);
 		if (!email) throw new ConvexError("Invalid email address");
-		await rateLimitPublicPayment(ctx, email, args.bookingId);
+		const attemptId = await rateLimitPublicPayment(ctx, email, args.bookingId);
+		return settlePaymentAttempt(ctx, attemptId, async () => {
 
-		const booking = await ctx.runQuery(
-			internal.payments.getBookingForCheckout,
-			{ bookingId: args.bookingId },
-		);
-		if (!booking) throw new ConvexError("Booking not found");
-		if (!booking.customerEmail || booking.customerEmail !== email) {
-			throw new ConvexError("Email does not match this booking");
-		}
-
-		const balance = booking.balanceDueCents ?? 0n;
-		await assertBookingCheckoutAllowed(ctx, args.bookingId, booking.organizationId, {
-			amountCents: balance,
-			balanceDueCents: balance,
-			status: booking.status,
-		});
-
-		const settings = await ctx.runQuery(
-			internal.payments.getStripeSecrets,
-			{ organizationId: booking.organizationId },
-		);
-		if (!settings?.stripeSecretKey || !settings.stripeEnabled) {
-			throw new ConvexError("Online payment is not available for this operator");
-		}
-		const stripeSecret = await decrypt(settings.stripeSecretKey);
-		const currencyDb = currencyForDb(settings.defaultCurrency);
-		const currencyStripe = currencyForStripe(currencyDb);
-
-		// F375 dedup: attach the booking's existing pending intent to the
-		// new session (Checkout accepts an unconfirmed intent via the
-		// payment_intent parameter) so completing two sessions still
-		// captures one PaymentIntent — the double-charge path is dead.
-		// Hosted reuse needs requires_payment_method (unconfirmed).
-		const reusable = await findReusableIntent(
-			ctx,
-			stripeSecret,
-			args.bookingId,
-			balance,
-			currencyDb,
-		);
-		const reusedPiId =
-			reusable?.id && reusable.status === "requires_payment_method"
-				? reusable.id
-				: null;
-
-		const siteUrl = checkoutSiteOrigin();
-		const successPath = checkoutReturnPath(
-			args.successPath,
-			`/book/paid?bookingId=${args.bookingId}`,
-		);
-		const cancelPath = checkoutReturnPath(
-			args.cancelPath,
-			`/book/paid?bookingId=${args.bookingId}&cancelled=1`,
-		);
-
-		const buildSessionParams = (withReusedPi: boolean) => {
-			const params = new URLSearchParams();
-			params.append("mode", "payment");
-			params.append("success_url", `${siteUrl}${successPath}`);
-			params.append("cancel_url", `${siteUrl}${cancelPath}`);
-			params.append("line_items[0][quantity]", "1");
-			params.append("line_items[0][price_data][currency]", currencyStripe);
-			params.append(
-				"line_items[0][price_data][unit_amount]",
-				balance.toString(),
+			const booking = await ctx.runQuery(
+				internal.payments.getBookingForCheckout,
+				{ bookingId: args.bookingId },
 			);
-			params.append(
-				"line_items[0][price_data][product_data][name]",
-				`Tour booking ${args.bookingId}`,
-			);
-			params.append("metadata[bookingId]", args.bookingId);
-			params.append("metadata[organizationId]", booking.organizationId);
-			params.append(
-				"payment_intent_data[metadata][bookingId]",
-				args.bookingId,
-			);
-			params.append(
-				"payment_intent_data[metadata][organizationId]",
-				booking.organizationId,
-			);
-			params.append("expand[]", "payment_intent");
-			params.append("customer_email", email);
-			if (withReusedPi && reusedPiId) {
-				params.append("payment_intent", reusedPiId);
+			if (!booking) throw new ConvexError("Booking not found");
+			if (!booking.customerEmail || booking.customerEmail !== email) {
+				throw new ConvexError("Email does not match this booking");
 			}
-			return params;
-		};
 
-		const createSession = async (withReusedPi: boolean) => {
-			const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
-				method: "POST",
-				headers: {
-					Authorization: `Bearer ${stripeSecret}`,
-					"Content-Type": "application/x-www-form-urlencoded",
-				},
-				body: buildSessionParams(withReusedPi).toString(),
-			});
-			return res;
-		};
-
-		let res = await createSession(reusedPiId !== null);
-		if (!res.ok && reusedPiId) {
-			// Stripe refused the reused intent (state moved, method types
-			// drifted) — fall back to a fresh session rather than fail the
-			// guest's payment. The stale row goes terminal via the webhook.
-			logger.warn(
-				`payment_intent reuse rejected for booking ${args.bookingId}, minting fresh`,
-			);
-			res = await createSession(false);
-		}
-		if (!res.ok) {
-			const errText = await res.text();
-			throw new ConvexError(
-				`Stripe Checkout error: ${res.status} ${errText.slice(0, 200)}`,
-			);
-		}
-		const session = (await res.json()) as {
-			id: string;
-			url: string | null;
-			payment_intent?: string | { id?: string } | null;
-		};
-		if (!session.url) {
-			throw new ConvexError("Stripe Checkout session missing URL");
-		}
-
-		const piId = paymentIntentIdFrom({
-			payment_intent: session.payment_intent,
-		});
-		if (piId) {
-			await ctx.runMutation(internal.payments.recordFromAction, {
-				organizationId: booking.organizationId,
-				bookingId: args.bookingId,
+			const balance = booking.balanceDueCents ?? 0n;
+			await assertBookingCheckoutAllowed(ctx, args.bookingId, booking.organizationId, {
 				amountCents: balance,
-				currency: currencyDb,
-				stripePaymentIntentId: piId,
+				balanceDueCents: balance,
+				status: booking.status,
 			});
-		}
 
-		return { url: session.url, sessionId: session.id };
+			const settings = await ctx.runQuery(
+				internal.payments.getStripeSecrets,
+				{ organizationId: booking.organizationId },
+			);
+			if (!settings?.stripeSecretKey || !settings.stripeEnabled) {
+				throw new ConvexError("Online payment is not available for this operator");
+			}
+			const stripeSecret = await decrypt(settings.stripeSecretKey);
+			const currencyDb = currencyForDb(settings.defaultCurrency);
+			const currencyStripe = currencyForStripe(currencyDb);
+
+			// F375 dedup: attach the booking's existing pending intent to the
+			// new session (Checkout accepts an unconfirmed intent via the
+			// payment_intent parameter) so completing two sessions still
+			// captures one PaymentIntent — the double-charge path is dead.
+			// Hosted reuse needs requires_payment_method (unconfirmed).
+			const reusable = await findReusableIntent(
+				ctx,
+				stripeSecret,
+				args.bookingId,
+				balance,
+				currencyDb,
+			);
+			const reusedPiId =
+				reusable?.id && reusable.status === "requires_payment_method"
+					? reusable.id
+					: null;
+
+			const siteUrl = checkoutSiteOrigin();
+			const successPath = checkoutReturnPath(
+				args.successPath,
+				`/book/paid?bookingId=${args.bookingId}`,
+			);
+			const cancelPath = checkoutReturnPath(
+				args.cancelPath,
+				`/book/paid?bookingId=${args.bookingId}&cancelled=1`,
+			);
+
+			const buildSessionParams = (withReusedPi: boolean) => {
+				const params = new URLSearchParams();
+				params.append("mode", "payment");
+				params.append("success_url", `${siteUrl}${successPath}`);
+				params.append("cancel_url", `${siteUrl}${cancelPath}`);
+				params.append("line_items[0][quantity]", "1");
+				params.append("line_items[0][price_data][currency]", currencyStripe);
+				params.append(
+					"line_items[0][price_data][unit_amount]",
+					balance.toString(),
+				);
+				params.append(
+					"line_items[0][price_data][product_data][name]",
+					`Tour booking ${args.bookingId}`,
+				);
+				params.append("metadata[bookingId]", args.bookingId);
+				params.append("metadata[organizationId]", booking.organizationId);
+				params.append(
+					"payment_intent_data[metadata][bookingId]",
+					args.bookingId,
+				);
+				params.append(
+					"payment_intent_data[metadata][organizationId]",
+					booking.organizationId,
+				);
+				params.append("expand[]", "payment_intent");
+				params.append("customer_email", email);
+				if (withReusedPi && reusedPiId) {
+					params.append("payment_intent", reusedPiId);
+				}
+				return params;
+			};
+
+			const createSession = async (withReusedPi: boolean) => {
+				const res = await fetch(`${STRIPE_API_BASE}/checkout/sessions`, {
+					method: "POST",
+					headers: {
+						Authorization: `Bearer ${stripeSecret}`,
+						"Content-Type": "application/x-www-form-urlencoded",
+					},
+					body: buildSessionParams(withReusedPi).toString(),
+				});
+				return res;
+			};
+
+			let res = await createSession(reusedPiId !== null);
+			if (!res.ok && reusedPiId) {
+				// Stripe refused the reused intent (state moved, method types
+				// drifted) — fall back to a fresh session rather than fail the
+				// guest's payment. The stale row goes terminal via the webhook.
+				logger.warn(
+					`payment_intent reuse rejected for booking ${args.bookingId}, minting fresh`,
+				);
+				res = await createSession(false);
+			}
+			if (!res.ok) {
+				const errText = await res.text();
+				throw new ConvexError(
+					`Stripe Checkout error: ${res.status} ${errText.slice(0, 200)}`,
+				);
+			}
+			const session = (await res.json()) as {
+				id: string;
+				url: string | null;
+				payment_intent?: string | { id?: string } | null;
+			};
+			if (!session.url) {
+				throw new ConvexError("Stripe Checkout session missing URL");
+			}
+
+			const piId = paymentIntentIdFrom({
+				payment_intent: session.payment_intent,
+			});
+			if (piId) {
+				await ctx.runMutation(internal.payments.recordFromAction, {
+					organizationId: booking.organizationId,
+					bookingId: args.bookingId,
+					amountCents: balance,
+					currency: currencyDb,
+					stripePaymentIntentId: piId,
+				});
+			}
+
+			return { url: session.url, sessionId: session.id };
+		});
 	},
 });
 
@@ -1086,12 +1140,32 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 	if (request.method !== "POST") {
 		return new Response("method not allowed", { status: 405 });
 	}
+	// The caller's identity, captured at the HTTP edge — a Convex
+	// mutation cannot read the request that triggered it, so this is
+	// the only place Stripe's address and user agent can be learned.
+	// Threaded into the audit rows the payment mutations write (F461).
+	const identity = extractRequestIdentity(request);
 	const sigHeader = request.headers.get("stripe-signature");
 	if (!sigHeader) {
 		return new Response("missing signature", { status: 400 });
 	}
 
-	const rawBody = await request.text();
+	// F554: the body is unauthenticated until the signature is verified,
+	// and the org that selects the secret is inside the payload — so the
+	// body has to be read (and parsed) before it can be authenticated.
+	// Cap the read so one oversized POST can't cost the process the
+	// platform's request ceiling in memory, and reject it before
+	// JSON.parse. 1 MiB is ~50x a typical Stripe event and far below
+	// Stripe's own 10 MB event ceiling.
+	const MAX_BODY_BYTES = 1024 * 1024;
+	const body = await readBodyWithLimit(request, MAX_BODY_BYTES);
+	if (!body.ok) {
+		if (body.reason === "too-large") {
+			return new Response("payload too large", { status: 413 });
+		}
+		return new Response("failed to read body", { status: 400 });
+	}
+	const rawBody = body.text;
 
 	let parsed: {
 		id?: string;
@@ -1230,16 +1304,16 @@ export const stripeWebhook = httpAction(async (ctx, request) => {
 					`[stripe-webhook] ${eventType} awaiting async settlement (payment_status=${obj?.payment_status}, org=${orgId}, session=${obj?.id ?? "?"})`,
 				);
 			} else {
-				await applyPaymentSuccess(ctx, obj, orgId, eventType);
+				await applyPaymentSuccess(ctx, obj, orgId, eventType, identity);
 			}
 		} else if (
 			eventType === "payment_intent.payment_failed" ||
 			eventType === CHECKOUT_SESSION_ASYNC_FAILED
 		) {
-			const earlyResponse = await applyPaymentFailed(ctx, obj, orgId);
+			const earlyResponse = await applyPaymentFailed(ctx, obj, orgId, identity);
 			if (earlyResponse) return earlyResponse;
 		} else if (eventType === "charge.refunded") {
-			await applyChargeRefund(ctx, obj, orgId);
+			await applyChargeRefund(ctx, obj, orgId, identity);
 		}
 
 		if (stripeEventId) {

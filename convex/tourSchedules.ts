@@ -53,6 +53,14 @@ export async function assertScheduleSlotFree(
 		excludeId?: Id<"tourSchedules">;
 	},
 ): Promise<void> {
+	// F694: a cancel/re-create cycle leaves TWO schedules in the same
+	// (tourId, date, startTime) partition (see ops.ts, which reads that
+	// partition with take(20) + a JS filter for exactly this reason).
+	// .unique() threw Convex's opaque "unique() query returned more than
+	// one result" error on such a partition, so the friendly refusal
+	// below was unreachable. take(2) + a length check answers the same
+	// question without the crash: two rows in the partition means the slot
+	// is taken, and at most one of them can be the excludeId row.
 	const existing = await ctx.db
 		.query("tourSchedules")
 		.withIndex("by_tour_date_start", (q) =>
@@ -61,8 +69,9 @@ export async function assertScheduleSlotFree(
 				.eq("date", args.date)
 				.eq("startTime", args.startTime),
 		)
-		.unique();
-	if (existing && existing._id !== args.excludeId) {
+		.take(2);
+	const conflicts = existing.filter((s) => s._id !== args.excludeId);
+	if (conflicts.length > 0) {
 		throw new ConvexError(
 			`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
 		);

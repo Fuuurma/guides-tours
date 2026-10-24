@@ -5,7 +5,7 @@ Tour operator SaaS — TanStack Start + Convex + Better Auth + Stripe + SES.
 ## Status
 
 - **Stage:** ready to deploy
-- **Backend:** 38 Convex tables (35 app + 3 org-plugin), 100+ functions, 51 test files, **579 passing tests**
+- **Backend:** 38 Convex tables (35 app + 3 org-plugin), 100+ functions
 - **Frontend:** 47 routes, full dashboard + public booking + onboarding + invite flows
 - **Auth:** Better Auth local-install — sign-up → onboarding → dashboard passes end-to-end
 - **Stack migrations:** all done (no remaining source codebases)
@@ -24,7 +24,7 @@ Tour operator SaaS — TanStack Start + Convex + Better Auth + Stripe + SES.
 - **Email:** AWS SES via Web Crypto Signature V4 (works in Cloudflare + Convex default runtime — no `"use node"` directive needed). See `convex/lib/awsSigV4.ts`.
 - **Payments:** Stripe via raw `fetch` (no SDK — same edge-runtime rationale)
 - **Package manager:** pnpm 10.30.2
-- **Testing:** Vitest (579 tests) + Playwright smoke (23/23 e2e: 19 route smoke + 4 auth flows)
+- **Testing:** Vitest + Playwright smoke (route smoke + auth flows)
 
 ## First-time setup
 
@@ -43,7 +43,7 @@ npx convex env set BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 npx convex env set SITE_URL=http://127.0.0.1:3020
 
 # 5. Start the app
-pnpm dev                    # frontend on :3000 (separate terminal for backend)
+pnpm dev                    # frontend on :3020 (separate terminal for backend)
 ```
 
 ## Scripts
@@ -51,8 +51,8 @@ pnpm dev                    # frontend on :3000 (separate terminal for backend)
 - `pnpm dev` — Vite dev server (port 3020)
 - `pnpm build` — Production build (Cloudflare Workers target)
 - `pnpm deploy` — Build + `wrangler deploy`
-- `pnpm test` — Vitest run (579 tests)
-- `pnpm test:e2e` — Playwright smoke (23 tests; self-starts the dev server)
+- `pnpm test` — Vitest run
+- `pnpm test:e2e` — Playwright smoke (self-starts the dev server)
 - `pnpm lint` — Biome lint
 - `pnpm check` — Biome lint + format check
 - `npx convex dev` — Convex backend dev (separate terminal)
@@ -77,7 +77,7 @@ convex/                          # Backend (Convex)
 │   ├── rate_limit.ts            # Public booking rate limit (5/email/15min)
 │   ├── time.ts                  # parseBookingTime helper
 │   └── __tests__/helpers.ts     # Shared seed functions
-├── __tests__/                   # 51 test files, 575 tests
+├── __tests__/                   # Vitest suites
 ├── notification_dispatch.ts     # Email/SMS dispatch (incl. immediate confirmation)
 ├── bookings.ts                  # CRUD + state machine (pending → confirmed → checked_in → completed/cancelled)
 ├── public_booking.ts            # POST /api/public/book/:slug + slug resolver

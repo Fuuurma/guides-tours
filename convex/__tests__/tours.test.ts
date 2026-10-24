@@ -468,4 +468,23 @@ describe("tours — create currency (F740)", () => {
 		});
 		expect(tour?.currency).toBe("GBP");
 	});
+
+	// F550 — the stored currency reaches Intl.NumberFormat on the public
+	// booking page; a malformed code ("Euro") throws RangeError there and
+	// crashes the page for the whole org. Only a direct owner/admin
+	// api.tours.create can plant one, so the create boundary rejects it.
+	it("rejects a malformed currency at the create boundary (F550)", async () => {
+		const t = convexTest(schema, modules);
+		await expect(
+			t.mutation(internal.tours.internalCreate, {
+				organizationId: "org_cur_bad",
+				userId: "user-1",
+				name: "Old Town Walk",
+				durationHours: 2,
+				capacity: 12,
+				tourType: "walking",
+				currency: "Euro",
+			}),
+		).rejects.toThrow(/must be 3 uppercase letters/);
+	});
 });

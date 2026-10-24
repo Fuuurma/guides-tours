@@ -1,3 +1,5 @@
+import { toVehicleStatus } from "@/lib/vehicle-status";
+
 export type VehicleFormValues = {
 	name: string;
 	vehicleType: string;
@@ -68,7 +70,7 @@ export function vehicleFormToMutationArgs(value: VehicleFormValues) {
 		year: yr,
 		color: value.color.trim() || undefined,
 		ownershipType: value.ownershipType,
-		status: value.status,
+		status: toVehicleStatus(value.status),
 		notes: value.notes.trim() || undefined,
 	};
 }

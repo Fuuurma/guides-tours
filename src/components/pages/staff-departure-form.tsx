@@ -47,6 +47,12 @@ import type { Id } from "../../../convex/_generated/dataModel";
 
 type Intent = "publish" | "assign";
 
+// One form, two intents: "publish" creates + publishes a departure in one step,
+// "assign" staffs an existing draft. Departures crossing midnight can't publish
+// (overnight crew rules are unresolved) — the error says so plainly (F64).
+// `ConflictChecker` live-queries assignment overlaps as times/staff change, so
+// double-bookings surface before submit, not after.
+
 type Tour = {
 	_id: string;
 	name: string;

@@ -9,6 +9,7 @@ import { ConvexError } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireMembership, requireRole } from "./lib/authz";
 import {
+	CURRENCY_REGEX,
 	MAX_DESCRIPTION_LEN,
 	MAX_NAME_LEN,
 	assertFieldWithinLimit,
@@ -223,6 +224,18 @@ export const internalCreate = internalMutation({
 		if (args.name.length > MAX_NAME_LEN) {
 			throw new ConvexError(
 				`Name is too long (max ${MAX_NAME_LEN} characters)`,
+			);
+		}
+		// F550: the currency reaches Intl.NumberFormat on the public
+		// booking page — a malformed code ("Euro") throws RangeError there
+		// and crashes the page for the whole org. Same CURRENCY_REGEX the
+		// payment paths enforce; absent keeps the F740 inherit.
+		if (
+			args.currency !== undefined &&
+			!CURRENCY_REGEX.test(args.currency)
+		) {
+			throw new ConvexError(
+				"Invalid currency: must be 3 uppercase letters (e.g. USD)",
 			);
 		}
 		if (args.description !== undefined) {

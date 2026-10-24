@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { organization } from "@/lib/auth-client";
+import { formatLongDate } from "@/lib/format";
 import { isInviteExpired, planInvitationResend } from "@/lib/invitations";
 import { getSafeDisplayMessage } from "@/lib/utils";
 import type { RoleName } from "../../convex/authz";
@@ -162,7 +163,7 @@ export function PendingInvitesSection() {
 									{inv.expiresAt
 										? isInviteExpired(inv)
 											? " · expired"
-											: ` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`
+											: ` · expires ${formatLongDate(inv.expiresAt)}`
 										: ""}
 								</p>
 							</div>

@@ -6,6 +6,8 @@ import { stripeWebhook } from "./payments_stripe_actions";
 import { ConvexError } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { logger } from "./lib/logger";
+import { extractRequestIdentity } from "./lib/requestIdentity";
+import { readBodyWithLimit } from "./lib/requestBody";
 import {
 	getSiteUrl,
 	isUnconfiguredDeployment,
@@ -140,22 +142,19 @@ http.route({
 
 		// Cap the request body at 8 KB — the booking payload is tiny
 		// (~6 fields). Anything larger is either an attacker probing
-		// for memory exhaustion or a buggy client. We check the actual
-		// body length, not the Content-Length header (which can be
-		// spoofed or omitted).
+		// for memory exhaustion or a buggy client. The cap is applied
+		// to the read itself, so the oversized bytes are never
+		// buffered (F51, F554). We measure the actual body size, not
+		// the Content-Length header (which can be spoofed or omitted).
 		const MAX_BODY_BYTES = 8 * 1024;
-		let rawBody: string;
-		try {
-			rawBody = await request.text();
-		} catch {
+		const body = await readBodyWithLimit(request, MAX_BODY_BYTES);
+		if (!body.ok) {
+			if (body.reason === "too-large") {
+				return bookingResponse("payload too large", 413, request);
+			}
 			return bookingResponse("failed to read body", 400, request);
 		}
-		// String length is UTF-16 code units, not bytes — a 4 KB body of
-		// multibyte chars is ~8+ KB on the wire. Measure the real byte
-		// size so the cap means what it says (F51).
-		if (new TextEncoder().encode(rawBody).length > MAX_BODY_BYTES) {
-			return bookingResponse("payload too large", 413, request);
-		}
+		const rawBody = body.text;
 
 		let payload: unknown;
 		try {
@@ -222,15 +221,16 @@ http.route({
 			);
 		}
 
-		// Extract client IP for per-IP rate limiting. CF-Connecting-IP
-		// is set by Cloudflare; for X-Forwarded-For the LAST element is
-		// the edge-observed address — the first is client-supplied and
-		// spoofable, letting an attacker pick their own bucket (F65).
-		const xff = request.headers.get("x-forwarded-for");
-		const ip =
-			request.headers.get("cf-connecting-ip") ??
-			xff?.split(",").at(-1)?.trim() ??
-			"";
+		// Capture the caller's identity at the HTTP edge — the only
+		// place a Convex-side path can learn who called. The address
+		// also drives the per-IP rate limit (CF-Connecting-IP is set by
+		// Cloudflare; for X-Forwarded-For the LAST element is the
+		// edge-observed address — the first is client-supplied and
+		// spoofable, letting an attacker pick their own bucket (F65)).
+		// Both are threaded into the booking's audit rows so an abusive
+		// caller can be attributed (F461).
+		const identity = extractRequestIdentity(request);
+		const ip = identity.ipAddress ?? "";
 
 		const { internal } = await import("./_generated/api");
 		try {
@@ -250,6 +250,7 @@ http.route({
 					emailConsent,
 					smsConsent,
 					ip,
+					userAgent: identity.userAgent,
 				},
 			);
 			// F372: createForSlug always returns the full object

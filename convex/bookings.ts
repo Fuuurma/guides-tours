@@ -131,8 +131,10 @@ export const list = query({
 		// Pick the right index based on which filter is present.
 		// by_org_source_date leads with (org, source, date) — push dateFrom/
 		// dateTo into the index range so we don't scan every booking with
-		// the given source. When no filter is present and sorting by
-		// `date`, use by_org_date with .order() to skip the JS sort below.
+		// the given source. Every branch that leads with `date` applies
+		// .order() explicitly: a Convex index scan iterates ascending, so
+		// without it the filtered branches returned oldest-first while the
+		// default sortOrder is 'desc' (F139).
 		// Bound the scan: a single page is at most 100, but the JS filter
 		// (status, tourId, customerId, search) needs every matching row.
 		// Cap at 5000 — the FE paginates, so this is fine for reasonable
@@ -159,6 +161,7 @@ export const list = query({
 						if (args.dateTo) return eq.lte("date", args.dateTo!);
 						return eq;
 					})
+					.order(order)
 					.take(MAX_SCAN)
 			: args.dateFrom || args.dateTo
 				? ctx.db
@@ -172,6 +175,7 @@ export const list = query({
 							if (args.dateTo) return eq.lte("date", args.dateTo);
 							return eq;
 						})
+						.order(order)
 						.take(MAX_SCAN)
 				: canUseDateOrder
 					? ctx.db
@@ -222,7 +226,9 @@ export const list = query({
 		// Skip the JS sort when the index already returns rows in the
 		// requested order. by_org_date and by_org_source_date both lead
 		// with `date`, so sorting by `date` is free when the index order
-		// matches (canUseDateOrder applies .order() explicitly).
+		// matches — every branch that leads with `date` applies .order()
+		// explicitly (F139), so "the index leads with date" and "the rows
+		// are in the requested order" are the same statement.
 		const indexAlreadySorted =
 			canUseDateOrder ||
 			((args.source || args.dateFrom || args.dateTo) && sortBy === "date");
@@ -514,7 +520,15 @@ export const create = mutation({
 			date = schedule.date;
 			startTime = schedule.startTime;
 		} else {
-			const match = await ctx.db
+			// F1006: a cancel/re-create cycle leaves TWO schedules in the
+			// same (tourId, date, startTime) partition — see convex/ops.ts,
+			// which reads that partition with take(20) + a JS filter for
+			// exactly this reason. .unique() threw Convex's opaque
+			// "unique() query returned more than one result" error on such
+			// a pair, so a staff booking died with an internal failure
+			// instead of refusing the slot. take(2) + a length check
+			// refuses the ambiguous slot the way F694's sites now do.
+			const matches = await ctx.db
 				.query("tourSchedules")
 				.withIndex("by_tour_date_start", (q) =>
 					q
@@ -522,7 +536,13 @@ export const create = mutation({
 						.eq("date", args.date)
 						.eq("startTime", args.startTime),
 				)
-				.unique();
+				.take(2);
+			if (matches.length > 1) {
+				throw new ConvexError(
+					`A schedule already exists for this tour on ${args.date} at ${args.startTime}`,
+				);
+			}
+			const match = matches[0];
 			if (match && match.organizationId === member.organizationId) {
 				if (match.status === "cancelled") {
 					throw new ConvexError("Cannot book a cancelled schedule");
