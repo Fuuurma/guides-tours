@@ -13,7 +13,7 @@ const config = defineConfig({
 	},
 	preview: {
 		host: "127.0.0.1",
-		port: 4020,
+		port: 3020,
 		strictPort: true,
 	},
 	resolve: { tsconfigPaths: true },
