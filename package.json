@@ -14,7 +14,7 @@
     "dev": "vite dev --host 127.0.0.1 --port 3020 --strictPort",
     "generate-routes": "tsr generate",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 4020 --strictPort",
+    "preview": "vite preview --host 127.0.0.1 --port 3020 --strictPort",
     "preview:worker": "wrangler dev --config dist/server/wrangler.json --ip 127.0.0.1 --port 3201 --local",
     "preview:worker:dryrun": "wrangler deploy --dry-run --outdir /tmp/wrangler-dryrun --config .wrangler/deploy/config.json",
     "test": "vitest run",
